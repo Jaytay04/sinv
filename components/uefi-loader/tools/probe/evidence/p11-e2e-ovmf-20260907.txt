@@ -1,0 +1,52 @@
+Gate: P11 full OVMF + swtpm + Windows replay E2E
+Date: 2026-09-07
+Run: uefi-linux-nested-windows-e2e-20260907-224932-87dcc274c8
+Result: PASS
+
+Prepared disk:
+  uefi-windows-capture-20260907-223730-72e0795395.vmdk
+
+Conditioning:
+  Status=PASS
+  Windows completed QEMU hardware conditioning.
+
+Authoritative pre-boot evidence:
+  active PCR banks: 0x00000002 (SHA-256)
+  SHA256 PCR[0-7]: all zero
+  gate verdict: PCR banks empty - replay may proceed
+  reference log events: 0x19 (25)
+  post-replay SHA256 PCR[0-7] exact: YES
+  replay and divergence: PASS
+  boot manager restore: PASS
+  payload launch: PASS
+
+Handoff evidence:
+  state=READY_BOOT_MANAGER
+  replay=PASS
+  restore=PASS
+  payload=PASS
+  exit_boot_services_calls=0
+
+Windows post-boot evidence:
+  Status=PASS
+  Windows startup captured and verified its post-replay TPM state.
+  active PCR banks: 1 (SHA-256)
+  log format: Spec ID Event03 (TCG_PCR_EVENT-wrapped)
+  Algorithm=0x000B PCRMismatchMask=0xFF
+  Verdict=log under-reports PCR; replay divergence attributed
+  DivergenceManifestRecords=11 Attributed=YES
+
+Final runner result:
+  Patched OVMF replayed the genuine log, launched Windows, and Windows
+  verified post-replay TPM state.
+
+Cleanup:
+  Total running VMware VMs: 0
+  vm-uefiloader-wsl2 lease: FREE
+
+Regression rerun after startup-task refactor and removal of the auxiliary
+post-QEMU TPM read:
+  Run: uefi-linux-nested-windows-e2e-20260908-000046-5424bf4172
+  Result: PASS
+  Windows TBS probe/capture and ibaudit remained the authoritative post-boot
+  evidence; their stderr files were empty.

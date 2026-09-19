@@ -1,0 +1,11 @@
+#ifndef HYPERSINV_CONTROL_SESSION_PROTOCOL_CLIENT_H
+#define HYPERSINV_CONTROL_SESSION_PROTOCOL_CLIENT_H
+
+#include <windows.h>
+
+BOOL
+ControlSessionProtocolClientNegotiate(
+    HANDLE device,
+    DWORD* error);
+
+#endif /* HYPERSINV_CONTROL_SESSION_PROTOCOL_CLIENT_H */

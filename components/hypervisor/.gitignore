@@ -1,0 +1,25 @@
+# Build output
+build/
+out/
+dist/
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Generated
+*.sys
+*.pdb
+*.exe
+*.dll
+*.lib
+*.exp
+*.obj
+tools/host-runner/host-runner.config.json
+.analysis/
+
+# OS
+Thumbs.db
+Desktop.ini

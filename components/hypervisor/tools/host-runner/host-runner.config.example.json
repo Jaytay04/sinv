@@ -1,0 +1,38 @@
+{
+  "SchemaVersion": 2,
+  "Vm": {
+    "VmxPath": "D:\\Archived Virtual Machines\\uefi2hsinv-2026-09-14\\V3H-Gate4-MultiGroup\\V3H-Gate4-MultiGroup.vmx",
+    "DisplayName": "V3H-Gate4-MultiGroup",
+    "SnapshotName": "Gate6-HostRunner-ReducedMemory-Clean",
+    "DebuggerPipe": "\\\\.\\pipe\\hypersinv_debug"
+  },
+  "Tools": {
+    "VmrunPath": "C:\\Program Files\\VMware\\VMware Workstation\\vmrun.exe",
+    "KdPath": "C:\\Program Files (x86)\\Windows Kits\\10\\Debuggers\\x64\\kd.exe",
+    "PoolmonPath": "C:\\Program Files (x86)\\Windows Kits\\10\\Tools\\10.0.28000.0\\x64\\poolmon.exe",
+    "PoolTagPath": "C:\\Program Files (x86)\\Windows Kits\\10\\Debuggers\\x64\\triage\\pooltag.txt"
+  },
+  "Mailbox": {
+    "HostRoot": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\Hypervisor\\.analysis\\host-runner-mailbox"
+  },
+  "Policy": {
+    "MaximumRuntimeSeconds": 1800
+  },
+  "Debugger": {
+    "ConnectionTimeoutSeconds": 120,
+    "MaximumStartupLogBytes": 262144,
+    "MaximumRunLogBytes": 8388608,
+    "HostMemoryReserveMb": 2048,
+    "MaximumDebuggerWorkingSetMb": 512,
+    "MinimumHostFreeMemoryMb": 2048,
+    "HostMemoryBreachGraceSeconds": 2,
+    "PoolSnapshotTriggerNonpagedMb": 2048,
+    "StopAfterPoolSnapshot": false,
+    "GuestMailboxReadinessTimeoutSeconds": 120,
+    "GuestMailboxReadinessPollIntervalMilliseconds": 1000,
+    "GuestMailboxStabilizationSeconds": 15
+  },
+  "Credential": {
+    "TargetName": "HypersinvHostRunner/V3H-Gate4-MultiGroup"
+  }
+}

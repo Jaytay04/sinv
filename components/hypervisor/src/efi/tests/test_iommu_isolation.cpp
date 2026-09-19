@@ -1,0 +1,314 @@
+#include "iommu_isolation.h"
+
+#include <stdint.h>
+#include <stdio.h>
+
+#define TEST_ASSERT(condition, message) \
+    do { \
+        if (!(condition)) { \
+            fprintf(stderr, "FAIL: %s\n", message); \
+            return 1; \
+        } \
+    } while (0)
+
+namespace {
+
+struct Fixture {
+    HV_EFI_IOMMU_UNIT Units[2];
+    HV_EFI_IOMMU_DEVICE Devices[3];
+    HV_EFI_IOMMU_RANGE Guest[4];
+    HV_EFI_IOMMU_RANGE Deny[4];
+    HV_EFI_IOMMU_RMRR Rmrr[4];
+    HV_EFI_IOMMU_RANGE NormalizedGuest[4];
+    HV_EFI_IOMMU_RANGE NormalizedDeny[4];
+    HV_EFI_IOMMU_DOMAIN_ASSIGNMENT Assignments[3];
+    HV_EFI_IOMMU_IDENTITY_MAPPING Mappings[32];
+    HV_EFI_IOMMU_TOPOLOGY Topology;
+    HV_EFI_IOMMU_PLAN_STORAGE Storage;
+    HV_EFI_IOMMU_PLAN Plan;
+};
+
+void Clear(void *buffer, size_t size)
+{
+    uint8_t *bytes = static_cast<uint8_t *>(buffer);
+    for (size_t index = 0; index < size; ++index) {
+        bytes[index] = 0;
+    }
+}
+
+void Initialize(Fixture *fixture)
+{
+    Clear(fixture, sizeof(*fixture));
+    fixture->Units[0] = {
+        UINT64_C(0xfed90000), 0, 1, 1, 1, 48, 1, 1, 1
+    };
+    fixture->Devices[0] = {
+        0, 0, 1, 0, HV_EFI_IOMMU_DEVICE_DISCRETE, 1, 0, 0
+    };
+    fixture->Devices[1] = {
+        0, 0, 2, 0, HV_EFI_IOMMU_DEVICE_INTEGRATED, 1, 1, 0
+    };
+    /* Deliberately adjacent and out of order; normalization must merge. */
+    fixture->Guest[0] = { UINT64_C(0x800000), UINT64_C(0x800000) };
+    fixture->Guest[1] = { 0, UINT64_C(0x800000) };
+    fixture->Deny[0] = { UINT64_C(0x201000), UINT64_C(0x2000) };
+    fixture->Rmrr[0] = {
+        UINT64_C(0x1200000), UINT64_C(0x2000), 1, 0
+    };
+    fixture->Topology.Platform = {
+        1, 1, 39, 1, 1, 1, 1, 0
+    };
+    fixture->Topology.Units = fixture->Units;
+    fixture->Topology.UnitCount = 1;
+    fixture->Topology.Devices = fixture->Devices;
+    fixture->Topology.DeviceCount = 2;
+    fixture->Topology.GuestRamRanges = fixture->Guest;
+    fixture->Topology.GuestRamRangeCount = 2;
+    fixture->Topology.HypervisorDenyRanges = fixture->Deny;
+    fixture->Topology.HypervisorDenyRangeCount = 1;
+    fixture->Topology.RmrrRanges = fixture->Rmrr;
+    fixture->Topology.RmrrRangeCount = 1;
+    fixture->Storage.NormalizedGuestRamRanges = fixture->NormalizedGuest;
+    fixture->Storage.NormalizedGuestRamCapacity = 4;
+    fixture->Storage.NormalizedDenyRanges = fixture->NormalizedDeny;
+    fixture->Storage.NormalizedDenyCapacity = 4;
+    fixture->Storage.Assignments = fixture->Assignments;
+    fixture->Storage.AssignmentCapacity = 3;
+    fixture->Storage.Mappings = fixture->Mappings;
+    fixture->Storage.MappingCapacity = 32;
+}
+
+int TestIdentityPlanAndIsolation()
+{
+    Fixture fixture;
+    Initialize(&fixture);
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_OK,
+                "admitted DMAR topology builds an identity-domain plan");
+    TEST_ASSERT(fixture.Plan.GuestRamRangeCount == 1 &&
+                fixture.Plan.HypervisorDenyRangeCount == 1 &&
+                fixture.Plan.AssignmentCount == 2 &&
+                fixture.Plan.MappingCount == 5 &&
+                fixture.Plan.Flags ==
+                    (HV_EFI_IOMMU_PLAN_USE_QUEUED_INVALIDATION |
+                     HV_EFI_IOMMU_PLAN_USE_INTERRUPT_REMAPPING |
+                     HV_EFI_IOMMU_PLAN_USE_EXTENDED_INTERRUPT_MODE),
+                "plan accounts normalized ranges, domains, QI, IR, and EIM");
+    TEST_ASSERT(fixture.Assignments[0].DomainId == 1 &&
+                fixture.Assignments[0].Flags ==
+                    (HV_EFI_IOMMU_ASSIGNMENT_DMA_CAPABLE |
+                     HV_EFI_IOMMU_ASSIGNMENT_INTERRUPT_REMAP) &&
+                fixture.Assignments[0].RmrrCount == 0 &&
+                fixture.Assignments[1].DomainId == 2 &&
+                fixture.Assignments[1].Flags ==
+                    (HV_EFI_IOMMU_ASSIGNMENT_INTEGRATED |
+                     HV_EFI_IOMMU_ASSIGNMENT_DMA_CAPABLE |
+                     HV_EFI_IOMMU_ASSIGNMENT_HAS_RMRR |
+                     HV_EFI_IOMMU_ASSIGNMENT_INTERRUPT_REMAP) &&
+                fixture.Assignments[1].RmrrCount == 1,
+                "integrated-device and RMRR ownership remain explicit");
+
+    HV_EFI_IOMMU_MAPPING_RESULT result = {};
+    TEST_ASSERT(HvEfiIommuPlanMappingAt(
+                    &fixture.Plan, 0, UINT64_C(0x1000), &result) ==
+                    HV_EFI_IOMMU_OK && result.Mapped == 1 &&
+                (result.Flags & HV_EFI_IOMMU_MAPPING_GUEST_RAM) != 0,
+                "guest RAM is identity mapped for a discrete device");
+    TEST_ASSERT(HvEfiIommuPlanMappingAt(
+                    &fixture.Plan, 0, UINT64_C(0x201000), &result) ==
+                    HV_EFI_IOMMU_OK && result.Mapped == 0,
+                "hypervisor deny pages are absent from a discrete domain");
+    TEST_ASSERT(HvEfiIommuPlanMappingAt(
+                    &fixture.Plan, 1, UINT64_C(0x201fff), &result) ==
+                    HV_EFI_IOMMU_OK && result.Mapped == 0,
+                "hypervisor deny pages are absent from an integrated domain");
+    TEST_ASSERT(HvEfiIommuPlanMappingAt(
+                    &fixture.Plan, 1, UINT64_C(0x1200000), &result) ==
+                    HV_EFI_IOMMU_OK && result.Mapped == 1 &&
+                (result.Flags & HV_EFI_IOMMU_MAPPING_RMRR) != 0,
+                "scoped RMRR is mapped only into its integrated-device domain");
+    TEST_ASSERT(HvEfiIommuPlanMappingAt(
+                    &fixture.Plan, 0, UINT64_C(0x1200000), &result) ==
+                    HV_EFI_IOMMU_OK && result.Mapped == 0,
+                "another device cannot DMA into an unscoped RMRR");
+    TEST_ASSERT(HvEfiIommuPlanMappingAt(
+                    &fixture.Plan, 1, UINT64_C(0x2000000), &result) ==
+                    HV_EFI_IOMMU_OK && result.Mapped == 0,
+                "unowned physical memory stays unmapped");
+
+    uint64_t checkedDeny = 0;
+    uint64_t checkedMappings = 0;
+    TEST_ASSERT(HvEfiIommuValidateIdentityPlan(
+                    &fixture.Plan, &checkedDeny, &checkedMappings) ==
+                    HV_EFI_IOMMU_OK && checkedDeny == 1 &&
+                checkedMappings == 5,
+                "independent plan audit covers all mappings and deny ranges");
+    return 0;
+}
+
+int TestAdmissionFailures()
+{
+    Fixture fixture;
+    Initialize(&fixture);
+    fixture.Topology.Platform.DmarPresent = 0;
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_DMAR_ABSENT &&
+                fixture.Plan.AssignmentCount == 0,
+                "absent DMAR fails closed without publishing a plan");
+    Initialize(&fixture);
+    fixture.Topology.Platform.DeviceEnumerationComplete = 0;
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_ENUMERATION_INCOMPLETE,
+                "incomplete DMA-device inventory fails closed");
+    Initialize(&fixture);
+    fixture.Units[0].TranslationSupported = 0;
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_REMAPPING_UNSUPPORTED,
+                "missing DMA translation support fails closed");
+    Initialize(&fixture);
+    fixture.Units[0].AddressWidthBits = 38;
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_ADDRESS_WIDTH_UNSUPPORTED,
+                "insufficient remapping address width fails closed");
+    Initialize(&fixture);
+    fixture.Units[0].QueuedInvalidationSupported = 0;
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_QUEUED_INVALIDATION_INCOMPATIBLE,
+                "required queued invalidation cannot silently downgrade");
+    Initialize(&fixture);
+    fixture.Units[0].InterruptRemappingSupported = 0;
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_INTERRUPT_REMAPPING_INCOMPATIBLE,
+                "required interrupt remapping cannot silently downgrade");
+    Initialize(&fixture);
+    fixture.Units[0].ExtendedInterruptModeSupported = 0;
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_INTERRUPT_REMAPPING_INCOMPATIBLE,
+                "x2APIC interrupt remapping requires EIM");
+    Initialize(&fixture);
+    fixture.Topology.Platform.X2ApicOptOut = 1;
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_INTERRUPT_REMAPPING_INCOMPATIBLE,
+                "DMAR x2APIC opt-out conflicts with an active x2APIC plan");
+    Initialize(&fixture);
+    fixture.Topology.Platform.InterruptRemappingReported = 0;
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_INTERRUPT_REMAPPING_INCOMPATIBLE,
+                "firmware must report required interrupt remapping");
+    return 0;
+}
+
+int TestRangeScopeAndCapacityFailures()
+{
+    Fixture fixture;
+    Initialize(&fixture);
+    fixture.Guest[1] = { UINT64_C(0x700000), UINT64_C(0x200000) };
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_RANGE_OVERLAP,
+                "overlapping guest ownership fails closed");
+    Initialize(&fixture);
+    fixture.Deny[1] = { UINT64_C(0x202000), UINT64_C(0x2000) };
+    fixture.Topology.HypervisorDenyRangeCount = 2;
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_RANGE_OVERLAP,
+                "overlapping hypervisor deny ownership fails closed");
+    Initialize(&fixture);
+    fixture.Guest[0] = {
+        (UINT64_C(1) << 39) - HV_EFI_IOMMU_PAGE_SIZE,
+        HV_EFI_IOMMU_PAGE_SIZE * 2
+    };
+    fixture.Topology.GuestRamRangeCount = 1;
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_RANGE_OVERFLOW,
+                "physical range overflow beyond admitted width fails closed");
+    Initialize(&fixture);
+    fixture.Rmrr[0].PhysicalBase = fixture.Deny[0].PhysicalBase;
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_RMRR_CONFLICT,
+                "RMRR cannot override hypervisor DMA isolation");
+    Initialize(&fixture);
+    fixture.Devices[1].Segment = 1;
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_SCOPE_MISMATCH,
+                "device-to-DRHD segment mismatch fails closed");
+    Initialize(&fixture);
+    fixture.Devices[1] = fixture.Devices[0];
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_INVALID_DEVICE,
+                "duplicate requester IDs fail closed");
+    Initialize(&fixture);
+    fixture.Storage.MappingCapacity = 4;
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_CAPACITY &&
+                fixture.Plan.MappingCount == 0,
+                "mapping capacity is checked before plan publication");
+    return 0;
+}
+
+int TestAuditRejectsTampering()
+{
+    Fixture fixture;
+    Initialize(&fixture);
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_OK,
+                "tamper fixture builds");
+    fixture.Mappings[0].Size += HV_EFI_IOMMU_PAGE_SIZE;
+    TEST_ASSERT(HvEfiIommuValidateIdentityPlan(
+                    &fixture.Plan, nullptr, nullptr) ==
+                    HV_EFI_IOMMU_DENY_VIOLATION,
+                "audit detects a mapping extended into a deny page");
+
+    Initialize(&fixture);
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_OK,
+                "authorization tamper fixture builds");
+    fixture.Mappings[4].Size += HV_EFI_IOMMU_PAGE_SIZE;
+    TEST_ASSERT(HvEfiIommuValidateIdentityPlan(
+                    &fixture.Plan, nullptr, nullptr) ==
+                    HV_EFI_IOMMU_INVARIANT,
+                "audit rejects identity mappings outside guest RAM and RMRR");
+    return 0;
+}
+
+static_assert(sizeof(HV_EFI_IOMMU_PLATFORM) == 32, "platform ABI");
+static_assert(sizeof(HV_EFI_IOMMU_UNIT) == 40, "unit ABI");
+static_assert(sizeof(HV_EFI_IOMMU_DEVICE) == 32, "device ABI");
+static_assert(sizeof(HV_EFI_IOMMU_RANGE) == 16, "range ABI");
+static_assert(sizeof(HV_EFI_IOMMU_RMRR) == 24, "RMRR ABI");
+static_assert(sizeof(HV_EFI_IOMMU_DOMAIN_ASSIGNMENT) == 24,
+              "assignment ABI");
+static_assert(sizeof(HV_EFI_IOMMU_IDENTITY_MAPPING) == 24, "mapping ABI");
+static_assert(sizeof(HV_EFI_IOMMU_MAPPING_RESULT) == 16, "query ABI");
+
+} // namespace
+
+int main()
+{
+    if (TestIdentityPlanAndIsolation() != 0 ||
+        TestAdmissionFailures() != 0 ||
+        TestRangeScopeAndCapacityFailures() != 0 ||
+        TestAuditRejectsTampering() != 0) {
+        return 1;
+    }
+    fprintf(stdout, "IOMMU isolation tests: PASS\n");
+    return 0;
+}

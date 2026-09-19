@@ -1,0 +1,55 @@
+Nested-Linux P5 PE/COFF Rehash Evidence
+=======================================
+
+Date (UTC): 2026-09-06
+Host-runner action: RunLinuxPeRehash
+RunId: uefi-linux-pe-rehash-20260906-203432-a3afe63471
+Result: PASS
+
+Environment
+-----------
+
+- VMware Ubuntu guest with nested KVM
+- QEMU q35 with a fresh swtpm TPM 2.0 instance
+- Stock EDK2 tag edk2-stable202605 (b03a21a)
+- EFI_TCG2_PROTOCOL present
+- Supported event-log mask: 0x00000003 (TCG 1.2 and TCG 2)
+- Active PCR-bank mask: 0x0000000F
+
+Input identity
+--------------
+
+- Source: host-installed C:\Windows\Boot\EFI\bootmgfw.efi
+- Staged ESP path: \EFI\Microsoft\Boot\bootmgfw.efi
+- Size read from the ESP before relocation: 0x00000000002EA000 bytes
+- Staged SHA-256: 456DE3C04EA6A39B03964181E23A725E9A27A1097D79D02355CBA0A061BD96C1
+
+Rehash observations
+-------------------
+
+- LoadImage received the complete ESP device path and the exact source bytes.
+- OVMF recorded an EV_EFI_BOOT_SERVICES_APPLICATION event.
+- The verifier reread the file from the ESP.
+- HashLogExtendEvent used the PE_COFF_IMAGE flag.
+- Four active-bank digests were reproduced and matched the recorded event.
+- The TCG2 log was present and not truncated.
+- PE pre-relocation rehash gate: PASS
+
+Evidence SHA-256
+---------------
+
+- result.json:
+  C1C37398E9C499D41897CB3C1BD28525469510722CCE57F62E21D198E4CAE530
+- qemu-debugcon.log:
+  1842BE4D45FC8EC545B02E8530F6AAAA5F0FA8B2686C8656781627D89FEC8A8A
+- qemu-serial.log:
+  F8A992B710648B24F9B26AA66488B7727B32AC59A0B6584181FFB8EBDEB684CC
+- edk2-build.log:
+  8AAB5C245B4CB8F6FD40D6F5E5252DD5A9F470B04090CE2B6BAA1478C27EF521
+
+Cleanup verification
+--------------------
+
+- Configured Ubuntu VM running: False
+- Linux runner quarantine: False
+- Shared resource local-vm-live-testing: FREE

@@ -1,0 +1,42 @@
+Nested Linux handoff-mechanics gate evidence — 2026-09-06
+
+Run ID: uefi-linux-handoff-mechanics-20260906-222617-e912b136d5
+Result: PASS
+Completed UTC: 2026-09-06T22:28:19Z
+
+The nested-OVMF fixture loaded a strict one-event tcglog.ib, performed one
+real raw PCR extension, and confirmed SHA-256 PCR0 became non-zero while QEMU
+still owned the swtpm transport. The persisted divergence manifest parsed as
+one IBDV record for event index 0, PCR0, EV_EFI_PLATFORM_FIRMWARE_BLOB, with
+four active-bank digests.
+
+The restore transaction copied and verified bootmgfw.efi.bak, displaced the
+replacement target, installed and reverified the restored image, and removed
+the backup, temporary, and displaced files. Host extraction produced the same
+SHA-256 for the staged backup and final bootmgfw.efi:
+
+E49DE6B2265DA911109FCF07D71C334F45D2C66C6E28E52FA6CB1DB90BB60F76
+
+Observed handoff order:
+
+handoff mechanics gate: START
+reference log events: 00000001
+replay and divergence: PASS
+boot manager restore: PASS
+handoff payload: START
+handoff payload: PASS
+payload launch: PASS
+handoff boot manager: START
+handoff boot manager: PASS
+boot manager launch: PASS
+ExitBootServices calls: 00000000
+handoff mechanics gate: PASS
+
+The runner stopped the Linux VM and released both its per-VM lease and the
+startup lease. The separate Hypervisor Windows lease remained ACTIVE during
+this run, demonstrating that per-VM lease overlap was accepted while startup
+serialization and known-VM safety checks remained enforced.
+
+Boundary: this synthetic fixture proves loader-side restore and handoff
+mechanics. It does not prove a real Windows desktop boot or post-boot PCR
+capture, so OpenSpec task 2.6 remains open.

@@ -1,0 +1,36 @@
+P9 defensive-audit detector gate
+================================
+
+Date: 2026-09-07
+Run: p9-audit-host-20260907-094756-4b784e6b35
+Result: PASS
+ibaudit.exe SHA-256:
+E94F2B534038AD84979AFEB42F828CA7410FC258CB620D0DC4AF61A3C349188A
+
+The static Windows build and CTest suite passed before the focused gate.
+The focused gate ran detector cores 1 through 6 and the production dump CLI.
+
+Detector 4 fixture coverage:
+- changed bootmgfw.efi hash was classified;
+- invalid Microsoft Authenticode result was classified;
+- bootmgfw.efi.bak was reported by name;
+- staged Boot0007 references from both BootNext and BootOrder were classified.
+
+Detector 5 fixture coverage:
+- TPM 2.0 plus wrapped Spec ID Event00 was reported HIGH;
+- an active bank with PCR[0-7] all at reset was reported CRITICAL;
+- TPM 2.0, Event03, and non-zero boot PCR state passed cleanly.
+
+Detector 6 fixture coverage:
+- a complete bounded JSON baseline round-tripped exactly;
+- malformed JSON was rejected;
+- a new MOK and changed bootmgfw hash mapped to detectors 3 and 4;
+- PCR drift mapped to detector 2.
+
+The production detector adapters are read-only except for the explicitly
+requested baseline JSON output. ESP discovery uses volume/partition metadata;
+boot manager inspection opens files read-only; firmware access uses only
+GetFirmwareEnvironmentVariableExW; TPM observations use TBS.
+
+Focused evidence directory:
+.analysis/host-runner/audit-gates/p9-audit-host-20260907-094756-4b784e6b35

@@ -1,0 +1,22 @@
+#ifndef HYPERSINV_CONTROL_SESSION_NAMESPACE_H
+#define HYPERSINV_CONTROL_SESSION_NAMESPACE_H
+
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef enum CONTROL_SESSION_NAMESPACE_DECISION {
+    CONTROL_SESSION_NAMESPACE_DENIED = 0,
+    CONTROL_SESSION_NAMESPACE_ALLOWED = 1
+} CONTROL_SESSION_NAMESPACE_DECISION;
+
+CONTROL_SESSION_NAMESPACE_DECISION
+ControlSessionNamespaceAuthorize(uint16_t file_name_length_bytes);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* HYPERSINV_CONTROL_SESSION_NAMESPACE_H */

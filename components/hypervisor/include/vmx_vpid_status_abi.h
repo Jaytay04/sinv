@@ -1,0 +1,76 @@
+#ifndef HYPERSINV_VMX_VPID_STATUS_ABI_H
+#define HYPERSINV_VMX_VPID_STATUS_ABI_H
+
+/* Fixed-width, pointer-free per-processor VPID status ABI. */
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define HYPERVISOR_VPID_STATUS_VERSION UINT32_C(1)
+#define HYPERVISOR_VPID_STATUS_RESPONSE_SIZE UINT32_C(64)
+
+#define HYPERVISOR_VPID_STATUS_FLAG_IDENTITY_AUTHENTICATED (UINT32_C(1) << 0)
+#define HYPERVISOR_VPID_STATUS_FLAG_CAPABILITIES_VALID      (UINT32_C(1) << 1)
+#define HYPERVISOR_VPID_STATUS_FLAG_ROOT_OWNED              (UINT32_C(1) << 2)
+#define HYPERVISOR_VPID_STATUS_FLAG_VMCS_AUTHENTICATED      (UINT32_C(1) << 3)
+#define HYPERVISOR_VPID_STATUS_FLAG_VPID_ENABLED            (UINT32_C(1) << 4)
+#define HYPERVISOR_VPID_STATUS_REQUIRED_FLAGS                UINT32_C(0x1f)
+
+#define HYPERVISOR_VPID_CAP_INVVPID       (UINT32_C(1) << 0)
+#define HYPERVISOR_VPID_CAP_SINGLE_CONTEXT (UINT32_C(1) << 2)
+#define HYPERVISOR_VPID_CAP_ALL_CONTEXTS   (UINT32_C(1) << 3)
+#define HYPERVISOR_VPID_CAP_RUNTIME_REQUIRED \
+    (HYPERVISOR_VPID_CAP_INVVPID | HYPERVISOR_VPID_CAP_SINGLE_CONTEXT | \
+     HYPERVISOR_VPID_CAP_ALL_CONTEXTS)
+#define HYPERVISOR_VPID_SECONDARY_ENABLE_EPT  (UINT32_C(1) << 1)
+#define HYPERVISOR_VPID_SECONDARY_ENABLE_VPID (UINT32_C(1) << 5)
+
+typedef enum HYPERVISOR_VPID_STATUS_CLASSIFICATION {
+    HYPERVISOR_VPID_STATUS_DISABLED = 1,
+    HYPERVISOR_VPID_STATUS_READY = 2,
+    HYPERVISOR_VPID_STATUS_ACTIVE = 3,
+    HYPERVISOR_VPID_STATUS_TEARDOWN_PENDING = 4
+} HYPERVISOR_VPID_STATUS_CLASSIFICATION;
+
+typedef struct HYPERVISOR_VPID_STATUS_RESPONSE {
+    uint32_t Version, Size, Classification, Flags;
+    uint32_t ProcessorCount, SystemIndex;
+    uint16_t Group;
+    uint8_t Number, OwnerState;
+    uint16_t Vpid, Reserved16;
+    uint32_t CapabilityFlags, SecondaryControls;
+    uint16_t ObservedVpid, ReservedObserved16;
+    int32_t LastStatus, VmcsStatus;
+    uint32_t Reserved32;
+    uint64_t Reserved64;
+} HYPERVISOR_VPID_STATUS_RESPONSE;
+
+#ifdef __cplusplus
+}
+#define HYPERSINV_VPID_ABI_ASSERT static_assert
+#define HYPERSINV_VPID_ABI_ALIGNOF alignof
+#else
+#define HYPERSINV_VPID_ABI_ASSERT _Static_assert
+#define HYPERSINV_VPID_ABI_ALIGNOF _Alignof
+#endif
+HYPERSINV_VPID_ABI_ASSERT(sizeof(HYPERVISOR_VPID_STATUS_RESPONSE) == 64,
+    "VPID status response ABI");
+HYPERSINV_VPID_ABI_ASSERT(
+    HYPERSINV_VPID_ABI_ALIGNOF(HYPERVISOR_VPID_STATUS_RESPONSE) == 8,
+    "VPID status response alignment");
+HYPERSINV_VPID_ABI_ASSERT(
+    offsetof(HYPERVISOR_VPID_STATUS_RESPONSE, Group) == 24,
+    "VPID status identity offset");
+HYPERSINV_VPID_ABI_ASSERT(
+    offsetof(HYPERVISOR_VPID_STATUS_RESPONSE, CapabilityFlags) == 32,
+    "VPID status capability offset");
+HYPERSINV_VPID_ABI_ASSERT(
+    offsetof(HYPERVISOR_VPID_STATUS_RESPONSE, Reserved64) == 56,
+    "VPID status reserved tail");
+#undef HYPERSINV_VPID_ABI_ASSERT
+#undef HYPERSINV_VPID_ABI_ALIGNOF
+
+#endif

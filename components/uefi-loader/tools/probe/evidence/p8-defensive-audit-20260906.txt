@@ -1,0 +1,37 @@
+P8 defensive-audit host evidence
+=================================
+
+Date: 2026-09-06
+Run: p8-audit-host-20260907-030715-02b58d82da
+Result: PASS
+
+The production static ibaudit.exe and all three detector seams built with MSVC
+/W4. Both dynamic-CRT and static-CRT CTest trees passed 18 of 18 tests.
+
+Detector 1 (`dump`) accepted a strict one-event Spec ID Event03 tcglog.ib and
+recomputed its SHA-256 event-data digest. The same production CLI rejected a
+single-bit digest mutation with exit code 1 and reported:
+
+DIGEST_MISMATCH EventNum=0 PCR=0 Algorithm=SHA256(0x000B)
+
+Detector 2 (`verify-pcrs`) used injected hash/TPM seams to prove clean folding
+for PCR0-7, active-bank fail-closed behavior, strict divergence-manifest
+validation, explained raw-extension attribution, and unexplained mismatch
+classification. The Windows adapter uses CNG for SHA-1/SHA-256/SHA-384/SHA-512
+and TBS for PCR reads. TPM responses are rejected unless framing, response
+length, bank selection, PCR count, and digest sizes are exact.
+
+Detector 3 (`audit-vars`) used an injected read-only firmware-variable seam to
+prove expected/rogue MOK classification, strict EFI_SIGNATURE_LIST bounds,
+disabled Secure Boot detection, BootNext-to-Boot#### consistency, and explicit
+read-failure handling. The production adapter only reads through
+GetFirmwareEnvironmentVariableExW and contains no variable-write operation.
+
+Hashes:
+
+- ibaudit.exe: CC38C6D8CB5E2466741665A24E040604F3ADDEAB78502ECAC636E49D36855F28
+- clean fixture: 9B14B45D0FFE97D51502313ABC32CF47F2F8090374B9CAD736BAB48C9CF18E7E
+- tampered fixture: 661F9EF684AD00D1E156B7BEBAE7566A97FCB2D9D5813FEB9F1AD68037CA2D47
+
+Live Windows reads remain diagnostic follow-up work; detector acceptance uses
+deterministic injected state so it does not depend on the developer workstation.

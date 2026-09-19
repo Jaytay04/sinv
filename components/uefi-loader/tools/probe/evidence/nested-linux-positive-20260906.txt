@@ -1,0 +1,32 @@
+UEFILoader nested-Linux positive-path evidence
+Date: 2026-09-06
+RunId: uefi-linux-positive-20260906-080808-ff88025b28
+Result: PASS
+Result message: Empty-PCR positive path reached with TCG2 and SHA-256 active.
+
+Pre-firmware SHA-256 PCR 0-7 baseline:
+  0-7: all 0x0000000000000000000000000000000000000000000000000000000000000000
+
+loader.efi debugcon output:
+  EFI_TCG2_PROTOCOL: located
+  TPM present: YES
+  number of PCR banks: 00000004
+  active PCR banks: 0x0000000F
+  SHA1   (14 bytes): PCR[0-7] 00000000
+  SHA256 (20 bytes): PCR[0-7] 00000000
+  SHA384 (30 bytes): PCR[0-7] 00000000
+  SHA512 (40 bytes): PCR[0-7] 00000000
+  gate verdict (04 banks): PCR banks empty - replay may proceed
+  no extensions performed; continuing boot unmodified
+
+Evidence SHA-256:
+  baseline.txt:      90FE9A105A5AE14F46C51450142C73B031D18AD5AC4C15372F9518AA7516ED31
+  edk2-build.log:    21E976EEAF9A8C6B7218D319BF9F4BC2AC4D2682F254BEA4DC247D187484466B
+  qemu-debugcon.log: A3D8926C3E6F737859B85F242226D9D2BD2336E40EA02677B2189F8DD1153522
+  qemu-serial.log:   8742A7C55453F546430B3F01B745D6DF692570DD391E0EF1E81914CA13016657
+  result.json:       F000B6DD7040AFE0350EDBF064D90F2AA39554F28B40AE79BC47C836A9296FF8
+
+Post-run state:
+  VMware running VMs: 0
+  Shared VM lease: FREE
+  Linux quarantine: absent

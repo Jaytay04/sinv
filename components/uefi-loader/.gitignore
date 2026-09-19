@@ -1,0 +1,30 @@
+# Build directories
+/build/
+/cmake-build-*/
+
+# EFI application artifacts (built loader.efi, payload.efi, etc.)
+*.efi
+# The pinned Microsoft-signed shim is source input, not a build artifact.
+!src/vendor/shimx64.efi
+
+# Boot-chain capture + container artifacts
+*.ib
+
+# Provisioned firmware / TPM state (reproducible via tools/provision-*.ps1)
+tools/ovmf/
+tools/firmware/
+tools/swtpm/
+tools/.cache/
+/.analysis/
+/tools/host-runner/host-runner.config.json
+/tools/host-runner/host-runner.*.config.json
+
+# Visual Studio / MSVC noise
+.vs/
+*.obj
+*.user
+*.suo
+
+# Windows
+Thumbs.db
+Desktop.ini

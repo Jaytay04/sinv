@@ -1,0 +1,31 @@
+P6 installer host gate
+======================
+
+Date: 2026-09-06
+Run: p6-installer-host-20260906-234924-ce33b0aceb
+Result: PASS
+
+The Windows host gate created an ephemeral CurrentUser code-signing key, exported
+its public DER certificate, and used the real Windows SDK signtool to sign the
+production loader and payload. The installer independently validated PE
+Authenticode integrity and required an exact match to the supplied public MOK
+certificate; the certificate was never added to a Windows trust store.
+
+The gate staged the vendored Ubuntu shim, the signed loader as grubx64.efi,
+tcglog.ib, and the signed payload into a temporary ESP model. It verified every
+staged size and SHA-256 value and committed the manifest last.
+
+Negative checks passed: a byte-tampered signed loader was rejected before ESP
+mutation, a wrong pinned certificate was rejected, and direct MokList/MokListRT
+enrollment from Windows was refused and directed to shim MokManager.
+
+Hashes:
+
+- shimx64.efi: 6FE6E1BCBE6CF6BAEC8E056D40361CA1AA715CC04DDCC2855351DE060B84350B
+- signed loader.efi: 36B1FF732C1A3F3C322032BBE91A2F206A700A5E1EDB880347C13F6BB0E96214
+- signed payload.efi: 26F04F787B281BD5F771431E3DA70911DAE9A74DD0EB22310A1AB051DC902E1C
+- manifest.sha256: 44975C3A17A9A9697FB7165D2A2549F0D5E363D36167CE4CC89BE88ED9F763AA
+
+The PFX, private key, public test certificates, and CurrentUser certificate-store
+entries were removed. A post-gate scan found no CN=UEFILoader P6 Gate certificate
+in CurrentUser My, Root, TrustedPeople, or TrustedPublisher.

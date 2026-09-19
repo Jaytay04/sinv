@@ -1,0 +1,34 @@
+P7 installer one-shot evidence
+================================
+
+Date: 2026-09-06
+Host run: p7-installer-oneshot-host-20260907-013656-a1bc339577
+Nested run: uefi-linux-oneshot-cycle-20260907-015234-0e25d12941
+Result: PASS
+
+The Windows host transaction gate exercised the production one-shot installer
+against a safe ESP model. It verified preflight and read-back hashes, installed
+the pinned Ubuntu shim at the Microsoft boot-manager path, retained the
+production loader as the shim sibling, rejected an unrestored state with
+BootNext fallback guidance, and removed only provably owned sibling residue
+after a simulated verified restore.
+
+The nested-OVMF gate started the vendored shim from
+EFI/Microsoft/Boot/bootmgfw.efi. Shim loaded the sibling production loader,
+proving the staged chain is executable. Firmware measured that launch into
+PCR0/PCR4 in all four active banks, and the production loader correctly enforced
+the hard non-empty-PCR gate: it performed no replay and skipped the payload.
+
+The fail-closed path still completed the one-shot safety transaction:
+
+- boot manager restore: PASS
+- restored SHA-256: 71EADDAD29FEB011B0ADB36207A900B07A49BF6A1BDE784CCCEA563B17AEFD76
+- backup, temporary, and displaced restore files absent
+- restored boot-manager launch: PASS
+- ExitBootServices calls: 0
+- loader fail-closed handoff: PASS
+
+The host runner stopped the Ubuntu wrapper VM and released the retained VM
+lease. This evidence closes the OVMF replace/restore cycle. Live Windows
+BootNext self-clearing and BootOrder fallback behavior remains OpenSpec task
+3.4 and requires the Windows clone guest credential.

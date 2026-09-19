@@ -1,0 +1,41 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 20,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "windows",
+      "displayName": "Windows MSVC x64 (Ninja)",
+      "description": "Configures the Windows CLI tools and EFI app with MSVC + Ninja. Run from a 'x64 Native Tools' / Developer PowerShell prompt so cl.exe is on PATH.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/windows",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "windows-static",
+      "displayName": "Windows MSVC x64 static CRT (Ninja, Release)",
+      "description": "Release build with the static CRT (/MT) so binaries carry no VC++ redistributable dependency. Run from a 'x64 Native Tools' / Developer PowerShell prompt so cl.exe is on PATH.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/windows-static",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "IB_STATIC_RUNTIME": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows",
+      "configurePreset": "windows"
+    },
+    {
+      "name": "windows-static",
+      "configurePreset": "windows-static"
+    }
+  ]
+}

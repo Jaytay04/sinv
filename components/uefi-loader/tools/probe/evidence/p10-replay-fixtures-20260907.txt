@@ -1,0 +1,28 @@
+P10 generated replay/audit fixture gate
+=======================================
+
+Date: 2026-09-07
+Run: p10-fixtures-host-20260907-095805-fdf2a39ae2
+Result: PASS
+ibaudit.exe SHA-256:
+690A4A93254F955A6D4582B2FF8B6DC861FF2FF6E1A15A1D107CBBEE862D0AF4
+
+The generator emitted a deterministic eight-event crypto-agile tcglog.ib,
+stored SHA-256 PCR[0-7] fold results, a digest-tampered twin, a wrapped Event00
+downgrade log, and clean/drift schema-1 baselines. An independent validator
+strictly loaded the container, recomputed every PCR fold, matched the stored
+states, decoded both baselines, and mapped the added MOK and changed boot
+manager to detectors 3 and 4.
+
+The production dump command passed the clean generated log and rejected the
+tampered twin at EventNum=0/PCR=0. The detector fixture suites additionally
+covered attributed raw-extend PCR divergence, unexplained mismatch, rogue MOK,
+boot-manager replacement/residue, Event00/all-reset signals, and clean states.
+
+The clean boot-manager fixture was copied from the host Windows installation
+for this ephemeral gate. The production read-only Authenticode adapter verified
+its trusted Microsoft signer and hashed it as:
+456DE3C04EA6A39B03964181E23A725E9A27A1097D79D02355CBA0A061BD96C1
+
+Focused evidence directory:
+.analysis/host-runner/fixture-gates/p10-fixtures-host-20260907-095805-fdf2a39ae2

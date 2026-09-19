@@ -1,0 +1,74 @@
+Nested-Linux P5 Divergence Manifest Evidence
+=============================================
+
+Date (UTC): 2026-09-06
+Workflow: LinuxDivergenceManifest
+RunId: uefi-linux-divergence-manifest-20260906-214012-246c5427b8
+Result: PASS
+
+Environment
+-----------
+
+- VMware Ubuntu guest with nested KVM
+- QEMU q35 with a fresh swtpm TPM 2.0 instance
+- EDK2 tag edk2-stable202605 (b03a21a), patched to suppress firmware
+  measurements into PCR 0-7
+- EFI_TCG2_PROTOCOL present
+- Active PCR-bank mask: 0x0000000F
+
+Divergence observations
+-----------------------
+
+- Synthetic events: 1
+- Raw TPM2_PCR_Extend operations: 1
+- SHA-256 PCR0 verified non-zero inside EFI before QEMU disconnected
+- Manifest path: \EFI\insecure-boot\divergence.ib
+- Manifest bytes: 216 (0xD8)
+- Manifest records: 1
+- Record event index: 0
+- Record PCR: 0
+- Record type: 0x80000008 (EV_EFI_PLATFORM_FIRMWARE_BLOB)
+- Record active digests: 4 (SHA1, SHA256, SHA384, SHA512)
+- Independent parser: PASS IBDV records=1 event_index=0 pcr=0
+  type=0x80000008 digests=4
+
+Transport-lifetime correction
+-----------------------------
+
+The first attempt, run
+uefi-linux-divergence-manifest-20260906-213401-5510f97094, produced a valid
+manifest and reported the EFI gate PASS, but the guest runner attempted a
+tpm2_pcrread after QEMU had disconnected and swtpm had closed its data socket.
+The final fixture verifies PCR0 through EFI_TCG2_PROTOCOL while QEMU still owns
+the TPM transport. The corrected run above passed.
+
+Evidence SHA-256
+---------------
+
+- result.json:
+  63077D6190571D50A42BB8D59DDB63E23C2413AF8A6765D0D200530FE7BA5E8B
+- qemu-debugcon.log:
+  2CE07B2F39C939CF8DA65CE3ED6934426024785D961CF915A20CC59505B32C5D
+- manifest-parse.txt:
+  57D5579E3EB0AD996B732C38796999AAE9347ED2393FEEA5AB46546D43F878BD
+- after-raw-extend.txt:
+  2CC1459CAE157C9E00EE2A5AF059056080F4DC7650FE0A9DF4E97B266BA28558
+- divergence.ib:
+  1A8300AC86CF941FB29BEB5ECB579F7927A31ECAE1CD4965E33DFB1CB31A8ADB
+- qemu-serial.log:
+  B4BA911405EA75EFC739082FFFA77A0330DF22A7543E0E1264355AC12809C40E
+- edk2-build.log:
+  70A3265E1EDEC8BF46EB453FBB15E65AC6782F4A5D3CA13E1FDF12D326EFF84A
+
+Cleanup state
+-------------
+
+- Configured Ubuntu VM running: False
+- Startup lease: FREE
+- Linux per-VM lease: ACTIVE until 2026-09-07T00:34:01.4856557Z
+- Quarantine state: RECOVERED_VM_OFF_LEASE_ACTIVE
+
+The original failed runner intentionally retained its per-VM lease but did not
+persist the release token. The VM is stopped; retain quarantine until that lease
+expires and its state can be safely taken over or cleared under the mailbox
+contract.

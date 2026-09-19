@@ -1,0 +1,55 @@
+{
+  "SchemaVersion": 1,
+  "ProjectRoot": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\UEFILoader",
+  "StateRoot": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\UEFILoader\\.analysis\\host-runner",
+  "Tools": {
+    "VmrunPath": "C:\\Program Files\\VMware\\VMware Workstation\\vmrun.exe",
+    "VsDevCmdPath": "C:\\PROGRA~1\\MICROS~3\\18\\COMMUN~1\\Common7\\Tools\\VsDevCmd.bat"
+  },
+  "SharedLease": {
+    "ScriptPath": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\AgentSharedMailbox\\Invoke-AgentVmLease.ps1"
+  },
+  "Policy": {
+    "BuildTimeoutSeconds": 1800,
+    "OperationTimeoutSeconds": 7200,
+    "GuestReadyTimeoutSeconds": 180,
+    "LeaseMinutes": 180,
+    "StartupLeaseMinutes": 10,
+    "MaxConcurrentVms": 2,
+    "MinimumHostReserveMib": 1024
+  },
+  "AdditionalKnownVms": [
+    {
+      "Name": "HypervisorWindows",
+      "VmxPath": "D:\\Archived Virtual Machines\\uefi2hsinv-2026-09-14\\V3H-Gate4-MultiGroup\\V3H-Gate4-MultiGroup.vmx",
+      "LeaseResource": "vm-hypervisor-v3h-gate4"
+    }
+  ],
+  "Profiles": {
+    "Linux": {
+      "Enabled": true,
+      "VmxPath": "D:\\Archived Virtual Machines\\uefi2hsinv-2026-09-14\\Ubuntu 64-bit\\Ubuntu 64-bit.vmx",
+      "DisplayName": "Ubuntu 64-bit",
+      "SnapshotName": "",
+      "GuestUser": "jayli",
+      "GuestStageRoot": "/home/jayli/.cache/uefiloader-host-runner",
+      "GuestCredentialFile": "linux-guest.xml",
+      "VmCredentialFile": "",
+      "LeaseResource": "vm-uefiloader-ubuntu64"
+    },
+    "Windows": {
+      "Enabled": true,
+      "VmxPath": "C:\\Users\\jayli\\OneDrive\\Documents\\Virtual Machines\\Clone of V3H-Gate4-MultiGroup\\Clone of V3H-Gate4-MultiGroup.vmx",
+      "DisplayName": "Clone of V3H-Gate4-MultiGroup",
+      "SnapshotName": "UEFILoader-GuestInfo-Clean-v7",
+      "GuestTransport": "VmwareGuestInfo",
+      "MailboxCredentialFile": "windows-clone-mailbox-key.xml",
+      "GuestUser": "jayli",
+      "GuestStageRoot": "C:\\ProgramData\\UEFILoaderRunner",
+      "GuestCredentialFile": "",
+      "VmCredentialFile": "windows-vm.xml",
+      "LeaseResource": "vm-uefiloader-windows-clone",
+      "ExpectedProbeVerdict": "NOT_MET"
+    }
+  }
+}

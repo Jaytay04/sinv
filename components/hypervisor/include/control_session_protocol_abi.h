@@ -1,0 +1,50 @@
+#ifndef HYPERSINV_CONTROL_SESSION_PROTOCOL_ABI_H
+#define HYPERSINV_CONTROL_SESSION_PROTOCOL_ABI_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+#define HYPERVISOR_CONTROL_PROTOCOL_MAGIC UINT32_C(0x48595052)
+#define HYPERVISOR_CONTROL_PROTOCOL_MAJOR UINT16_C(1)
+#define HYPERVISOR_CONTROL_PROTOCOL_MINOR UINT16_C(0)
+#define HYPERVISOR_CONTROL_PROTOCOL_REQUEST_FLAGS_NONE UINT32_C(0)
+#define HYPERVISOR_CONTROL_PROTOCOL_RESPONSE_NEGOTIATED UINT32_C(1)
+
+typedef struct HYPERVISOR_CONTROL_PROTOCOL_REQUEST {
+    uint32_t Magic;
+    uint16_t Major;
+    uint16_t Minor;
+    uint32_t Size;
+    uint32_t Flags;
+} HYPERVISOR_CONTROL_PROTOCOL_REQUEST;
+
+typedef struct HYPERVISOR_CONTROL_PROTOCOL_RESPONSE {
+    uint32_t Magic;
+    uint16_t Major;
+    uint16_t Minor;
+    uint32_t Size;
+    uint32_t Flags;
+} HYPERVISOR_CONTROL_PROTOCOL_RESPONSE;
+
+#if defined(__cplusplus)
+#define HYPERSINV_PROTOCOL_ABI_ASSERT static_assert
+#else
+#define HYPERSINV_PROTOCOL_ABI_ASSERT _Static_assert
+#endif
+
+HYPERSINV_PROTOCOL_ABI_ASSERT(
+    sizeof(HYPERVISOR_CONTROL_PROTOCOL_REQUEST) == 16,
+    "control protocol request size");
+HYPERSINV_PROTOCOL_ABI_ASSERT(
+    sizeof(HYPERVISOR_CONTROL_PROTOCOL_RESPONSE) == 16,
+    "control protocol response size");
+HYPERSINV_PROTOCOL_ABI_ASSERT(
+    offsetof(HYPERVISOR_CONTROL_PROTOCOL_REQUEST, Flags) == 12,
+    "control protocol request flags offset");
+HYPERSINV_PROTOCOL_ABI_ASSERT(
+    offsetof(HYPERVISOR_CONTROL_PROTOCOL_RESPONSE, Flags) == 12,
+    "control protocol response flags offset");
+
+#undef HYPERSINV_PROTOCOL_ABI_ASSERT
+
+#endif /* HYPERSINV_CONTROL_SESSION_PROTOCOL_ABI_H */

@@ -1,0 +1,19 @@
+Asset: shimx64.efi
+Architecture: amd64 / x86_64 UEFI
+Upstream package: Ubuntu 24.04 LTS (noble) shim-signed 1.58+15.8-0ubuntu1
+Package URL: https://archive.ubuntu.com/ubuntu/pool/main/s/shim-signed/shim-signed_1.58+15.8-0ubuntu1_amd64.deb
+Package SHA-256: BA9B5D80E5D886C30664F2BEBFB5C2FCCE3B9B40F16FC46CBA49C19A91C8059C
+Package member: /usr/lib/shim/shimx64.efi.signed.latest
+Asset SHA-256: 6FE6E1BCBE6CF6BAEC8E056D40361CA1AA715CC04DDCC2855351DE060B84350B
+Signer subject: Microsoft Windows UEFI Driver Publisher
+Signer issuer: Microsoft Corporation UEFI CA 2011
+Signature timestamp: 2024-02-27T18:07:54Z
+
+The PE contains a Microsoft UEFI signature. On the development host,
+signtool /kp identified the signer chain but could not build it to a locally
+trusted Microsoft Third Party Marketplace Root (0x800B010A). The package and
+asset hashes above are therefore pinned independently. Secure Boot acceptance
+must still be verified in the snapshot-protected target VM before release.
+
+The upstream shim build defaults to grubx64.efi as its x64 second-stage name:
+https://github.com/rhboot/shim/blob/main/BUILDING

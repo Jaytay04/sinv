@@ -1,0 +1,23 @@
+Gate: P11 two-environment deployment and detection walkthrough
+Date: 2026-09-07
+Result: PASS
+
+OVMF + swtpm environment:
+  Full replay/Windows gate:
+    uefi-linux-nested-windows-e2e-20260907-224932-87dcc274c8
+  Production BootNext gate:
+    uefi-linux-bootnext-e2e-20260907-234840-f317c1e14f
+  Replay result: exact SHA-256 PCR0-7 state and 11 attributed raw events.
+  One-shot result: BootNext consumed once, loader handed off to Windows,
+    owned Boot#### cleaned, BootOrder and bootmgfw.efi unchanged.
+
+VMware Windows environment:
+  The disposable clone's native TBS probe/capture walkthrough passed through
+  the authenticated GuestInfo runner. VMware remained the negative replay
+  control because firmware measurements make PCR0-7 non-empty. Detector and
+  capture evidence is recorded in M0-VERDICT.md and the P8/P9/P10 evidence.
+
+Rollback:
+  WSL/QEMU used per-run qcow2 overlays and fresh swtpm/OVMF state.
+  VMware used the clean snapshot and exact per-VM lease. All live gates
+  stopped their owned VM/process set and released their lease.

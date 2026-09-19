@@ -1,0 +1,233 @@
+diff --git a/OvmfPkg/Include/Dsc/OvmfTpmSecurityStub.dsc.inc b/OvmfPkg/Include/Dsc/OvmfTpmSecurityStub.dsc.inc
+--- a/OvmfPkg/Include/Dsc/OvmfTpmSecurityStub.dsc.inc
++++ b/OvmfPkg/Include/Dsc/OvmfTpmSecurityStub.dsc.inc
+@@ -8,7 +8,9 @@
+ !endif
+ !endif
+ 
+-!if $(TPM2_ENABLE) == TRUE || $(CC_MEASUREMENT_ENABLE) == TRUE
++      # UEFILoader test harness: omit TPM2 image measurement. CC measurement
++      # retains its normal library dependency.
++!if $(CC_MEASUREMENT_ENABLE) == TRUE
+       #
+       # DxeTpm2MeasureBootLib provides security service of TPM2 measure boot and
+       # Confidential Computing (CC) measure boot. It should be controlled by
+diff --git a/OvmfPkg/OvmfPkgX64.dsc b/OvmfPkg/OvmfPkgX64.dsc
+--- a/OvmfPkg/OvmfPkgX64.dsc
++++ b/OvmfPkg/OvmfPkgX64.dsc
+@@ -1186,8 +1186,9 @@
+ !include OvmfPkg/Include/Dsc/OvmfTpmComponentsDxe.dsc.inc
+ 
+   #
+-  # Smbios Measurement support
+-  #
+-!if $(TPM2_ENABLE) == TRUE || $(CC_MEASUREMENT_ENABLE) == TRUE
++  # Smbios Measurement support. The UEFILoader test harness suppresses the
++  # TPM2 measured-boot path while retaining CC measurement behavior.
++  #
++!if $(CC_MEASUREMENT_ENABLE) == TRUE
+   MdeModulePkg/Universal/SmbiosMeasurementDxe/SmbiosMeasurementDxe.inf
+ !endif
+diff --git a/OvmfPkg/OvmfPkgX64.fdf b/OvmfPkg/OvmfPkgX64.fdf
+--- a/OvmfPkg/OvmfPkgX64.fdf
++++ b/OvmfPkg/OvmfPkgX64.fdf
+@@ -386,9 +386,10 @@ INF OvmfPkg/Tcg/TdTcg2Dxe/TdTcg2Dxe.inf
+ !include OvmfPkg/Include/Fdf/OvmfOptHw.fdf.inc
+ 
+   #
+-  # Smbios Measurement support
+-  #
+-!if $(TPM2_ENABLE) == TRUE || $(CC_MEASUREMENT_ENABLE) == TRUE
++  # Smbios Measurement support. The UEFILoader test harness suppresses the
++  # TPM2 measured-boot path while retaining CC measurement behavior.
++  #
++!if $(CC_MEASUREMENT_ENABLE) == TRUE
+ INF MdeModulePkg/Universal/SmbiosMeasurementDxe/SmbiosMeasurementDxe.inf
+ !endif
+ 
+diff --git a/SecurityPkg/Tcg/Tcg2Dxe/Tcg2Dxe.c b/SecurityPkg/Tcg/Tcg2Dxe/Tcg2Dxe.c
+--- a/SecurityPkg/Tcg/Tcg2Dxe/Tcg2Dxe.c
++++ b/SecurityPkg/Tcg/Tcg2Dxe/Tcg2Dxe.c
+@@ -2889,43 +2889,40 @@ DriverEntry (
+     Status = SetupEventLog ();
+     ASSERT_EFI_ERROR (Status);
+ 
+-    //
+-    // Measure handoff tables, Boot#### variables etc.
+-    //
+-    Status = EfiCreateEventReadyToBootEx (
+-               TPL_CALLBACK,
+-               OnReadyToBoot,
+-               NULL,
+-               &Event
+-               );
+-
+-    Status = gBS->CreateEventEx (
+-                    EVT_NOTIFY_SIGNAL,
+-                    TPL_NOTIFY,
+-                    OnExitBootServices,
+-                    NULL,
+-                    &gEfiEventExitBootServicesGuid,
+-                    &Event
+-                    );
+-
+-    //
+-    // Measure Exit Boot Service failed
+-    //
+-    Status = gBS->CreateEventEx (
+-                    EVT_NOTIFY_SIGNAL,
+-                    TPL_NOTIFY,
+-                    OnExitBootServicesFailed,
+-                    NULL,
+-                    &gEventExitBootServicesFailedGuid,
+-                    &Event
+-                    );
+-
+-    //
+-    // Create event callback, because we need access variable on SecureBootPolicyVariable
+-    // We should use VariableWriteArch instead of VariableArch, because Variable driver
+-    // may update SecureBoot value based on last setting.
+-    //
+-    EfiCreateProtocolNotifyEvent (&gEfiVariableWriteArchProtocolGuid, TPL_CALLBACK, MeasureSecureBootPolicy, NULL, &Registration);
++    //
++    // UEFILoader test harness: retain EFI_TCG2_PROTOCOL and event-log storage,
++    // but do not register firmware measurement callbacks. Keeping the original
++    // calls referenced avoids unused-function build regressions.
++    // Never use this firmware as a production measured-boot implementation.
++    //
++    if (FALSE) {
++      Status = EfiCreateEventReadyToBootEx (
++                 TPL_CALLBACK,
++                 OnReadyToBoot,
++                 NULL,
++                 &Event
++                 );
++
++      Status = gBS->CreateEventEx (
++                      EVT_NOTIFY_SIGNAL,
++                      TPL_NOTIFY,
++                      OnExitBootServices,
++                      NULL,
++                      &gEfiEventExitBootServicesGuid,
++                      &Event
++                      );
++
++      Status = gBS->CreateEventEx (
++                      EVT_NOTIFY_SIGNAL,
++                      TPL_NOTIFY,
++                      OnExitBootServicesFailed,
++                      NULL,
++                      &gEventExitBootServicesFailedGuid,
++                      &Event
++                      );
++
++      EfiCreateProtocolNotifyEvent (&gEfiVariableWriteArchProtocolGuid, TPL_CALLBACK, MeasureSecureBootPolicy, NULL, &Registration);
++    }
+ 
+     //
+     // Hook the system reset to properly shutdown TPM.
+diff --git a/SecurityPkg/Tcg/Tcg2Pei/Tcg2Pei.c b/SecurityPkg/Tcg/Tcg2Pei/Tcg2Pei.c
+--- a/SecurityPkg/Tcg/Tcg2Pei/Tcg2Pei.c
++++ b/SecurityPkg/Tcg/Tcg2Pei/Tcg2Pei.c
+@@ -968,22 +968,25 @@ PeimEntryMP (
+   Status = PeiServicesInstallPpi (&mTcgPpiList);
+   ASSERT_EFI_ERROR (Status);
+ 
+-  if (PcdGet8 (PcdTpm2ScrtmPolicy) == 1) {
+-    Status = MeasureCRTMVersion ();
+-  }
+-
+-  Status = MeasureMainBios ();
+-  if (EFI_ERROR (Status)) {
+-    return Status;
+-  }
+-
+-  //
+-  // Post callbacks:
+-  // for the FvInfoPpi services to measure and record
+-  // the additional Fvs to TPM
+-  //
+-  Status = PeiServicesNotifyPpi (&mNotifyList[0]);
+-  ASSERT_EFI_ERROR (Status);
++  //
++  // UEFILoader test harness: keep TPM initialization and the TCG PPI, but
++  // deliberately suppress all PEI PCR extensions. Keeping the original calls
++  // referenced in a dead branch avoids unused-function build regressions.
++  // Never use this firmware as a production measured-boot implementation.
++  //
++  if (FALSE) {
++    if (PcdGet8 (PcdTpm2ScrtmPolicy) == 1) {
++      Status = MeasureCRTMVersion ();
++    }
++
++    Status = MeasureMainBios ();
++    if (EFI_ERROR (Status)) {
++      return Status;
++    }
++
++    Status = PeiServicesNotifyPpi (&mNotifyList[0]);
++    ASSERT_EFI_ERROR (Status);
++  }
+ 
+   return Status;
+ }
+diff --git a/OvmfPkg/Library/AcpiPlatformLib/QemuFwCfgAcpi.c b/OvmfPkg/Library/AcpiPlatformLib/QemuFwCfgAcpi.c
+--- a/OvmfPkg/Library/AcpiPlatformLib/QemuFwCfgAcpi.c
++++ b/OvmfPkg/Library/AcpiPlatformLib/QemuFwCfgAcpi.c
+@@ -419,14 +419,20 @@ ProcessCmdAllocate (
+   // It has to be done before it is consumed. Because the data will
+   // be updated in the following operations.
+   //
+-  TpmMeasureAndLogData (
+-    1,
+-    EV_PLATFORM_CONFIG_FLAGS,
+-    EV_POSTCODE_INFO_ACPI_DATA,
+-    ACPI_DATA_LEN,
+-    (VOID *)(UINTN)Blob->Base,
+-    Blob->Size
+-    );
++  //
++  // UEFILoader test harness: keep the measurement call referenced, but do
++  // not extend PCR[1]. Never use this firmware for production measured boot.
++  //
++  if (FALSE) {
++    TpmMeasureAndLogData (
++      1,
++      EV_PLATFORM_CONFIG_FLAGS,
++      EV_POSTCODE_INFO_ACPI_DATA,
++      ACPI_DATA_LEN,
++      (VOID *)(UINTN)Blob->Base,
++      Blob->Size
++      );
++  }
+ 
+   return EFI_SUCCESS;
+ 
+@@ -1145,13 +1151,19 @@ InstallQemuFwCfgTables (
+   // It has to be done before it is consumed. Because it would be
+   // updated in the following operations.
+   //
+-  TpmMeasureAndLogData (
+-    1,
+-    EV_PLATFORM_CONFIG_FLAGS,
+-    EV_POSTCODE_INFO_ACPI_DATA,
+-    ACPI_DATA_LEN,
+-    (VOID *)(UINTN)LoaderStart,
+-    FwCfgSize
+-    );
++  //
++  // UEFILoader test harness: keep the measurement call referenced, but do
++  // not extend PCR[1]. Never use this firmware for production measured boot.
++  //
++  if (FALSE) {
++    TpmMeasureAndLogData (
++      1,
++      EV_PLATFORM_CONFIG_FLAGS,
++      EV_POSTCODE_INFO_ACPI_DATA,
++      ACPI_DATA_LEN,
++      (VOID *)(UINTN)LoaderStart,
++      FwCfgSize
++      );
++  }
+ 
+   LoaderEnd = LoaderStart + FwCfgSize / sizeof *LoaderEntry;

@@ -1,0 +1,57 @@
+Nested-Linux P5 Synthetic Replay Dry-Run Evidence
+=================================================
+
+Date (UTC): 2026-09-06
+Host-runner action: RunLinuxReplayDryRun
+RunId: uefi-linux-replay-dry-run-20260906-110011-9a14c6743c
+Result: PASS
+
+Environment
+-----------
+
+- VMware Ubuntu guest with nested KVM
+- QEMU q35 with a fresh swtpm TPM 2.0 instance
+- EDK2 tag edk2-stable202605 (b03a21a), patched to suppress firmware
+  measurements into PCR 0-7
+- EFI_TCG2_PROTOCOL present
+- Active PCR bank mask: 0x0000000F
+
+Replay dry-run observations
+---------------------------
+
+- Synthetic events: 3
+- Callback sequence: HRH
+- Raw-event active digests: 4
+- NULL DataToHash calls: 0
+- PCR extensions performed by the dry-run callbacks: 0
+- replay EFI dry-run: PASS
+
+Independent post-dry-run PCR check
+---------------------------------
+
+A separate EFI executable read PCR 0-7 after the replay smoke target and
+before QEMU shutdown. SHA1, SHA256, SHA384, and SHA512 each reported the
+bitmap 00000000. The hard gate independently returned:
+
+    gate verdict (04 banks): PCR banks empty - replay may proceed
+
+Evidence SHA-256
+---------------
+
+- baseline.txt:
+  90FE9A105A5AE14F46C51450142C73B031D18AD5AC4C15372F9518AA7516ED31
+- after-pcr-check.txt:
+  E1F17B669B8D21F573CC9FA58A778D8633339BBFEE25AA72A25BFFBCAEFD9B77
+- qemu-debugcon.log:
+  BE1041B48FC0A60A8AA8309ED75395BF5C94F2D820567702D88210B970F8A5F6
+- qemu-serial.log:
+  C501F30ADB740607C48833E8C5A949F4FD148F8508AA342496B79F365C563A41
+- result.json:
+  2D1713062B62B61339D4A6BB42274233CCC3C983B5A78C0CCA92993C9C941CDD
+
+Cleanup verification
+--------------------
+
+- Configured Ubuntu VM running: False
+- Linux runner quarantine: False
+- Shared resource local-vm-live-testing: FREE

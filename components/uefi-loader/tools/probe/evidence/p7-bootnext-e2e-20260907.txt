@@ -1,0 +1,36 @@
+Gate: P7 production BootNext one-shot E2E
+Date: 2026-09-07
+Run: uefi-linux-bootnext-e2e-20260907-234840-f317c1e14f
+Result: PASS
+
+Environment:
+  WSL2 Ubuntu, KVM, patched OVMF, swtpm, disposable Windows overlay
+  Prepared base: uefi-windows-capture-20260907-233441-49e4f452ed.vmdk
+
+Production installer setup boot:
+  ib-install.exe oneshot --mode bootnext --esp-volume auto
+  BootNext set to owned Boot0006; BootOrder was not changed.
+  bootmgfw.efi SHA256 before setup:
+    B6F5FF8A5F605840796875259BBA555D0642745A7AC8A5B38D16603768B22570
+
+One-shot loader boot:
+  loader.efi entered exactly once through the owned BootNext entry.
+  The normal measured OVMF boot made the empty-bank gate fail closed.
+  state=READY_BOOT_MANAGER
+  replay=ABORTED
+  restore=PASS
+  payload=SKIPPED
+  exit_boot_services_calls=0
+  Windows then started through its normal BootOrder boot manager.
+
+Windows post-boot verification:
+  Firmware exposed no BootNext/bootsequence before cleanup.
+  Owned Boot0006 was removed by ib-install.exe oneshot --mode off.
+  BootOrder was not changed.
+  Firmware-manager evidence SHA256 before/after cleanup:
+    68CA5E2D45936EDC19C27E92D0B7208A026FEFD08FB1397924EE457F11AE5C55
+  bootmgfw.efi SHA256 after the cycle:
+    B6F5FF8A5F605840796875259BBA555D0642745A7AC8A5B38D16603768B22570
+
+Cleanup:
+  WSL lease released; no run-owned QEMU or swtpm process remained.

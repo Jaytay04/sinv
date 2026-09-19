@@ -1,0 +1,45 @@
+Nested Linux production-handoff gate evidence - 2026-09-06
+
+Run ID: uefi-linux-production-handoff-20260906-230022-9787748677
+Result: PASS
+Completed UTC: 2026-09-06T23:02:22Z
+
+The nested-OVMF integration gate executed the actual production loader.efi
+entry point. It loaded one strict tcglog.ib event, passed the empty-bank gate,
+performed a real raw PCR extension, confirmed SHA-256 PCR0 became non-zero,
+and persisted the divergence manifest before handoff.
+
+Persistent handoff status:
+
+schema=1
+state=READY_BOOT_MANAGER
+replay=PASS
+restore=PASS
+payload=PASS
+exit_boot_services_calls=0
+
+The restored boot-manager image matched the staged backup:
+
+expected=71eaddad29feb011b0adb36207a900b07a49bf6a1bde784cccea563b17aefd76
+actual=71eaddad29feb011b0adb36207a900b07a49bf6a1bde784cccea563b17aefd76
+
+Observed handoff order:
+
+loader production handoff: START
+reference log events: 00000001
+replay and divergence: PASS
+boot manager restore: PASS
+handoff payload: START
+handoff payload: PASS
+payload launch: PASS
+handoff boot manager: START
+handoff boot manager: PASS
+boot manager launch: PASS
+loader production handoff: PASS
+
+After evidence collection, the runner stopped the Linux VM and released both
+the per-VM lease and startup lease.
+
+Boundary: this gate proves the production loader integration against
+deterministic nested-OVMF child images. It does not prove a real Windows
+desktop boot or post-boot PCR capture, so OpenSpec task 2.6 remains open.

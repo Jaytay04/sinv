@@ -1,0 +1,15 @@
+param([Parameter(Mandatory=$true)][string]$ScriptPath,
+      [Parameter(Mandatory=$true)][string]$DocPath,
+      [Parameter(Mandatory=$true)][string]$TestsCMake)
+$ErrorActionPreference='Stop'
+function A([bool]$x,[string]$m){if(-not$x){throw $m}}
+function O([string]$t,[string[]]$v,[string]$n){$p=-1;foreach($x in $v){$q=$t.IndexOf($x,$p+1,[StringComparison]::Ordinal);A ($q-gt$p) "$n $x";$p=$q}}
+function V([string]$s,[string]$d,[string]$t){
+ O $s @('$GateScript=Join-Path $Stage ''gate14-cr3-status-observation.ps1''','$Required=@($Driver,$DriverPdb,$Loader,$LoaderPdb,$GateScript)','$Principal.IsInRole','Start-Transcript','GetActiveProcessorGroupCount','GetActiveProcessorCount([uint16]$Group)','$GroupCount-ne2','$Processors-ne4','Where-Object ActiveProcessors -ne 2','Save-ServiceState ''service-before''','$Before.ExitCode-ne1060','=== LOAD ===','Invoke-Loader ''load'' ''load''','SUCCESS: Hypervisor loaded on $Processors cores and verified by exact V3 status.','INFO: Exact EPT READY status is verified.','Save-ServiceState ''service-after-load''','=== REDACTED CR3 STATUS OBSERVATION ===','$Attempt-le40','''cr3-status''','root|normalized_root|guest_cr3|system_cr3','CR3 Status: class=(OBSERVED|INACTIVE)','CR3 CPU: index=','$Contexts-ne$Processors','$Targets-lt1','$Targets-gt2','$CpuLines.Count-ne$Contexts','$Seen.ContainsKey($Key)','$ResidentSum-ne$Residents','$TransitionSum-ne$Transitions','''OBSERVED''-and$Transitions-gt0','No authenticated CR3 transition was observed within 10 seconds.','=== UNLOAD ===','Invoke-Loader ''unload'' ''unload''','SUCCESS: Hypervisor unloaded','Save-ServiceState ''service-after-unload''','$After.ExitCode-ne1060','if($Cr3Failure){throw','MEMORY.DMP','Cr3Status=OBSERVED','Stop-Transcript','tar.exe -a -c -f $ZipPath') 'Gate14 order'
+ foreach($x in @('Gate 14','gate14-cr3-status-observation.ps1','cr3-status','redacted','OBSERVED','two processor groups','40','10 seconds','.symfix','.sympath+','.reload /f','.logopen /t','.logclose','single supervised','do not retry')){A ($d.Contains($x)) "doc $x"}
+ A (([regex]::Matches($t,'test_gate14_cr3_status_observation_script_contracts').Count)-eq1) 'CTest once'
+}
+$s=[IO.File]::ReadAllText((Resolve-Path $ScriptPath));$d=[IO.File]::ReadAllText((Resolve-Path $DocPath));$t=[IO.File]::ReadAllText((Resolve-Path $TestsCMake));V $s $d $t
+$mut=@($s.Replace("'cr3-status'","'status'"),$s.Replace('$Attempt-le40','$Attempt-le1'),$s.Replace("if(`$Cr3.Stdout-match'(?i)\b(root|normalized_root|guest_cr3|system_cr3)=')","if(`$false)"),$s.Replace('$Contexts-ne$Processors','$false'),$s.Replace('$TransitionSum-ne$Transitions','$false'),$s.Replace("'OBSERVED'-and`$Transitions-gt0","'INACTIVE'"),$s.Replace('$After.ExitCode-ne1060','$false'),$s.Replace('& tar.exe -a -c -f $ZipPath','Write-Host'))
+foreach($m in $mut){A ($m-ne$s) 'vacuous mutation';$bad=$false;try{V $m $d $t}catch{$bad=$true};A $bad 'accepted mutation'}
+Write-Output 'Verified Gate14: single supervised two-group load, exact redacted CR3 observation, aggregate proof, clean unload, crash checks, and evidence archive.'

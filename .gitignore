@@ -1,0 +1,34 @@
+# Generated superbuild state and component outputs
+/build/
+/.codex-build/
+**/.codex-build/
+/out/
+/artifacts/
+/.analysis/
+/tools/host-runner/host-runner.config.json
+
+# CMake and IDE state
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+.vs/
+*.obj
+*.suo
+*.user
+
+# Build logs and local VM state
+*.log
+*.dmp
+*.vmem
+*.vmsn
+*.nvram
+
+# Local signing material and credentials must never enter source control.
+*.pfx
+*.p12
+*.key
+*.pem
+*.secret
+*.secrets.*

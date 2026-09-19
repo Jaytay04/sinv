@@ -1,0 +1,76 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 24,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "combined-windows",
+      "displayName": "Combined Windows Release (Visual Studio 2026)",
+      "description": "Static-first MSVC superbuild for UEFILoader and the EFI hypervisor MVP.",
+      "generator": "Visual Studio 18 2026",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/combined/windows-vs",
+      "cacheVariables": {
+        "COMBINED_CONFIG": "Release",
+        "COMBINED_BUILD_UEFI_LOADER": "ON",
+        "COMBINED_BUILD_HYPERVISOR_EFI": "ON",
+        "COMBINED_BUILD_COMPONENT_TESTS": "ON"
+      }
+    },
+    {
+      "name": "combined-windows-debug",
+      "displayName": "Combined Windows Debug (Visual Studio 2026)",
+      "description": "Debug superbuild with the same static-runtime and VM-only boundaries.",
+      "generator": "Visual Studio 18 2026",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/combined/windows-debug-vs",
+      "cacheVariables": {
+        "COMBINED_CONFIG": "Debug",
+        "COMBINED_BUILD_UEFI_LOADER": "ON",
+        "COMBINED_BUILD_HYPERVISOR_EFI": "ON",
+        "COMBINED_BUILD_COMPONENT_TESTS": "ON"
+      }
+    },
+    {
+      "name": "combined-contract-only",
+      "displayName": "Combined Source Contract (no component build)",
+      "description": "Source-only contract checks for environments without a Windows toolchain or VM.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/combined/contract",
+      "cacheVariables": {
+        "COMBINED_BUILD_UEFI_LOADER": "OFF",
+        "COMBINED_BUILD_HYPERVISOR_EFI": "OFF",
+        "COMBINED_BUILD_COMPONENT_TESTS": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "combined-windows",
+      "configurePreset": "combined-windows",
+      "targets": ["combined_hypervisor_efi"]
+    },
+    {
+      "name": "combined-windows-tests",
+      "configurePreset": "combined-windows",
+      "targets": ["combined_test"]
+    },
+    {
+      "name": "combined-contract-only",
+      "configurePreset": "combined-contract-only",
+      "targets": ["all"]
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "combined-contract",
+      "configurePreset": "combined-contract-only",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}
