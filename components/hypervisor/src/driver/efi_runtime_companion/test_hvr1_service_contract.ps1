@@ -58,6 +58,11 @@ Assert-Contains $source 'analysis-traverse'
 Assert-Contains $source 'analysis-extract'
 Assert-Contains $source 'analysis-results'
 Assert-Contains $source 'analysis-stop'
+Assert-Contains $source 'analysis-publish'
+Assert-Contains $source 'FetchAnalysisSnapshot'
+Assert-Contains $source 'Hvr1BuildOverlayFrame'
+Assert-Contains $source 'SharedMemoryPublisher'
+Assert-Contains $source 'PublisherAccess::AuthenticatedUsersRead'
 Assert-Contains $source 'request.Operation == HV_EFI_ANALYSIS_RESULTS'
 Assert-Contains $source 'Hvr1ComputeMailboxAuthTag'
 Assert-Contains $auth 'BCryptHash'
@@ -137,11 +142,12 @@ if ($null -ne $compilerPath) {
         $shared = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Include\10.0.28000.0\shared'
         $ucrt = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Include\10.0.28000.0\ucrt'
         $efiDirectory = [IO.Path]::GetFullPath((Join-Path $SourceDirectory '..\..\efi'))
+        $overlayDirectory = [IO.Path]::GetFullPath((Join-Path $SourceDirectory '..\..\..\..\..\tools\overlay\include'))
         $msvcInclude = Split-Path (Split-Path (Split-Path (Split-Path $compilerPath -Parent) -Parent) -Parent) -Parent
         $msvcInclude = Join-Path $msvcInclude 'include'
         & $compilerPath /nologo /std:c++17 /EHsc /W4 /WX /permissive- /DUNICODE /D_UNICODE `
-            /DWIN32_LEAN_AND_MEAN /DNTDDI_VERSION=0x0A00000C "/I$SourceDirectory" "/I$um" "/I$shared" "/I$ucrt" `
-            "/I$msvcInclude" "/I$efiDirectory" /c $source "/Fo$objectPath"
+            /DWIN32_LEAN_AND_MEAN /DNOMINMAX /DNTDDI_VERSION=0x0A00000C "/I$SourceDirectory" "/I$um" "/I$shared" "/I$ucrt" `
+            "/I$msvcInclude" "/I$efiDirectory" "/I$overlayDirectory" /c $source "/Fo$objectPath"
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $objectPath)) {
             throw 'Win32 service source compilation failed'
         }

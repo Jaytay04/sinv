@@ -212,6 +212,15 @@ LocalSystem, which is also enforced by the device ACL.  It supports:
   `analysis-traverse`, `analysis-extract`, and `analysis-results [OFFSET]`
   expose safe traversal, typed reads, and paginated findings. `analysis-stop`
   wipes the private session state.
+- `hvr1_runtime_service.exe analysis-publish MAPPING HWND [DURATION_MS]
+  [TRANSFORM] [ascii|utf16]` continuously pages authenticated
+  `ANALYSIS_RESULTS`, converts them to HVO2 records, and publishes through a
+  read-only-for-clients named mapping at no more than 60 Hz. Use a `Global\`
+  mapping for the normal session-zero LocalSystem to interactive-user bridge.
+  The accepted transform specifications are `none`,
+  `xor:HEXKEY:SEED:STEP:ROTATE`, `fnv32:OFFSET:PRIME`,
+  `fnv64:OFFSET:PRIME`, `rol:BITS`, `ror:BITS`,
+  `sub:ODD_MULTIPLIER:ADDEND`, and `unsub:ODD_MULTIPLIER:ADDEND`.
 - `hvr1_runtime_service.exe selftest-shutdown` is a VM-validation command that
   consumes a prior-boot recovery marker, acquires the active-session power
   requests, proves a corrupted HMAC is rejected without changing state,

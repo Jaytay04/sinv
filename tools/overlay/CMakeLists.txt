@@ -16,6 +16,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(hypersinv_overlay WIN32
     src/main.cpp
+    src/data_transform.cpp
     src/d3d_renderer.cpp
     src/overlay_window.cpp
     src/shared_memory_reader.cpp
@@ -47,8 +48,11 @@ include(CTest)
 if(BUILD_TESTING)
     add_executable(hypersinv_overlay_protocol_tests
         tests/protocol_tests.cpp
+        src/data_transform.cpp
+        src/shared_memory_publisher.cpp
         src/shared_memory_reader.cpp
     )
+    target_link_libraries(hypersinv_overlay_protocol_tests PRIVATE advapi32)
     target_include_directories(hypersinv_overlay_protocol_tests PRIVATE include)
     target_compile_definitions(hypersinv_overlay_protocol_tests PRIVATE
         UNICODE
@@ -63,10 +67,51 @@ if(BUILD_TESTING)
     add_test(NAME hypersinv_overlay_protocol_tests
         COMMAND hypersinv_overlay_protocol_tests)
 
+    add_executable(hypersinv_overlay_transform_tests
+        tests/transform_tests.cpp
+        src/data_transform.cpp
+    )
+    target_include_directories(hypersinv_overlay_transform_tests PRIVATE include)
+    target_compile_definitions(hypersinv_overlay_transform_tests PRIVATE
+        UNICODE
+        _UNICODE
+        WIN32_LEAN_AND_MEAN
+        NOMINMAX
+    )
+    if(MSVC)
+        target_compile_options(hypersinv_overlay_transform_tests PRIVATE
+            /W4 /WX /permissive- /utf-8)
+    endif()
+    add_test(NAME hypersinv_overlay_transform_tests
+        COMMAND hypersinv_overlay_transform_tests)
+
+    add_executable(hypersinv_overlay_publisher_tests
+        tests/publisher_tests.cpp
+        src/shared_memory_publisher.cpp
+        src/shared_memory_reader.cpp
+    )
+    target_link_libraries(hypersinv_overlay_publisher_tests PRIVATE advapi32)
+    target_include_directories(hypersinv_overlay_publisher_tests PRIVATE include)
+    target_compile_definitions(hypersinv_overlay_publisher_tests PRIVATE
+        UNICODE
+        _UNICODE
+        WIN32_LEAN_AND_MEAN
+        NOMINMAX
+    )
+    if(MSVC)
+        target_compile_options(hypersinv_overlay_publisher_tests PRIVATE
+            /W4 /WX /permissive- /utf-8)
+    endif()
+    add_test(NAME hypersinv_overlay_publisher_tests
+        COMMAND hypersinv_overlay_publisher_tests)
+
     add_executable(hypersinv_overlay_window_tests
         tests/window_renderer_tests.cpp
+        src/data_transform.cpp
         src/d3d_renderer.cpp
         src/overlay_window.cpp
+        src/shared_memory_publisher.cpp
+        src/shared_memory_reader.cpp
     )
     target_include_directories(hypersinv_overlay_window_tests PRIVATE include)
     target_compile_definitions(hypersinv_overlay_window_tests PRIVATE
@@ -76,6 +121,7 @@ if(BUILD_TESTING)
         NOMINMAX
     )
     target_link_libraries(hypersinv_overlay_window_tests PRIVATE
+        advapi32
         bcrypt
         d2d1
         d3d11

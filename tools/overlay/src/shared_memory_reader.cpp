@@ -80,8 +80,8 @@ SnapshotReadStatus SharedMemoryReader::Read(OverlaySnapshot& snapshot) const noe
         OverlaySnapshot candidate{};
         std::memcpy(&candidate.Header, &header, sizeof(header));
         const std::size_t count = header.EntityCount;
-        std::memcpy(candidate.Entities,
-                    view_->Entities,
+        std::memcpy(candidate.Entries,
+                    view_->Entries,
                     count * sizeof(EntityData));
         MemoryBarrier();
 
@@ -93,7 +93,7 @@ SnapshotReadStatus SharedMemoryReader::Read(OverlaySnapshot& snapshot) const noe
 
         candidate.Header.Sequence = after;
         for (std::size_t i = 0; i < count; ++i) {
-            candidate.Entities[i].name[31] = L'\0';
+            candidate.Entries[i].name[31] = L'\0';
         }
         snapshot = candidate;
         return SnapshotReadStatus::Success;

@@ -366,8 +366,16 @@ function Test-UhrCredential {
         [Parameter(Mandatory=$true)][AllowEmptyString()][string]$FileName
     )
     if ([string]::IsNullOrWhiteSpace($FileName)) { return $false }
-    return Test-Path -LiteralPath `
-        (Get-UhrCredentialPath -Config $Config -FileName $FileName) -PathType Leaf
+    $Path = Get-UhrCredentialPath -Config $Config -FileName $FileName
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
+    $Credential = $null
+    try {
+        $Credential = Import-Clixml -LiteralPath $Path -ErrorAction Stop
+        return $Credential -is [PSCredential] -and
+            -not [string]::IsNullOrWhiteSpace($Credential.UserName)
+    }
+    catch { return $false }
+    finally { $Credential = $null }
 }
 
 function ConvertTo-UhrNativeArgument {

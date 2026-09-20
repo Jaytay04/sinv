@@ -7,7 +7,9 @@ $ErrorActionPreference = 'Stop'
 $windowSource = Get-Content -LiteralPath (Join-Path $SourceRoot 'src\overlay_window.cpp') -Raw
 $readerSource = Get-Content -LiteralPath (Join-Path $SourceRoot 'src\shared_memory_reader.cpp') -Raw
 $rendererSource = Get-Content -LiteralPath (Join-Path $SourceRoot 'src\d3d_renderer.cpp') -Raw
-$allSource = $windowSource + $readerSource + $rendererSource
+$publisherSource = Get-Content -LiteralPath (Join-Path $SourceRoot 'src\shared_memory_publisher.cpp') -Raw
+$mainSource = Get-Content -LiteralPath (Join-Path $SourceRoot 'src\main.cpp') -Raw
+$allSource = $windowSource + $readerSource + $rendererSource + $publisherSource + $mainSource
 
 $required = @(
     'WS_EX_TOPMOST',
@@ -21,6 +23,9 @@ $required = @(
     'DXGI_FORMAT_B8G8R8A8_UNORM',
     'D2D1_ALPHA_MODE_PREMULTIPLIED',
     'DWriteCreateFactory'
+    'InterlockedExchange64'
+    'PublisherAccess::AuthenticatedUsersRead'
+    'ProjectWorldToScreen'
 )
 
 foreach ($token in $required) {

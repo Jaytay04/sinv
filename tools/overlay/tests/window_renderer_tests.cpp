@@ -1,8 +1,13 @@
+#include "data_transform.h"
 #include "d3d_renderer.h"
+#include "overlay_protocol.h"
 #include "overlay_window.h"
+#include "shared_memory_publisher.h"
+#include "shared_memory_reader.h"
 
 #include <windows.h>
 
+#include <chrono>
 #include <cstdio>
 #include <string>
 
@@ -56,15 +61,82 @@ int wmain() {
     }
 
     D3dRenderer renderer;
-    if (!renderer.Initialize(window.Handle(), 320, 240) ||
-        !renderer.BeginFrame()) {
+    if (!renderer.Initialize(window.Handle(), 320, 240)) {
         return Fail("D3D11/Direct2D initialization");
     }
-    renderer.DrawBox(10.0f, 10.0f, 100.0f, 80.0f, 0xcc40a0ffu);
-    renderer.DrawLine(0.0f, 0.0f, 319.0f, 239.0f, 0xff33cc66u);
-    renderer.DrawText(12.0f, 12.0f, L"render-test", 0xffffffffu);
+
+    wchar_t mappingName[128]{};
+    swprintf_s(mappingName,
+               L"Local\\HypersinvPresentTest_%lu_%llu",
+               GetCurrentProcessId(),
+               static_cast<unsigned long long>(GetTickCount64()));
+    SharedMemoryPublisher publisher;
+    SharedMemoryReader reader;
+    if (!publisher.Open(mappingName, 0) || !reader.Open(mappingName)) {
+        return Fail("pipeline mapping initialization");
+    }
+    AnalysisResult frame{};
+    frame.Header.Magic = kOverlayMagic;
+    frame.Header.Version = kOverlayVersion;
+    frame.Header.HeaderSize = sizeof(SharedOverlayHeader);
+    frame.Header.EntityStride = sizeof(EntityData);
+    frame.Header.Capacity = static_cast<std::uint32_t>(kMaximumEntities);
+    frame.Header.EntityCount = 1;
+    frame.Header.SceneFlags = kSceneHasViewProjection;
+    frame.Header.SourceGeneration = 1;
+    frame.Header.SourceSequence = 1;
+    frame.Header.ViewProjection[0] = 1.0f;
+    frame.Header.ViewProjection[5] = 1.0f;
+    frame.Header.ViewProjection[10] = 1.0f;
+    frame.Header.ViewProjection[15] = 1.0f;
+    frame.Entries[0].width = 100.0f;
+    frame.Entries[0].height = 80.0f;
+    frame.Entries[0].coordinateSpace = static_cast<std::uint32_t>(
+        CoordinateSpace::World);
+    wcscpy_s(frame.Entries[0].name, L"pipeline-render-test");
+    frame.Entries[0].color = 0xcc40a0ffu;
+    frame.Entries[0].isVisible = 1;
+
+    const auto pipelineStarted = std::chrono::steady_clock::now();
+    if (publisher.Publish(frame) != PublishStatus::Success) {
+        return Fail("pipeline publish");
+    }
+    OverlaySnapshot snapshot{};
+    if (reader.Read(snapshot) != SnapshotReadStatus::Success ||
+        snapshot.Header.EntityCount != 1) {
+        return Fail("pipeline read");
+    }
+    float screenX = 0.0f;
+    float screenY = 0.0f;
+    if (!ProjectWorldToScreen(snapshot.Header.ViewProjection,
+                              snapshot.Entries[0].worldX,
+                              snapshot.Entries[0].worldY,
+                              snapshot.Entries[0].worldZ,
+                              320.0f,
+                              240.0f,
+                              screenX,
+                              screenY) ||
+        screenX != 160.0f || screenY != 120.0f ||
+        !renderer.BeginFrame()) {
+        return Fail("pipeline projection/render begin");
+    }
+    renderer.DrawBox(screenX,
+                     screenY,
+                     snapshot.Entries[0].width,
+                     snapshot.Entries[0].height,
+                     snapshot.Entries[0].color);
+    renderer.DrawLine(0.0f, 0.0f, screenX, screenY, 0xff33cc66u);
+    renderer.DrawText(screenX,
+                      screenY,
+                      snapshot.Entries[0].name,
+                      0xffffffffu);
     if (!renderer.EndFrame()) {
-        return Fail("D3D11 present");
+        return Fail("pipeline D3D11 present");
+    }
+    const auto pipelineLatency =
+        std::chrono::steady_clock::now() - pipelineStarted;
+    if (pipelineLatency >= std::chrono::milliseconds(50)) {
+        return Fail("publisher-to-present latency exceeded 50 ms");
     }
     renderer.Shutdown();
     window.Destroy();
@@ -80,6 +152,8 @@ int wmain() {
     }
     secondWindow.Destroy();
 
-    std::puts("PASS: overlay window styles and DirectX render path");
+    std::printf(
+        "PASS: overlay window and publisher-to-present pipeline %.3f ms\n",
+        std::chrono::duration<double, std::milli>(pipelineLatency).count());
     return 0;
 }

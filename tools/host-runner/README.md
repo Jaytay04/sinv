@@ -43,6 +43,9 @@ guests and the WSL2/KVM environment used by this project:
   authenticated Guest Variables mailbox while VMware Tools is healthy. The
   post-handoff health proof uses a temporary dedicated COM2 named pipe instead,
   so it does not depend on VMware Tools while Windows runs under the monitor.
+  The pinned-profile path also runs the HVA1 analysis scan and a 500 ms HVO2
+  publisher sample; it requires at least one frame and zero
+  extraction-to-publication samples at or above 50 ms.
 - `RunWindowsDirectScannerE2E` uses the same boot and authenticated control
   path, invokes the bounded read-only physical scanner, and publishes success
   before detach. It isolates scanner validation from the shutdown gate while
@@ -84,15 +87,21 @@ Store credentials once from an interactive PowerShell session:
 $Runner = '.\tools\host-runner\Invoke-UEFILoaderHostRunner.ps1'
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Runner -Action StoreGuestCredential -Profile Linux
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Runner -Action StoreVmCredential -Profile Windows
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Runner -Action StoreMailboxCredential -Profile Windows
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Runner -Action CredentialStatus -Profile All
 ~~~
+
+`CredentialStatus` reports `False` for both missing and DPAPI-unreadable files,
+so a restart or user-context change cannot leave a stale credential looking
+ready.
 
 Credentials are protected for the current Windows user with DPAPI. The Linux
 profile uses its guest credential. The Windows mailbox profile uses only the
 encrypted-VM password for host-side power and snapshot operations; it does not
 need a Windows sign-in password. `vmrun` still receives the encrypted-VM
 password as a process argument while it is running, so use a dedicated test-VM
-password.
+password. The mailbox action stores the existing 32-byte HMAC key as base64;
+it must match the key provisioned inside the disposable VM.
 
 ### Passwordless Windows guest preparation
 

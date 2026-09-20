@@ -1,4 +1,5 @@
 #include "d3d_renderer.h"
+#include "data_transform.h"
 #include "overlay_protocol.h"
 #include "overlay_window.h"
 #include "shared_memory_reader.h"
@@ -171,24 +172,33 @@ OverlaySnapshot MakeDemoSnapshot(UINT width, UINT height, double seconds) {
     const float pulse = 10.0f * static_cast<float>(std::sin(seconds * 2.0));
     const float centerX = static_cast<float>(width) * 0.5f;
     const float centerY = static_cast<float>(height) * 0.5f;
-    snapshot.Entities[0] = EntityData{centerX - 120.0f,
+    snapshot.Entries[0] = EntityData{centerX - 120.0f,
                                       centerY - 100.0f,
                                       240.0f,
                                       200.0f,
+                                      0.0f, 0.0f, 0.0f,
+                                      static_cast<std::uint32_t>(
+                                          CoordinateSpace::Screen),
                                       L"Primary region",
                                       0xff33cc66u,
                                       1};
-    snapshot.Entities[1] = EntityData{centerX + 160.0f + pulse,
+    snapshot.Entries[1] = EntityData{centerX + 160.0f + pulse,
                                       centerY - 60.0f,
                                       140.0f,
                                       120.0f,
+                                      0.0f, 0.0f, 0.0f,
+                                      static_cast<std::uint32_t>(
+                                          CoordinateSpace::Screen),
                                       L"Tracked item",
                                       0xe6ffb020u,
                                       1};
-    snapshot.Entities[2] = EntityData{50.0f,
+    snapshot.Entries[2] = EntityData{50.0f,
                                       70.0f,
                                       180.0f,
                                       90.0f,
+                                      0.0f, 0.0f, 0.0f,
+                                      static_cast<std::uint32_t>(
+                                          CoordinateSpace::Screen),
                                       L"Debug sample",
                                       0xcc40a0ffu,
                                       1};
@@ -203,7 +213,7 @@ void RenderSnapshot(D3dRenderer& renderer,
         snapshot.Header.EntityCount,
         static_cast<std::uint32_t>(kMaximumEntities));
     for (std::uint32_t i = 0; i < count; ++i) {
-        const EntityData& entity = snapshot.Entities[i];
+        const EntityData& entity = snapshot.Entries[i];
         if (entity.isVisible == 0 || !std::isfinite(entity.screenX) ||
             !std::isfinite(entity.screenY) || !std::isfinite(entity.width) ||
             !std::isfinite(entity.height) || entity.width <= 0.0f ||
@@ -211,18 +221,38 @@ void RenderSnapshot(D3dRenderer& renderer,
             continue;
         }
 
-        renderer.DrawBox(entity.screenX,
-                         entity.screenY,
+        float screenX = entity.screenX;
+        float screenY = entity.screenY;
+        if (entity.coordinateSpace ==
+            static_cast<std::uint32_t>(CoordinateSpace::World)) {
+            if ((snapshot.Header.SceneFlags & kSceneHasViewProjection) == 0 ||
+                !ProjectWorldToScreen(snapshot.Header.ViewProjection,
+                                      entity.worldX,
+                                      entity.worldY,
+                                      entity.worldZ,
+                                      static_cast<float>(width),
+                                      static_cast<float>(height),
+                                      screenX,
+                                      screenY)) {
+                continue;
+            }
+        } else if (entity.coordinateSpace !=
+                   static_cast<std::uint32_t>(CoordinateSpace::Screen)) {
+            continue;
+        }
+
+        renderer.DrawBox(screenX,
+                         screenY,
                          entity.width,
                          entity.height,
                          entity.color);
         renderer.DrawLine(static_cast<float>(width) * 0.5f,
                           static_cast<float>(height),
-                          entity.screenX + entity.width * 0.5f,
-                          entity.screenY + entity.height,
+                          screenX + entity.width * 0.5f,
+                          screenY + entity.height,
                           entity.color);
-        renderer.DrawText(entity.screenX,
-                          std::max(0.0f, entity.screenY - 22.0f),
+        renderer.DrawText(screenX,
+                          std::max(0.0f, screenY - 22.0f),
                           entity.name,
                           entity.color);
     }

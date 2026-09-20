@@ -1,4 +1,6 @@
 #include "overlay_protocol.h"
+#include "data_transform.h"
+#include "shared_memory_publisher.h"
 #include "shared_memory_reader.h"
 
 #include <windows.h>
@@ -53,10 +55,13 @@ int wmain() {
     shared->Header.Capacity = static_cast<std::uint32_t>(kMaximumEntities);
     shared->Header.EntityCount = 1;
     shared->Header.Sequence = 2;
-    shared->Entities[0] = EntityData{10.0f,
+    shared->Entries[0] = EntityData{10.0f,
                                      20.0f,
                                      30.0f,
                                      40.0f,
+                                     0.0f, 0.0f, 0.0f,
+                                     static_cast<std::uint32_t>(
+                                         CoordinateSpace::Screen),
                                      L"protocol-test",
                                      0xff123456u,
                                      1};
@@ -71,9 +76,9 @@ int wmain() {
     OverlaySnapshot snapshot{};
     if (reader.Read(snapshot) != SnapshotReadStatus::Success ||
         snapshot.Header.EntityCount != 1 ||
-        snapshot.Entities[0].screenX != 10.0f ||
-        snapshot.Entities[0].color != 0xff123456u ||
-        std::wstring(snapshot.Entities[0].name) != L"protocol-test") {
+        snapshot.Entries[0].screenX != 10.0f ||
+        snapshot.Entries[0].color != 0xff123456u ||
+        std::wstring(snapshot.Entries[0].name) != L"protocol-test") {
         return Fail("valid snapshot round trip");
     }
 

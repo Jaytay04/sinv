@@ -555,6 +555,33 @@ try {
             throw "HVR1 authenticated analysis scan exited with code $($AnalysisScan.ExitCode)."
         }
 
+        $AnalysisPublish = Invoke-BoundedProcess -FilePath $CompanionService `
+            -Arguments @('analysis-publish',
+                'Local\HypersinvOverlayGateV2', '0', '500', 'none', 'ascii') `
+            -OutPath (Join-Path $InstallRoot 'hvr1-analysis-publish-stdout.txt') `
+            -ErrPath (Join-Path $InstallRoot 'hvr1-analysis-publish-stderr.txt')
+        $Stdout += "`r`n" + $AnalysisPublish.Stdout
+        $Stderr += $AnalysisPublish.Stderr
+        $PublishMatch = [regex]::Match(
+            $AnalysisPublish.Stdout,
+            '(?m)^overlay publisher: frames=([1-9][0-9]*) skipped=([0-9]+) max-extract-to-publish-ms=([0-9]+(?:\.[0-9]+)?) over-50ms=0\r?$')
+        $PublishLatency = [double]0
+        if ($AnalysisPublish.ExitCode -ne 0 -or
+            -not $PublishMatch.Success -or
+            -not [double]::TryParse(
+                $PublishMatch.Groups[3].Value,
+                [Globalization.NumberStyles]::Float,
+                [Globalization.CultureInfo]::InvariantCulture,
+                [ref]$PublishLatency) -or
+            $PublishLatency -ge 50.0) {
+            [IO.File]::WriteAllText($StdoutPath, $Stdout,
+                [Text.UTF8Encoding]::new($false))
+            [IO.File]::WriteAllText($StderrPath, $Stderr,
+                [Text.UTF8Encoding]::new($false))
+            throw "HVR1 live analysis publisher exited with code $($AnalysisPublish.ExitCode)."
+        }
+        $Stdout += "HVR1_OVERLAY_PUBLISHER=PASS`r`n"
+
         $AnalysisStop = Invoke-BoundedProcess -FilePath $CompanionService `
             -Arguments @('analysis-stop') `
             -OutPath (Join-Path $InstallRoot 'hvr1-analysis-stop-stdout.txt') `

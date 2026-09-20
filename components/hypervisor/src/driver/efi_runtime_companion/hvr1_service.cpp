@@ -19,6 +19,9 @@
 #include <winsvc.h>
 #include <bcrypt.h>
 
+#include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstddef>
 #include <cerrno>
@@ -29,6 +32,7 @@
 #include <limits>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "hvr1_protocol.h"
@@ -37,6 +41,8 @@
 #include "runtime_scanner.h"
 #include "runtime_process_abi.h"
 #include "runtime_shadow_abi.h"
+#include "hvr1_overlay_adapter.h"
+#include "shared_memory_publisher.h"
 
 namespace {
 
@@ -1406,6 +1412,299 @@ bool ParseAddress(const wchar_t *text, std::uint64_t *value)
     return true;
 }
 
+bool SplitTransformSpec(const wchar_t *text,
+                        std::vector<std::wstring> *parts)
+{
+    if (text == nullptr || parts == nullptr || *text == L'\0') return false;
+    parts->clear();
+    const wchar_t *begin = text;
+    for (const wchar_t *cursor = text;; ++cursor) {
+        if (*cursor != L':' && *cursor != L'\0') continue;
+        if (cursor == begin) return false;
+        try {
+            parts->emplace_back(begin, cursor);
+        } catch (...) {
+            parts->clear();
+            return false;
+        }
+        if (*cursor == L'\0') break;
+        begin = cursor + 1;
+    }
+    return true;
+}
+
+bool ParseHexKey(const std::wstring &text,
+                 hypersinv::overlay::RollingXorConfig *config)
+{
+    if (config == nullptr || text.empty() || (text.size() & 1u) != 0 ||
+        text.size() > config->Key.size() * 2) {
+        return false;
+    }
+    config->KeyLength = static_cast<std::uint32_t>(text.size() / 2);
+    for (std::size_t index = 0; index < config->KeyLength; ++index) {
+        const int high = HexNibble(text[index * 2]);
+        const int low = HexNibble(text[index * 2 + 1]);
+        if (high < 0 || low < 0) return false;
+        config->Key[index] = static_cast<std::uint8_t>((high << 4) | low);
+    }
+    return true;
+}
+
+bool ParseTransformSpec(const wchar_t *text,
+                        hypersinv::overlay::TransformConfig *config)
+{
+    if (config == nullptr) return false;
+    *config = {};
+    std::vector<std::wstring> parts;
+    if (!SplitTransformSpec(text, &parts)) return false;
+    if (parts.size() == 1 && _wcsicmp(parts[0].c_str(), L"none") == 0)
+        return true;
+
+    std::uint64_t first = 0;
+    std::uint64_t second = 0;
+    std::uint64_t third = 0;
+    if (parts.size() == 5 && _wcsicmp(parts[0].c_str(), L"xor") == 0 &&
+        ParseHexKey(parts[1], &config->RollingXor) &&
+        ParseAddress(parts[2].c_str(), &first) && first <= UINT32_MAX &&
+        ParseAddress(parts[3].c_str(), &second) && second <= UINT32_MAX &&
+        ParseAddress(parts[4].c_str(), &third) && third <= 31) {
+        config->Kind = hypersinv::overlay::TransformKind::RollingXor;
+        config->RollingXor.InitialState = static_cast<std::uint32_t>(first);
+        config->RollingXor.StateStep = static_cast<std::uint32_t>(second);
+        config->RollingXor.StateRotation = static_cast<std::uint32_t>(third);
+        return true;
+    }
+    if (parts.size() == 3 && _wcsicmp(parts[0].c_str(), L"fnv32") == 0 &&
+        ParseAddress(parts[1].c_str(), &first) && first <= UINT32_MAX &&
+        ParseAddress(parts[2].c_str(), &second) && second <= UINT32_MAX) {
+        config->Kind = hypersinv::overlay::TransformKind::Fnv1a32;
+        config->Fnv32.OffsetBasis = static_cast<std::uint32_t>(first);
+        config->Fnv32.Prime = static_cast<std::uint32_t>(second);
+        return config->Fnv32.Prime != 0;
+    }
+    if (parts.size() == 3 && _wcsicmp(parts[0].c_str(), L"fnv64") == 0 &&
+        ParseAddress(parts[1].c_str(), &first) &&
+        ParseAddress(parts[2].c_str(), &second)) {
+        config->Kind = hypersinv::overlay::TransformKind::Fnv1a64;
+        config->Fnv64.OffsetBasis = first;
+        config->Fnv64.Prime = second;
+        return config->Fnv64.Prime != 0;
+    }
+    if (parts.size() == 2 &&
+        (_wcsicmp(parts[0].c_str(), L"rol") == 0 ||
+         _wcsicmp(parts[0].c_str(), L"ror") == 0) &&
+        ParseAddress(parts[1].c_str(), &first) && first <= 7) {
+        config->Kind = _wcsicmp(parts[0].c_str(), L"rol") == 0
+            ? hypersinv::overlay::TransformKind::RotateLeft
+            : hypersinv::overlay::TransformKind::RotateRight;
+        config->RotationBits = static_cast<std::uint32_t>(first);
+        return true;
+    }
+    if (parts.size() == 3 &&
+        (_wcsicmp(parts[0].c_str(), L"sub") == 0 ||
+         _wcsicmp(parts[0].c_str(), L"unsub") == 0) &&
+        ParseAddress(parts[1].c_str(), &first) && first <= UINT8_MAX &&
+        ParseAddress(parts[2].c_str(), &second) && second <= UINT8_MAX &&
+        hypersinv::overlay::BuildAffineSubstitution(
+            static_cast<std::uint8_t>(first),
+            static_cast<std::uint8_t>(second), config->Substitution)) {
+        config->Kind = _wcsicmp(parts[0].c_str(), L"sub") == 0
+            ? hypersinv::overlay::TransformKind::Substitute
+            : hypersinv::overlay::TransformKind::InverseSubstitute;
+        return true;
+    }
+    return false;
+}
+
+bool FetchAnalysisSnapshot(DeviceHandle *device,
+                           HVR1_OVERLAY_SOURCE *source,
+                           DWORD *error)
+{
+    if (device == nullptr || source == nullptr || error == nullptr)
+        return false;
+    *source = {};
+    std::uint32_t offsets[3]{0, 0, 0};
+    std::uint32_t offsetCount = 1;
+    for (std::uint32_t page = 0; page < offsetCount; ++page) {
+        HV_EFI_ANALYSIS_REQUEST request{};
+        request.Size = sizeof(request);
+        request.Version = HV_EFI_ANALYSIS_VERSION;
+        request.Operation = HV_EFI_ANALYSIS_RESULTS;
+        request.ResultOffset = offsets[page];
+        request.RegionOffset = offsets[page];
+
+        HVR1_MAILBOX_DESCRIPTOR descriptor{};
+        if (!device->GetMailbox(&descriptor, error)) return false;
+        HV_EFI_ANALYSIS_RESPONSE response{};
+        const bool completed = device->Analysis(
+            descriptor, request, &response, error);
+        SecureZeroMemory(&descriptor, sizeof(descriptor));
+        if (!completed) return false;
+        if (response.Status != HV_EFI_ANALYSIS_SUCCESS ||
+            response.SessionActive == 0 || response.Generation == 0 ||
+            response.TotalResultCount > HV_EFI_ANALYSIS_MAX_RESULTS ||
+            response.TotalFieldCount > HV_EFI_ANALYSIS_MAX_FIELDS ||
+            response.ReturnedResultCount > HV_EFI_ANALYSIS_RESPONSE_RESULTS ||
+            response.ReturnedFieldCount > HV_EFI_ANALYSIS_RESPONSE_FIELDS ||
+            offsets[page] + response.ReturnedResultCount >
+                response.TotalResultCount ||
+            offsets[page] + response.ReturnedFieldCount >
+                response.TotalFieldCount) {
+            *error = ERROR_INVALID_DATA;
+            return false;
+        }
+        if (page == 0) {
+            source->Generation = response.Generation;
+            source->ProcessId = response.ProcessId;
+            source->ResultCount = response.TotalResultCount;
+            source->FieldCount = response.TotalFieldCount;
+            if (source->FieldCount > HV_EFI_ANALYSIS_RESPONSE_FIELDS)
+                offsets[offsetCount++] = HV_EFI_ANALYSIS_RESPONSE_FIELDS;
+            if (source->ResultCount > HV_EFI_ANALYSIS_RESPONSE_RESULTS)
+                offsets[offsetCount++] = HV_EFI_ANALYSIS_RESPONSE_RESULTS;
+        } else if (source->Generation != response.Generation ||
+                   source->ProcessId != response.ProcessId ||
+                   source->ResultCount != response.TotalResultCount ||
+                   source->FieldCount != response.TotalFieldCount) {
+            *error = ERROR_RETRY;
+            return false;
+        }
+        source->Sequence = response.Sequence;
+        if (response.ReturnedResultCount != 0) {
+            std::memcpy(source->Results + offsets[page], response.Results,
+                        response.ReturnedResultCount *
+                            sizeof(source->Results[0]));
+        }
+        if (response.ReturnedFieldCount != 0) {
+            std::memcpy(source->Fields + offsets[page], response.Fields,
+                        response.ReturnedFieldCount *
+                            sizeof(source->Fields[0]));
+        }
+    }
+    *error = ERROR_SUCCESS;
+    return true;
+}
+
+volatile LONG gAnalysisPublisherStop = FALSE;
+
+BOOL WINAPI AnalysisPublisherConsoleHandler(DWORD controlType)
+{
+    if (controlType != CTRL_C_EVENT && controlType != CTRL_BREAK_EVENT)
+        return FALSE;
+    InterlockedExchange(&gAnalysisPublisherStop, TRUE);
+    return TRUE;
+}
+
+int RunAnalysisPublisher(int argc, wchar_t **argv)
+{
+    if (argc < 4 || argc > 7) return 1;
+    std::uint64_t targetWindow = 0;
+    std::uint64_t durationMilliseconds = 0;
+    if (!ParseAddress(argv[3], &targetWindow) ||
+        (argc >= 5 && (!ParseAddress(argv[4], &durationMilliseconds) ||
+                       durationMilliseconds > INT64_MAX))) {
+        return 1;
+    }
+    HVR1_OVERLAY_ADAPTER_CONFIG adapterConfig{};
+    if (argc >= 6 &&
+        !ParseTransformSpec(argv[5], &adapterConfig.NameTransform)) {
+        return 1;
+    }
+    if (argc == 7) {
+        if (_wcsicmp(argv[6], L"ascii") == 0) {
+            adapterConfig.NameEncoding =
+                hypersinv::overlay::TextEncoding::Ascii;
+        } else if (_wcsicmp(argv[6], L"utf16") == 0) {
+            adapterConfig.NameEncoding =
+                hypersinv::overlay::TextEncoding::Utf16Le;
+        } else {
+            return 1;
+        }
+    }
+
+    DeviceHandle device;
+    if (!device.Open()) {
+        ReportError(L"open runtime companion", GetLastError());
+        return 2;
+    }
+    hypersinv::overlay::SharedMemoryPublisher publisher;
+    if (!publisher.Open(
+            argv[2], 60,
+            hypersinv::overlay::PublisherAccess::AuthenticatedUsersRead)) {
+        ReportError(L"create overlay shared memory", GetLastError());
+        return 2;
+    }
+    InterlockedExchange(&gAnalysisPublisherStop, FALSE);
+    if (!SetConsoleCtrlHandler(AnalysisPublisherConsoleHandler, TRUE)) {
+        ReportError(L"install publisher console handler", GetLastError());
+        return 2;
+    }
+
+    constexpr auto framePeriod = std::chrono::nanoseconds(16666667);
+    const auto started = std::chrono::steady_clock::now();
+    auto nextFrame = started;
+    std::uint64_t publishedFrames = 0;
+    std::uint64_t skippedFrames = 0;
+    std::uint64_t latencyWarnings = 0;
+    auto maximumLatency = std::chrono::steady_clock::duration::zero();
+    int result = 0;
+    while (InterlockedCompareExchange(
+               &gAnalysisPublisherStop, FALSE, FALSE) == FALSE) {
+        const auto queryStarted = std::chrono::steady_clock::now();
+        if (durationMilliseconds != 0 &&
+            queryStarted - started >=
+                std::chrono::milliseconds(durationMilliseconds)) {
+            break;
+        }
+        HVR1_OVERLAY_SOURCE source{};
+        DWORD error = ERROR_SUCCESS;
+        if (!FetchAnalysisSnapshot(&device, &source, &error)) {
+            ReportError(L"fetch authenticated analysis results", error);
+            result = 3;
+            break;
+        }
+        hypersinv::overlay::AnalysisResult frame{};
+        if (!Hvr1BuildOverlayFrame(
+                source, targetWindow, adapterConfig, frame)) {
+            ReportError(L"transform analysis results", ERROR_INVALID_DATA);
+            result = 3;
+            break;
+        }
+        const hypersinv::overlay::PublishStatus status =
+            publisher.Publish(frame);
+        if (status == hypersinv::overlay::PublishStatus::Success) {
+            ++publishedFrames;
+            const auto latency = std::chrono::steady_clock::now() -
+                queryStarted;
+            maximumLatency = (std::max)(maximumLatency, latency);
+            if (latency >= std::chrono::milliseconds(50)) ++latencyWarnings;
+        } else if (status == hypersinv::overlay::PublishStatus::RateLimited ||
+                   status == hypersinv::overlay::PublishStatus::Busy) {
+            ++skippedFrames;
+        } else {
+            ReportError(L"publish overlay frame", ERROR_INVALID_DATA);
+            result = 3;
+            break;
+        }
+
+        nextFrame += framePeriod;
+        const auto now = std::chrono::steady_clock::now();
+        if (nextFrame < now) nextFrame = now;
+        std::this_thread::sleep_until(nextFrame);
+    }
+    (void)SetConsoleCtrlHandler(AnalysisPublisherConsoleHandler, FALSE);
+    const double maximumLatencyMilliseconds =
+        std::chrono::duration<double, std::milli>(maximumLatency).count();
+    std::wprintf(
+        L"overlay publisher: frames=%llu skipped=%llu "
+        L"max-extract-to-publish-ms=%.3f over-50ms=%llu\n",
+        static_cast<unsigned long long>(publishedFrames),
+        static_cast<unsigned long long>(skippedFrames),
+        maximumLatencyMilliseconds,
+        static_cast<unsigned long long>(latencyWarnings));
+    return result;
+}
+
 const wchar_t *ScanStatusName(std::uint32_t status)
 {
     switch (status) {
@@ -2103,6 +2402,8 @@ void PrintUsage()
                  L"analysis-traverse ADDRESS TYPE ARGS...|"
                  L"analysis-extract ADDRESS TYPE [NAME] [MAX_BYTES]|"
                  L"analysis-results [OFFSET]|analysis-stop|"
+                 L"analysis-publish MAPPING HWND [DURATION_MS] "
+                 L"[TRANSFORM] [ascii|utf16]|"
                  L"scan \"PATTERN\" START END "
                  L"[first|all|single]\n");
 }
@@ -2111,6 +2412,8 @@ void PrintUsage()
 
 int wmain(int argc, wchar_t **argv)
 {
+    if (argc >= 2 && _wcsicmp(argv[1], L"analysis-publish") == 0)
+        return RunAnalysisPublisher(argc, argv);
     if (argc >= 2 && _wcsnicmp(argv[1], L"analysis-", 9) == 0)
         return RunAnalysis(argc, argv);
     if (argc >= 2 && _wcsicmp(argv[1], L"scan") == 0)

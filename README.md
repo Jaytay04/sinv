@@ -186,6 +186,16 @@ canonical-address, backlink, cycle, and capacity checks. Scalars, vectors,
 matrices, pointers, ASCII/UTF-8 strings, and 8/16/32-bit length-prefixed strings
 are decoded into a fixed typed representation.
 
+The LocalSystem control client now bridges authenticated `ANALYSIS_RESULTS`
+to the HVO2 named shared-memory protocol. It paginates the complete private
+result/field set, applies bounded configurable byte transforms to extracted
+names, converts structured `entity.<id>.*` fields into fixed visualization
+records, and publishes with an atomic odd/even sequence at no more than 60 Hz.
+The read-only overlay performs row-major 4x4 world-to-screen projection and
+renders through D3D11/Direct2D. VMX root never calls Win32 mapping APIs, and the
+overlay never receives the companion device handle or authentication material.
+See `docs/OVERLAY_PIPELINE.md` for the wire contract and test vectors.
+
 Present user mappings and effective R/W/X permissions are discovered by
 walking only present lower-half page-table branches. Up to 2,048 coalesced
 ranges are retained per session, with explicit truncation reporting. PE images
@@ -203,6 +213,12 @@ the authenticated analysis path on pinned Windows `26200.9445`: a process-bound
 session discovered 2,048 bounded mappings, found the target image's `MZ`
 signature at guest VA `0x00007FF60B7E0000`, returned its translated physical
 address, stopped cleanly, and then completed shadow-EPT and four-vCPU detach.
+
+Disposable-VM run `uefi-windows-probe-20260920-170822-67fa005610` additionally
+validated the HVA1-to-HVO2 bridge: it published 20 live analysis-derived frames
+with a maximum extraction-to-publication latency of 0.451 ms, zero samples at
+or above 50 ms, then completed analysis stop, shadow-EPT checks, four-CPU
+detach, replay rejection, and companion unload.
 
 ### Process-bound alternate EPT views
 

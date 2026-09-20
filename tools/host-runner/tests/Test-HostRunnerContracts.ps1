@@ -202,6 +202,9 @@ try {
 
     $RunnerSource = Get-Content -Raw -LiteralPath (
         Join-Path $RunnerRoot 'Invoke-UEFILoaderHostRunner.ps1')
+    Assert-True ($RunnerSource.Contains('StoreMailboxCredential') -and
+        $RunnerSource.Contains('must decode to exactly 32 bytes')) (
+        'Mailbox credential refresh action is missing or unbounded.')
     $ExactBuildSource = Get-Content -Raw -LiteralPath (
         Join-Path $RunnerRoot 'guest\Invoke-WindowsExactBuildUpdate.ps1')
     foreach ($Token in @(
@@ -1011,6 +1014,7 @@ try {
              '$DirectLoaderPlaceholder',
              '$DirectCompanionDriverPlaceholder',
              '$DirectCompanionServicePlaceholder',
+             'hvr1_overlay_adapter_tests',
              'Compress-UhrArtifactBytes',
              '$DirectCompanionCertificatePlaceholder',
              '$DirectProcessProfilePlaceholder',
@@ -1030,6 +1034,9 @@ try {
             "@('analysis-start', `$ShadowPid)",
             "@('analysis-configure', 'mz', '4D 5A', '2')",
             "@('analysis-scan', 'first', '0x10000000')",
+            "'analysis-publish'",
+            "'Local\HypersinvOverlayGateV2'",
+            'HVR1_OVERLAY_PUBLISHER=PASS',
             "@('analysis-stop')",
             'HVR1_DYNAMIC_ANALYSIS=PASS',
             '$DirectResultTimeoutSeconds',

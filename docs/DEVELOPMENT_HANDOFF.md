@@ -72,10 +72,11 @@ controlled network.
                v
   LocalSystem control client
 
-  Future/required visualization bridge:
-
-  control-client publisher -- HVO1 named mapping --> D3D11 overlay
-            (not implemented)                        (implemented)
+  LocalSystem control-client publisher
+               | HVA1-to-HVO2 adapter + bounded transforms
+               | HVO2 Global/Local named mapping, read-only client ACL
+               v
+  D3D11/Direct2D overlay -- world-to-screen projection and rendering
 ```
 
 There are two different objects called a mailbox/mapping and they must not be
@@ -83,13 +84,14 @@ confused:
 
 1. The HVR1 control mailbox is a physically contiguous, driver-owned nonpaged
    allocation used for authenticated kernel-to-VMX-root requests and responses.
-2. The HVO1 overlay mapping is a Windows named shared-memory object consumed
+2. The HVO2 overlay mapping is a Windows named shared-memory object consumed
    read-only by `hypersinv_overlay.exe`.
 
 VMX root does **not** create or write a Windows named mapping. It cannot safely
-depend on Windows object-manager services. A trusted user-mode publisher must
-receive authenticated HVR1 results and publish visualization records to HVO1.
-That publisher is the principal unfinished integration point.
+depend on Windows object-manager services. The LocalSystem `analysis-publish`
+command receives authenticated HVR1 results and publishes visualization records
+to HVO2. The overlay never receives the device handle or authentication
+material.
 
 ### 2.2 Boot and VMX ownership
 
@@ -332,14 +334,16 @@ Direct2D, and DirectWrite. It provides:
 - premultiplied BGRA Direct2D rendering and DirectWrite text;
 - boxes, lines, and text with `0xAARRGGBB` colors;
 - explicit 60 FPS pacing;
-- read-only HVO1 shared-memory consumption.
+- read-only HVO2 shared-memory consumption;
+- world-space records projected through an optional row-major 4x4 matrix.
 
 The styles remove the overlay from Alt-Tab and the taskbar and prevent normal
 activation. They do not hide it from diagnostic APIs such as `EnumWindows`.
 There are no hooks, DLL injection, remote process reads, or overlay kernel
 driver.
 
-HVO1 uses `Local\HypersinvOverlayDataV1`, a fixed maximum of 256 entities, and
+HVO2 uses `Local\HypersinvOverlayDataV2` by default, a fixed maximum of 256
+entities, and
 an odd/even sequence protocol. The reader accepts only matching magic, version,
 header size, entity stride, capacity, and reserved fields. It copies a snapshot
 only when the same even sequence is observed before and after the copy. Torn or
@@ -367,19 +371,31 @@ invalid frames render empty rather than stale data.
 - HMAC-authenticated companion transport, replay protection, all-CPU detach,
   lifecycle quarantine, and clean unload gate.
 - AuxKlib live-kernel-base discovery in the companion.
-- Standalone D3D11/Direct2D overlay and tested HVO1 read-only IPC consumer.
+- LocalSystem HVA1-to-HVO2 publisher with authenticated pagination, explicit
+  cross-session read-only ACL, 60 Hz cap, and generation consistency checks.
+- Rolling XOR, configurable FNV-1a 32/64, per-byte rotation, affine
+  substitution, and ASCII/UTF-16LE formatting.
+- Standalone D3D11/Direct2D overlay with tested HVO2 read-only IPC,
+  world-to-screen projection, and rendering.
+- Parameterized target transforms (rolling XOR, configurable FNV-1a 32/64,
+  byte rotation, affine substitution/inverse, ASCII, and UTF-16LE) without
+  target code executing in VMX root or the guest.
+- Publisher-to-read-only-consumer-to-projection-to-D3D-present validation in
+  4.932 ms on the build host, plus live pinned-VM extraction-to-publication in
+  0.451 ms with zero 50 ms violations.
 - Disposable Windows VM validation on build `26200.9445`, including a live
   process-bound signature match, translated physical address, alternate EPT,
   authenticated shutdown, replay rejection, and clean companion unload.
 
-### 3.2 Not complete; do not claim otherwise
+### 3.2 Remaining limitations and deliberate non-goals
 
-- **HVR1-to-HVO1 publisher:** no current executable converts authenticated
-  analysis results into overlay `EntityData`. The overlay protocol and reader
-  are complete, but end-to-end hypervisor-to-overlay visualization is not.
-- **Application-specific decryption:** typed reads are implemented. There is no
-  generic or target-specific decryption engine and no `ANALYSIS_DECRYPT`
-  command.
+- **Arbitrary transform execution:** target constants are configurable for the
+  implemented bounded algorithms. Uploaded code, arbitrary bytecode, guest
+  execution, and a root-side `ANALYSIS_DECRYPT` command remain prohibited by
+  design rather than missing integration work.
+- **Physical display scan-out instrumentation:** the pipeline is measured
+  through successful D3D `Present`; physical panel scan-out is outside this
+  software boundary and is not included in the latency claim.
 - **Automatic VAD/heap/stack discovery:** PTE mappings are discovered. Semantic
   region labels require authenticated external evidence.
 - **Five-level paging:** `CR4.LA57` is rejected.
@@ -530,12 +546,13 @@ hvr1_runtime_service.exe analysis-extract 0x000001ABC5000100 utf8 label 64
 Accepted types are `f32`, `f64`, `i32`, `i64`, `vec3`, `vec4`, `mat4`, `ptr`,
 `ascii`, `utf8`, `lp8`, `lp16`, and `lp32`.
 
-There is no decryption command. The safe current workflow is:
+There is no root-side decryption command. The implemented workflow is:
 
 1. Extract the minimum required bytes through authenticated, read-only HVA1.
 2. Copy the bounded response into a trusted user-mode analysis process.
-3. Apply a build/target-specific pure transformation there.
-4. Publish only visualization-ready values to HVO1.
+3. Apply one bounded LocalSystem transform (`xor`, configurable FNV-1a,
+   rotate, affine substitute/inverse, or none).
+4. Publish only visualization-ready values to HVO2.
 
 If root-side decryption is ever justified, it should be a fixed, audited decoder
 with explicit input/output bounds—not arbitrary uploaded code or a guest-code
@@ -563,23 +580,29 @@ build\overlay\hypersinv_overlay.exe --demo
 build\overlay\hypersinv_overlay.exe --target-pid 1234
 ```
 
-Production visualization requires the missing publisher bridge. Its intended
-flow is:
+Production visualization uses this implemented flow:
 
 ```text
 HVR1 process/analysis response
     -> validate authenticated response and target generation
-    -> target-specific projection/world-to-screen transformation
-    -> CreateFileMapping(Local\HypersinvOverlayDataV1)
+    -> Hvr1BuildOverlayFrame and bounded name transformation
+    -> SharedMemoryPublisher(Global\HypersinvOverlayDataV2)
     -> publish SharedOverlayHeader + EntityData[] under odd/even sequence
     -> overlay OpenFileMapping(FILE_MAP_READ)
-    -> draw visible entities
+    -> world-to-screen projection and draw visible entities
 ```
 
-The bridge should include `tools/overlay/include/overlay_protocol.h`, apply an
-ACL appropriate to the intended user/session, cap entity count at 256, set
-`TargetWindow`, and stop publishing when the HVR1 session generation changes.
-Do not give the overlay device access or the HMAC session key.
+Example, run as LocalSystem after populating the HVA1 session:
+
+```powershell
+hvr1_runtime_service.exe analysis-publish `
+  "Global\HypersinvOverlayDataV2" 0x11234 10000 none ascii
+```
+
+The bridge applies a SYSTEM-full/Authenticated-Users-read mapping ACL, caps
+entity count at 256, sets `TargetWindow`, caps publication at 60 Hz, and fails
+instead of mixing pages when generation/PID/counts change. Field conventions,
+transform grammar, algorithms, and vectors are in `docs/OVERLAY_PIPELINE.md`.
 
 ### 5.7 Stop cleanly
 
@@ -676,8 +699,10 @@ anchors, and add cross-page plus all-wildcard tests.
 
 ### 7.2 Adding decoders or decryption
 
-Prefer user-mode pure functions after authenticated extraction. If a universal
-fixed-format decoder belongs in root:
+Prefer the existing user-mode pure functions after authenticated extraction.
+Add a new parameterized algorithm in `tools/overlay/src/data_transform.cpp`,
+then expose it through `ParseTransformSpec` and add a fixed test vector. If a
+universal fixed-format decoder truly belongs in root:
 
 1. add a versioned `HV_EFI_ANALYSIS_FIELD_TYPE`;
 2. define a fixed-size result representation;
@@ -692,7 +717,7 @@ fixed-format decoder belongs in root:
 Extend `D3dRenderer` and keep coordinates client-relative. Add a source/runtime
 test that initializes the D3D11/Direct2D path and presents at least one frame.
 Do not add global hooks, injection, remote process access, or a new driver. More
-complex scenes should be produced by the future publisher, leaving the overlay
+complex scenes should be produced by the publisher adapter, leaving the overlay
 as a bounded renderer.
 
 ### 7.4 Supporting another Windows build
@@ -703,15 +728,15 @@ multiple profiles in one EFI binary, introduce an explicit registry keyed by
 build/UBR/timestamp/image-size/PDB GUID/age, then select only after full live
 identity validation. Never fall back to a “closest” build.
 
-### 7.5 Completing overlay integration
+### 7.5 Extending overlay integration
 
-Implement a standalone, least-privileged publisher beside the existing control
-client. It should:
+The publisher is implemented beside the existing control client. Extensions
+must preserve these properties:
 
 - consume only authenticated HVR1 responses;
 - own no raw physical-memory access;
 - keep the HMAC descriptor out of the overlay process;
-- create and ACL the HVO1 mapping;
+- create and ACL the HVO2 mapping;
 - transform results into screen-space `EntityData`;
 - publish with the sequence protocol;
 - clear the mapping on session stop, generation change, target exit, or error;
@@ -734,19 +759,24 @@ powershell -NoProfile -ExecutionPolicy Bypass `
 git diff --check
 ```
 
-At this handoff the configured suites contain 16 EFI/hypervisor tests, 3 HVR1
-companion tests, 3 overlay tests, and 1 root contract test, plus the host-runner
+At this handoff the configured suites contain 16 EFI/hypervisor tests, 4 HVR1
+companion tests, 5 overlay tests, and 1 root contract test, plus the host-runner
 contract script.
+
+The direct runner explicitly builds `hvr1_overlay_adapter_tests` before CTest.
+Credential readiness imports the DPAPI payload instead of checking only for a
+file, and `StoreMailboxCredential` can safely refresh the existing provisioned
+32-byte mailbox key when the runner is executed under the owning Windows user.
 
 Relevant disposable-VM evidence recorded in the root README includes:
 
 - the accepted 20-vCPU Windows `26200.9445` boot/health/detach run;
 - four-vCPU diagnostic regressions;
 - dynamic-analysis run
-  `uefi-windows-probe-20260920-015843-d5aca9c2f3`, which found an `MZ` match at
-  guest VA `0x00007FF60B7E0000`, returned translated physical address
-  `0x00000000AFF4A000`, stopped analysis, exercised alternate EPT, and detached
-  cleanly.
+  `uefi-windows-probe-20260920-170822-67fa005610`, which found an `MZ` match at
+  guest VA `0x00007FF7EEE80000`, published 20 HVO2 frames with a 0.451 ms
+  maximum extraction-to-publication latency and no 50 ms violations, stopped
+  analysis, exercised alternate EPT, and detached all four CPUs cleanly.
 
 Only the disposable-VM gate proves privileged behavior. Pure-model and source
 contracts are necessary but do not prove that VM entry, EPT switching, Windows
@@ -757,8 +787,8 @@ boot, or all-CPU detach works on a new profile.
 1. Read this document, the root `README.md`, and
    `components/hypervisor/src/driver/efi_runtime_companion/README.md`.
 2. Run the local regression commands and confirm a clean Git worktree.
-3. Treat the HVR1-to-HVO1 publisher as the next concrete missing integration if
-   end-to-end visualization is the goal.
+3. Use `docs/OVERLAY_PIPELINE.md` before changing the HVA1-to-HVO2 adapter,
+   transforms, mapping ACL, or projection contract.
 4. For root changes, update ABI layout assertions, C/ASM offsets, capability
    masks, source contracts, and pure-model tests together.
 5. Run privileged changes only through the leased disposable-VM host runner,

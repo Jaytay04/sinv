@@ -4,6 +4,8 @@ cmake_minimum_required(VERSION 3.20)
 # whether to add this directory; the legacy driver is never linked here.
 project(hvr1_efi_runtime_companion LANGUAGES C CXX)
 
+set(HVR1_OVERLAY_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../tools/overlay")
+
 if(MSVC)
     # Kernel targets must not inherit user-mode Debug runtime/check flags.
     set(CMAKE_MSVC_RUNTIME_LIBRARY "")
@@ -54,20 +56,50 @@ if(HVR1_BUILD_CONTRACT_TESTS AND WIN32)
     endif()
     target_link_libraries(hvr1_auth_tests PRIVATE Bcrypt.lib)
     add_test(NAME hvr1_auth_tests COMMAND hvr1_auth_tests)
+
+    add_executable(hvr1_overlay_adapter_tests
+        test_hvr1_overlay_adapter.cpp
+        hvr1_overlay_adapter.cpp
+        "${HVR1_OVERLAY_ROOT}/src/data_transform.cpp"
+        "${HVR1_OVERLAY_ROOT}/src/shared_memory_publisher.cpp"
+        "${HVR1_OVERLAY_ROOT}/src/shared_memory_reader.cpp")
+    target_compile_features(hvr1_overlay_adapter_tests PRIVATE cxx_std_17)
+    target_compile_definitions(hvr1_overlay_adapter_tests PRIVATE
+        UNICODE
+        _UNICODE
+        WIN32_LEAN_AND_MEAN
+        NOMINMAX)
+    target_include_directories(hvr1_overlay_adapter_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../efi
+        "${HVR1_OVERLAY_ROOT}/include")
+    if(MSVC)
+        target_compile_options(hvr1_overlay_adapter_tests PRIVATE
+            /W4 /WX /EHsc /permissive- /utf-8)
+    endif()
+    target_link_libraries(hvr1_overlay_adapter_tests PRIVATE Advapi32.lib)
+    add_test(NAME hvr1_overlay_adapter_tests COMMAND hvr1_overlay_adapter_tests)
 endif()
 
 if(HVR1_BUILD_SERVICE AND WIN32)
-    add_executable(hvr1_runtime_service hvr1_service.cpp hvr1_auth.c)
+    add_executable(hvr1_runtime_service
+        hvr1_service.cpp
+        hvr1_auth.c
+        hvr1_overlay_adapter.cpp
+        "${HVR1_OVERLAY_ROOT}/src/data_transform.cpp"
+        "${HVR1_OVERLAY_ROOT}/src/shared_memory_publisher.cpp")
     target_compile_features(hvr1_runtime_service PRIVATE cxx_std_17)
     target_compile_definitions(hvr1_runtime_service PRIVATE
         UNICODE
         _UNICODE
         WIN32_LEAN_AND_MEAN
+        NOMINMAX
         NTDDI_VERSION=0x0A00000C
     )
     target_include_directories(hvr1_runtime_service PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${CMAKE_CURRENT_SOURCE_DIR}/../../efi
+        "${HVR1_OVERLAY_ROOT}/include"
     )
     if(MSVC)
         target_compile_options(hvr1_runtime_service PRIVATE

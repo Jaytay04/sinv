@@ -2,7 +2,8 @@
 param(
     [ValidateSet(
         'Doctor', 'Build', 'CredentialStatus', 'StoreGuestCredential',
-        'StoreVmCredential', 'RemoveGuestCredential', 'RemoveVmCredential',
+        'StoreVmCredential', 'StoreMailboxCredential',
+        'RemoveGuestCredential', 'RemoveVmCredential',
         'RunInstallerHostGate', 'RunInstallerOneShotHostGate',
         'RunAuditHostGate', 'RunFixtureHostGate',
         'RunLinuxPositivePath', 'RunLinuxHypervisorSmoke',
@@ -2285,7 +2286,7 @@ function Invoke-Hvr1RuntimeCompanionBuild {
     $Command += ' && cmake -S . -B build\hvr1-direct -A x64'
     $Command += ' -DHYPERSINV_BUILD_DRIVER=OFF -DHYPERSINV_BUILD_LOADER=OFF -DHYPERSINV_BUILD_CORE=OFF -DHYPERSINV_BUILD_UEFI=OFF'
     $Command += ' -DHYPERSINV_BUILD_EFI_RUNTIME_COMPANION=ON -DHYPERSINV_BUILD_EFI_RUNTIME_SERVICE=ON -DHYPERSINV_TEST_EFI_RUNTIME_COMPANION=ON'
-    $Command += ' && cmake --build build\hvr1-direct --target hvr1_efi_runtime_companion hvr1_runtime_service hvr1_auth_tests --config Release'
+    $Command += ' && cmake --build build\hvr1-direct --target hvr1_efi_runtime_companion hvr1_runtime_service hvr1_auth_tests hvr1_overlay_adapter_tests --config Release'
     $Command += ' && ctest --test-dir build\hvr1-direct -C Release --output-on-failure'
     $Result = Invoke-UhrProcess -FilePath $env:ComSpec `
         -ArgumentList @('/d', '/c', $Command) `
@@ -5422,6 +5423,41 @@ switch ($Action) {
         Set-UhrCredential -Config $Config `
             -FileName ([string]$Selected.VmCredentialFile) `
             -Credential $Credential | Out-Null
+        Get-CredentialSummary $Profile
+        break
+    }
+    'StoreMailboxCredential' {
+        if ($Profile -ne 'Windows') { throw 'Choose the Windows profile.' }
+        $Selected = Get-ProfileConfig $Profile
+        if ([string]::IsNullOrWhiteSpace(
+                [string]$Selected.MailboxCredentialFile)) {
+            throw 'The Windows profile has no mailbox credential file.'
+        }
+        $Secret = Read-Host `
+            'Base64-encoded 32-byte Windows mailbox HMAC key' -AsSecureString
+        $Credential = [PSCredential]::new('UEFILoaderMailbox', $Secret)
+        $Plaintext = $Credential.GetNetworkCredential().Password
+        $KeyBytes = $null
+        try {
+            $KeyBytes = [Convert]::FromBase64String($Plaintext)
+            if ($KeyBytes.Length -ne 32) {
+                throw 'The mailbox key must decode to exactly 32 bytes.'
+            }
+            Set-UhrCredential -Config $Config `
+                -FileName ([string]$Selected.MailboxCredentialFile) `
+                -Credential $Credential | Out-Null
+        }
+        catch [FormatException] {
+            throw 'The mailbox key is not valid base64.'
+        }
+        finally {
+            if ($null -ne $KeyBytes) {
+                [Array]::Clear($KeyBytes, 0, $KeyBytes.Length)
+            }
+            $Plaintext = $null
+            $Credential = $null
+            $Secret = $null
+        }
         Get-CredentialSummary $Profile
         break
     }
