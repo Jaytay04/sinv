@@ -3,6 +3,37 @@
 set(HYPERSINV_EFI_CRT "${HYPERSINV_UEFI_SUPPORT_DIR}/efi_crt.c")
 set(HYPERSINV_EFI_HEADER "${HYPERSINV_UEFI_SUPPORT_DIR}/Uefi.h")
 
+set(HYPERSINV_KERNEL_PROFILE_GENERATED_DIR
+    "${CMAKE_CURRENT_BINARY_DIR}/generated")
+if(HYPERSINV_KERNEL_PROFILE_AVAILABLE)
+    set(HYPERSINV_KERNEL_PROFILE_HEADER
+        "${HYPERSINV_KERNEL_PROFILE_GENERATED_DIR}/kernel_profile_gen.h")
+    set(HYPERSINV_KERNEL_PROFILE_MANIFEST
+        "${HYPERSINV_KERNEL_PROFILE_GENERATED_DIR}/kernel_profile_manifest.json")
+    add_custom_command(
+        OUTPUT
+            "${HYPERSINV_KERNEL_PROFILE_HEADER}"
+            "${HYPERSINV_KERNEL_PROFILE_MANIFEST}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${HYPERSINV_KERNEL_PROFILE_GENERATED_DIR}"
+        COMMAND $<TARGET_FILE:hypersinv_kernel_profile_generator>
+            --image "${HYPERSINV_KERNEL_IMAGE}"
+            --pdb "${HYPERSINV_KERNEL_PDB}"
+            --build "${HYPERSINV_KERNEL_BUILD}"
+            --ubr "${HYPERSINV_KERNEL_UBR}"
+            --out-dir "${HYPERSINV_KERNEL_PROFILE_GENERATED_DIR}"
+        DEPENDS
+            hypersinv_kernel_profile_generator
+            "${HYPERSINV_KERNEL_IMAGE}"
+            "${HYPERSINV_KERNEL_PDB}"
+        VERBATIM
+        COMMENT "Generating validated Windows kernel profile")
+    add_custom_target(hypersinv_kernel_profile
+        DEPENDS
+            "${HYPERSINV_KERNEL_PROFILE_HEADER}"
+            "${HYPERSINV_KERNEL_PROFILE_MANIFEST}")
+endif()
+
 if(NOT EXISTS "${HYPERSINV_EFI_CRT}" OR NOT EXISTS "${HYPERSINV_EFI_HEADER}")
     message(WARNING
         "UEFI support files were not found under HYPERSINV_UEFI_SUPPORT_DIR="
@@ -13,21 +44,38 @@ else()
 
         add_executable(uefi_hypervisor
             ept_protection.cpp
+            shadow_ept.cpp
             efi_hypervisor.c
             efi_hypervisor_math.c
             iommu_isolation.cpp
             iommu_runtime.c
             interrupt_policy.cpp
+            guest_process.cpp
+            guest_pt_walker.cpp
+            runtime_analysis.cpp
             runtime_control.cpp
             runtime_dispatch.cpp
             runtime_lifecycle.cpp
+            runtime_scanner.cpp
+            runtime_shadow.cpp
             runtime_teardown.cpp
             runtime_transport.cpp
             scanner.cpp
             efi_hypervisor.asm
             "${HYPERSINV_EFI_CRT}")
+        if(HYPERSINV_KERNEL_PROFILE_AVAILABLE)
+            target_sources(uefi_hypervisor PRIVATE
+                "${HYPERSINV_KERNEL_PROFILE_HEADER}")
+            add_dependencies(uefi_hypervisor hypersinv_kernel_profile)
+            target_compile_definitions(uefi_hypervisor PRIVATE
+                HYPERSINV_KERNEL_PROFILE_AVAILABLE=1)
+        else()
+            target_compile_definitions(uefi_hypervisor PRIVATE
+                HYPERSINV_KERNEL_PROFILE_AVAILABLE=0)
+        endif()
         target_include_directories(uefi_hypervisor PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}"
+            "${HYPERSINV_KERNEL_PROFILE_GENERATED_DIR}"
             "${HYPERSINV_UEFI_SUPPORT_DIR}")
         target_compile_options(uefi_hypervisor PRIVATE
             "$<$<COMPILE_LANGUAGE:C>:/GS->"
@@ -46,6 +94,20 @@ else()
             /FIXED:NO
             /MANIFEST:NO
             /NODEFAULTLIB)
+        find_program(HYPERSINV_DUMPBIN_EXECUTABLE NAMES dumpbin.exe)
+        find_program(HYPERSINV_POWERSHELL_EXECUTABLE
+            NAMES powershell.exe pwsh.exe)
+        if(HYPERSINV_DUMPBIN_EXECUTABLE AND
+           HYPERSINV_POWERSHELL_EXECUTABLE)
+            add_custom_command(TARGET uefi_hypervisor POST_BUILD
+                COMMAND "${HYPERSINV_POWERSHELL_EXECUTABLE}"
+                    -NoProfile -ExecutionPolicy Bypass
+                    -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/Test-EfiRuntimeScannerImage.ps1"
+                    -ImagePath "$<TARGET_FILE:uefi_hypervisor>"
+                    -DumpbinPath "${HYPERSINV_DUMPBIN_EXECUTABLE}"
+                    -MaximumPages 16
+                VERBATIM)
+        endif()
 
         add_executable(uefi_hypervisor_probe
             uefi_hypervisor_probe.c
@@ -152,6 +214,64 @@ endif()
 add_test(NAME uefi_hypervisor_scanner_tests
     COMMAND uefi_hypervisor_scanner_tests)
 
+add_executable(uefi_hypervisor_runtime_scanner_tests
+    tests/test_runtime_scanner.cpp
+    runtime_scanner.cpp
+    scanner.cpp)
+target_include_directories(uefi_hypervisor_runtime_scanner_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(uefi_hypervisor_runtime_scanner_tests PRIVATE
+    cxx_std_17)
+if(MSVC)
+    target_compile_options(uefi_hypervisor_runtime_scanner_tests PRIVATE
+        /W4 /WX /GS- /GR- /EHs-c-)
+else()
+    target_compile_options(uefi_hypervisor_runtime_scanner_tests PRIVATE
+        -Wall -Wextra -Werror -fno-exceptions -fno-rtti)
+endif()
+add_test(NAME uefi_hypervisor_runtime_scanner_tests
+    COMMAND uefi_hypervisor_runtime_scanner_tests)
+
+add_executable(uefi_hypervisor_guest_introspection_tests
+    tests/test_guest_introspection.cpp
+    guest_process.cpp
+    guest_pt_walker.cpp
+    scanner.cpp)
+target_include_directories(uefi_hypervisor_guest_introspection_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(uefi_hypervisor_guest_introspection_tests PRIVATE
+    cxx_std_17)
+target_compile_definitions(uefi_hypervisor_guest_introspection_tests PRIVATE
+    HYPERSINV_KERNEL_PROFILE_AVAILABLE=0)
+if(MSVC)
+    target_compile_options(uefi_hypervisor_guest_introspection_tests PRIVATE
+        /W4 /WX /GS- /GR- /EHs-c-)
+else()
+    target_compile_options(uefi_hypervisor_guest_introspection_tests PRIVATE
+        -Wall -Wextra -Werror -fno-exceptions -fno-rtti)
+endif()
+add_test(NAME uefi_hypervisor_guest_introspection_tests
+    COMMAND uefi_hypervisor_guest_introspection_tests)
+
+add_executable(uefi_hypervisor_runtime_analysis_tests
+    tests/test_runtime_analysis.cpp
+    runtime_analysis.cpp
+    guest_pt_walker.cpp
+    scanner.cpp)
+target_include_directories(uefi_hypervisor_runtime_analysis_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(uefi_hypervisor_runtime_analysis_tests PRIVATE
+    cxx_std_17)
+if(MSVC)
+    target_compile_options(uefi_hypervisor_runtime_analysis_tests PRIVATE
+        /W4 /WX /GS- /GR- /EHs-c-)
+else()
+    target_compile_options(uefi_hypervisor_runtime_analysis_tests PRIVATE
+        -Wall -Wextra -Werror -fno-exceptions -fno-rtti)
+endif()
+add_test(NAME uefi_hypervisor_runtime_analysis_tests
+    COMMAND uefi_hypervisor_runtime_analysis_tests)
+
 add_executable(uefi_hypervisor_runtime_control_tests
     tests/test_runtime_control.cpp
     runtime_control.cpp)
@@ -202,6 +322,22 @@ else()
 endif()
 add_test(NAME uefi_hypervisor_ept_protection_tests
     COMMAND uefi_hypervisor_ept_protection_tests)
+
+add_executable(uefi_hypervisor_shadow_ept_tests
+    tests/test_shadow_ept.cpp
+    shadow_ept.cpp)
+target_include_directories(uefi_hypervisor_shadow_ept_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(uefi_hypervisor_shadow_ept_tests PRIVATE cxx_std_17)
+if(MSVC)
+    target_compile_options(uefi_hypervisor_shadow_ept_tests PRIVATE
+        /W4 /WX /GS- /GR- /EHs-c-)
+else()
+    target_compile_options(uefi_hypervisor_shadow_ept_tests PRIVATE
+        -Wall -Wextra -Werror -fno-exceptions -fno-rtti)
+endif()
+add_test(NAME uefi_hypervisor_shadow_ept_tests
+    COMMAND uefi_hypervisor_shadow_ept_tests)
 
 add_executable(uefi_hypervisor_interrupt_policy_tests
     tests/test_interrupt_policy.cpp

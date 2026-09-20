@@ -39,6 +39,26 @@ Assert-Contains $source 'DeviceIoControl'
 Assert-Contains $source 'HVR1_IOCTL_SUBMIT'
 Assert-Contains $source 'HVR1_IOCTL_QUERY_STATUS'
 Assert-Contains $source 'HVR1_IOCTL_GET_MAILBOX'
+Assert-Contains $source 'HVR1_IOCTL_OPERATION_SCAN'
+Assert-Contains $source 'HVR1_IOCTL_OPERATION_PROCESS_LOCATE'
+Assert-Contains $source 'HVR1_IOCTL_OPERATION_SHADOW_EPT'
+Assert-Contains $source 'HVR1_IOCTL_OPERATION_ANALYSIS'
+Assert-Contains $source 'HV_EFI_RUNTIME_SCAN_MAILBOX_RESPONSE_READY'
+Assert-Contains $source 'Hvr1VerifyMailboxAuthTag'
+Assert-Contains $source 'RunScan(argc, argv)'
+Assert-Contains $source 'RunLocateProcess(argc, argv)'
+Assert-Contains $source 'RunShadow(argc, argv, HV_EFI_RUNTIME_SHADOW_BIND)'
+Assert-Contains $source 'RunShadow(argc, argv, HV_EFI_RUNTIME_SHADOW_UNBIND)'
+Assert-Contains $source 'RunShadow(argc, argv, HV_EFI_RUNTIME_SHADOW_QUERY_STATUS)'
+Assert-Contains $source 'RunAnalysis(argc, argv)'
+Assert-Contains $source 'analysis-start'
+Assert-Contains $source 'analysis-configure'
+Assert-Contains $source 'analysis-scan'
+Assert-Contains $source 'analysis-traverse'
+Assert-Contains $source 'analysis-extract'
+Assert-Contains $source 'analysis-results'
+Assert-Contains $source 'analysis-stop'
+Assert-Contains $source 'request.Operation == HV_EFI_ANALYSIS_RESULTS'
 Assert-Contains $source 'Hvr1ComputeMailboxAuthTag'
 Assert-Contains $auth 'BCryptHash'
 Assert-Contains $source 'SecureZeroMemory(&descriptor'
@@ -116,11 +136,12 @@ if ($null -ne $compilerPath) {
         $um = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Include\10.0.28000.0\um'
         $shared = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Include\10.0.28000.0\shared'
         $ucrt = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Include\10.0.28000.0\ucrt'
+        $efiDirectory = [IO.Path]::GetFullPath((Join-Path $SourceDirectory '..\..\efi'))
         $msvcInclude = Split-Path (Split-Path (Split-Path (Split-Path $compilerPath -Parent) -Parent) -Parent) -Parent
         $msvcInclude = Join-Path $msvcInclude 'include'
         & $compilerPath /nologo /std:c++17 /EHsc /W4 /WX /permissive- /DUNICODE /D_UNICODE `
             /DWIN32_LEAN_AND_MEAN /DNTDDI_VERSION=0x0A00000C "/I$SourceDirectory" "/I$um" "/I$shared" "/I$ucrt" `
-            "/I$msvcInclude" /c $source "/Fo$objectPath"
+            "/I$msvcInclude" "/I$efiDirectory" /c $source "/Fo$objectPath"
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $objectPath)) {
             throw 'Win32 service source compilation failed'
         }

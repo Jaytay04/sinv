@@ -11,6 +11,9 @@
 ; COMMIT_NATIVE_DETACH (5):
 ;   inputs RDX = pointer to VMCS PA, R10/R11 = guest CR0/CR4,
 ;   R8/R9 = continuation RIP/RSP, and R12 = post-restore ACK address.
+; RUNTIME_SCAN (6):
+;   inputs token0 in RDX, token1 in RBX, token2 in R8, token3 in R9,
+;   mailbox PA in R10, generation in R12, and sequence in R13.
 ;
 ; COMMIT's VMCALL must enter Hvr1NativeDetachPivot through the host state
 ; armed by PREPARE.  The pivot VMCLEARs the VMCS operand, VMXOFFs, clears only
@@ -24,6 +27,10 @@ HVR1_EFI_CALL_MAGIC EQU 055454649564D5831h
 HVR1_EFI_CALL_QUERY_SESSION EQU 3
 HVR1_EFI_CALL_PREPARE_NATIVE_DETACH EQU 4
 HVR1_EFI_CALL_COMMIT_NATIVE_DETACH EQU 5
+HVR1_EFI_CALL_RUNTIME_SCAN EQU 6
+HVR1_EFI_CALL_PROCESS_LOCATE EQU 7
+HVR1_EFI_CALL_SHADOW_CONTROL EQU 8
+HVR1_EFI_CALL_ANALYSIS_CONTROL EQU 9
 HVR1_RUNTIME_ABI_VERSION EQU 1
 HVR1_MAILBOX_ACK_OK EQU 1
 HVR1_MAILBOX_ACK_FAILURE EQU 2
@@ -32,6 +39,10 @@ HVR1_MAILBOX_ACK_FAILURE EQU 2
 
 PUBLIC Hvr1Cpl0QuerySession
 PUBLIC Hvr1Cpl0Detach
+PUBLIC Hvr1Cpl0Scan
+PUBLIC Hvr1Cpl0ProcessLocate
+PUBLIC Hvr1Cpl0ShadowControl
+PUBLIC Hvr1Cpl0AnalysisControl
 PUBLIC Hvr1NativeDetachPivot
 PUBLIC Hvr1Cpl0DetachContinuation
 
@@ -65,6 +76,102 @@ Hvr1Cpl0QuerySession PROC
     pop rbx
     ret
 Hvr1Cpl0QuerySession ENDP
+
+; UINT64 Hvr1Cpl0Scan(const HVR1_SCAN_ARGUMENTS* Arguments)
+Hvr1Cpl0Scan PROC
+    push rbx
+    push r12
+    push r13
+    sub rsp, 20h
+    mov r11, rcx
+    mov rdx, qword ptr [r11 + 00h]
+    mov rbx, qword ptr [r11 + 08h]
+    mov r8,  qword ptr [r11 + 10h]
+    mov r9,  qword ptr [r11 + 18h]
+    mov r10, qword ptr [r11 + 20h]
+    mov r12, qword ptr [r11 + 30h]
+    mov r13, qword ptr [r11 + 38h]
+    mov rax, HVR1_EFI_CALL_MAGIC
+    mov ecx, HVR1_EFI_CALL_RUNTIME_SCAN
+    vmcall
+    add rsp, 20h
+    pop r13
+    pop r12
+    pop rbx
+    ret
+Hvr1Cpl0Scan ENDP
+
+; UINT64 Hvr1Cpl0ProcessLocate(const HVR1_PROCESS_ARGUMENTS* Arguments)
+Hvr1Cpl0ProcessLocate PROC
+    push rbx
+    push r12
+    push r13
+    sub rsp, 20h
+    mov r11, rcx
+    mov rdx, qword ptr [r11 + 00h]
+    mov rbx, qword ptr [r11 + 08h]
+    mov r8,  qword ptr [r11 + 10h]
+    mov r9,  qword ptr [r11 + 18h]
+    mov r10, qword ptr [r11 + 20h]
+    mov r12, qword ptr [r11 + 30h]
+    mov r13, qword ptr [r11 + 38h]
+    mov rax, HVR1_EFI_CALL_MAGIC
+    mov ecx, HVR1_EFI_CALL_PROCESS_LOCATE
+    vmcall
+    add rsp, 20h
+    pop r13
+    pop r12
+    pop rbx
+    ret
+Hvr1Cpl0ProcessLocate ENDP
+
+; UINT64 Hvr1Cpl0ShadowControl(const HVR1_SHADOW_ARGUMENTS* Arguments)
+Hvr1Cpl0ShadowControl PROC
+    push rbx
+    push r12
+    push r13
+    sub rsp, 20h
+    mov r11, rcx
+    mov rdx, qword ptr [r11 + 00h]
+    mov rbx, qword ptr [r11 + 08h]
+    mov r8,  qword ptr [r11 + 10h]
+    mov r9,  qword ptr [r11 + 18h]
+    mov r10, qword ptr [r11 + 20h]
+    mov r12, qword ptr [r11 + 30h]
+    mov r13, qword ptr [r11 + 38h]
+    mov rax, HVR1_EFI_CALL_MAGIC
+    mov ecx, HVR1_EFI_CALL_SHADOW_CONTROL
+    vmcall
+    add rsp, 20h
+    pop r13
+    pop r12
+    pop rbx
+    ret
+Hvr1Cpl0ShadowControl ENDP
+
+; UINT64 Hvr1Cpl0AnalysisControl(const HVR1_ANALYSIS_ARGUMENTS* Arguments)
+Hvr1Cpl0AnalysisControl PROC
+    push rbx
+    push r12
+    push r13
+    sub rsp, 20h
+    mov r11, rcx
+    mov rdx, qword ptr [r11 + 00h]
+    mov rbx, qword ptr [r11 + 08h]
+    mov r8,  qword ptr [r11 + 10h]
+    mov r9,  qword ptr [r11 + 18h]
+    mov r10, qword ptr [r11 + 20h]
+    mov r12, qword ptr [r11 + 30h]
+    mov r13, qword ptr [r11 + 38h]
+    mov rax, HVR1_EFI_CALL_MAGIC
+    mov ecx, HVR1_EFI_CALL_ANALYSIS_CONTROL
+    vmcall
+    add rsp, 20h
+    pop r13
+    pop r12
+    pop rbx
+    ret
+Hvr1Cpl0AnalysisControl ENDP
 
 ; UINT64 Hvr1Cpl0Detach(const HVR1_PREPARE_ARGUMENTS* Arguments,
 ;                       volatile LONG* AckAddress,

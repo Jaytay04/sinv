@@ -225,6 +225,34 @@ int TestPageTableWindow()
         UINT64_C(0x1000), &mapping) ==
         HV_EFI_SCANNER_RANGE_NOT_ALLOWED,
         "mapping outside RAM allowlist rejected");
+
+    TEST_ASSERT(HvEfiScannerMapReadOnly(
+        &window, &allowed, 1, UINT64_C(0x01000000),
+        UINT64_C(0x1000), &mapping) == HV_EFI_SCANNER_OK,
+        "stale-window recovery fixture mapped");
+    const uint32_t invalidationsBeforeRecovery = invalidations.Count;
+    TEST_ASSERT(HvEfiScannerInitializeWindow(
+        pageTables, HV_EFI_SCANNER_REQUIRED_PAGE_TABLE_PAGES,
+        pageTablePhysical, 1, 1, CountInvalidation,
+        &invalidations, &window) == HV_EFI_SCANNER_OK &&
+        pageTables[HV_EFI_SCANNER_PT_PAGE * 512] == 0 &&
+        invalidations.Count == invalidationsBeforeRecovery + 1,
+        "new command clears and invalidates a stale read-only alias");
+
+    pageTables[512 + 1] |= UINT64_C(1) << 5;
+    pageTables[HV_EFI_SCANNER_PD_PAGE * 512] |= UINT64_C(1) << 5;
+    TEST_ASSERT(HvEfiScannerInitializeWindow(
+        pageTables, HV_EFI_SCANNER_REQUIRED_PAGE_TABLE_PAGES,
+        pageTablePhysical, 1, 1, CountInvalidation,
+        &invalidations, &window) == HV_EFI_SCANNER_OK,
+        "hardware-set non-leaf Accessed bits are accepted");
+
+    pageTables[512 + 1] ^= UINT64_C(0x1000);
+    TEST_ASSERT(HvEfiScannerInitializeWindow(
+        pageTables, HV_EFI_SCANNER_REQUIRED_PAGE_TABLE_PAGES,
+        pageTablePhysical, 1, 1, CountInvalidation,
+        &invalidations, &window) == HV_EFI_SCANNER_HIERARCHY_MISMATCH,
+        "corrupt scanner hierarchy is never repaired");
     return 0;
 }
 
@@ -238,6 +266,28 @@ int TestAddressResolution()
     TEST_ASSERT(HvEfiScannerAbsoluteFromRva(
         UINT64_MAX - 1, 2, &absolute) == HV_EFI_SCANNER_OVERFLOW,
         "RVA overflow rejected");
+    return 0;
+}
+
+int TestMaskedPattern()
+{
+    const uint8_t bytes[] = {0x48, 0x8b, 0, 0x90};
+    const uint8_t mask[] = {0xff, 0xff, 0, 0xff};
+    const uint8_t data[] = {0, 0x48, 0x8b, 0x37, 0x90, 0};
+    HV_EFI_SCANNER_PATTERN_BYTE storage[4]{};
+    HV_EFI_SCANNER_COMPILED_PATTERN pattern{};
+    uint64_t offset = 0;
+    TEST_ASSERT(HvEfiScannerCompileMaskedPattern(
+        bytes, mask, 4, storage, 4, &pattern) == HV_EFI_SCANNER_OK,
+        "masked signature compiles through shared BMH engine");
+    TEST_ASSERT(HvEfiScannerFindFirst(
+        data, sizeof(data), &pattern, &offset) == HV_EFI_SCANNER_OK &&
+        offset == 1, "masked signature wildcard matches");
+    const uint8_t wildcardMask[] = {0, 0, 0, 0};
+    TEST_ASSERT(HvEfiScannerCompileMaskedPattern(
+        bytes, wildcardMask, 4, storage, 4, &pattern) == HV_EFI_SCANNER_OK &&
+        pattern.AllWildcards == 1,
+        "all-wildcard masked pattern preserves scanner semantics");
     return 0;
 }
 
@@ -309,6 +359,7 @@ int main()
         TestPatternDifferential() != 0 ||
         TestPageTableWindow() != 0 ||
         TestAddressResolution() != 0 ||
+        TestMaskedPattern() != 0 ||
         TestSignatureResolution() != 0) {
         return 1;
     }

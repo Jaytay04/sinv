@@ -1,5 +1,10 @@
 # uefi2hsinv
 
+The repository also contains an optional standalone Windows visualization
+overlay under [`tools/overlay`](tools/overlay/README.md). It is a pure user-mode
+Direct3D 11/Direct2D application and does not alter or link into the
+hypervisor/companion runtime.
+
 `uefi2hsinv` is a Windows/x86-64 VM research composition: UEFILoader owns
 the UEFI boot handoff, and Hypervisor supplies a small EFI VMX payload. The
 root project is a static-first superbuild; the original projects remain
@@ -33,6 +38,9 @@ and direct Windows actions exercise a real Windows handoff in disposable VMs.
 `RunWindowsDirectHypervisorE2E` always stages freshly built loader, hypervisor,
 and static Windows probe binaries, expands the disposable VM to 20 vCPUs for
 the run, and restores its snapshot and original VMX settings afterward.
+`RunWindowsDirectScannerE2E` uses the same disposable boot path but publishes
+success immediately after the authenticated read-only scan, keeping scanner
+validation independent from the destructive multi-CPU detach gate.
 
 A second, bounded smoke replaces Windows Boot Manager with a runtime-resident
 probe. It calls `ExitBootServices`, executes the same intercepted health CPUID,
@@ -113,14 +121,114 @@ EPT permissions are never changed.
 Boyer-Moore-Horspool search, chunked physical-range scanning, checked
 base-plus-RVA calculation, and ordered multi-signature resolution. Signature
 records carry an ID, pattern, signed match-relative offset, and target data
-size. The scanner contains no write, hook, guest-execution, allocation, or
-runtime-control API.
+size. The scanner contains no write, hook, guest-execution, or allocation API.
 
-The module is statically tested and linked into `uefi_hypervisor.efi`, but no
-runtime command invokes it yet. Its caller must provide validated RAM ranges
-and a contiguous physical module base/size; virtual-to-physical discovery and
-non-contiguous image walking are outside this module's contract. Privileged
-scanner execution remains VM-only.
+The authenticated HVR1 companion invokes the scanner with VMCALL opcode 6.
+Requests carry up to 64 pattern bytes, a wildcard bitmask, a physical range,
+a bounded per-exit byte budget, a monotonic sequence, and first/single/all
+result policy. The root scans only a boot-derived RAM allowlist with all
+hypervisor-owned EPT-denied ranges subtracted. Each scan window is mapped in
+the private root page tables as read-only and non-executable; EPT is not used
+for root memory accesses and guest EPT permissions are never relaxed. The
+ordinary guest-owned result mailbox is writable only while the bounded result
+is copied back. Large scans continue through `MORE_DATA` rather than holding
+one VM exit indefinitely. Privileged scanner execution remains VM-only.
+
+### Build-pinned Windows process enumeration
+
+The EFI payload can optionally expose authenticated process lookup for one
+exact Windows kernel build. CMake builds `hypersinv_kernel_profile_generator`,
+which loads the pinned `ntoskrnl.exe` and its matching PDB through DbgHelp,
+falls back to the installed DIA SDK if DbgHelp cannot extract the symbols,
+verifies the PE RSDS GUID/age against the loaded PDB, extracts the required
+`_EPROCESS`/`_KPROCESS` offsets and `PsActiveProcessHead` RVA, and emits both
+`kernel_profile_gen.h` and `kernel_profile_manifest.json`. A mismatch or a
+missing field fails the build. No generated offset header is checked in.
+
+VMX root captures the current guest CR3/CR4 at the authenticated VMCALL. The
+four-level guest walker strips CR3 PCID bits, rejects LA57, honors MAXPHYADDR,
+supports 4-KiB, 2-MiB, and 1-GiB mappings, and performs every physical read
+through `HvEfiScannerMapReadOnly`. It never treats identity EPT as virtual to
+physical translation and never directly dereferences a guest virtual address.
+Process-list reads are page-bounded and enforce canonical-address, RAM-range,
+cycle, and 10,000-entry limits. Enumerated records remain in EPT-denied
+hypervisor-private memory.
+
+The companion obtains and validates the live kernel base with AuxKlib, adds
+the running build and UBR, and submits VMCALL opcode 7 through the existing
+HMAC-authenticated, monotonic mailbox. Root revalidates the in-memory kernel
+PE timestamp, image size, and RSDS identity before using the profile. Only the
+authenticated process response returns PID and directory-table base; the
+generic public runtime ABI remains unchanged. Builds without a supplied
+profile omit the process capability and fail process requests closed.
+
+### Dynamic guest-memory analysis
+
+Authenticated VMCALL opcode 9 exposes a bounded, read-only analysis session
+for a PID already cached by process enumeration. `runtime_analysis.cpp` keeps
+all signatures, discovered regions, matches, traversal nodes, and typed values
+in an EPT-denied 32-page private allocation. The session API supports start,
+configure, scan, traverse, extract, paginated results, and stop. Every command
+is generation-bound and monotonic; one lock serializes vCPUs, and translation,
+mapping, timeout, or structural-integrity failures wipe the session.
+
+The analysis scanner reuses the existing Boyer-Moore-Horspool engine through
+its masked-byte compiler. It scans guest virtual ranges page by page through
+`GuestPtWalker` and `HvEfiScannerMapReadOnly`, carries at most 63 overlap bytes,
+and returns both the matched guest VA and translated physical address. Per-call
+limits bound scanned bytes, TSC duration, matches, page-table pages, traversal
+nodes, strings, and response records. Singly/doubly linked lists, arrays,
+pointer arrays, 2-D arrays, binary trees, and two-edge graphs use alignment,
+canonical-address, backlink, cycle, and capacity checks. Scalars, vectors,
+matrices, pointers, ASCII/UTF-8 strings, and 8/16/32-bit length-prefixed strings
+are decoded into a fixed typed representation.
+
+Present user mappings and effective R/W/X permissions are discovered by
+walking only present lower-half page-table branches. Up to 2,048 coalesced
+ranges are retained per session, with explicit truncation reporting. PE images
+are identified conservatively from validated in-memory headers, including the
+normal read-only/NX header mapping. PTEs do not encode
+Windows VAD ownership, heap membership, thread-stack ownership, guard state, or
+reserved address ranges. Those classifications are therefore accepted only as
+authenticated region evidence through `ANALYSIS_CONFIGURE`; they are never
+guessed from page-table bits. Supplied evidence can label mapped/private,
+heap/stack, guard, and reserved ranges, while actual access permissions for
+present pages always come from the guest page-table walk.
+
+Disposable-VM run `uefi-windows-probe-20260920-015843-d5aca9c2f3` validated
+the authenticated analysis path on pinned Windows `26200.9445`: a process-bound
+session discovered 2,048 bounded mappings, found the target image's `MZ`
+signature at guest VA `0x00007FF60B7E0000`, returned its translated physical
+address, stopped cleanly, and then completed shadow-EPT and four-vCPU detach.
+
+### Process-bound alternate EPT views
+
+After a successful process lookup, authenticated VMCALL opcode 8 can bind an
+alternate EPT view to the cached PID. Each logical processor owns a preallocated
+shadow hierarchy and manager page in EPT-denied hypervisor memory. The hierarchy
+is cloned from that processor's 512-GiB identity EPT; internal table pointers are
+rebased, while every leaf retains the identity view's exact host-physical frame
+and never gains an access bit. Selected, page-aligned allowlisted RAM ranges can
+have EPT write permission cleared, producing an R-X view only when the identity
+leaf was already readable and executable. Kernel/System PID 4, non-RAM ranges,
+and all hypervisor-private allocations are rejected.
+
+CR3-load exiting is enabled only while a target is bound. A matching CR3 selects
+the alternate EPTP; every other CR3 selects identity EPT. EPT violations while
+the alternate view is active fail safe to identity and retry without injecting a
+guest exception. INVEPT and INVVPID single-context invalidations accompany every
+EPTP transition. The companion serializes commands and gives every processor a
+separate physical mailbox during the all-CPU rendezvous; partial bind failure is
+followed by an all-CPU unbind attempt.
+
+This facility is a write-restricted guest view, not a mechanism for VMX root to
+bypass guest page-table permissions. Root reads still use the private host page
+tables through `HvEfiScannerMapReadOnly`; EPT never mediates root-mode reads.
+Clearing EPT write permission is observable because the next guest write causes
+a VM exit. Windows page-table edits need no content synchronization between the
+views because both EPTs map the same backing frames. The explicit synchronization
+path exists for hypervisor-owned EPT policy changes and reapplies configured
+permissions as one batch.
 
 ### Lifecycle, control, interrupts, and isolation
 
@@ -137,8 +245,8 @@ from returning to Windows until every processor has executed `VMCLEAR`,
 companion is a separate opt-in target; the combined default still installs and
 loads no driver.
 
-The companion's optional LocalSystem service provides bounded `status` and
-`shutdown` commands, records lifecycle state plus a volatile boot identity in
+The companion's optional LocalSystem service provides bounded `status`,
+`scan`, and `shutdown` commands, records lifecycle state plus a volatile boot identity in
 the registry, and refuses unsafe reuse after an incomplete same-boot detach.
 After a real reboot, the changed boot identity permits a fresh session because
 processor VMX state cannot survive the reset. Shutdown, preshutdown, and power
@@ -201,6 +309,23 @@ The Hypervisor configuration receives these explicit paths:
 
 - `HYPERSINV_UEFI_SOURCE_DIR` — `components/uefi-loader`;
 - `HYPERSINV_UEFI_SUPPORT_DIR` — `components/uefi-loader/src/vendor`.
+
+To enable process enumeration, pin all four kernel-profile inputs. The image
+must come from the disposable target VM and the PDB must be its exact symbol
+match:
+
+```powershell
+cmake --preset combined-windows --fresh `
+  -DCOMBINED_KERNEL_IMAGE=C:\profiles\26200.9445\ntoskrnl.exe `
+  -DCOMBINED_KERNEL_PDB=C:\profiles\26200.9445\ntkrnlmp.pdb `
+  -DCOMBINED_KERNEL_BUILD=26200 `
+  -DCOMBINED_KERNEL_UBR=9445 `
+  -DCOMBINED_REQUIRE_KERNEL_PROFILE=ON
+```
+
+The equivalent component options use the `HYPERSINV_` prefix. The generated
+JSON audit manifest is written under the hypervisor build tree at
+`src/efi/generated/kernel_profile_manifest.json`.
 
 That support directory is the source of the freestanding UEFI entry, allocator,
 CRT shims, and vendor headers used by the Hypervisor EFI target. The root
@@ -276,6 +401,11 @@ belong to an explicit VM runbook and must be reviewed separately.
   topology changes are not supported.
 - The CPUID smoke response is a health signal only. It does not authorize
   memory inspection, stealth, persistence, or a driver load.
+- Alternate EPT is intentionally not advertised as transparent memory access:
+  it changes only guest GPA-to-HPA permissions, and a write to an R-X range is
+  observable as a VM exit. The current authenticated ABI accepts physical RAM
+  ranges and rejects the System process plus hypervisor-owned ranges; it does not
+  infer ownership of arbitrary Windows kernel pool pages from a physical address.
 - No signing private key, VM disk, generated build state, or live-load helper
   is part of this repository.
 

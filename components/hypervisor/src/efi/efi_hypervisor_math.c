@@ -1,5 +1,6 @@
 #include "efi_hypervisor.h"
 #include "efi_hypervisor_math.h"
+#include "shadow_ept.h"
 
 int HvEfiDirectInterruptPinControlsValid(uint32_t selectedPinControls)
 {
@@ -383,7 +384,9 @@ int HvEfiProcessorResourceAddressesValid(
         record != NULL ? record->GuestStackPhysical : 0,
         record != NULL ? record->PageTablePhysical : 0,
         record != NULL ? record->DescriptorStoragePhysical : 0,
-        record != NULL ? record->EptPhysical : 0
+        record != NULL ? record->EptPhysical : 0,
+        record != NULL ? record->ShadowEptPhysical : 0,
+        record != NULL ? record->ShadowEptStatePhysical : 0
     };
     const uint32_t pages[] = {
         HV_EFI_CONTEXT_PAGES,
@@ -393,7 +396,9 @@ int HvEfiProcessorResourceAddressesValid(
         HV_EFI_GUEST_STACK_PAGES,
         HV_EFI_PAGE_TABLE_PAGES,
         HV_EFI_DESCRIPTOR_STORAGE_PAGES,
-        HV_EFI_EPT_TABLE_PAGES
+        HV_EFI_EPT_TABLE_PAGES,
+        HV_EFI_EPT_TABLE_PAGES,
+        HV_EFI_SHADOW_EPT_STATE_PAGES
     };
     uint64_t ends[sizeof(addresses) / sizeof(addresses[0])];
     uint32_t i;
@@ -403,7 +408,7 @@ int HvEfiProcessorResourceAddressesValid(
     if (record == NULL) {
         return 0;
     }
-    resourceCount = 8u;
+    resourceCount = 10u;
     for (i = 0; i < resourceCount; ++i) {
         uint64_t bytes = (uint64_t)pages[i] * HV_EFI_PAGE_SIZE;
 
@@ -446,10 +451,17 @@ int HvEfiProcessorPreparationStateValid(
         return 0;
     }
     if (record->EptPhysical != context->EptPhysical ||
+        record->ShadowEptPhysical != context->ShadowEptPhysical ||
+        record->ShadowEptStatePhysical !=
+            context->ShadowEptStatePhysical ||
         !HvEfiBuildEptPointer(context->EptPhysical,
                               context->EptVpidCapabilities,
                               &expectedEptPointer) ||
-        context->EptPointer != expectedEptPointer) {
+        context->EptPointer != expectedEptPointer ||
+        !HvEfiBuildEptPointer(context->ShadowEptPhysical,
+                              context->EptVpidCapabilities,
+                              &expectedEptPointer) ||
+        context->ShadowEptPointer != expectedEptPointer) {
         return 0;
     }
     return record->VmxonPhysical == context->VmxonPhysical &&
@@ -458,7 +470,7 @@ int HvEfiProcessorPreparationStateValid(
         record->DescriptorStoragePhysical ==
             context->DescriptorStoragePhysical &&
         context->HostStackTop == record->HostStackPhysical +
-            (HV_EFI_PAGE_SIZE / 2u) - 8 &&
+            ((uint64_t)HV_EFI_HOST_STACK_PAGES * HV_EFI_PAGE_SIZE / 2u) - 8 &&
         context->GuestStackTop == record->GuestStackPhysical +
             HV_EFI_PAGE_SIZE - 32;
 }
@@ -471,7 +483,11 @@ int HvEfiApStartupCapabilitiesValid(
     const uint64_t requiredEptCapabilities =
         HV_EFI_EPT_CAP_WALK_LENGTH_4 |
         HV_EFI_EPT_CAP_EPTP_MEMORY_TYPE_WB |
-        HV_EFI_EPT_CAP_2MB_PAGE;
+        HV_EFI_EPT_CAP_2MB_PAGE |
+        HV_EFI_EPT_CAP_INVEPT |
+        HV_EFI_EPT_CAP_INVEPT_SINGLE_CONTEXT |
+        HV_EFI_VPID_CAP_INVVPID |
+        HV_EFI_VPID_CAP_INVVPID_SINGLE_CONTEXT;
 
     return HvEfiAdjustControls(
                HV_EFI_VM_SECONDARY_ENABLE_EPT |

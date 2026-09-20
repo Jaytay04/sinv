@@ -14,7 +14,7 @@
   "Policy": {
     "BuildTimeoutSeconds": 1800,
     "OperationTimeoutSeconds": 7200,
-    "GuestReadyTimeoutSeconds": 180,
+    "GuestReadyTimeoutSeconds": 600,
     "LeaseMinutes": 180,
     "StartupLeaseMinutes": 10,
     "MaxConcurrentVms": 2,
@@ -30,7 +30,7 @@
   ],
   "Profiles": {
     "Linux": {
-      "Enabled": true,
+      "Enabled": false,
       "VmxPath": "D:\\Archived Virtual Machines\\uefi2hsinv-2026-09-14\\Ubuntu 64-bit\\Ubuntu 64-bit.vmx",
       "DisplayName": "Ubuntu 64-bit",
       "SnapshotName": "",
@@ -42,19 +42,21 @@
     },
     "Windows": {
       "Enabled": true,
-      "VmxPath": "C:\\Users\\jayli\\OneDrive\\Documents\\Virtual Machines\\Clone of V3H-Gate4-MultiGroup\\Clone of V3H-Gate4-MultiGroup.vmx",
-      "DisplayName": "Clone of V3H-Gate4-MultiGroup",
-      "SnapshotName": "UEFILoader-GuestInfo-Clean-v7",
+      "VmxPath": "C:\\Users\\jayli\\OneDrive\\Documents\\Virtual Machines\\UEFILoader-Win11-vTPM-ExactBuild-Gate\\UEFILoader-Win11-vTPM-ExactBuild-Gate.vmx",
+      "DisplayName": "UEFILoader-Win11-vTPM-ExactBuild-Gate",
+      "SnapshotName": "UEFILoader-Win11-26200.9445-vTPM-Base",
       "GuestTransport": "VmwareGuestInfo",
       "MailboxCredentialFile": "windows-clone-mailbox-key.xml",
-      "GuestUser": "jayli",
+      "GuestUser": "UEFILoaderVm",
       "GuestStageRoot": "C:\\ProgramData\\UEFILoaderRunner",
       "GuestCredentialFile": "",
       "VmCredentialFile": "windows-vm.xml",
-      "LeaseResource": "vm-uefiloader-windows-clone",
+      "LeaseResource": "vm-uefiloader-windows-exactbuild-vtpm",
       "ExpectedProbeVerdict": "NOT_MET",
       "ExpectedWindowsBuild": 26200,
-      "ExpectedWindowsUbr": 9168
+      "ExpectedWindowsUbr": 9445,
+      "KernelProfileImage": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\uefi2hsinv\\.analysis\\pinned-kernel-profile\\ntoskrnl.exe",
+      "KernelProfilePdb": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\uefi2hsinv\\.analysis\\pinned-kernel-profile\\ntkrnlmp.pdb"
     }
   }
 }

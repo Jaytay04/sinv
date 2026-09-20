@@ -26,31 +26,40 @@ Hvr1ComputeMailboxAuthTag(
     uint8_t tag[HVR1_MAILBOX_TAG_BYTES])
 {
     BCRYPT_ALG_HANDLE algorithm = NULL;
-    UCHAR canonical[HVR1_AUTH_NONCE_BYTES + HVR1_MAILBOX_TAG_OFFSET];
-    NTSTATUS status;
+    BCRYPT_HASH_HANDLE hash = NULL;
+    NTSTATUS status = STATUS_INVALID_PARAMETER;
 
-    if (key == NULL || nonce == NULL || mailbox == NULL || tag == NULL)
+    if (key == NULL || nonce == NULL || mailbox == NULL || tag == NULL ||
+        mailbox->HeaderSize != HVR1_MAILBOX_HEADER_BYTES ||
+        mailbox->PayloadOffset != HVR1_MAILBOX_HEADER_BYTES ||
+        mailbox->PayloadSize > HVR1_MAILBOX_MAX_PAYLOAD_BYTES ||
+        mailbox->TotalSize !=
+            HVR1_MAILBOX_HEADER_BYTES + mailbox->PayloadSize)
         return 0;
-    RtlCopyMemory(canonical, nonce, HVR1_AUTH_NONCE_BYTES);
-    RtlCopyMemory(canonical + HVR1_AUTH_NONCE_BYTES, mailbox,
-                  HVR1_MAILBOX_TAG_OFFSET);
     RtlZeroMemory(tag, HVR1_MAILBOX_TAG_BYTES);
     status = BCryptOpenAlgorithmProvider(
         &algorithm, BCRYPT_SHA256_ALGORITHM, NULL,
         BCRYPT_ALG_HANDLE_HMAC_FLAG);
-    if (status >= 0) {
-        status = BCryptHash(
-            algorithm,
-            (PUCHAR)key,
-            HVR1_AUTH_KEY_BYTES,
-            canonical,
-            (ULONG)sizeof(canonical),
-            tag,
-            HVR1_MAILBOX_TAG_BYTES);
-    }
+    if (status >= 0)
+        status = BCryptCreateHash(
+            algorithm, &hash, NULL, 0, (PUCHAR)key,
+            HVR1_AUTH_KEY_BYTES, 0);
+    if (status >= 0)
+        status = BCryptHashData(
+            hash, (PUCHAR)nonce, HVR1_AUTH_NONCE_BYTES, 0);
+    if (status >= 0)
+        status = BCryptHashData(
+            hash, (PUCHAR)mailbox, HVR1_MAILBOX_TAG_OFFSET, 0);
+    if (status >= 0 && mailbox->PayloadSize != 0)
+        status = BCryptHashData(
+            hash, (PUCHAR)mailbox->Payload, mailbox->PayloadSize, 0);
+    if (status >= 0)
+        status = BCryptFinishHash(
+            hash, tag, HVR1_MAILBOX_TAG_BYTES, 0);
+    if (hash != NULL)
+        (VOID)BCryptDestroyHash(hash);
     if (algorithm != NULL)
         (VOID)BCryptCloseAlgorithmProvider(algorithm, 0);
-    Hvr1ClearBytes(canonical, sizeof(canonical));
     if (status < 0) {
         Hvr1ClearBytes(tag, HVR1_MAILBOX_TAG_BYTES);
         return 0;

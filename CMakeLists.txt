@@ -28,6 +28,16 @@ option(COMBINED_BUILD_EFI_RUNTIME_COMPANION
     "Build the opt-in Windows WDM companion (never installed or loaded)" OFF)
 option(COMBINED_BUILD_EFI_RUNTIME_SERVICE
     "Build the opt-in Windows LocalSystem companion service/CLI" OFF)
+set(COMBINED_KERNEL_IMAGE "" CACHE FILEPATH
+    "Pinned ntoskrnl.exe used for the guest process profile")
+set(COMBINED_KERNEL_PDB "" CACHE FILEPATH
+    "Matching kernel PDB used for the guest process profile")
+set(COMBINED_KERNEL_BUILD "" CACHE STRING
+    "Pinned Windows kernel build number")
+set(COMBINED_KERNEL_UBR "" CACHE STRING
+    "Pinned Windows kernel update build revision")
+option(COMBINED_REQUIRE_KERNEL_PROFILE
+    "Require a validated build-pinned guest kernel profile" OFF)
 
 set(COMBINED_UEFI_SOURCE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/components/uefi-loader"
@@ -120,6 +130,11 @@ if(COMBINED_BUILD_HYPERVISOR_EFI)
             -DHYPERSINV_BUILD_EFI_RUNTIME_COMPANION:BOOL=${COMBINED_BUILD_EFI_RUNTIME_COMPANION}
             -DHYPERSINV_BUILD_EFI_RUNTIME_SERVICE:BOOL=${COMBINED_BUILD_EFI_RUNTIME_SERVICE}
             -DHYPERSINV_TEST_EFI_RUNTIME_COMPANION:BOOL=ON
+            -DHYPERSINV_KERNEL_IMAGE:FILEPATH=${COMBINED_KERNEL_IMAGE}
+            -DHYPERSINV_KERNEL_PDB:FILEPATH=${COMBINED_KERNEL_PDB}
+            -DHYPERSINV_KERNEL_BUILD:STRING=${COMBINED_KERNEL_BUILD}
+            -DHYPERSINV_KERNEL_UBR:STRING=${COMBINED_KERNEL_UBR}
+            -DHYPERSINV_REQUIRE_KERNEL_PROFILE:BOOL=${COMBINED_REQUIRE_KERNEL_PROFILE}
             -DHYPERSINV_UEFI_SOURCE_DIR:PATH=${COMBINED_UEFI_SOURCE_DIR}
             -DHYPERSINV_UEFI_SUPPORT_DIR:PATH=${COMBINED_UEFI_SUPPORT_DIR}
             -DCMAKE_MSVC_RUNTIME_LIBRARY:STRING=MultiThreaded
@@ -178,11 +193,16 @@ if(COMBINED_BUILD_COMPONENT_TESTS)
                 --output-on-failure)
     endif()
 
-    add_custom_target(combined_test
-        ${_combined_test_commands}
-        USES_TERMINAL
-        COMMENT "Run component tests from their isolated CTest registries"
-    )
+    if(_combined_test_commands)
+        add_custom_target(combined_test
+            ${_combined_test_commands}
+            USES_TERMINAL
+            COMMENT "Run component tests from their isolated CTest registries"
+        )
+    else()
+        add_custom_target(combined_test
+            COMMENT "No component tests are enabled")
+    endif()
     if(TARGET combined_build)
         add_dependencies(combined_test combined_build)
     endif()
@@ -205,4 +225,5 @@ message(STATUS "  Isolated build root: ${COMBINED_BUILD_ROOT}")
 message(STATUS "  Configuration: ${COMBINED_CONFIG}")
 message(STATUS "  EFI runtime companion build: ${COMBINED_BUILD_EFI_RUNTIME_COMPANION}")
 message(STATUS "  EFI runtime service build: ${COMBINED_BUILD_EFI_RUNTIME_SERVICE}")
+message(STATUS "  Required kernel profile: ${COMBINED_REQUIRE_KERNEL_PROFILE}")
 message(STATUS "  Driver installation/live-load: never performed by this build")

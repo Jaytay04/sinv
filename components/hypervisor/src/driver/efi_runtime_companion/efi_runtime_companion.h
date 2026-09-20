@@ -40,7 +40,7 @@ NTSTATUS Hvr1CompanionGetMailboxDescriptor(
 /*
  * Dispatches one bounded IOCTL.  Input and output are already METHOD_BUFFERED
  * kernel buffers owned by the parent WDM/KMDF driver.  The function is valid
- * at PASSIVE_LEVEL only because PREPARE may issue a root VMCALL.
+ * at PASSIVE_LEVEL only because PREPARE and scan may issue a root VMCALL.
  */
 NTSTATUS Hvr1CompanionHandleIoctl(
     _Inout_ HVR1_COMPANION *Companion,
@@ -104,6 +104,18 @@ UINT64 Hvr1Cpl0Detach(
     _In_ const HVR1_PREPARE_ARGUMENTS *Arguments,
     _Out_ volatile LONG *AckAddress,
     _Inout_ HVR1_DETACH_BARRIER *Barrier);
+
+UINT64 Hvr1Cpl0Scan(
+    _In_ const HVR1_SCAN_ARGUMENTS *Arguments);
+
+UINT64 Hvr1Cpl0ProcessLocate(
+    _In_ const HVR1_PROCESS_ARGUMENTS *Arguments);
+
+UINT64 Hvr1Cpl0ShadowControl(
+    _In_ const HVR1_SHADOW_ARGUMENTS *Arguments);
+
+UINT64 Hvr1Cpl0AnalysisControl(
+    _In_ const HVR1_ANALYSIS_ARGUMENTS *Arguments);
 
 /* Entry and continuation labels used by PREPARE/COMMIT's host-state pivot. */
 VOID Hvr1NativeDetachPivot(VOID);

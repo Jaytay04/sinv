@@ -33,6 +33,9 @@ assert_contains("${_root_text}" "hypervisor" "Hypervisor has an isolated build d
 assert_contains("${_root_text}" "HYPERSINV_BUILD_DRIVER:BOOL=OFF" "driver is disabled by default")
 assert_contains("${_root_text}" "HYPERSINV_BUILD_UEFI:BOOL=ON" "EFI payload is enabled by the component option")
 assert_contains("${_root_text}" "HYPERSINV_UEFI_SUPPORT_DIR:PATH" "UEFI support path is explicit")
+assert_contains("${_root_text}" "HYPERSINV_KERNEL_IMAGE:FILEPATH" "kernel image pin is forwarded")
+assert_contains("${_root_text}" "HYPERSINV_KERNEL_PDB:FILEPATH" "kernel PDB pin is forwarded")
+assert_contains("${_root_text}" "HYPERSINV_REQUIRE_KERNEL_PROFILE:BOOL" "kernel profile can be required")
 assert_contains("${_root_text}" "IB_PAYLOAD_REPLAY_INDEPENDENT:BOOL=ON" "combined loader permits the EFI payload on stock measured firmware")
 assert_contains("${_root_text}" "--target uefi_hypervisor" "EFI target is an explicit build contract")
 assert_contains("${_root_text}" "COMBINED_BUILD_COMPONENT_TESTS" "component test orchestration is configurable")
@@ -43,6 +46,7 @@ assert_contains("${_readme_text}" "ExitBootServices" "README states the boot-ser
 assert_contains("${_readme_text}" "CPUID" "README documents the smoke interface")
 assert_contains("${_readme_text}" "VM-only" "README states VM-only safety")
 assert_contains("${_readme_text}" "live-load" "README rejects driver live-load")
+assert_contains("${_readme_text}" "Build-pinned Windows process enumeration" "README documents process introspection")
 
 assert_contains("${_script_text}" "COMBINED_BUILD_HYPERVISOR_EFI" "build script enables the EFI target")
 assert_contains("${_script_text}" "combined_test" "build script exposes component tests")

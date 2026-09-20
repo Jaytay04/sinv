@@ -58,6 +58,25 @@ int main()
         Hvr1VerifyMailboxAuthTag(key, nonce, &mailbox) == 0,
         "header mutation is rejected");
     mailbox.Sequence ^= UINT64_C(1);
+    mailbox.Operation = HVR1_MAILBOX_OPERATION_RUNTIME_SCAN;
+    mailbox.PayloadSize = 4;
+    mailbox.TotalSize = HVR1_MAILBOX_HEADER_BYTES + mailbox.PayloadSize;
+    mailbox.Payload[0] = 0x48;
+    mailbox.Payload[1] = 0x8b;
+    mailbox.Payload[2] = 0x05;
+    mailbox.Payload[3] = 0xcc;
+    failures += Require(
+        Hvr1ComputeMailboxAuthTag(key, nonce, &mailbox, tag) != 0,
+        "payload-bearing mailbox tag computes");
+    std::memcpy(mailbox.AuthTag, tag, sizeof(tag));
+    failures += Require(
+        Hvr1VerifyMailboxAuthTag(key, nonce, &mailbox) != 0,
+        "payload-bearing tag verifies");
+    mailbox.Payload[3] ^= 1;
+    failures += Require(
+        Hvr1VerifyMailboxAuthTag(key, nonce, &mailbox) == 0,
+        "payload mutation is rejected");
+    mailbox.Payload[3] ^= 1;
     nonce[0] ^= 1;
     failures += Require(
         Hvr1VerifyMailboxAuthTag(key, nonce, &mailbox) == 0,

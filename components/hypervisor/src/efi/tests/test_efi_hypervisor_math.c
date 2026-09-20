@@ -77,7 +77,7 @@ int main(void)
     ioBitmapA[0] = 0;
     failures += expect(
                        HV_EFI_EPT_BASE_TABLE_PAGES == UINT32_C(514) &&
-                       HV_EFI_EPT_MAX_DENY_RANGES == UINT32_C(458) &&
+                       HV_EFI_EPT_MAX_DENY_RANGES == UINT32_C(595) &&
                        HV_EFI_EPT_MAX_SPLIT_PAGES == UINT32_C(784) &&
                        HV_EFI_EPT_TABLE_PAGES == UINT32_C(1298) &&
                        HvEfiProcessorRecordPageCount(
@@ -331,10 +331,12 @@ int main(void)
     resourceRecord.VmxonPhysical = UINT64_C(0x2000);
     resourceRecord.VmcsPhysical = UINT64_C(0x3000);
     resourceRecord.HostStackPhysical = UINT64_C(0x4000);
-    resourceRecord.GuestStackPhysical = UINT64_C(0x5000);
-    resourceRecord.PageTablePhysical = UINT64_C(0x6000);
-    resourceRecord.DescriptorStoragePhysical = UINT64_C(0x10000);
+    resourceRecord.GuestStackPhysical = UINT64_C(0x8000);
+    resourceRecord.PageTablePhysical = UINT64_C(0x9000);
+    resourceRecord.DescriptorStoragePhysical = UINT64_C(0x11000);
     resourceRecord.EptPhysical = UINT64_C(0x20000);
+    resourceRecord.ShadowEptPhysical = UINT64_C(0x600000);
+    resourceRecord.ShadowEptStatePhysical = UINT64_C(0xc00000);
     failures += expect(HvEfiProcessorResourceAddressesValid(
                            &resourceRecord) != 0,
                        "non-overlapping processor resources are accepted");
@@ -371,12 +373,16 @@ int main(void)
     preparationContext.DescriptorStoragePhysical =
         resourceRecord.DescriptorStoragePhysical;
     preparationContext.HostStackTop = resourceRecord.HostStackPhysical +
-        (HV_EFI_PAGE_SIZE / 2u) - 8;
+        ((uint64_t)HV_EFI_HOST_STACK_PAGES * HV_EFI_PAGE_SIZE / 2u) - 8;
     preparationContext.GuestStackTop = resourceRecord.GuestStackPhysical +
         HV_EFI_PAGE_SIZE - 32;
     preparationContext.HostDescriptorStateReady = 1;
     preparationContext.BspProcessorNumber = 7;
     preparationContext.EptPhysical = resourceRecord.EptPhysical;
+    preparationContext.ShadowEptPhysical =
+        resourceRecord.ShadowEptPhysical;
+    preparationContext.ShadowEptStatePhysical =
+        resourceRecord.ShadowEptStatePhysical;
     preparationContext.EptVpidCapabilities =
         HV_EFI_EPT_CAP_WALK_LENGTH_4 |
         HV_EFI_EPT_CAP_EPTP_MEMORY_TYPE_WB;
@@ -385,11 +391,23 @@ int main(void)
                            preparationContext.EptVpidCapabilities,
                            &preparationContext.EptPointer) != 0,
                        "BSP EPT pointer fixture is valid");
+    failures += expect(HvEfiBuildEptPointer(
+                           preparationContext.ShadowEptPhysical,
+                           preparationContext.EptVpidCapabilities,
+                           &preparationContext.ShadowEptPointer) != 0,
+                       "BSP shadow EPT pointer fixture is valid");
     preparationContext.EptHierarchyReady = 1;
     resourceRecord.StateFlags |= HV_EFI_PROCESSOR_STATE_EPT_READY;
     failures += expect(HvEfiProcessorPreparationStateValid(
                            &resourceRecord, &preparationContext) != 0,
                        "processor-local captured and isolated state is accepted");
+    preparationContext.HostStackTop = resourceRecord.HostStackPhysical +
+        (HV_EFI_PAGE_SIZE / 2u) - 8;
+    failures += expect(HvEfiProcessorPreparationStateValid(
+                           &resourceRecord, &preparationContext) == 0,
+                       "legacy one-page host-stack split is rejected");
+    preparationContext.HostStackTop = resourceRecord.HostStackPhysical +
+        ((uint64_t)HV_EFI_HOST_STACK_PAGES * HV_EFI_PAGE_SIZE / 2u) - 8;
     preparationContext.CurrentProcessorNumber = 8;
     failures += expect(HvEfiProcessorPreparationStateValid(
                            &resourceRecord, &preparationContext) == 0 &&
@@ -452,26 +470,42 @@ int main(void)
                            HV_EFI_EPT_CAP_WALK_LENGTH_4 |
                                HV_EFI_EPT_CAP_EPTP_MEMORY_TYPE_WB |
                                HV_EFI_EPT_CAP_2MB_PAGE |
-                               HV_EFI_EPT_CAP_1GB_PAGE) != 0,
+                               HV_EFI_EPT_CAP_1GB_PAGE |
+                               HV_EFI_EPT_CAP_INVEPT |
+                               HV_EFI_EPT_CAP_INVEPT_SINGLE_CONTEXT |
+                               HV_EFI_VPID_CAP_INVVPID |
+                               HV_EFI_VPID_CAP_INVVPID_SINGLE_CONTEXT) != 0,
                        "WB EPT unrestricted-guest startup capabilities accepted");
     failures += expect(HvEfiApStartupCapabilitiesValid(
                            UINT64_C(0xffffff7f00000000),
                            HV_EFI_EPT_CAP_WALK_LENGTH_4 |
                                HV_EFI_EPT_CAP_EPTP_MEMORY_TYPE_WB |
                                HV_EFI_EPT_CAP_2MB_PAGE |
-                               HV_EFI_EPT_CAP_1GB_PAGE) == 0,
+                               HV_EFI_EPT_CAP_1GB_PAGE |
+                               HV_EFI_EPT_CAP_INVEPT |
+                               HV_EFI_EPT_CAP_INVEPT_SINGLE_CONTEXT |
+                               HV_EFI_VPID_CAP_INVVPID |
+                               HV_EFI_VPID_CAP_INVVPID_SINGLE_CONTEXT) == 0,
                        "missing unrestricted-guest control is rejected");
     failures += expect(HvEfiApStartupCapabilitiesValid(
                            UINT64_C(0xffffffff00000000),
                            HV_EFI_EPT_CAP_WALK_LENGTH_4 |
                                HV_EFI_EPT_CAP_EPTP_MEMORY_TYPE_WB |
-                               HV_EFI_EPT_CAP_1GB_PAGE) == 0,
+                               HV_EFI_EPT_CAP_1GB_PAGE |
+                               HV_EFI_EPT_CAP_INVEPT |
+                               HV_EFI_EPT_CAP_INVEPT_SINGLE_CONTEXT |
+                               HV_EFI_VPID_CAP_INVVPID |
+                               HV_EFI_VPID_CAP_INVVPID_SINGLE_CONTEXT) == 0,
                        "missing EPT 2-MiB leaf support is rejected");
     failures += expect(HvEfiApStartupCapabilitiesValid(
                            UINT64_C(0xffffffff00000000),
                            HV_EFI_EPT_CAP_WALK_LENGTH_4 |
                                HV_EFI_EPT_CAP_EPTP_MEMORY_TYPE_WB |
-                               HV_EFI_EPT_CAP_2MB_PAGE) != 0,
+                               HV_EFI_EPT_CAP_2MB_PAGE |
+                               HV_EFI_EPT_CAP_INVEPT |
+                               HV_EFI_EPT_CAP_INVEPT_SINGLE_CONTEXT |
+                               HV_EFI_VPID_CAP_INVVPID |
+                               HV_EFI_VPID_CAP_INVVPID_SINGLE_CONTEXT) != 0,
                        "EPT startup accepts a 2-MiB-only fallback");
     failures += expect(HvEfiBuildEptPointer(
                            UINT64_C(0x12000),
@@ -977,11 +1011,15 @@ int main(void)
     failures += expect(offsetof(HV_EFI_CONTEXT, ProcessorCount) == 716 &&
                        offsetof(HV_EFI_CONTEXT, ApPreflightStatus) == 732,
                        "topology fields append without MASM ABI drift");
-    failures += expect(sizeof(HV_EFI_PROCESSOR_RECORD) == 88 &&
+    failures += expect(sizeof(HV_EFI_PROCESSOR_RECORD) == 104 &&
                        offsetof(HV_EFI_PROCESSOR_RECORD,
                                 DescriptorStoragePhysical) == 72 &&
                        offsetof(HV_EFI_PROCESSOR_RECORD,
                                 EptPhysical) == 80 &&
+                       offsetof(HV_EFI_PROCESSOR_RECORD,
+                                ShadowEptPhysical) == 88 &&
+                       offsetof(HV_EFI_PROCESSOR_RECORD,
+                                ShadowEptStatePhysical) == 96 &&
                        offsetof(HV_EFI_CONTEXT,
                                 ProcessorRecordsPhysical) == 736,
                         "processor ownership registry layout is stable");
@@ -1028,7 +1066,35 @@ int main(void)
                        offsetof(HV_EFI_CONTEXT,
                                 PhysicalIommuStatePhysical) == 960 &&
                        offsetof(HV_EFI_CONTEXT, AcpiShadowPhysical) == 992 &&
-                       sizeof(HV_EFI_CONTEXT) == 1016,
+                       offsetof(HV_EFI_CONTEXT,
+                                RuntimeScannerCodeBase) == 1016 &&
+                       offsetof(HV_EFI_CONTEXT,
+                                RuntimeScannerCodeSize) == 1024 &&
+                       offsetof(HV_EFI_CONTEXT,
+                                RuntimeScannerEntry) == 1032 &&
+                       offsetof(HV_EFI_CONTEXT,
+                                RuntimeScannerStatePhysical) == 1040 &&
+                       offsetof(HV_EFI_CONTEXT,
+                                RuntimeScannerRamRangesPhysical) == 1048 &&
+                       offsetof(HV_EFI_CONTEXT,
+                                RuntimeScannerCodePages) == 1056 &&
+                       offsetof(HV_EFI_CONTEXT,
+                                RuntimeScannerRamRangeCount) == 1064 &&
+                       offsetof(HV_EFI_CONTEXT,
+                                RuntimeProcessEntry) == 1072 &&
+                       offsetof(HV_EFI_CONTEXT,
+                                RuntimeShadowEntry) == 1080 &&
+                       offsetof(HV_EFI_CONTEXT,
+                                ShadowEptPhysical) == 1088 &&
+                       offsetof(HV_EFI_CONTEXT,
+                                ShadowTargetCr3) == 1112 &&
+                       offsetof(HV_EFI_CONTEXT,
+                                ShadowViolationCount) == 1128 &&
+                       offsetof(HV_EFI_CONTEXT,
+                                RuntimeAnalysisEntry) == 1144 &&
+                       offsetof(HV_EFI_CONTEXT,
+                                RuntimeAnalysisStatePhysical) == 1152 &&
+                       sizeof(HV_EFI_CONTEXT) == 1168,
                        "AP activation, EPT audit, and guest transition state append without ABI drift");
     failures += expect(HV_EFI_RESIDENT_CODE_PAGES == 2 &&
                        HV_EFI_GUEST_TRANSITION_CODE_PAGES == 1,

@@ -42,7 +42,8 @@ typedef enum HV_EFI_SCANNER_STATUS {
     HV_EFI_SCANNER_OVERFLOW = 9,
     HV_EFI_SCANNER_DUPLICATE_ID = 10,
     HV_EFI_SCANNER_INVARIANT_VIOLATION = 11,
-    HV_EFI_SCANNER_NO_EXECUTE_REQUIRED = 12
+    HV_EFI_SCANNER_NO_EXECUTE_REQUIRED = 12,
+    HV_EFI_SCANNER_HIERARCHY_MISMATCH = 13
 } HV_EFI_SCANNER_STATUS;
 
 typedef struct HV_EFI_SCANNER_PATTERN_BYTE {
@@ -140,6 +141,15 @@ HV_EFI_SCANNER_STATUS HvEfiScannerUnmap(
 
 HV_EFI_SCANNER_STATUS HvEfiScannerCompilePattern(
     const char *pattern,
+    HV_EFI_SCANNER_PATTERN_BYTE *storage,
+    uint32_t storageCapacity,
+    HV_EFI_SCANNER_COMPILED_PATTERN *compiled);
+
+/* mask[N] == 0 makes byte N a wildcard; any non-zero value is exact. */
+HV_EFI_SCANNER_STATUS HvEfiScannerCompileMaskedPattern(
+    const uint8_t *bytes,
+    const uint8_t *mask,
+    uint32_t length,
     HV_EFI_SCANNER_PATTERN_BYTE *storage,
     uint32_t storageCapacity,
     HV_EFI_SCANNER_COMPILED_PATTERN *compiled);

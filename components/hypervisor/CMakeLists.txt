@@ -47,6 +47,16 @@ option(HYPERSINV_BUILD_EFI_RUNTIME_SERVICE
     "Build the opt-in LocalSystem service/CLI for the EFI companion" OFF)
 option(HYPERSINV_TEST_EFI_RUNTIME_COMPANION
     "Register WDK-free source contracts for the EFI runtime companion" ON)
+set(HYPERSINV_KERNEL_IMAGE "" CACHE FILEPATH
+    "Pinned ntoskrnl.exe used to generate the VMX-root kernel profile")
+set(HYPERSINV_KERNEL_PDB "" CACHE FILEPATH
+    "PDB matching HYPERSINV_KERNEL_IMAGE")
+set(HYPERSINV_KERNEL_BUILD "" CACHE STRING
+    "Windows kernel build number recorded in the generated profile")
+set(HYPERSINV_KERNEL_UBR "" CACHE STRING
+    "Windows kernel update build revision recorded in the generated profile")
+option(HYPERSINV_REQUIRE_KERNEL_PROFILE
+    "Fail configuration unless all pinned kernel profile inputs are supplied" OFF)
 set(HYPERSINV_UEFI_SOURCE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/../uefi-loader"
     CACHE PATH
@@ -55,6 +65,32 @@ set(HYPERSINV_UEFI_SUPPORT_DIR
     "${HYPERSINV_UEFI_SOURCE_DIR}/src/vendor"
     CACHE PATH
     "Directory containing Uefi.h and the freestanding EFI CRT support")
+
+set(HYPERSINV_KERNEL_PROFILE_AVAILABLE OFF)
+if(HYPERSINV_KERNEL_IMAGE OR HYPERSINV_KERNEL_PDB OR
+        HYPERSINV_KERNEL_BUILD OR HYPERSINV_KERNEL_UBR)
+    if(NOT WIN32 OR NOT MSVC)
+        message(FATAL_ERROR
+            "Kernel profile generation requires a Windows MSVC host")
+    endif()
+    foreach(_profile_input IN ITEMS
+            HYPERSINV_KERNEL_IMAGE HYPERSINV_KERNEL_PDB
+            HYPERSINV_KERNEL_BUILD HYPERSINV_KERNEL_UBR)
+        if("${${_profile_input}}" STREQUAL "")
+            message(FATAL_ERROR
+                "All kernel profile inputs are required; missing ${_profile_input}")
+        endif()
+    endforeach()
+    if(NOT EXISTS "${HYPERSINV_KERNEL_IMAGE}" OR
+       NOT EXISTS "${HYPERSINV_KERNEL_PDB}")
+        message(FATAL_ERROR "Pinned kernel image or PDB does not exist")
+    endif()
+    add_subdirectory(tools/kernel_profile_generator)
+    set(HYPERSINV_KERNEL_PROFILE_AVAILABLE ON)
+elseif(HYPERSINV_REQUIRE_KERNEL_PROFILE)
+    message(FATAL_ERROR
+        "HYPERSINV_REQUIRE_KERNEL_PROFILE needs image, PDB, build, and UBR")
+endif()
 
 if(HYPERSINV_BUILD_CORE)
     add_subdirectory(src/hypervisor)

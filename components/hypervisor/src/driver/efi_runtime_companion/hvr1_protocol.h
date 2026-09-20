@@ -8,7 +8,9 @@
  * HMAC-SHA-256 over the boot nonce followed by the canonical mailbox header.
  * The exact EFI session ABI does not carry this mailbox to the root: the
  * LocalSystem-only companion authenticates the request before using the
- * root-owned 256-bit VM-call token on every processor.
+ * root-owned 256-bit VM-call token on every processor.  The authenticated
+ * bytes are nonce || canonical header prefix || payload; the AuthTag and ACK
+ * table are deliberately excluded.
  */
 
 #include <stddef.h>
@@ -39,19 +41,56 @@ extern "C" {
 #define HVR1_EFI_CALL_QUERY_SESSION UINT32_C(3)
 #define HVR1_EFI_CALL_SHUTDOWN_PREPARE UINT32_C(4)
 #define HVR1_EFI_CALL_SHUTDOWN_COMMIT UINT32_C(5)
+#define HVR1_EFI_CALL_RUNTIME_SCAN UINT32_C(6)
+#define HVR1_EFI_CALL_PROCESS_LOCATE UINT32_C(7)
+#define HVR1_EFI_CALL_SHADOW_CONTROL UINT32_C(8)
+#define HVR1_EFI_CALL_ANALYSIS_CONTROL UINT32_C(9)
 
 /* The existing EFI bootstrap and interrupt-guard opcodes remain 1 and 2. */
 #define HVR1_EFI_CALL_MAGIC UINT64_C(0x55454649564d5831) /* "UEFIVMX1" */
 #define HVR1_RUNTIME_ABI_VERSION UINT64_C(1)
 #define HVR1_RUNTIME_CAP_SHUTDOWN (UINT64_C(1) << 1)
+#define HVR1_RUNTIME_CAP_SCAN (UINT64_C(1) << 4)
+#define HVR1_RUNTIME_CAP_PROCESS (UINT64_C(1) << 5)
+#define HVR1_RUNTIME_CAP_SHADOW_EPT (UINT64_C(1) << 6)
+#define HVR1_RUNTIME_CAP_ANALYSIS (UINT64_C(1) << 7)
 
 typedef enum HVR1_MAILBOX_OPERATION {
-    HVR1_MAILBOX_OPERATION_RUNTIME_FRAME = 1
+    HVR1_MAILBOX_OPERATION_RUNTIME_FRAME = 1,
+    HVR1_MAILBOX_OPERATION_RUNTIME_SCAN = 2,
+    HVR1_MAILBOX_OPERATION_PROCESS_LOCATE = 3,
+    HVR1_MAILBOX_OPERATION_SHADOW_EPT = 4,
+    HVR1_MAILBOX_OPERATION_ANALYSIS = 5
 } HVR1_MAILBOX_OPERATION;
+
+/* Last response-validation failure reported through HVR1_IOCTL_STATUS.Reserved. */
+typedef enum HVR1_SCAN_RESPONSE_DIAGNOSTIC {
+    HVR1_SCAN_RESPONSE_DIAGNOSTIC_NONE = 0,
+    HVR1_SCAN_RESPONSE_DIAGNOSTIC_STATUS = 1,
+    HVR1_SCAN_RESPONSE_DIAGNOSTIC_MAGIC = 2,
+    HVR1_SCAN_RESPONSE_DIAGNOSTIC_VERSION = 3,
+    HVR1_SCAN_RESPONSE_DIAGNOSTIC_HEADER_SIZE = 4,
+    HVR1_SCAN_RESPONSE_DIAGNOSTIC_STATE = 5,
+    HVR1_SCAN_RESPONSE_DIAGNOSTIC_GENERATION = 6,
+    HVR1_SCAN_RESPONSE_DIAGNOSTIC_REQUEST_SEQUENCE = 7,
+    HVR1_SCAN_RESPONSE_DIAGNOSTIC_RESPONSE_SIZE = 8,
+    HVR1_SCAN_RESPONSE_DIAGNOSTIC_RESPONSE_VERSION = 9,
+    HVR1_SCAN_RESPONSE_DIAGNOSTIC_RESPONSE_STATUS = 10,
+    HVR1_SCAN_RESPONSE_DIAGNOSTIC_RESPONSE_GENERATION = 11,
+    HVR1_SCAN_RESPONSE_DIAGNOSTIC_RESPONSE_SEQUENCE = 12,
+    HVR1_SCAN_RESPONSE_DIAGNOSTIC_RESULT_COUNT = 13,
+    HVR1_SCAN_RESPONSE_DIAGNOSTIC_SHADOW_RENDEZVOUS = 14,
+    HVR1_SCAN_RESPONSE_DIAGNOSTIC_SHADOW_CPU_STATUS = 15,
+    HVR1_SCAN_RESPONSE_DIAGNOSTIC_SHADOW_RANGE_COUNT = 16
+} HVR1_SCAN_RESPONSE_DIAGNOSTIC;
 
 typedef enum HVR1_IOCTL_OPERATION {
     HVR1_IOCTL_OPERATION_SHUTDOWN = 1,
-    HVR1_IOCTL_OPERATION_QUERY_STATUS = 2
+    HVR1_IOCTL_OPERATION_QUERY_STATUS = 2,
+    HVR1_IOCTL_OPERATION_SCAN = 3,
+    HVR1_IOCTL_OPERATION_PROCESS_LOCATE = 4,
+    HVR1_IOCTL_OPERATION_SHADOW_EPT = 5,
+    HVR1_IOCTL_OPERATION_ANALYSIS = 6
 } HVR1_IOCTL_OPERATION;
 
 typedef enum HVR1_POWER_EVENT {
@@ -117,6 +156,42 @@ typedef struct HVR1_COMMIT_ARGUMENTS {
     uint64_t AckAddress;
 } HVR1_COMMIT_ARGUMENTS;
 
+/* Exact register inputs for RUNTIME_SCAN (opcode 6). */
+typedef struct HVR1_SCAN_ARGUMENTS {
+    uint64_t Token[4];
+    uint64_t MailboxPhysical;
+    uint64_t MailboxBytes;
+    uint64_t Generation;
+    uint64_t Sequence;
+} HVR1_SCAN_ARGUMENTS;
+
+/* Exact register inputs for PROCESS_LOCATE (opcode 7). */
+typedef struct HVR1_PROCESS_ARGUMENTS {
+    uint64_t Token[4];
+    uint64_t MailboxPhysical;
+    uint64_t MailboxBytes;
+    uint64_t Generation;
+    uint64_t Sequence;
+} HVR1_PROCESS_ARGUMENTS;
+
+/* Exact register inputs for SHADOW_CONTROL (opcode 8). */
+typedef struct HVR1_SHADOW_ARGUMENTS {
+    uint64_t Token[4];
+    uint64_t MailboxPhysical;
+    uint64_t MailboxBytes;
+    uint64_t Generation;
+    uint64_t Sequence;
+} HVR1_SHADOW_ARGUMENTS;
+
+/* Exact register inputs for ANALYSIS_CONTROL (opcode 9). */
+typedef struct HVR1_ANALYSIS_ARGUMENTS {
+    uint64_t Token[4];
+    uint64_t MailboxPhysical;
+    uint64_t MailboxBytes;
+    uint64_t Generation;
+    uint64_t Sequence;
+} HVR1_ANALYSIS_ARGUMENTS;
+
 /* HVR1_IOCTL_* use METHOD_BUFFERED and require read/write access. */
 #define HVR1_DEVICE_TYPE UINT32_C(0x00000022)
 #define HVR1_IOCTL_INDEX_GET_MAILBOX UINT32_C(0x800)
@@ -141,8 +216,9 @@ typedef struct HVR1_COMMIT_ARGUMENTS {
 /*
  * The mailbox is fixed-size and nonpaged in the companion.  TotalSize covers
  * HeaderSize plus PayloadSize.  AuthTag is supplied by the LocalSystem
- * service and verified in constant time by the companion before shutdown is
- * admitted.  The current shutdown operation requires an empty payload.
+ * service and verified in constant time by the companion before an operation
+ * is admitted. Shutdown has an empty payload; runtime scan carries one fixed
+ * HV_EFI_RUNTIME_SCAN_MAILBOX payload.
  */
 typedef struct HVR1_MAILBOX {
     uint32_t Magic;
@@ -178,6 +254,7 @@ typedef struct HVR1_MAILBOX_DESCRIPTOR {
     uint64_t Generation;
     uint8_t SessionKey[HVR1_AUTH_KEY_BYTES];
     uint8_t SessionNonce[HVR1_AUTH_NONCE_BYTES];
+    uint64_t NextSequence;
 } HVR1_MAILBOX_DESCRIPTOR;
 
 typedef struct HVR1_IOCTL_STATUS {
@@ -189,6 +266,7 @@ typedef struct HVR1_IOCTL_STATUS {
     uint32_t ExpectedCpuCount;
     uint32_t AcknowledgedCpuCount;
     uint32_t CrashRecorded;
+    /* HVR1_SCAN_RESPONSE_DIAGNOSTIC; zero outside response validation failures. */
     uint32_t Reserved;
     uint32_t CrashCode;
     uint32_t CrashCpu;
@@ -225,7 +303,7 @@ static_assert(offsetof(HVR1_MAILBOX, AckByProcessor) ==
               "HVR1 mailbox ACK offset drift");
 static_assert(sizeof(HVR1_IOCTL_REQUEST) == 24,
               "HVR1 request ABI drift");
-static_assert(sizeof(HVR1_MAILBOX_DESCRIPTOR) == 72,
+static_assert(sizeof(HVR1_MAILBOX_DESCRIPTOR) == 80,
               "HVR1 descriptor ABI drift");
 static_assert(sizeof(HVR1_IOCTL_STATUS) == 56,
               "HVR1 status ABI drift");
@@ -237,6 +315,12 @@ static_assert(sizeof(HVR1_PREPARE_RESULT) == 64,
               "HVR1 prepare result ABI drift");
 static_assert(sizeof(HVR1_COMMIT_ARGUMENTS) == 48,
               "HVR1 commit argument ABI drift");
+static_assert(sizeof(HVR1_SCAN_ARGUMENTS) == 64,
+              "HVR1 scan argument ABI drift");
+static_assert(sizeof(HVR1_PROCESS_ARGUMENTS) == 64,
+              "HVR1 process argument ABI drift");
+static_assert(sizeof(HVR1_ANALYSIS_ARGUMENTS) == 64,
+              "HVR1 analysis argument ABI drift");
 #else
 typedef char hvr1_mailbox_size_assert[
     sizeof(HVR1_MAILBOX) == HVR1_MAILBOX_BYTES ? 1 : -1];
@@ -245,6 +329,8 @@ typedef char hvr1_mailbox_payload_offset_assert[
 typedef char hvr1_mailbox_ack_offset_assert[
     offsetof(HVR1_MAILBOX, AckByProcessor) == HVR1_MAILBOX_ACK_OFFSET
         ? 1 : -1];
+typedef char hvr1_mailbox_descriptor_size_assert[
+    sizeof(HVR1_MAILBOX_DESCRIPTOR) == 80 ? 1 : -1];
 typedef char hvr1_runtime_session_size_assert[
     sizeof(HVR1_RUNTIME_SESSION) == 64 ? 1 : -1];
 typedef char hvr1_prepare_arguments_size_assert[
@@ -253,6 +339,12 @@ typedef char hvr1_prepare_result_size_assert[
     sizeof(HVR1_PREPARE_RESULT) == 64 ? 1 : -1];
 typedef char hvr1_commit_arguments_size_assert[
     sizeof(HVR1_COMMIT_ARGUMENTS) == 48 ? 1 : -1];
+typedef char hvr1_scan_arguments_size_assert[
+    sizeof(HVR1_SCAN_ARGUMENTS) == 64 ? 1 : -1];
+typedef char hvr1_process_arguments_size_assert[
+    sizeof(HVR1_PROCESS_ARGUMENTS) == 64 ? 1 : -1];
+typedef char hvr1_analysis_arguments_size_assert[
+    sizeof(HVR1_ANALYSIS_ARGUMENTS) == 64 ? 1 : -1];
 #endif
 
 #endif /* HYPERSINV_HVR1_PROTOCOL_H */

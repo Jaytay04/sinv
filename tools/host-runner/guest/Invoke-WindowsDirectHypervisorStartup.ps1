@@ -15,6 +15,8 @@ $KeyPath = 'C:\ProgramData\UEFILoaderRunner\mailbox.key'
 $ResultFramePrefix = 'UEFI2HSINV-DIRECT:'
 $StageTwoVariableName = 'uefiloader.direct.stage2.' + $RunId
 $ExpectedProcessors = __DIRECT_PROCESSOR_COUNT__
+$ScannerOnly = __DIRECT_SCANNER_ONLY__
+$ProcessProfileEnabled = __DIRECT_PROCESS_PROFILE_ENABLED__
 $StdoutPath = Join-Path $InstallRoot 'stdout.txt'
 $StderrPath = Join-Path $InstallRoot 'stderr.txt'
 
@@ -459,6 +461,180 @@ try {
         throw "HVR1 companion driver start exited with code $DriverStartExitCode."
     }
     Write-DirectDiagnostic 'DRIVER_START_COMPLETE'
+    Write-DirectDiagnostic 'RUNTIME_SCAN_START'
+    $RuntimeScan = Invoke-BoundedProcess -FilePath $CompanionService `
+        -Arguments @('scan', '??', '0', '0', 'first') `
+        -OutPath (Join-Path $InstallRoot 'hvr1-scan-stdout.txt') `
+        -ErrPath (Join-Path $InstallRoot 'hvr1-scan-stderr.txt')
+    $Stdout += "`r`n" + $RuntimeScan.Stdout
+    $Stderr += $RuntimeScan.Stderr
+    if ($RuntimeScan.ExitCode -ne 0 -or
+        $RuntimeScan.Stdout -notmatch
+            '(?m)^scan: status=success scanned=0x[0-9A-F]+ next=0x[0-9A-F]+ results=1\r?$' -or
+        [regex]::Matches($RuntimeScan.Stdout,
+            '(?m)^0x[0-9A-F]{16}\r?$').Count -ne 1) {
+        [IO.File]::WriteAllText($StdoutPath, $Stdout,
+            [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText($StderrPath, $Stderr,
+            [Text.UTF8Encoding]::new($false))
+        throw "HVR1 authenticated runtime scan exited with code $($RuntimeScan.ExitCode)."
+    }
+    $Stdout += "HVR1_RUNTIME_SCAN=PASS`r`n"
+    Write-DirectDiagnostic 'RUNTIME_SCAN_COMPLETE'
+    if ($ProcessProfileEnabled) {
+        Write-DirectDiagnostic 'PROCESS_LOCATE_START'
+        $ProcessLocate = Invoke-BoundedProcess -FilePath $CompanionService `
+            -Arguments @('process', 'services.exe') `
+            -OutPath (Join-Path $InstallRoot 'hvr1-process-stdout.txt') `
+            -ErrPath (Join-Path $InstallRoot 'hvr1-process-stderr.txt')
+        $Stdout += "`r`n" + $ProcessLocate.Stdout
+        $Stderr += $ProcessLocate.Stderr
+        $ProcessMatch = [regex]::Match($ProcessLocate.Stdout,
+            '(?m)^process: pid=([1-9][0-9]*) cr3=0x[1-9A-F][0-9A-F]* eprocess=0x[89A-F][0-9A-F]{15} enumerated=[1-9][0-9]* stored=[1-9][0-9]* flags=0x[0-9A-F]{8}\r?$')
+        if ($ProcessLocate.ExitCode -ne 0 -or
+            -not $ProcessMatch.Success -or
+            [uint64]$ProcessMatch.Groups[1].Value -le 4) {
+            [IO.File]::WriteAllText($StdoutPath, $Stdout,
+                [Text.UTF8Encoding]::new($false))
+            [IO.File]::WriteAllText($StderrPath, $Stderr,
+                [Text.UTF8Encoding]::new($false))
+            throw "HVR1 authenticated process lookup exited with code $($ProcessLocate.ExitCode)."
+        }
+        $Stdout += "HVR1_PROCESS_LOCATE=PASS`r`n"
+        Write-DirectDiagnostic 'PROCESS_LOCATE_COMPLETE'
+
+        $ShadowPid = $ProcessMatch.Groups[1].Value
+        Write-DirectDiagnostic 'ANALYSIS_START'
+        $AnalysisStart = Invoke-BoundedProcess -FilePath $CompanionService `
+            -Arguments @('analysis-start', $ShadowPid) `
+            -OutPath (Join-Path $InstallRoot 'hvr1-analysis-start-stdout.txt') `
+            -ErrPath (Join-Path $InstallRoot 'hvr1-analysis-start-stderr.txt')
+        $Stdout += "`r`n" + $AnalysisStart.Stdout
+        $Stderr += $AnalysisStart.Stderr
+        if ($AnalysisStart.ExitCode -ne 0 -or
+            $AnalysisStart.Stdout -notmatch
+                ("(?m)^analysis: status=[02] active=1 pid={0} " -f $ShadowPid)) {
+            [IO.File]::WriteAllText($StdoutPath, $Stdout,
+                [Text.UTF8Encoding]::new($false))
+            [IO.File]::WriteAllText($StderrPath, $Stderr,
+                [Text.UTF8Encoding]::new($false))
+            throw "HVR1 authenticated analysis start exited with code $($AnalysisStart.ExitCode)."
+        }
+
+        $AnalysisConfigure = Invoke-BoundedProcess -FilePath $CompanionService `
+            -Arguments @('analysis-configure', 'mz', '4D 5A', '2') `
+            -OutPath (Join-Path $InstallRoot 'hvr1-analysis-configure-stdout.txt') `
+            -ErrPath (Join-Path $InstallRoot 'hvr1-analysis-configure-stderr.txt')
+        $Stdout += "`r`n" + $AnalysisConfigure.Stdout
+        $Stderr += $AnalysisConfigure.Stderr
+        if ($AnalysisConfigure.ExitCode -ne 0 -or
+            $AnalysisConfigure.Stdout -notmatch
+                ("(?m)^analysis: status=0 active=1 pid={0} " -f $ShadowPid)) {
+            [IO.File]::WriteAllText($StdoutPath, $Stdout,
+                [Text.UTF8Encoding]::new($false))
+            [IO.File]::WriteAllText($StderrPath, $Stderr,
+                [Text.UTF8Encoding]::new($false))
+            throw "HVR1 authenticated analysis configure exited with code $($AnalysisConfigure.ExitCode)."
+        }
+
+        $AnalysisScan = Invoke-BoundedProcess -FilePath $CompanionService `
+            -Arguments @('analysis-scan', 'first', '0x10000000') `
+            -OutPath (Join-Path $InstallRoot 'hvr1-analysis-scan-stdout.txt') `
+            -ErrPath (Join-Path $InstallRoot 'hvr1-analysis-scan-stderr.txt')
+        $Stdout += "`r`n" + $AnalysisScan.Stdout
+        $Stderr += $AnalysisScan.Stderr
+        if ($AnalysisScan.ExitCode -ne 0 -or
+            $AnalysisScan.Stdout -notmatch
+                ("(?m)^analysis: status=0 active=1 pid={0} .*results=1 " -f $ShadowPid) -or
+            $AnalysisScan.Stdout -notmatch
+                '(?m)^match mz va=0x[0-9A-F]{16} pa=0x[0-9A-F]{16} confidence=100\r?$') {
+            [IO.File]::WriteAllText($StdoutPath, $Stdout,
+                [Text.UTF8Encoding]::new($false))
+            [IO.File]::WriteAllText($StderrPath, $Stderr,
+                [Text.UTF8Encoding]::new($false))
+            throw "HVR1 authenticated analysis scan exited with code $($AnalysisScan.ExitCode)."
+        }
+
+        $AnalysisStop = Invoke-BoundedProcess -FilePath $CompanionService `
+            -Arguments @('analysis-stop') `
+            -OutPath (Join-Path $InstallRoot 'hvr1-analysis-stop-stdout.txt') `
+            -ErrPath (Join-Path $InstallRoot 'hvr1-analysis-stop-stderr.txt')
+        $Stdout += "`r`n" + $AnalysisStop.Stdout
+        $Stderr += $AnalysisStop.Stderr
+        if ($AnalysisStop.ExitCode -ne 0 -or
+            $AnalysisStop.Stdout -notmatch
+                '(?m)^analysis: status=0 active=0 pid=0 ') {
+            [IO.File]::WriteAllText($StdoutPath, $Stdout,
+                [Text.UTF8Encoding]::new($false))
+            [IO.File]::WriteAllText($StderrPath, $Stderr,
+                [Text.UTF8Encoding]::new($false))
+            throw "HVR1 authenticated analysis stop exited with code $($AnalysisStop.ExitCode)."
+        }
+        $Stdout += "HVR1_DYNAMIC_ANALYSIS=PASS`r`n"
+        Write-DirectDiagnostic 'ANALYSIS_COMPLETE'
+
+        Write-DirectDiagnostic 'SHADOW_BIND_START'
+        $ShadowBind = Invoke-BoundedProcess -FilePath $CompanionService `
+            -Arguments @('shadow-bind', $ShadowPid) `
+            -OutPath (Join-Path $InstallRoot 'hvr1-shadow-bind-stdout.txt') `
+            -ErrPath (Join-Path $InstallRoot 'hvr1-shadow-bind-stderr.txt')
+        $Stdout += "`r`n" + $ShadowBind.Stdout
+        $Stderr += $ShadowBind.Stderr
+        if ($ShadowBind.ExitCode -ne 0 -or
+            $ShadowBind.Stdout -notmatch
+                ("(?m)^shadow: status=0 state=2 pid={0} ranges=0 active=[01] tables=[1-9][0-9]* pending=0 violations=[0-9]+ redirects=[0-9]+ sync=[0-9]+\r?$" -f $ShadowPid)) {
+            [IO.File]::WriteAllText($StdoutPath, $Stdout,
+                [Text.UTF8Encoding]::new($false))
+            [IO.File]::WriteAllText($StderrPath, $Stderr,
+                [Text.UTF8Encoding]::new($false))
+            throw "HVR1 authenticated shadow bind exited with code $($ShadowBind.ExitCode)."
+        }
+        Write-DirectDiagnostic 'SHADOW_BIND_COMPLETE'
+
+        $ShadowStatus = Invoke-BoundedProcess -FilePath $CompanionService `
+            -Arguments @('shadow-status') `
+            -OutPath (Join-Path $InstallRoot 'hvr1-shadow-status-stdout.txt') `
+            -ErrPath (Join-Path $InstallRoot 'hvr1-shadow-status-stderr.txt')
+        $Stdout += "`r`n" + $ShadowStatus.Stdout
+        $Stderr += $ShadowStatus.Stderr
+        if ($ShadowStatus.ExitCode -ne 0 -or
+            $ShadowStatus.Stdout -notmatch
+                ("(?m)^shadow: status=0 state=2 pid={0} ranges=0 active=[01] tables=[1-9][0-9]* pending=0 violations=[0-9]+ redirects=[0-9]+ sync=[0-9]+\r?$" -f $ShadowPid)) {
+            [IO.File]::WriteAllText($StdoutPath, $Stdout,
+                [Text.UTF8Encoding]::new($false))
+            [IO.File]::WriteAllText($StderrPath, $Stderr,
+                [Text.UTF8Encoding]::new($false))
+            throw "HVR1 authenticated shadow status exited with code $($ShadowStatus.ExitCode)."
+        }
+
+        $ShadowUnbind = Invoke-BoundedProcess -FilePath $CompanionService `
+            -Arguments @('shadow-unbind') `
+            -OutPath (Join-Path $InstallRoot 'hvr1-shadow-unbind-stdout.txt') `
+            -ErrPath (Join-Path $InstallRoot 'hvr1-shadow-unbind-stderr.txt')
+        $Stdout += "`r`n" + $ShadowUnbind.Stdout
+        $Stderr += $ShadowUnbind.Stderr
+        if ($ShadowUnbind.ExitCode -ne 0 -or
+            $ShadowUnbind.Stdout -notmatch
+                '(?m)^shadow: status=0 state=1 pid=0 ranges=0 active=0 tables=[1-9][0-9]* pending=0 violations=[0-9]+ redirects=[0-9]+ sync=[0-9]+\r?$') {
+            [IO.File]::WriteAllText($StdoutPath, $Stdout,
+                [Text.UTF8Encoding]::new($false))
+            [IO.File]::WriteAllText($StderrPath, $Stderr,
+                [Text.UTF8Encoding]::new($false))
+            throw "HVR1 authenticated shadow unbind exited with code $($ShadowUnbind.ExitCode)."
+        }
+        $Stdout += "HVR1_SHADOW_EPT=PASS`r`n"
+        Write-DirectDiagnostic 'SHADOW_UNBIND_COMPLETE'
+    }
+    if ($ScannerOnly) {
+        $Stdout += "HVR1_RUNTIME_SCAN_ONLY=PASS`r`n"
+        [IO.File]::WriteAllText($StdoutPath, $Stdout,
+            [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText($StderrPath, $Stderr,
+            [Text.UTF8Encoding]::new($false))
+        $Status = 'PASS'
+        $Message = "Windows verified the authenticated runtime scanner on $ExpectedProcessors processors."
+        return
+    }
     Write-DirectDiagnostic 'SELFTEST_START'
     $SelfTest = Invoke-BoundedProcess -FilePath $CompanionService `
         -Arguments @('selftest-shutdown') `

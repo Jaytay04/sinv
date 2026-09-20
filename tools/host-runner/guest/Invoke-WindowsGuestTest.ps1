@@ -18,12 +18,12 @@ $ErrorActionPreference = 'Stop'
 # proves the payload's CPUID contract after Windows returns, then removes the
 # owned firmware and ESP state.
 $DirectHypervisorMode = '__DIRECT_HYPERVISOR_MODE__'
-$DirectLoaderEfiBase64 = '__DIRECT_LOADER_EFI_BASE64__'
-$DirectHypervisorEfiBase64 = '__DIRECT_HYPERVISOR_EFI_BASE64__'
-$DirectInstallerBase64 = '__DIRECT_INSTALLER_BASE64__'
+$DirectLoaderEfiDeflateBase64 = '__DIRECT_LOADER_EFI_DEFLATE_BASE64__'
+$DirectHypervisorEfiDeflateBase64 = '__DIRECT_HYPERVISOR_EFI_DEFLATE_BASE64__'
+$DirectInstallerDeflateBase64 = '__DIRECT_INSTALLER_DEFLATE_BASE64__'
 $DirectStartupScriptBase64 = '__DIRECT_STARTUP_SCRIPT_BASE64__'
-$DirectCompanionDriverBase64 = '__DIRECT_COMPANION_DRIVER_BASE64__'
-$DirectCompanionServiceBase64 = '__DIRECT_COMPANION_SERVICE_BASE64__'
+$DirectCompanionDriverDeflateBase64 = '__DIRECT_COMPANION_DRIVER_DEFLATE_BASE64__'
+$DirectCompanionServiceDeflateBase64 = '__DIRECT_COMPANION_SERVICE_DEFLATE_BASE64__'
 $DirectCompanionCertificateBase64 = '__DIRECT_COMPANION_CERTIFICATE_BASE64__'
 $DirectHypervisorProcessorCount = __DIRECT_PROCESSOR_COUNT__
 
@@ -136,6 +136,47 @@ function Write-DirectEmbeddedFile {
     finally { [Array]::Clear($Bytes, 0, $Bytes.Length) }
 }
 
+function Write-DirectEmbeddedCompressedFile {
+    param(
+        [Parameter(Mandatory=$true)][string]$Base64,
+        [Parameter(Mandatory=$true)][string]$Path,
+        [Parameter(Mandatory=$true)][string]$Description
+    )
+    if ([string]::IsNullOrWhiteSpace($Base64)) {
+        throw "$Description was not embedded by the host."
+    }
+    try { $Compressed = [Convert]::FromBase64String($Base64) }
+    catch { throw "$Description is not valid compressed base64." }
+    $Input = [IO.MemoryStream]::new($Compressed, $false)
+    $Inflater = [IO.Compression.DeflateStream]::new(
+        $Input, [IO.Compression.CompressionMode]::Decompress)
+    $Output = [IO.MemoryStream]::new()
+    try {
+        $Buffer = [byte[]]::new(64KB)
+        while (($Read = $Inflater.Read($Buffer, 0, $Buffer.Length)) -gt 0) {
+            if ($Output.Length + $Read -gt 2MB) {
+                throw "$Description expands beyond its fixed limit."
+            }
+            $Output.Write($Buffer, 0, $Read)
+        }
+        $Bytes = $Output.ToArray()
+        try {
+            if ($Bytes.Length -lt 1024 -or $Bytes[0] -ne 0x4D -or
+                $Bytes[1] -ne 0x5A) {
+                throw "$Description is not a bounded PE image."
+            }
+            [IO.File]::WriteAllBytes($Path, $Bytes)
+        }
+        finally { [Array]::Clear($Bytes, 0, $Bytes.Length) }
+    }
+    finally {
+        $Inflater.Dispose()
+        $Input.Dispose()
+        $Output.Dispose()
+        [Array]::Clear($Compressed, 0, $Compressed.Length)
+    }
+}
+
 function Write-DirectEmbeddedDataFile {
     param(
         [Parameter(Mandatory=$true)][string]$Base64,
@@ -198,7 +239,8 @@ function Invoke-DirectHypervisorSetup {
         throw 'Direct EFI setup was invoked outside its fixed guest mode.'
     }
     $Installer = Join-Path $RunRoot 'ib-direct-install.exe'
-    Write-DirectEmbeddedFile -Base64 $DirectInstallerBase64 `
+    Write-DirectEmbeddedCompressedFile `
+        -Base64 $DirectInstallerDeflateBase64 `
         -Path $Installer -Description 'Direct EFI installer'
     try {
         $PersistentRoot = Join-Path $env:ProgramData `
@@ -212,9 +254,11 @@ function Invoke-DirectHypervisorSetup {
             'hvr1_efi_runtime_companion.sys'
         $CompanionService = Join-Path $PersistentRoot `
             'hvr1_runtime_service.exe'
-        Write-DirectEmbeddedFile -Base64 $DirectCompanionDriverBase64 `
+        Write-DirectEmbeddedCompressedFile `
+            -Base64 $DirectCompanionDriverDeflateBase64 `
             -Path $CompanionDriver -Description 'HVR1 WDM companion'
-        Write-DirectEmbeddedFile -Base64 $DirectCompanionServiceBase64 `
+        Write-DirectEmbeddedCompressedFile `
+            -Base64 $DirectCompanionServiceDeflateBase64 `
             -Path $CompanionService -Description 'HVR1 runtime service'
         $RecoveryArmCode = Invoke-DirectProcess -FilePath $CompanionService `
             -Arguments @('arm-recovery-test') `
@@ -241,8 +285,16 @@ function Invoke-DirectHypervisorSetup {
         }
         Import-Certificate -FilePath $CertificatePath `
             -CertStoreLocation 'Cert:\LocalMachine\Root' | Out-Null
-        Import-Certificate -FilePath $CertificatePath `
-            -CertStoreLocation 'Cert:\LocalMachine\TrustedPublisher' | Out-Null
+        try {
+            Import-Certificate -FilePath $CertificatePath `
+                -CertStoreLocation 'Cert:\LocalMachine\TrustedPublisher' |
+                Out-Null
+        }
+        catch [UnauthorizedAccessException] {
+            [IO.File]::AppendAllText($Stdout,
+                "HVR1_TRUSTED_PUBLISHER_IMPORT=SKIPPED_ACCESS_DENIED`n",
+                [Text.UTF8Encoding]::new($false))
+        }
         $Signature = Get-AuthenticodeSignature -LiteralPath $CompanionDriver
         if ($Signature.Status -ne
                 [System.Management.Automation.SignatureStatus]::Valid -or
@@ -397,12 +449,14 @@ function Invoke-DirectHypervisorSetup {
             }
             New-Item -ItemType Directory -Path $Stage | Out-Null
             $Loader = Join-Path $Stage 'shimx64.efi'
-            Write-DirectEmbeddedFile -Base64 $DirectLoaderEfiBase64 `
+            Write-DirectEmbeddedCompressedFile `
+                -Base64 $DirectLoaderEfiDeflateBase64 `
                 -Path $Loader -Description 'UEFI loader'
             Copy-Item -LiteralPath $Loader `
                 -Destination (Join-Path $Stage 'grubx64.efi')
             $Hypervisor = Join-Path $Stage 'payload.efi'
-            Write-DirectEmbeddedFile -Base64 $DirectHypervisorEfiBase64 `
+            Write-DirectEmbeddedCompressedFile `
+                -Base64 $DirectHypervisorEfiDeflateBase64 `
                 -Path $Hypervisor -Description 'EFI hypervisor'
             $ReferenceLog = Join-Path $RunRoot 'tcglog.ib'
             if (-not (Test-Path -LiteralPath $ReferenceLog -PathType Leaf) -or
@@ -493,7 +547,8 @@ function Invoke-DirectHypervisorVerify {
         $HealthError = 'The EFI hypervisor CPUID contract did not pass on every expected Windows processor.'
     }
     $Installer = Join-Path $RunRoot 'ib-direct-install.exe'
-    Write-DirectEmbeddedFile -Base64 $DirectInstallerBase64 `
+    Write-DirectEmbeddedCompressedFile `
+        -Base64 $DirectInstallerDeflateBase64 `
         -Path $Installer -Description 'Direct EFI installer'
     try {
         $Code = Invoke-DirectProcess -FilePath $Installer -Arguments @(
@@ -584,6 +639,7 @@ function Get-KernelSymbolMetadata {
             throw 'The Windows kernel does not have a PE signature.'
         }
         $SectionCount = [int](Read-UInt16 ($PeOffset + 6))
+        $ImageTimestamp = Read-UInt32 ($PeOffset + 8)
         $OptionalSize = [int](Read-UInt16 ($PeOffset + 20))
         $Optional = $PeOffset + 24
         Assert-ByteRange $Optional $OptionalSize 'optional header'
@@ -596,6 +652,10 @@ function Get-KernelSymbolMetadata {
         }
         else {
             throw ('Unsupported Windows kernel PE optional-header magic: 0x{0:X}' -f $Magic)
+        }
+        $ImageSize = Read-UInt32 ($Optional + 56)
+        if ($ImageTimestamp -eq 0 -or $ImageSize -eq 0) {
+            throw 'The Windows kernel PE identity is incomplete.'
         }
         Assert-ByteRange ($DataDirectory + (6 * 8)) 8 'debug data directory'
         $DebugRva = Read-UInt32 ($DataDirectory + (6 * 8))
@@ -644,6 +704,8 @@ function Get-KernelSymbolMetadata {
             KernelFileName = 'ntoskrnl.exe'
             FileVersion = [string]$Version.FileVersion
             ProductVersion = [string]$Version.ProductVersion
+            ImageTimestamp = [uint32]$ImageTimestamp
+            ImageSize = [uint32]$ImageSize
             PdbGuid = $Guid.ToString('D').ToUpperInvariant()
             PdbAge = [uint32]$Age
             PdbName = $PdbName
@@ -872,6 +934,13 @@ try {
 }
 catch {
     $Result.Message = $_.Exception.Message
+    $Diagnostic = "GUEST_WORKFLOW_EXCEPTION: $($_.Exception.GetType().FullName): $($_.Exception.Message)`r`n" +
+        "SCRIPT_STACK:`r`n$($_.ScriptStackTrace)`r`n" +
+        "POSITION:`r`n$($_.InvocationInfo.PositionMessage)`r`n"
+    if ([Text.Encoding]::UTF8.GetByteCount($Diagnostic) -le 64KB) {
+        [IO.File]::AppendAllText((Join-Path $RunRoot 'stderr.txt'),
+            $Diagnostic, [Text.UTF8Encoding]::new($false))
+    }
     Write-Result
     exit 1
 }

@@ -25,6 +25,7 @@ function Assert-Ordered([string]$Text, [string[]]$Tokens, [string]$Name) {
 $Root = [IO.Path]::GetFullPath($EfiSourceRoot)
 $Asm = Get-Content -Raw -LiteralPath (Join-Path $Root 'efi_hypervisor.asm')
 $Inc = Get-Content -Raw -LiteralPath (Join-Path $Root 'efi_hypervisor.inc')
+$Source = Get-Content -Raw -LiteralPath (Join-Path $Root 'efi_hypervisor.c')
 $Probe = Get-Content -Raw -LiteralPath (
     Join-Path $Root 'uefi_hypervisor_post_ebs_probe.asm')
 
@@ -32,11 +33,26 @@ foreach ($Token in @(
         'HV_EFI_CALL_QUERY_RUNTIME_SESSION EQU 3',
         'HV_EFI_CALL_PREPARE_NATIVE_DETACH EQU 4',
         'HV_EFI_CALL_COMMIT_NATIVE_DETACH EQU 5',
+        'HV_EFI_CALL_RUNTIME_SCAN          EQU 6',
         'CONTEXT_RUNTIME_TOKEN0          EQU 912',
         'CONTEXT_RUNTIME_GENERATION      EQU 944',
-        'CONTEXT_RUNTIME_STATE           EQU 952')) {
+        'CONTEXT_RUNTIME_STATE           EQU 952',
+        'CONTEXT_RUNTIME_SCANNER_ENTRY     EQU 1032',
+        'CONTEXT_RUNTIME_SCANNER_RANGE_COUNT EQU 1064')) {
     Assert-True ($Inc.Contains($Token)) "Runtime ABI contract missing: $Token"
 }
+
+Assert-Ordered $Source @(
+    'HvEfiBuildRuntimeScannerAllowlist(',
+    'processorContext->RuntimeScannerRamRangeCount =',
+    'rootContext->RuntimeScannerRamRangeCount;') `
+    'AP runtime scanner allowlist refresh'
+Assert-True ($Source.Contains(
+    'context->Efer | HV_EFI_EFER_NXE')) `
+    'VMX root must enforce EFER.NXE for non-executable scanner aliases.'
+Assert-True ($Source.Contains(
+    'context->HostCr0 = normalizedCr0 | HV_EFI_CR0_WP;')) `
+    'VMX root must enforce CR0.WP for read-only scanner aliases on every CPU.'
 
 $DebugStart = $Asm.IndexOf('HvEfiDebugOutByte PROC',
     [StringComparison]::Ordinal)
@@ -94,6 +110,31 @@ Assert-Ordered $Prepare @(
     'PHYSICAL_IOMMU_ENABLED], 0') 'Physical VT-d detach rollback'
 Assert-True ($Prepare.Contains('jmp ResidentFatal')) `
     'Physical VT-d detach timeouts must fail-stop.'
+
+$ScanStart = $Asm.IndexOf('ResidentRuntimeScan:',
+    [StringComparison]::Ordinal)
+$ScanEnd = $Asm.IndexOf('ResidentMapWritableMmioPage:', $ScanStart,
+    [StringComparison]::Ordinal)
+Assert-True ($ScanStart -ge 0 -and $ScanEnd -gt $ScanStart) `
+    'Resident runtime scanner block boundaries are missing.'
+$Scan = $Asm.Substring($ScanStart, $ScanEnd - $ScanStart)
+Assert-Ordered $Scan @(
+    'call ResidentValidateRuntimeCaller',
+    'CONTEXT_RUNTIME_TOKEN0',
+    'CONTEXT_RUNTIME_TOKEN3',
+    'CONTEXT_RUNTIME_GENERATION',
+    'CONTEXT_GUEST_R13',
+    'test edx, 0FFFh',
+    'CONTEXT_RUNTIME_SCANNER_ENTRY',
+    'CONTEXT_RUNTIME_SCANNER_CODE_BASE',
+    'CONTEXT_RUNTIME_SCANNER_CODE_SIZE',
+    'mov r8, HVR1_MAILBOX_BYTES',
+    'call rax',
+    'CONTEXT_GUEST_RAX',
+    'CONTEXT_GUEST_RDX',
+    'ResidentAdvanceRip') 'Resident authenticated runtime scan'
+Assert-True (-not $Scan.Contains('VMCS_PROC_BASED')) `
+    'Runtime scan must reuse the unconditional VMCALL exit, not add controls.'
 Assert-Ordered $Probe @(
     'HV_EFI_CALL_QUERY_RUNTIME_SESSION',
     'HV_EFI_CALL_PREPARE_NATIVE_DETACH',

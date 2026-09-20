@@ -97,11 +97,11 @@ try {
     Assert-True ($Config.Profiles.Linux.LeaseResource -ceq
         'vm-uefiloader-ubuntu64') 'Linux lease resource changed unexpectedly.'
     Assert-True ($Config.Profiles.Windows.LeaseResource -ceq
-        'vm-uefiloader-windows-clone') 'Windows lease resource changed unexpectedly.'
+        'vm-uefiloader-windows-exactbuild-vtpm') 'Windows lease resource changed unexpectedly.'
     Assert-True ([uint64]$Config.Profiles.Windows.ExpectedWindowsBuild -eq
         [uint64]26200) 'Example Windows build expectation changed unexpectedly.'
     Assert-True ([uint64]$Config.Profiles.Windows.ExpectedWindowsUbr -eq
-        [uint64]9168) 'Example Windows UBR expectation changed unexpectedly.'
+        [uint64]9445) 'Example Windows UBR expectation changed unexpectedly.'
     Assert-True (@($Config.AdditionalKnownVms | Where-Object {
                 [string]$_.LeaseResource -ceq 'vm-hypervisor-v3h-gate4'
             }).Count -eq 1) (
@@ -283,6 +283,7 @@ try {
             'guest\Invoke-WindowsDirectHypervisorStartup.ps1')
     foreach ($Token in @(
             '__DIRECT_VERIFY_RUN_ID__',
+            '__DIRECT_SCANNER_ONLY__',
             'UEFI2HSINV-DIRECT:', 'UEFI2HSINV-DIAG:',
             "[IO.Ports.SerialPort]::new('COM2'",
             "Write-DirectDiagnostic 'STARTUP_ENTERED'",
@@ -291,6 +292,7 @@ try {
             "Write-DirectDiagnostic 'PROBE_CLASSIFIED_ABSENT'",
             "Write-DirectDiagnostic 'PROBE_CLASSIFIED_PASS'",
             "Write-DirectDiagnostic 'DRIVER_START_BEGIN'",
+            "Write-DirectDiagnostic 'RUNTIME_SCAN_START'",
             'UEFI_HYPERVISOR_WINDOWS_CPU:',
             'UEFI_HYPERVISOR_WINDOWS_CPUID:PASS',
             'CurrentVersionPath', 'CurrentBuild', 'UBR',
@@ -298,6 +300,9 @@ try {
             'DIRECT_HYPERVISOR_VERIFIED_PROCESSORS=',
              'ResponseHmacSha256', 'HMACSHA256',
              'selftest-shutdown',
+             "@('scan', '??', '0', '0', 'first')",
+             'HVR1_RUNTIME_SCAN=PASS',
+             'HVR1_RUNTIME_SCAN_ONLY=PASS',
              'HVR1_CRASH_RECOVERY_PRIOR_BOOT=PASS',
              'HVR1_POWER_REQUEST_HELD=PASS',
              'HVR1_AUTH_INVALID_TAG_REJECTED=PASS',
@@ -325,6 +330,8 @@ try {
     }
     foreach ($Token in @(
             'Wait-WindowsDirectHypervisorResult',
+            'RunWindowsDirectScannerE2E',
+            'Invoke-WindowsDirectHypervisorE2E -ScannerOnly',
             'Get-WindowsDirectBuildMetadata',
             'ExpectedWindowsBuild', 'ExpectedWindowsUbr',
             'Windows build mismatch', 'Windows UBR mismatch',
@@ -972,11 +979,15 @@ try {
             "[ValidateSet('Probe', 'Capture')]", 'Get-FileHash',
             'verdict: empty-bank precondition NOT MET', 'tcglog-full.bin',
             'kernel-metadata.json', 'PdbGuid', 'SymbolKey',
+            'ImageTimestamp', 'ImageSize',
             'KERNEL_SYMBOL_KEY=',
             'UEFILoader-Nested-E2E', 'manage-bde.exe', 'mountvol.exe',
-             '__DIRECT_LOADER_EFI_BASE64__',
-             '__DIRECT_COMPANION_DRIVER_BASE64__',
-             '__DIRECT_COMPANION_SERVICE_BASE64__',
+             '__DIRECT_LOADER_EFI_DEFLATE_BASE64__',
+             '__DIRECT_HYPERVISOR_EFI_DEFLATE_BASE64__',
+             '__DIRECT_INSTALLER_DEFLATE_BASE64__',
+             '__DIRECT_COMPANION_DRIVER_DEFLATE_BASE64__',
+             '__DIRECT_COMPANION_SERVICE_DEFLATE_BASE64__',
+             'Write-DirectEmbeddedCompressedFile',
              '__DIRECT_COMPANION_CERTIFICATE_BASE64__',
              'Write-DirectEmbeddedDataFile',
              'arm-recovery-test',
@@ -1000,13 +1011,37 @@ try {
              '$DirectLoaderPlaceholder',
              '$DirectCompanionDriverPlaceholder',
              '$DirectCompanionServicePlaceholder',
+             'Compress-UhrArtifactBytes',
              '$DirectCompanionCertificatePlaceholder',
+             '$DirectProcessProfilePlaceholder',
              'Get-UhrSignToolPath',
              'New-SelfSignedCertificate',
              "'sign', '/v', '/fd', 'SHA256', '/ph'",
              'SignTool page-hash signing failed')) {
         Assert-True ($RunnerSource.Contains($Token)) (
             "Direct Windows combined staging contract is missing: $Token")
+    }
+    $DirectStartupSource = Get-Content -Raw -LiteralPath (
+        Join-Path $RunnerRoot 'guest\Invoke-WindowsDirectHypervisorStartup.ps1')
+    foreach ($Token in @(
+            'KernelProfileImage', 'KernelProfilePdb',
+            'HYPERSINV_REQUIRE_KERNEL_PROFILE ON',
+            'HVR1_PROCESS_LOCATE=PASS',
+            "@('analysis-start', `$ShadowPid)",
+            "@('analysis-configure', 'mz', '4D 5A', '2')",
+            "@('analysis-scan', 'first', '0x10000000')",
+            "@('analysis-stop')",
+            'HVR1_DYNAMIC_ANALYSIS=PASS',
+            '$DirectResultTimeoutSeconds',
+            '(?=UEFI2HSINV-DIRECT:',
+            "@('shadow-bind', `$ShadowPid)",
+            "@('shadow-status')",
+            "@('shadow-unbind')",
+            'HVR1_SHADOW_EPT=PASS',
+            '__DIRECT_PROCESS_PROFILE_ENABLED__')) {
+        Assert-True (($RunnerSource + $WindowsSource +
+                $DirectStartupSource).Contains($Token)) (
+            "Pinned process-enumeration gate token is missing: $Token")
     }
     Assert-True ($WindowsSource -notmatch
         'Invoke-Expression|Start-Process\s+-FilePath\s+\$[A-Za-z]+Path') (

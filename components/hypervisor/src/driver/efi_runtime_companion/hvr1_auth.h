@@ -7,8 +7,8 @@
 extern "C" {
 #endif
 
-/* Computes the exact header-only HVR1 shutdown tag:
- * HMAC-SHA-256(key, nonce || mailbox[0..AuthTag)). */
+/* Computes HMAC-SHA-256(key, nonce || mailbox[0..AuthTag) || payload).
+ * The caller must provide a structurally bounded canonical mailbox. */
 int Hvr1ComputeMailboxAuthTag(
     const uint8_t key[HVR1_AUTH_KEY_BYTES],
     const uint8_t nonce[HVR1_AUTH_NONCE_BYTES],

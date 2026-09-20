@@ -127,7 +127,8 @@ $Paths=@($InterfacePath,$CapabilityPath,$AbiPath,$LaunchPath,$CompositionPath,
  $DispatchPath,$ActivatePath,$RuntimePath,$OwnerPath,$ValidatorPath,
  $RequestFramePath,$ResponseFramePath,$IoctlPath,$LoaderPath,$GatePath,
  $PackagerPath,$RoadmapPath,$DocPath,$TestsCMakePath,$ExitPath)
-$Text=@($Paths|ForEach-Object{[IO.File]::ReadAllText((Resolve-Path $_))})
+$Text=@($Paths|ForEach-Object{
+ [IO.File]::ReadAllText((Resolve-Path $_)).Replace("`r`n","`n")})
 Verify $Text
 $Mutations=@(
  @{I=3;T=$Text[3].Replace("`n    hlt`n","`n    nop`n")},

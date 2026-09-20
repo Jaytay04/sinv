@@ -2,15 +2,30 @@
 
 #if defined(_MSC_VER)
 #include <intrin.h>
+#if !defined(__clang__)
 #pragma intrinsic(__invlpg)
 #pragma intrinsic(__readcr0)
 #pragma intrinsic(__readmsr)
+#endif
+#pragma code_seg(push, ".hvscan$a")
+extern "C" __declspec(noinline) uint32_t HvEfiRuntimeScannerResidentStart(void)
+{
+    return UINT32_C(0x48565341);
+}
+#pragma code_seg(pop)
+#pragma code_seg(push, ".hvscan$m")
+#else
+extern "C" uint32_t HvEfiRuntimeScannerResidentStart(void)
+{
+    return UINT32_C(0x48565341);
+}
 #endif
 
 namespace {
 
 constexpr uint64_t kPresent = UINT64_C(1);
 constexpr uint64_t kWritable = UINT64_C(2);
+constexpr uint64_t kAccessed = UINT64_C(1) << 5;
 constexpr uint64_t kNoExecute = UINT64_C(1) << 63;
 constexpr uint64_t kPageAddressMask = UINT64_C(0x000FFFFFFFFFF000);
 constexpr uint64_t kCr0WriteProtect = UINT64_C(1) << 16;
@@ -28,7 +43,7 @@ void ZeroBytes(void *destination, size_t size)
 
 void CompilerBarrier()
 {
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) && !defined(__clang__)
     _ReadWriteBarrier();
 #else
     __asm__ __volatile__("" ::: "memory");
@@ -37,7 +52,7 @@ void CompilerBarrier()
 
 uint64_t NativeReadCr0()
 {
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) && !defined(__clang__)
     return __readcr0();
 #else
     uint64_t value;
@@ -48,7 +63,7 @@ uint64_t NativeReadCr0()
 
 uint64_t NativeReadEfer()
 {
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) && !defined(__clang__)
     return __readmsr(kIa32Efer);
 #else
     uint32_t low;
@@ -60,7 +75,7 @@ uint64_t NativeReadEfer()
 
 void NativeInvalidatePage(void *, uint64_t virtualAddress)
 {
-#if defined(_MSC_VER)
+#if defined(_MSC_VER) && !defined(__clang__)
     __invlpg(reinterpret_cast<void *>(static_cast<uintptr_t>(virtualAddress)));
 #else
     __asm__ __volatile__(
@@ -174,6 +189,14 @@ bool PatternValid(const HV_EFI_SCANNER_COMPILED_PATTERN *pattern)
         pattern->Bytes[pattern->Anchor].Wildcard == 0;
 }
 
+void FillShifts(uint32_t *shifts, uint32_t value)
+{
+    volatile uint32_t *destination = shifts;
+    for (uint32_t index = 0; index < 256; ++index) {
+        destination[index] = value;
+    }
+}
+
 HV_EFI_SCANNER_STATUS ApplySignedOffset(
     uint64_t value, int64_t offset, uint64_t *result)
 {
@@ -265,15 +288,28 @@ extern "C" HV_EFI_SCANNER_STATUS HvEfiScannerInitializeWindow(
     uint64_t *pdpt = pageTableStorage + kEntriesPerPage;
     uint64_t *windowPd = pageTableStorage +
         HV_EFI_SCANNER_PD_PAGE * kEntriesPerPage;
-    if (pdpt[1] != expectedPd || windowPd[0] != expectedPt) {
-        return HV_EFI_SCANNER_INVARIANT_VIOLATION;
+    /* The processor sets Accessed in non-leaf paging entries. Ignore only
+     * that hardware-owned bit; addresses and permissions must remain exact. */
+    if ((pdpt[1] & ~kAccessed) != expectedPd ||
+        (windowPd[0] & ~kAccessed) != expectedPt) {
+        return HV_EFI_SCANNER_HIERARCHY_MISMATCH;
     }
 
     volatile uint64_t *entries = pageTableStorage +
         HV_EFI_SCANNER_PT_PAGE * kEntriesPerPage;
+    /* A command owns this per-CPU window exclusively. If an interrupted
+     * earlier command left a leaf behind, remove that alias before admitting
+     * new work. Clearing a mapping is fail-closed; malformed hierarchy links
+     * above are never repaired here. */
     for (uint32_t index = 0; index < HV_EFI_SCANNER_PTE_COUNT; ++index) {
         if (entries[index] != 0) {
-            return HV_EFI_SCANNER_INVARIANT_VIOLATION;
+            entries[index] = 0;
+            CompilerBarrier();
+            invalidatePage(
+                invalidateContext,
+                HV_EFI_SCANNER_WINDOW_VIRTUAL_BASE +
+                    static_cast<uint64_t>(index) *
+                        HV_EFI_SCANNER_PAGE_SIZE);
         }
     }
     window->PageTableEntries = entries;
@@ -460,16 +496,12 @@ extern "C" HV_EFI_SCANNER_STATUS HvEfiScannerCompilePattern(
     if (anchor == 0 && storage[0].Wildcard != 0) {
         compiled->AllWildcards = 1;
         compiled->Anchor = 0;
-        for (uint32_t index = 0; index < 256; ++index) {
-            compiled->Shifts[index] = 1;
-        }
+        FillShifts(compiled->Shifts, 1);
         return HV_EFI_SCANNER_OK;
     }
 
     compiled->Anchor = anchor;
-    for (uint32_t index = 0; index < 256; ++index) {
-        compiled->Shifts[index] = anchor + 1;
-    }
+    FillShifts(compiled->Shifts, anchor + 1);
     for (uint32_t index = 0; index < anchor; ++index) {
         const uint32_t distance = anchor - index;
         if (storage[index].Wildcard != 0) {
@@ -477,6 +509,55 @@ extern "C" HV_EFI_SCANNER_STATUS HvEfiScannerCompilePattern(
                 if (compiled->Shifts[value] > distance) {
                     compiled->Shifts[value] = distance;
                 }
+            }
+        } else if (compiled->Shifts[storage[index].Value] > distance) {
+            compiled->Shifts[storage[index].Value] = distance;
+        }
+    }
+    return HV_EFI_SCANNER_OK;
+}
+
+extern "C" HV_EFI_SCANNER_STATUS HvEfiScannerCompileMaskedPattern(
+    const uint8_t *bytes,
+    const uint8_t *mask,
+    uint32_t length,
+    HV_EFI_SCANNER_PATTERN_BYTE *storage,
+    uint32_t storageCapacity,
+    HV_EFI_SCANNER_COMPILED_PATTERN *compiled)
+{
+    if (bytes == nullptr || mask == nullptr || storage == nullptr ||
+        compiled == nullptr || length == 0 || length > storageCapacity ||
+        storageCapacity > HV_EFI_SCANNER_MAX_PATTERN_BYTES) {
+        return HV_EFI_SCANNER_INVALID_ARGUMENT;
+    }
+    ZeroBytes(compiled, sizeof(*compiled));
+    compiled->Bytes = storage;
+    compiled->Capacity = storageCapacity;
+    compiled->Length = length;
+    for (uint32_t index = 0; index < length; ++index) {
+        storage[index].Value = bytes[index];
+        storage[index].Wildcard = mask[index] == 0 ? 1 : 0;
+    }
+
+    uint32_t anchor = length;
+    while (anchor != 0) {
+        --anchor;
+        if (storage[anchor].Wildcard == 0) break;
+    }
+    if (anchor == 0 && storage[0].Wildcard != 0) {
+        compiled->AllWildcards = 1;
+        compiled->Anchor = 0;
+        FillShifts(compiled->Shifts, 1);
+        return HV_EFI_SCANNER_OK;
+    }
+    compiled->Anchor = anchor;
+    FillShifts(compiled->Shifts, anchor + 1);
+    for (uint32_t index = 0; index < anchor; ++index) {
+        const uint32_t distance = anchor - index;
+        if (storage[index].Wildcard != 0) {
+            for (uint32_t value = 0; value < 256; ++value) {
+                if (compiled->Shifts[value] > distance)
+                    compiled->Shifts[value] = distance;
             }
         } else if (compiled->Shifts[storage[index].Value] > distance) {
             compiled->Shifts[storage[index].Value] = distance;
@@ -694,3 +775,18 @@ extern "C" HV_EFI_SCANNER_STATUS HvEfiScannerResolveSignatures(
     }
     return HV_EFI_SCANNER_OK;
 }
+
+#if defined(_MSC_VER)
+#pragma code_seg(pop)
+#pragma code_seg(push, ".hvscan$z")
+extern "C" __declspec(noinline) uint32_t HvEfiRuntimeScannerResidentEnd(void)
+{
+    return UINT32_C(0x48565A5A);
+}
+#pragma code_seg(pop)
+#else
+extern "C" uint32_t HvEfiRuntimeScannerResidentEnd(void)
+{
+    return UINT32_C(0x48565A5A);
+}
+#endif

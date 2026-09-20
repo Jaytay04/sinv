@@ -3,7 +3,12 @@
 #include "efi_hypervisor_math.h"
 #include "efi_mp_services.h"
 #include "iommu_runtime.h"
+#include "runtime_analysis.h"
+#include "runtime_process.h"
+#include "runtime_scanner.h"
+#include "runtime_shadow.h"
 #include "scanner.h"
+#include "shadow_ept.h"
 
 #define HV_EFI_MEMORY_MAP_SLACK_DESCRIPTORS ((UINTN)8)
 #define HV_EFI_MEMORY_MAP_MAX_ATTEMPTS UINT32_C(4)
@@ -693,6 +698,8 @@ static int HvEfiBindBspProcessorResources(
     HV_EFI_PROCESSOR_RECORD *records;
     HV_EFI_PROCESSOR_RECORD *record;
     EFI_PHYSICAL_ADDRESS eptPa = 0;
+    EFI_PHYSICAL_ADDRESS shadowEptPa = 0;
+    EFI_PHYSICAL_ADDRESS shadowStatePa = 0;
 
     if (context == NULL) {
         return 0;
@@ -726,6 +733,17 @@ static int HvEfiBindBspProcessorResources(
                                        &eptPa))) {
         return 0;
     }
+    if (EFI_ERROR(HvEfiAllocateRuntime(EfiRuntimeServicesData,
+                                       HV_EFI_EPT_TABLE_PAGES,
+                                       &shadowEptPa)) ||
+        EFI_ERROR(HvEfiAllocateRuntime(EfiRuntimeServicesData,
+                                       HV_EFI_SHADOW_EPT_STATE_PAGES,
+                                       &shadowStatePa))) {
+        HvEfiFreeRuntime(shadowStatePa, HV_EFI_SHADOW_EPT_STATE_PAGES);
+        HvEfiFreeRuntime(shadowEptPa, HV_EFI_EPT_TABLE_PAGES);
+        HvEfiFreeRuntime(eptPa, HV_EFI_EPT_TABLE_PAGES);
+        return 0;
+    }
     record->ContextPhysical = contextPa;
     record->VmxonPhysical = vmxonPa;
     record->VmcsPhysical = vmcsPa;
@@ -734,6 +752,8 @@ static int HvEfiBindBspProcessorResources(
     record->PageTablePhysical = pageTablePa;
     record->DescriptorStoragePhysical = descriptorPa;
     record->EptPhysical = eptPa;
+    record->ShadowEptPhysical = shadowEptPa;
+    record->ShadowEptStatePhysical = shadowStatePa;
     if (!HvEfiProcessorResourceAddressesValid(record)) {
         record->ContextPhysical = 0;
         record->VmxonPhysical = 0;
@@ -743,6 +763,10 @@ static int HvEfiBindBspProcessorResources(
         record->PageTablePhysical = 0;
         record->DescriptorStoragePhysical = 0;
         record->EptPhysical = 0;
+        record->ShadowEptPhysical = 0;
+        record->ShadowEptStatePhysical = 0;
+        HvEfiFreeRuntime(shadowStatePa, HV_EFI_SHADOW_EPT_STATE_PAGES);
+        HvEfiFreeRuntime(shadowEptPa, HV_EFI_EPT_TABLE_PAGES);
         HvEfiFreeRuntime(eptPa, HV_EFI_EPT_TABLE_PAGES);
         return 0;
     }
@@ -752,6 +776,8 @@ static int HvEfiBindBspProcessorResources(
     context->ProcessorResourceStatus =
         HV_EFI_PROCESSOR_RESOURCES_BSP_ONLY;
     context->EptPhysical = eptPa;
+    context->ShadowEptPhysical = shadowEptPa;
+    context->ShadowEptStatePhysical = shadowStatePa;
     return 1;
 }
 
@@ -762,6 +788,9 @@ static void HvEfiReleaseProcessorRecordResources(
         return;
     }
     HvEfiFreeRuntime(record->EptPhysical, HV_EFI_EPT_TABLE_PAGES);
+    HvEfiFreeRuntime(record->ShadowEptPhysical, HV_EFI_EPT_TABLE_PAGES);
+    HvEfiFreeRuntime(record->ShadowEptStatePhysical,
+                     HV_EFI_SHADOW_EPT_STATE_PAGES);
     HvEfiFreeRuntime(record->DescriptorStoragePhysical,
                      HV_EFI_DESCRIPTOR_STORAGE_PAGES);
     HvEfiFreeRuntime(record->PageTablePhysical, HV_EFI_PAGE_TABLE_PAGES);
@@ -778,6 +807,8 @@ static void HvEfiReleaseProcessorRecordResources(
     record->PageTablePhysical = 0;
     record->DescriptorStoragePhysical = 0;
     record->EptPhysical = 0;
+    record->ShadowEptPhysical = 0;
+    record->ShadowEptStatePhysical = 0;
     record->StateFlags &= ~(HV_EFI_PROCESSOR_STATE_RESOURCES_BOUND |
                             HV_EFI_PROCESSOR_STATE_VIRTUALIZED |
                             HV_EFI_PROCESSOR_STATE_PREPARED |
@@ -849,8 +880,15 @@ static void HvEfiReleaseBspEpt(HV_EFI_CONTEXT *context)
         context->ProcessorRecordsPhysical;
     record = &records[context->BspProcessorNumber];
     HvEfiFreeRuntime(record->EptPhysical, HV_EFI_EPT_TABLE_PAGES);
+    HvEfiFreeRuntime(record->ShadowEptPhysical, HV_EFI_EPT_TABLE_PAGES);
+    HvEfiFreeRuntime(record->ShadowEptStatePhysical,
+                     HV_EFI_SHADOW_EPT_STATE_PAGES);
     record->EptPhysical = 0;
+    record->ShadowEptPhysical = 0;
+    record->ShadowEptStatePhysical = 0;
     context->EptPhysical = 0;
+    context->ShadowEptPhysical = 0;
+    context->ShadowEptStatePhysical = 0;
 }
 
 static int HvEfiInitializePrivatePageTables(EFI_PHYSICAL_ADDRESS pageTablePa)
@@ -925,6 +963,14 @@ static EFI_STATUS HvEfiAllocateProcessorRecordResources(
                                   HV_EFI_EPT_TABLE_PAGES,
                                   &record->EptPhysical);
     if (EFI_ERROR(status)) goto fail;
+    status = HvEfiAllocateRuntime(EfiRuntimeServicesData,
+                                  HV_EFI_EPT_TABLE_PAGES,
+                                  &record->ShadowEptPhysical);
+    if (EFI_ERROR(status)) goto fail;
+    status = HvEfiAllocateRuntime(EfiRuntimeServicesData,
+                                  HV_EFI_SHADOW_EPT_STATE_PAGES,
+                                  &record->ShadowEptStatePhysical);
+    if (EFI_ERROR(status)) goto fail;
     if (!HvEfiProcessorResourceAddressesValid(record)) {
         status = EFI_ABORTED;
         goto fail;
@@ -942,6 +988,10 @@ static EFI_STATUS HvEfiAllocateProcessorRecordResources(
               HV_EFI_DESCRIPTOR_STORAGE_PAGES * HV_EFI_PAGE_SIZE);
     HvEfiZero((void *)(uintptr_t)record->EptPhysical,
               HV_EFI_EPT_TABLE_PAGES * HV_EFI_PAGE_SIZE);
+    HvEfiZero((void *)(uintptr_t)record->ShadowEptPhysical,
+              HV_EFI_EPT_TABLE_PAGES * HV_EFI_PAGE_SIZE);
+    HvEfiZero((void *)(uintptr_t)record->ShadowEptStatePhysical,
+              HV_EFI_SHADOW_EPT_STATE_PAGES * HV_EFI_PAGE_SIZE);
     if (!HvEfiInitializePrivatePageTables(record->PageTablePhysical)) {
         status = EFI_ABORTED;
         goto fail;
@@ -953,7 +1003,7 @@ static EFI_STATUS HvEfiAllocateProcessorRecordResources(
     processorContext->Version = HV_EFI_CONTEXT_VERSION;
     processorContext->Size = (uint32_t)sizeof(*processorContext);
     processorContext->HostStackTop = record->HostStackPhysical +
-        (HV_EFI_PAGE_SIZE / 2u) - 8;
+        ((uint64_t)HV_EFI_HOST_STACK_PAGES * HV_EFI_PAGE_SIZE / 2u) - 8;
     processorContext->GuestStackTop = record->GuestStackPhysical +
         HV_EFI_PAGE_SIZE - 32;
     processorContext->ResidentCodeBase = rootContext->ResidentCodeBase;
@@ -984,6 +1034,29 @@ static EFI_STATUS HvEfiAllocateProcessorRecordResources(
     processorContext->AcpiShadowPhysical = rootContext->AcpiShadowPhysical;
     processorContext->AcpiGuestRsdpPage = rootContext->AcpiGuestRsdpPage;
     processorContext->AcpiGuestXsdtPage = rootContext->AcpiGuestXsdtPage;
+    processorContext->RuntimeScannerCodeBase =
+        rootContext->RuntimeScannerCodeBase;
+    processorContext->RuntimeScannerCodeSize =
+        rootContext->RuntimeScannerCodeSize;
+    processorContext->RuntimeScannerEntry = rootContext->RuntimeScannerEntry;
+    processorContext->RuntimeProcessEntry = rootContext->RuntimeProcessEntry;
+    processorContext->RuntimeShadowEntry = rootContext->RuntimeShadowEntry;
+    processorContext->RuntimeAnalysisEntry =
+        rootContext->RuntimeAnalysisEntry;
+    processorContext->RuntimeAnalysisStatePhysical =
+        rootContext->RuntimeAnalysisStatePhysical;
+    processorContext->RuntimeAnalysisStatePages =
+        rootContext->RuntimeAnalysisStatePages;
+    processorContext->RuntimeScannerStatePhysical =
+        rootContext->RuntimeScannerStatePhysical;
+    processorContext->RuntimeScannerRamRangesPhysical =
+        rootContext->RuntimeScannerRamRangesPhysical;
+    processorContext->RuntimeScannerCodePages =
+        rootContext->RuntimeScannerCodePages;
+    processorContext->RuntimeScannerRamRangePages =
+        rootContext->RuntimeScannerRamRangePages;
+    processorContext->RuntimeScannerRamRangeCount =
+        rootContext->RuntimeScannerRamRangeCount;
     processorContext->VmxonPhysical = record->VmxonPhysical;
     processorContext->VmcsPhysical = record->VmcsPhysical;
     processorContext->PageTablePhysical = record->PageTablePhysical;
@@ -994,6 +1067,9 @@ static EFI_STATUS HvEfiAllocateProcessorRecordResources(
     processorContext->DescriptorStoragePages =
         HV_EFI_DESCRIPTOR_STORAGE_PAGES;
     processorContext->EptPhysical = record->EptPhysical;
+    processorContext->ShadowEptPhysical = record->ShadowEptPhysical;
+    processorContext->ShadowEptStatePhysical =
+        record->ShadowEptStatePhysical;
     processorContext->ProcessorCount = rootContext->ProcessorCount;
     processorContext->EnabledProcessorCount =
         rootContext->EnabledProcessorCount;
@@ -1298,7 +1374,14 @@ static int HvEfiPrepareControlRegisters(HV_EFI_CONTEXT *context,
                                        cr4Fixed1, &normalizedCr4)) {
         return 0;
     }
-    context->HostCr0 = normalizedCr0;
+    /* Root's read-only scanner mappings rely on hardware write protection.
+     * Firmware AP startup state is not required to match the BSP's CR0.WP,
+     * so establish the invariant explicitly while leaving the guest image
+     * unchanged. */
+    if ((normalizedCr0 | HV_EFI_CR0_WP) & ~cr0Fixed1) {
+        return 0;
+    }
+    context->HostCr0 = normalizedCr0 | HV_EFI_CR0_WP;
     context->HostCr4 = normalizedCr4;
     /* VMX fixed bits are also required by the guest-state checks.  Preserve
      * the originals separately for rollback if a later VMX step fails. */
@@ -1557,7 +1640,8 @@ static int HvEfiPrepareHostState(const HV_EFI_CONTEXT *context)
         HvEfiWriteField(HV_EFI_VMCS_HOST_RSP, context->HostStackTop) &&
         HvEfiWriteField(HV_EFI_VMCS_HOST_RIP, context->ResidentHostRip) &&
         HvEfiWriteField(HV_EFI_VMCS_HOST_PAT, context->Pat) &&
-        HvEfiWriteField(HV_EFI_VMCS_HOST_EFER, context->Efer) &&
+        HvEfiWriteField(HV_EFI_VMCS_HOST_EFER,
+                        context->Efer | HV_EFI_EFER_NXE) &&
         HvEfiWriteField(HV_EFI_VMCS_HOST_SYSENTER_CS,
                         context->SysenterCs) &&
         HvEfiWriteField(HV_EFI_VMCS_HOST_ES_SELECTOR,
@@ -2289,7 +2373,9 @@ static int HvEfiBuildEptDenyInventory(
         HV_EFI_HOST_STACK_PAGES,
         HV_EFI_PAGE_TABLE_PAGES,
         HV_EFI_HOST_DESCRIPTOR_STORAGE_PAGES,
-        HV_EFI_EPT_TABLE_PAGES
+        HV_EFI_EPT_TABLE_PAGES,
+        HV_EFI_EPT_TABLE_PAGES,
+        HV_EFI_SHADOW_EPT_STATE_PAGES
     };
     HV_EFI_PROCESSOR_RECORD *records;
     uint32_t count = 0;
@@ -2308,6 +2394,21 @@ static int HvEfiBuildEptDenyInventory(
     if (!HvEfiAppendEptDenyRange(
             ranges, capacity, &count, context->ResidentCodeBase,
             HV_EFI_RESIDENT_CODE_PAGES) ||
+        !HvEfiAppendEptDenyRange(
+            ranges, capacity, &count, context->RuntimeScannerCodeBase,
+            context->RuntimeScannerCodePages) ||
+        !HvEfiAppendEptDenyRange(
+            ranges, capacity, &count,
+            context->RuntimeScannerStatePhysical,
+            HV_EFI_RUNTIME_SCANNER_STATE_PAGES) ||
+        !HvEfiAppendEptDenyRange(
+            ranges, capacity, &count,
+            context->RuntimeAnalysisStatePhysical,
+            context->RuntimeAnalysisStatePages) ||
+        !HvEfiAppendEptDenyRange(
+            ranges, capacity, &count,
+            context->RuntimeScannerRamRangesPhysical,
+            context->RuntimeScannerRamRangePages) ||
         !HvEfiAppendEptDenyRange(
             ranges, capacity, &count,
             context->ProcessorRecordsPhysical,
@@ -2328,7 +2429,9 @@ static int HvEfiBuildEptDenyInventory(
             record->PageTablePhysical,
             record->DescriptorStoragePhysical +
                 HV_EFI_DESCRIPTOR_HOST_GDT_PAGE * HV_EFI_PAGE_SIZE,
-            record->EptPhysical
+            record->EptPhysical,
+            record->ShadowEptPhysical,
+            record->ShadowEptStatePhysical
         };
 
         if ((record->StateFlags &
@@ -2407,6 +2510,163 @@ static int HvEfiBuildEptDenyInventory(
     return 1;
 }
 
+static int HvEfiScannerRamMemoryType(uint32_t type)
+{
+    return type == EfiLoaderCode || type == EfiLoaderData ||
+        type == EfiBootServicesCode || type == EfiBootServicesData ||
+        type == EfiRuntimeServicesCode || type == EfiRuntimeServicesData ||
+        type == EfiConventionalMemory || type == EfiACPIReclaimMemory ||
+        type == EfiACPIMemoryNVS || type == EfiPersistentMemory;
+}
+
+static int HvEfiAppendScannerRamRange(
+    HV_EFI_SCANNER_RAM_RANGE *ranges,
+    uint32_t capacity,
+    uint32_t *count,
+    uint64_t start,
+    uint64_t end)
+{
+    if (ranges == NULL || count == NULL || start >= end ||
+        (start & HV_EFI_SCANNER_PAGE_MASK) != 0 ||
+        (end & HV_EFI_SCANNER_PAGE_MASK) != 0 || *count >= capacity) {
+        return 0;
+    }
+    ranges[*count].PhysicalBase = start;
+    ranges[*count].Size = end - start;
+    ++*count;
+    return 1;
+}
+
+/* Persist guest-visible RAM only. Root-private EPT deny ranges are subtracted
+ * so an authenticated scan cannot be used as an oracle over runtime tokens,
+ * VMCS state, scanner results, or other hypervisor-owned storage. */
+static int HvEfiBuildRuntimeScannerAllowlist(
+    HV_EFI_CONTEXT *context,
+    const EFI_MEMORY_DESCRIPTOR *memoryMap,
+    UINTN memoryMapSize,
+    UINTN descriptorSize,
+    const HV_EFI_EPT_DENY_RANGE *denied,
+    uint32_t deniedCount)
+{
+    HV_EFI_SCANNER_RAM_RANGE *ranges;
+    uint32_t count = 0;
+    uint32_t descriptorCount;
+    uint32_t descriptorIndex;
+
+    if (context == NULL || memoryMap == NULL ||
+        descriptorSize < sizeof(EFI_MEMORY_DESCRIPTOR) ||
+        memoryMapSize < descriptorSize || denied == NULL || deniedCount == 0 ||
+        context->RuntimeScannerRamRangesPhysical == 0 ||
+        context->RuntimeScannerRamRangePages !=
+            HV_EFI_RUNTIME_SCANNER_RANGE_PAGES) {
+        return 0;
+    }
+    ranges = (HV_EFI_SCANNER_RAM_RANGE *)(uintptr_t)
+        context->RuntimeScannerRamRangesPhysical;
+    HvEfiZero(ranges,
+        HV_EFI_RUNTIME_SCANNER_RANGE_PAGES * HV_EFI_PAGE_SIZE);
+    descriptorCount = (uint32_t)(memoryMapSize / descriptorSize);
+    for (descriptorIndex = 0;
+         descriptorIndex < descriptorCount;
+         ++descriptorIndex) {
+        const EFI_MEMORY_DESCRIPTOR *descriptor =
+            (const EFI_MEMORY_DESCRIPTOR *)(const void *)(
+                (const uint8_t *)(const void *)memoryMap +
+                (UINTN)descriptorIndex * descriptorSize);
+        uint64_t cursor;
+        uint64_t end;
+        uint32_t denyIndex;
+        if (!HvEfiScannerRamMemoryType(descriptor->Type) ||
+            descriptor->NumberOfPages == 0 ||
+            descriptor->NumberOfPages >
+                HV_EFI_SCANNER_PHYSICAL_LIMIT / HV_EFI_PAGE_SIZE) {
+            continue;
+        }
+        cursor = descriptor->PhysicalStart;
+        if (cursor >= HV_EFI_SCANNER_PHYSICAL_LIMIT ||
+            descriptor->NumberOfPages >
+                (HV_EFI_SCANNER_PHYSICAL_LIMIT - cursor) /
+                    HV_EFI_PAGE_SIZE) {
+            continue;
+        }
+        end = cursor + descriptor->NumberOfPages * HV_EFI_PAGE_SIZE;
+        for (denyIndex = 0; denyIndex < deniedCount; ++denyIndex) {
+            uint64_t denyEnd;
+            if (denied[denyIndex].Size == 0 ||
+                denied[denyIndex].PhysicalBase >
+                    UINT64_MAX - denied[denyIndex].Size) {
+                return 0;
+            }
+            denyEnd = denied[denyIndex].PhysicalBase +
+                denied[denyIndex].Size;
+            if (denyEnd <= cursor) {
+                continue;
+            }
+            if (denied[denyIndex].PhysicalBase >= end) {
+                break;
+            }
+            if (cursor < denied[denyIndex].PhysicalBase &&
+                !HvEfiAppendScannerRamRange(
+                    ranges, HV_EFI_RUNTIME_SCANNER_MAX_RAM_RANGES,
+                    &count, cursor, denied[denyIndex].PhysicalBase)) {
+                return 0;
+            }
+            if (cursor < denyEnd) {
+                cursor = denyEnd;
+            }
+            if (cursor >= end) {
+                break;
+            }
+        }
+        if (cursor < end && !HvEfiAppendScannerRamRange(
+                ranges, HV_EFI_RUNTIME_SCANNER_MAX_RAM_RANGES,
+                &count, cursor, end)) {
+            return 0;
+        }
+    }
+    if (count == 0) {
+        return 0;
+    }
+    for (descriptorIndex = 1; descriptorIndex < count; ++descriptorIndex) {
+        HV_EFI_SCANNER_RAM_RANGE value = ranges[descriptorIndex];
+        uint32_t position = descriptorIndex;
+        while (position != 0 &&
+               ranges[position - 1].PhysicalBase > value.PhysicalBase) {
+            ranges[position] = ranges[position - 1];
+            --position;
+        }
+        ranges[position] = value;
+    }
+    {
+        uint32_t mergedCount = 1;
+        for (descriptorIndex = 1; descriptorIndex < count;
+             ++descriptorIndex) {
+            HV_EFI_SCANNER_RAM_RANGE *previous = &ranges[mergedCount - 1];
+            uint64_t previousEnd;
+            if (previous->Size == 0 ||
+                previous->PhysicalBase > UINT64_MAX - previous->Size) {
+                return 0;
+            }
+            previousEnd = previous->PhysicalBase + previous->Size;
+            if (ranges[descriptorIndex].PhysicalBase < previousEnd) {
+                return 0;
+            }
+            if (ranges[descriptorIndex].PhysicalBase == previousEnd) {
+                if (previous->Size >
+                    UINT64_MAX - ranges[descriptorIndex].Size) {
+                    return 0;
+                }
+                previous->Size += ranges[descriptorIndex].Size;
+            } else {
+                ranges[mergedCount++] = ranges[descriptorIndex];
+            }
+        }
+        count = mergedCount;
+    }
+    context->RuntimeScannerRamRangeCount = count;
+    return 1;
+}
+
 static void HvEfiRecordApPreparationFailure(
     HV_EFI_AP_PREPARATION_CONTEXT *preparation,
     uint32_t failureStage)
@@ -2478,6 +2738,32 @@ static void EFIAPI HvEfiApPrepareProcessorState(void *procedureArgument)
             preparation, HV_EFI_PROCESSOR_PREPARATION_FAILURE_CONTEXT);
         return;
     }
+    /* AP resources are allocated before the final boot memory map is
+     * captured. Refresh the shared scanner metadata now that the root has
+     * built and frozen its guest-RAM allowlist. */
+    processorContext->RuntimeScannerCodeBase =
+        rootContext->RuntimeScannerCodeBase;
+    processorContext->RuntimeScannerCodeSize =
+        rootContext->RuntimeScannerCodeSize;
+    processorContext->RuntimeScannerEntry = rootContext->RuntimeScannerEntry;
+    processorContext->RuntimeProcessEntry = rootContext->RuntimeProcessEntry;
+    processorContext->RuntimeShadowEntry = rootContext->RuntimeShadowEntry;
+    processorContext->RuntimeAnalysisEntry =
+        rootContext->RuntimeAnalysisEntry;
+    processorContext->RuntimeAnalysisStatePhysical =
+        rootContext->RuntimeAnalysisStatePhysical;
+    processorContext->RuntimeAnalysisStatePages =
+        rootContext->RuntimeAnalysisStatePages;
+    processorContext->RuntimeScannerStatePhysical =
+        rootContext->RuntimeScannerStatePhysical;
+    processorContext->RuntimeScannerRamRangesPhysical =
+        rootContext->RuntimeScannerRamRangesPhysical;
+    processorContext->RuntimeScannerCodePages =
+        rootContext->RuntimeScannerCodePages;
+    processorContext->RuntimeScannerRamRangePages =
+        rootContext->RuntimeScannerRamRangePages;
+    processorContext->RuntimeScannerRamRangeCount =
+        rootContext->RuntimeScannerRamRangeCount;
     processorVmxBasic = HvEfiReadMsr(HV_EFI_IA32_VMX_BASIC);
     if (!HvEfiValidateVmxBasic(processorVmxBasic)) {
         HvEfiRecordApPreparationFailure(
@@ -2574,7 +2860,18 @@ static void EFIAPI HvEfiApPrepareProcessorState(void *procedureArgument)
             preparation->EptWriteBackLeafCount,
             processorContext->EptSplitPageCount,
             processorContext->EptDeniedPageCount) ||
-        !HvEfiInstallPhysicalAcpiShadow(processorContext)) {
+        !HvEfiInstallPhysicalAcpiShadow(processorContext) ||
+        !HvEfiBuildEptPointer(processorContext->ShadowEptPhysical,
+                              eptVpidCapabilities,
+                              &processorContext->ShadowEptPointer) ||
+        HvEfiShadowEptInitialize(
+            (ShadowEptManager *)(uintptr_t)
+                processorContext->ShadowEptStatePhysical,
+            (const uint64_t *)(uintptr_t)processorContext->EptPhysical,
+            processorContext->EptPhysical, processorContext->EptPointer,
+            (uint64_t *)(uintptr_t)processorContext->ShadowEptPhysical,
+            processorContext->ShadowEptPhysical, HV_EFI_EPT_TABLE_PAGES,
+            processorContext->ShadowEptPointer) != HV_EFI_SHADOW_EPT_OK) {
         HvEfiRecordApPreparationFailure(
             preparation,
             HV_EFI_PROCESSOR_PREPARATION_FAILURE_EPT_HIERARCHY);
@@ -2683,7 +2980,10 @@ static EFI_STATUS HvEfiPrepareApProcessorStates(HV_EFI_CONTEXT *context)
         !HvEfiBuildEptDenyInventory(
             context, eptDenyRanges,
             HV_EFI_EPT_MAX_DENY_RANGES,
-            &eptDenyRangeCount)) {
+            &eptDenyRangeCount) ||
+        !HvEfiBuildRuntimeScannerAllowlist(
+            context, memoryMap, memoryMapSize, descriptorSize,
+            eptDenyRanges, eptDenyRangeCount)) {
         if (memoryMap != NULL) {
             gBS->FreePool(memoryMap);
         }
@@ -2705,10 +3005,18 @@ static EFI_STATUS HvEfiPrepareApProcessorStates(HV_EFI_CONTEXT *context)
     if ((eptVpidCapabilities &
          (HV_EFI_EPT_CAP_WALK_LENGTH_4 |
           HV_EFI_EPT_CAP_EPTP_MEMORY_TYPE_WB |
-          HV_EFI_EPT_CAP_2MB_PAGE)) !=
+          HV_EFI_EPT_CAP_2MB_PAGE |
+          HV_EFI_EPT_CAP_INVEPT |
+          HV_EFI_EPT_CAP_INVEPT_SINGLE_CONTEXT |
+          HV_EFI_VPID_CAP_INVVPID |
+          HV_EFI_VPID_CAP_INVVPID_SINGLE_CONTEXT)) !=
             (HV_EFI_EPT_CAP_WALK_LENGTH_4 |
              HV_EFI_EPT_CAP_EPTP_MEMORY_TYPE_WB |
-             HV_EFI_EPT_CAP_2MB_PAGE) ||
+             HV_EFI_EPT_CAP_2MB_PAGE |
+             HV_EFI_EPT_CAP_INVEPT |
+             HV_EFI_EPT_CAP_INVEPT_SINGLE_CONTEXT |
+             HV_EFI_VPID_CAP_INVVPID |
+             HV_EFI_VPID_CAP_INVVPID_SINGLE_CONTEXT) ||
         !HvEfiBuildProtectedEptIdentityHierarchy(
             (uint64_t *)(uintptr_t)context->EptPhysical,
             HV_EFI_EPT_TABLE_PAGES, context->EptPhysical,
@@ -2727,7 +3035,17 @@ static EFI_STATUS HvEfiPrepareApProcessorStates(HV_EFI_CONTEXT *context)
             context->EptPointer, writeBackLeafCount,
             context->EptSplitPageCount,
             context->EptDeniedPageCount) ||
-        !HvEfiInstallPhysicalAcpiShadow(context)) {
+        !HvEfiInstallPhysicalAcpiShadow(context) ||
+        !HvEfiBuildEptPointer(context->ShadowEptPhysical,
+                              eptVpidCapabilities,
+                              &context->ShadowEptPointer) ||
+        HvEfiShadowEptInitialize(
+            (ShadowEptManager *)(uintptr_t)context->ShadowEptStatePhysical,
+            (const uint64_t *)(uintptr_t)context->EptPhysical,
+            context->EptPhysical, context->EptPointer,
+            (uint64_t *)(uintptr_t)context->ShadowEptPhysical,
+            context->ShadowEptPhysical, HV_EFI_EPT_TABLE_PAGES,
+            context->ShadowEptPointer) != HV_EFI_SHADOW_EPT_OK) {
         context->ProcessorPreparationFailure =
             HV_EFI_PROCESSOR_PREPARATION_FAILURE_EPT_HIERARCHY;
         status = EFI_ABORTED;
@@ -3196,6 +3514,27 @@ static EFI_STATUS HvEfiFailAndFree(HV_EFI_CONTEXT *context,
     HvEfiFreeRuntime(vmcsPa, HV_EFI_VMCS_PAGES);
     HvEfiFreeRuntime(vmxonPa, HV_EFI_VMXON_PAGES);
     if (context != NULL) {
+        HvEfiFreeRuntime(context->RuntimeScannerRamRangesPhysical,
+                         context->RuntimeScannerRamRangePages);
+        context->RuntimeScannerRamRangesPhysical = 0;
+        context->RuntimeScannerRamRangePages = 0;
+        context->RuntimeScannerRamRangeCount = 0;
+        HvEfiFreeRuntime(context->RuntimeScannerStatePhysical,
+                         HV_EFI_RUNTIME_SCANNER_STATE_PAGES);
+        context->RuntimeScannerStatePhysical = 0;
+        HvEfiFreeRuntime(context->RuntimeScannerCodeBase,
+                         context->RuntimeScannerCodePages);
+        context->RuntimeScannerCodeBase = 0;
+        context->RuntimeScannerCodeSize = 0;
+        context->RuntimeScannerEntry = 0;
+        context->RuntimeProcessEntry = 0;
+        context->RuntimeShadowEntry = 0;
+        context->RuntimeScannerCodePages = 0;
+        HvEfiFreeRuntime(context->RuntimeAnalysisStatePhysical,
+                         context->RuntimeAnalysisStatePages);
+        context->RuntimeAnalysisStatePhysical = 0;
+        context->RuntimeAnalysisStatePages = 0;
+        context->RuntimeAnalysisEntry = 0;
         HvEfiFreeRuntime(context->GuestTransitionCodeBase,
                          HV_EFI_GUEST_TRANSITION_CODE_PAGES);
         context->GuestTransitionCodeBase = 0;
@@ -3244,6 +3583,7 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
     uint64_t vmxBasic;
     uint32_t revision;
     UINTN residentSize;
+    UINTN runtimeScannerSize;
     UINTN guestTransitionSize;
     int launchResult;
     uint32_t dmaIsolationState;
@@ -3306,6 +3646,103 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
     }
     HvEfiCopy((void *)(uintptr_t)codePa, HvEfiResidentVmExitStart,
               residentSize);
+
+    status = HvEfiAllocateRuntime(
+        EfiRuntimeServicesCode, HV_EFI_RUNTIME_SCANNER_CODE_PAGES,
+        &context->RuntimeScannerCodeBase);
+    if (!EFI_ERROR(status)) {
+        context->RuntimeScannerCodePages =
+            HV_EFI_RUNTIME_SCANNER_CODE_PAGES;
+        status = HvEfiAllocateRuntime(
+            EfiRuntimeServicesData, HV_EFI_RUNTIME_SCANNER_STATE_PAGES,
+            &context->RuntimeScannerStatePhysical);
+    }
+    if (!EFI_ERROR(status)) {
+        context->RuntimeAnalysisStatePages = HV_EFI_ANALYSIS_STATE_PAGES;
+        status = HvEfiAllocateRuntime(
+            EfiRuntimeServicesData, HV_EFI_ANALYSIS_STATE_PAGES,
+            &context->RuntimeAnalysisStatePhysical);
+    }
+    if (!EFI_ERROR(status)) {
+        context->RuntimeScannerRamRangePages =
+            HV_EFI_RUNTIME_SCANNER_RANGE_PAGES;
+        status = HvEfiAllocateRuntime(
+            EfiRuntimeServicesData, HV_EFI_RUNTIME_SCANNER_RANGE_PAGES,
+            &context->RuntimeScannerRamRangesPhysical);
+    }
+    if (EFI_ERROR(status)) {
+        HvEfiDebugPrintAscii(
+            "uefi hypervisor: runtime scanner allocation: FAIL 0x");
+        HvEfiDebugPrintHex32((uint32_t)status);
+        HvEfiDebugPrintAscii("\n");
+        return HvEfiFailAndFree(context, contextPa, codePa, 0, 0, 0, 0, 0, 0,
+                                0, status);
+    }
+    runtimeScannerSize = (UINTN)(
+        (uintptr_t)HvEfiRuntimeScannerResidentEnd -
+        (uintptr_t)HvEfiRuntimeScannerResidentStart);
+    if (runtimeScannerSize == 0 ||
+        runtimeScannerSize >
+            HV_EFI_RUNTIME_SCANNER_CODE_PAGES * (UINTN)HV_EFI_PAGE_SIZE ||
+        (uintptr_t)HvEfiRuntimeScannerResidentCommand <
+            (uintptr_t)HvEfiRuntimeScannerResidentStart ||
+        (uintptr_t)HvEfiRuntimeScannerResidentCommand >=
+            (uintptr_t)HvEfiRuntimeScannerResidentEnd ||
+        (uintptr_t)HvEfiRuntimeProcessResidentCommand <
+            (uintptr_t)HvEfiRuntimeScannerResidentStart ||
+        (uintptr_t)HvEfiRuntimeProcessResidentCommand >=
+            (uintptr_t)HvEfiRuntimeScannerResidentEnd ||
+        (uintptr_t)HvEfiRuntimeShadowResidentCommand <
+            (uintptr_t)HvEfiRuntimeScannerResidentStart ||
+        (uintptr_t)HvEfiRuntimeShadowResidentCommand >=
+            (uintptr_t)HvEfiRuntimeScannerResidentEnd ||
+        (uintptr_t)HvEfiRuntimeAnalysisResidentCommand <
+            (uintptr_t)HvEfiRuntimeScannerResidentStart ||
+        (uintptr_t)HvEfiRuntimeAnalysisResidentCommand >=
+            (uintptr_t)HvEfiRuntimeScannerResidentEnd ||
+        HV_EFI_RUNTIME_PROCESS_STATE_PAGE_OFFSET +
+            sizeof(HV_EFI_RUNTIME_PROCESS_STATE) >
+            HV_EFI_RUNTIME_SCANNER_STATE_PAGES * HV_EFI_PAGE_SIZE) {
+        HvEfiDebugPrintAscii(
+            "uefi hypervisor: runtime scanner image bounds: FAIL\n");
+        return HvEfiFailAndFree(context, contextPa, codePa, 0, 0, 0, 0, 0, 0,
+                                0, EFI_BAD_BUFFER_SIZE);
+    }
+    HvEfiZero((void *)(uintptr_t)context->RuntimeScannerCodeBase,
+              HV_EFI_RUNTIME_SCANNER_CODE_PAGES * HV_EFI_PAGE_SIZE);
+    HvEfiCopy((void *)(uintptr_t)context->RuntimeScannerCodeBase,
+              HvEfiRuntimeScannerResidentStart, runtimeScannerSize);
+    context->RuntimeScannerCodeSize = runtimeScannerSize;
+    context->RuntimeScannerEntry = context->RuntimeScannerCodeBase +
+        ((uintptr_t)HvEfiRuntimeScannerResidentCommand -
+         (uintptr_t)HvEfiRuntimeScannerResidentStart);
+    context->RuntimeProcessEntry = context->RuntimeScannerCodeBase +
+        ((uintptr_t)HvEfiRuntimeProcessResidentCommand -
+         (uintptr_t)HvEfiRuntimeScannerResidentStart);
+    context->RuntimeShadowEntry = context->RuntimeScannerCodeBase +
+        ((uintptr_t)HvEfiRuntimeShadowResidentCommand -
+         (uintptr_t)HvEfiRuntimeScannerResidentStart);
+    context->RuntimeAnalysisEntry = context->RuntimeScannerCodeBase +
+        ((uintptr_t)HvEfiRuntimeAnalysisResidentCommand -
+         (uintptr_t)HvEfiRuntimeScannerResidentStart);
+    HvEfiZero((void *)(uintptr_t)context->RuntimeScannerStatePhysical,
+              HV_EFI_RUNTIME_SCANNER_STATE_PAGES * HV_EFI_PAGE_SIZE);
+    ((HV_EFI_RUNTIME_SCAN_STATE *)(uintptr_t)
+        context->RuntimeScannerStatePhysical)->Marker =
+            HV_EFI_RUNTIME_SCAN_STATE_MARKER;
+    ((HV_EFI_RUNTIME_PROCESS_STATE *)(uintptr_t)
+        (context->RuntimeScannerStatePhysical +
+         HV_EFI_RUNTIME_PROCESS_STATE_PAGE_OFFSET))->Marker =
+            HV_EFI_RUNTIME_PROCESS_STATE_MARKER;
+    HvEfiZero((void *)(uintptr_t)context->RuntimeAnalysisStatePhysical,
+              HV_EFI_ANALYSIS_STATE_PAGES * HV_EFI_PAGE_SIZE);
+    ((HV_EFI_ANALYSIS_STATE *)(uintptr_t)
+        context->RuntimeAnalysisStatePhysical)->Marker =
+            HV_EFI_ANALYSIS_STATE_MARKER;
+    HvEfiZero((void *)(uintptr_t)context->RuntimeScannerRamRangesPhysical,
+              HV_EFI_RUNTIME_SCANNER_RANGE_PAGES * HV_EFI_PAGE_SIZE);
+    HvEfiDebugPrintAscii(
+        "uefi hypervisor: runtime scanner allocation: PASS\n");
 
     status = HvEfiAllocateRuntime(EfiRuntimeServicesCode,
                                   HV_EFI_GUEST_TRANSITION_CODE_PAGES,
@@ -3393,7 +3830,8 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
 
     /* VM-exit hardware loads this exact RSP.  The context cookie occupies
      * [RSP], below the first push in the resident handler. */
-    context->HostStackTop = hostStackPa + (HV_EFI_PAGE_SIZE / 2u) - 8;
+    context->HostStackTop = hostStackPa +
+        ((uint64_t)HV_EFI_HOST_STACK_PAGES * HV_EFI_PAGE_SIZE / 2u) - 8;
     context->GuestStackTop = guestStackPa + HV_EFI_PAGE_SIZE - 32;
     context->ResidentCodeBase = codePa;
     context->ResidentCodeSize = residentSize;

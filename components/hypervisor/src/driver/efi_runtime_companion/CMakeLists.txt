@@ -46,7 +46,12 @@ if(HVR1_BUILD_CONTRACT_TESTS AND WIN32)
     target_compile_definitions(hvr1_auth_tests PRIVATE
         WIN32_LEAN_AND_MEAN
         NTDDI_VERSION=0x0A00000C)
-    target_compile_options(hvr1_auth_tests PRIVATE /W4 /WX)
+    if(MSVC)
+        target_compile_options(hvr1_auth_tests PRIVATE /W4 /WX)
+    else()
+        target_compile_options(hvr1_auth_tests PRIVATE
+            -Wall -Wextra -Werror)
+    endif()
     target_link_libraries(hvr1_auth_tests PRIVATE Bcrypt.lib)
     add_test(NAME hvr1_auth_tests COMMAND hvr1_auth_tests)
 endif()
@@ -62,13 +67,15 @@ if(HVR1_BUILD_SERVICE AND WIN32)
     )
     target_include_directories(hvr1_runtime_service PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../efi
     )
-    target_compile_options(hvr1_runtime_service PRIVATE
-        /W4
-        /WX
-        /EHsc
-        /permissive-
-    )
+    if(MSVC)
+        target_compile_options(hvr1_runtime_service PRIVATE
+            /W4 /WX /EHsc /permissive-)
+    else()
+        target_compile_options(hvr1_runtime_service PRIVATE
+            -Wall -Wextra -Werror)
+    endif()
     target_link_libraries(hvr1_runtime_service PRIVATE
         Advapi32.lib
         Bcrypt.lib
@@ -116,6 +123,7 @@ target_compile_definitions(hvr1_efi_runtime_companion PRIVATE
 target_include_directories(hvr1_efi_runtime_companion PRIVATE
     ${WDK_INCLUDE_DIRS}
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../efi
 )
 target_link_directories(hvr1_efi_runtime_companion PRIVATE
     ${WDK_LIBRARY_DIRS}
@@ -147,6 +155,7 @@ target_link_libraries(hvr1_efi_runtime_companion PRIVATE
     wmilib.lib
     wdmsec.lib
     cng.lib
+    Aux_Klib.lib
     "${WDK_LIBRARY_DIRS}/BufferOverflowK.lib"
 )
 set_target_properties(hvr1_efi_runtime_companion PROPERTIES

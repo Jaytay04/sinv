@@ -13,8 +13,8 @@ rendezvous:
 1. A LocalSystem service submits an HVR1 mailbox containing runtime-control
    metadata.  The driver validates the fixed header, bounds, generation,
    strictly increasing sequence, and HMAC-SHA-256 tag before copying it to its
-   own nonpaged allocation.  The tag covers a boot-random nonce and the
-   canonical header.  The exact EFI ABI then authorizes each processor with
+   own nonpaged allocation.  The tag covers a boot-random nonce, the canonical
+   header, and the complete bounded payload. The exact EFI ABI then authorizes each processor with
    the root-owned four-word boot token.
 2. The mailbox is one 64 KiB physically contiguous nonpaged allocation.  Its
    physical address is retained in kernel state and is never returned by an
@@ -95,16 +95,79 @@ The pivot treats VMCLEAR or VMXOFF failure as fatal: it writes
 `ACK_FAILURE`, disables interrupts, and halts.  It never returns to guest
 code with a partially restored host state.
 
+### RUNTIME_SCAN (opcode 6)
+
+The companion pins the submitting thread to one processor, queries that
+processor's token, and immediately issues the scan VMCALL on the same CPU.
+RDX/RBX/R8/R9 carry token words 0-3, R10 carries the page-aligned physical
+address of the driver-owned mailbox, R12 carries the runtime generation, and
+R13 carries the monotonic request sequence. RAX returns the bounded scanner
+status. VMCALL already exits unconditionally, so no MSR/I/O intercept or new
+VMCS execution control is enabled.
+
+### PROCESS_LOCATE (opcode 7)
+
+The LocalSystem client submits only a bounded 1-15 byte image name. After
+mailbox HMAC, generation, sequence, and framing validation, the kernel
+companion uses `AuxKlibQueryModuleInformation` to locate `ntoskrnl.exe`,
+validates its mapped PE headers, and appends its base plus the running Windows
+build and UBR. It pins the thread, queries the processor-local session, and
+immediately issues opcode 7 on that same processor.
+
+VMX root captures `VMCS_GUEST_CR3` and `VMCS_GUEST_CR4`, verifies the generated
+kernel profile against the live PE/RSDS identity, translates guest virtual
+addresses with the read-only page-table walker, and performs the bounded
+`ActiveProcessLinks` traversal. The response containing PID and directory
+table base is covered by the same boot-scoped HMAC. No physical mapping or raw
+CR3 field was added to the generic IOCTL descriptor/status ABI.
+
+### SHADOW_CONTROL (opcode 8)
+
+The companion performs this operation on every active logical processor with
+`KeIpiGenericCall`. Each processor receives a separate physically contiguous
+mailbox slot, queries its processor-local token, and invokes opcode 8 against its
+private shadow EPT. Root enables CR3-load exiting only while bound, switches to
+the alternate EPTP only for the cached target CR3, and executes single-context
+INVEPT plus INVVPID after a switch. Any EPT violation in the alternate view
+reverts that processor to identity EPT before retrying the guest instruction.
+
+`BIND`, `UNBIND`, and `QUERY_STATUS` are HMAC authenticated and monotonic. Bind
+requires a PID previously cached by `PROCESS_LOCATE`; PID 4, addresses outside
+the boot RAM allowlist, and ranges intersecting hypervisor-private allocations
+fail closed. A partial all-CPU bind triggers a second all-CPU unbind rendezvous.
+The alternate view never changes an HPA mapping or grants permissions absent
+from identity EPT. In particular, it is not a root-memory read path: root reads
+continue through `HvEfiScannerMapReadOnly`, and removing guest write permission
+is observable as a VM exit.
+
+### ANALYSIS_CONTROL (opcode 9)
+
+The companion pins the caller to one processor, verifies the processor-local
+analysis capability, and issues opcode 9 with the same token, generation, and
+sequence register contract as scan and process lookup. The fixed HVA1 payload
+supports `START`, `CONFIGURE`, `SCAN`, `TRAVERSE`, `EXTRACT`, `RESULTS`, and
+`STOP`. Results remain in hypervisor-private storage and only bounded,
+authenticated pages are copied into the response mailbox.
+
+`START` requires a non-System PID previously cached by `PROCESS_LOCATE`.
+`CONFIGURE` carries up to 16 masked signatures and 256 optional region-evidence
+records. Root derives committed mappings and effective access permissions from
+the target CR3. Region labels such as heap, stack, mapped, private, guard, and
+reserved are evidence fields because hardware PTEs alone cannot prove those
+Windows allocation semantics.
+
 ## IOCTL ABI and device security
 
 `hvr1_protocol.h` is the versioned, packed, WDK-free wire definition.
 
 - `HVR1_IOCTL_GET_MAILBOX` returns mailbox capacity, header size, the next
-  generation, and a boot-scoped shared HMAC session key/nonce. It never
+  generation and sequence, and a boot-scoped shared HMAC session key/nonce. It never
   returns a physical address. The key is available only through the
   exclusive LocalSystem-only handle and is never persisted.
 - `HVR1_IOCTL_SUBMIT` accepts `HVR1_IOCTL_REQUEST` followed immediately by a
-  complete HVR1 mailbox.  Only the shutdown operation is accepted.
+  complete HVR1 mailbox. Shutdown accepts an empty payload; scan, process lookup,
+  shadow control, and analysis accept their fixed mailbox payloads and return authenticated
+  responses through the same buffered IOCTL.
 - `HVR1_IOCTL_QUERY_STATUS` returns state, rendezvous counts, and the crash
   marker.
 - All three controls use `METHOD_BUFFERED` and read/write access.
@@ -127,6 +190,28 @@ LocalSystem, which is also enforced by the device ACL.  It supports:
 - `hvr1_runtime_service.exe shutdown` — obtains the bounded descriptor,
   submits a header-only HVR1 request, then requires `OFFLINE`, matching
   expected/acknowledged CPU counts, and zero root status before success.
+- `hvr1_runtime_service.exe scan "48 8B 05 ?? ?? ?? ??" 0 0 first` scans
+  allowlisted physical RAM in bounded continuations and prints matching
+  physical addresses. Modes are `first`, `all`, and `single`; start/end are
+  physical addresses and an end of zero selects the scanner's physical limit.
+- `hvr1_runtime_service.exe process explorer.exe` performs build-pinned,
+  read-only process enumeration and prints the authenticated PID, process CR3,
+  and EPROCESS address. It fails closed if the EFI image has no generated
+  profile or the running kernel build/UBR/PE/PDB identity differs.
+- `hvr1_runtime_service.exe shadow-bind PID [GPA_START SIZE]...` binds the
+  cached process on every processor. Each optional range is page-aligned,
+  allowlisted guest physical RAM that becomes non-writable in the alternate
+  view. A bind with no ranges creates an identity-equivalent alternate view.
+- `hvr1_runtime_service.exe shadow-status` returns authenticated state, active
+  flag, table/range counts, and violation/synchronization counters.
+- `hvr1_runtime_service.exe shadow-unbind` disables CR3-load exits and restores
+  identity EPT on every processor.
+- `hvr1_runtime_service.exe analysis-start PID` starts a process-bound session.
+  `analysis-configure ID "PATTERN" [REGION_MASK]` loads a wildcard signature;
+  `analysis-scan first|single|all [MAX_BYTES]` performs the bounded scan.
+  `analysis-traverse`, `analysis-extract`, and `analysis-results [OFFSET]`
+  expose safe traversal, typed reads, and paginated findings. `analysis-stop`
+  wipes the private session state.
 - `hvr1_runtime_service.exe selftest-shutdown` is a VM-validation command that
   consumes a prior-boot recovery marker, acquires the active-session power
   requests, proves a corrupted HMAC is rejected without changing state,
@@ -185,10 +270,10 @@ shutdown before requesting driver unload.
 
 The companion generates a fresh key and nonce with the Windows system RNG at
 driver creation. The LocalSystem service obtains that boot-scoped session over
-the exclusive secured handle, signs the header-only shutdown request, and
+the exclusive secured handle, signs the canonical header plus any payload, and
 immediately clears its returned descriptor. The driver verifies `AuthTag` in
 constant time and rejects stale sequences before any IPI or VM call. The EFI
-root independently validates its 256-bit per-boot token for PREPARE.
+root independently validates its 256-bit per-boot token for PREPARE and scan.
 
 This is an authenticated control API inside the trusted Windows kernel TCB.
 It protects against unprivileged callers, malformed requests, tag forgery,

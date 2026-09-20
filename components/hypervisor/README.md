@@ -26,6 +26,13 @@ activation/authenticated-detach gate as
 four-vCPU diagnostic regression as
 `uefi-windows-probe-20260914-141911-59e0da5be2`.
 
+The EFI path also contains build-pinned, read-only Windows process enumeration
+and authenticated process-bound alternate EPT views. Alternate EPTs preserve
+the identity view's HPA mappings and may only remove write permission from
+explicit allowlisted RAM ranges. They do not make VMX-root reads pass through
+EPT and are not invisible: a guest write to a protected range causes a VM exit
+and a fail-safe return to identity EPT.
+
 Privileged EFI and companion execution is VM-only. The physical VT-d path is
 currently build/model tested and must not be first-run on the primary host.
 
@@ -76,6 +83,7 @@ Ring -1 →  hypervisor_core        (C11 static lib, VM-Exit dispatch, EPT, stea
 - **Reviewed Runtime V30 execution context** — every current-VMCS attestation requires exact non-migratable `DISPATCH_LEVEL`; Gate 69 is accepted
 - **Runtime V31-V46 hardening closure** — VMCS planning, transient execution, VPID, EPT construction, session configuration, and hook ownership use transactional admission and frozen inputs; the cumulative valid path is accepted through Gate 69 from the Runtime V46 package
 - **CR3 interception** — target process detection on context switch
+- **Authenticated dynamic analysis** — bounded masked signature scans, user page-map discovery, safe structure traversal, and typed read-only extraction
 
 ## Project Structure
 

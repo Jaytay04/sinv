@@ -1,0 +1,269 @@
+#ifndef HYPERSINV_EFI_RUNTIME_ANALYSIS_ABI_H
+#define HYPERSINV_EFI_RUNTIME_ANALYSIS_ABI_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#define HV_EFI_ANALYSIS_MAGIC UINT32_C(0x31415648) /* "HVA1" */
+#define HV_EFI_ANALYSIS_VERSION UINT16_C(1)
+#define HV_EFI_ANALYSIS_IDENTIFIER_BYTES UINT32_C(32)
+#define HV_EFI_ANALYSIS_PATTERN_BYTES UINT32_C(64)
+#define HV_EFI_ANALYSIS_MAX_SIGNATURES UINT32_C(16)
+#define HV_EFI_ANALYSIS_MAX_CONFIG_REGIONS UINT32_C(256)
+#define HV_EFI_ANALYSIS_MAX_REGIONS UINT32_C(2048)
+#define HV_EFI_ANALYSIS_MAX_RESULTS UINT32_C(128)
+#define HV_EFI_ANALYSIS_MAX_NODES UINT32_C(256)
+#define HV_EFI_ANALYSIS_MAX_FIELDS UINT32_C(64)
+#define HV_EFI_ANALYSIS_RESPONSE_REGIONS UINT32_C(64)
+#define HV_EFI_ANALYSIS_RESPONSE_RESULTS UINT32_C(64)
+#define HV_EFI_ANALYSIS_RESPONSE_NODES UINT32_C(128)
+#define HV_EFI_ANALYSIS_RESPONSE_FIELDS UINT32_C(32)
+#define HV_EFI_ANALYSIS_DEFAULT_SCAN_BYTES UINT64_C(0x01000000)
+#define HV_EFI_ANALYSIS_MAX_SCAN_BYTES UINT64_C(0x10000000)
+#define HV_EFI_ANALYSIS_MAX_TIMEOUT_TSC UINT64_C(10000000000)
+#define HV_EFI_ANALYSIS_MAX_STRING_BYTES UINT32_C(64)
+
+typedef enum HV_EFI_ANALYSIS_OPERATION {
+    HV_EFI_ANALYSIS_START = 1,
+    HV_EFI_ANALYSIS_CONFIGURE = 2,
+    HV_EFI_ANALYSIS_SCAN = 3,
+    HV_EFI_ANALYSIS_TRAVERSE = 4,
+    HV_EFI_ANALYSIS_EXTRACT = 5,
+    HV_EFI_ANALYSIS_RESULTS = 6,
+    HV_EFI_ANALYSIS_STOP = 7
+} HV_EFI_ANALYSIS_OPERATION;
+
+typedef enum HV_EFI_ANALYSIS_STATUS {
+    HV_EFI_ANALYSIS_SUCCESS = 0,
+    HV_EFI_ANALYSIS_NOT_FOUND = 1,
+    HV_EFI_ANALYSIS_MORE_DATA = 2,
+    HV_EFI_ANALYSIS_INVALID_REQUEST = 3,
+    HV_EFI_ANALYSIS_BUSY = 4,
+    HV_EFI_ANALYSIS_REPLAY_REJECTED = 5,
+    HV_EFI_ANALYSIS_NO_SESSION = 6,
+    HV_EFI_ANALYSIS_WRONG_PROCESS = 7,
+    HV_EFI_ANALYSIS_TRANSLATION_FAILED = 8,
+    HV_EFI_ANALYSIS_MAPPING_FAILED = 9,
+    HV_EFI_ANALYSIS_RANGE_DENIED = 10,
+    HV_EFI_ANALYSIS_LIMIT_REACHED = 11,
+    HV_EFI_ANALYSIS_TIMEOUT = 12,
+    HV_EFI_ANALYSIS_CORRUPT_STRUCTURE = 13,
+    HV_EFI_ANALYSIS_CYCLE_DETECTED = 14,
+    HV_EFI_ANALYSIS_UNSUPPORTED = 15,
+    HV_EFI_ANALYSIS_INVARIANT_VIOLATION = 16,
+    HV_EFI_ANALYSIS_MULTIPLE_MATCHES = 17
+} HV_EFI_ANALYSIS_STATUS;
+
+typedef enum HV_EFI_ANALYSIS_MAILBOX_STATE {
+    HV_EFI_ANALYSIS_MAILBOX_EMPTY = 0,
+    HV_EFI_ANALYSIS_MAILBOX_REQUEST_READY = 1,
+    HV_EFI_ANALYSIS_MAILBOX_PROCESSING = 2,
+    HV_EFI_ANALYSIS_MAILBOX_RESPONSE_READY = 3
+} HV_EFI_ANALYSIS_MAILBOX_STATE;
+
+typedef enum HV_EFI_ANALYSIS_SCAN_MODE {
+    HV_EFI_ANALYSIS_SCAN_FIRST = 1,
+    HV_EFI_ANALYSIS_SCAN_SINGLE = 2,
+    HV_EFI_ANALYSIS_SCAN_ALL = 3
+} HV_EFI_ANALYSIS_SCAN_MODE;
+
+typedef enum HV_EFI_ANALYSIS_REGION_TYPE {
+    HV_EFI_ANALYSIS_REGION_UNKNOWN = 0,
+    HV_EFI_ANALYSIS_REGION_IMAGE = 1,
+    HV_EFI_ANALYSIS_REGION_HEAP = 2,
+    HV_EFI_ANALYSIS_REGION_STACK = 3,
+    HV_EFI_ANALYSIS_REGION_MAPPED = 4,
+    HV_EFI_ANALYSIS_REGION_PRIVATE = 5
+} HV_EFI_ANALYSIS_REGION_TYPE;
+
+#define HV_EFI_ANALYSIS_REGION_FILTER(Type) (UINT32_C(1) << (Type))
+#define HV_EFI_ANALYSIS_REGION_FILTER_ALL UINT32_C(0x3f)
+
+#define HV_EFI_ANALYSIS_PROTECTION_READ UINT32_C(1)
+#define HV_EFI_ANALYSIS_PROTECTION_WRITE UINT32_C(2)
+#define HV_EFI_ANALYSIS_PROTECTION_EXECUTE UINT32_C(4)
+#define HV_EFI_ANALYSIS_PROTECTION_USER UINT32_C(8)
+#define HV_EFI_ANALYSIS_PROTECTION_COMMITTED UINT32_C(16)
+#define HV_EFI_ANALYSIS_PROTECTION_GUARD UINT32_C(32)
+#define HV_EFI_ANALYSIS_PROTECTION_RESERVED UINT32_C(64)
+#define HV_EFI_ANALYSIS_PROTECTION_ALL UINT32_C(127)
+
+#define HV_EFI_ANALYSIS_SIGNATURE_ALIGN_4 UINT32_C(1)
+#define HV_EFI_ANALYSIS_SIGNATURE_ALIGN_8 UINT32_C(2)
+#define HV_EFI_ANALYSIS_SIGNATURE_EXECUTABLE UINT32_C(4)
+#define HV_EFI_ANALYSIS_SIGNATURE_READABLE UINT32_C(8)
+#define HV_EFI_ANALYSIS_SIGNATURE_WRITABLE UINT32_C(16)
+#define HV_EFI_ANALYSIS_SIGNATURE_FLAGS_ALL UINT32_C(31)
+
+typedef enum HV_EFI_ANALYSIS_TRAVERSAL_TYPE {
+    HV_EFI_ANALYSIS_TRAVERSE_SINGLY_LINKED = 1,
+    HV_EFI_ANALYSIS_TRAVERSE_DOUBLY_FORWARD = 2,
+    HV_EFI_ANALYSIS_TRAVERSE_DOUBLY_BACKWARD = 3,
+    HV_EFI_ANALYSIS_TRAVERSE_CONTIGUOUS_ARRAY = 4,
+    HV_EFI_ANALYSIS_TRAVERSE_POINTER_ARRAY = 5,
+    HV_EFI_ANALYSIS_TRAVERSE_ARRAY_2D = 6,
+    HV_EFI_ANALYSIS_TRAVERSE_BINARY_TREE = 7,
+    HV_EFI_ANALYSIS_TRAVERSE_GRAPH_BINARY = 8
+} HV_EFI_ANALYSIS_TRAVERSAL_TYPE;
+
+typedef enum HV_EFI_ANALYSIS_FIELD_TYPE {
+    HV_EFI_ANALYSIS_FIELD_FLOAT32 = 1,
+    HV_EFI_ANALYSIS_FIELD_FLOAT64 = 2,
+    HV_EFI_ANALYSIS_FIELD_INT32 = 3,
+    HV_EFI_ANALYSIS_FIELD_INT64 = 4,
+    HV_EFI_ANALYSIS_FIELD_VECTOR3 = 5,
+    HV_EFI_ANALYSIS_FIELD_VECTOR4 = 6,
+    HV_EFI_ANALYSIS_FIELD_MATRIX4X4 = 7,
+    HV_EFI_ANALYSIS_FIELD_POINTER = 8,
+    HV_EFI_ANALYSIS_FIELD_ASCII_Z = 9,
+    HV_EFI_ANALYSIS_FIELD_UTF8_Z = 10,
+    HV_EFI_ANALYSIS_FIELD_LENGTH_PREFIXED8 = 11,
+    HV_EFI_ANALYSIS_FIELD_LENGTH_PREFIXED16 = 12,
+    HV_EFI_ANALYSIS_FIELD_LENGTH_PREFIXED32 = 13
+} HV_EFI_ANALYSIS_FIELD_TYPE;
+
+#pragma pack(push, 1)
+
+typedef struct HV_EFI_ANALYSIS_MEMORY_SIGNATURE {
+    char Identifier[HV_EFI_ANALYSIS_IDENTIFIER_BYTES];
+    uint8_t Pattern[HV_EFI_ANALYSIS_PATTERN_BYTES];
+    uint8_t Mask[HV_EFI_ANALYSIS_PATTERN_BYTES];
+    uint32_t Length;
+    int32_t DataOffset;
+    uint32_t Flags;
+    uint32_t Reserved;
+} HV_EFI_ANALYSIS_MEMORY_SIGNATURE;
+
+typedef struct HV_EFI_ANALYSIS_SCAN_RESULT {
+    uint64_t GuestVirtualAddress;
+    uint64_t HostPhysicalAddress;
+    uint32_t OwningProcessId;
+    char MatchedSignature[HV_EFI_ANALYSIS_IDENTIFIER_BYTES];
+    uint32_t MatchConfidence;
+    uint32_t Reserved;
+} HV_EFI_ANALYSIS_SCAN_RESULT;
+
+typedef struct HV_EFI_ANALYSIS_MEMORY_REGION {
+    uint64_t BaseVirtualAddress;
+    uint64_t Size;
+    uint32_t ProcessId;
+    uint32_t RegionType;
+    uint32_t Protection;
+    uint32_t Reserved;
+} HV_EFI_ANALYSIS_MEMORY_REGION;
+
+typedef union HV_EFI_ANALYSIS_FIELD_VALUE {
+    float F32;
+    double F64;
+    int32_t I32;
+    int64_t I64;
+    float Vec3[3];
+    float Vec4[4];
+    float Mat4x4[16];
+    uint64_t Pointer;
+    uint8_t Bytes[HV_EFI_ANALYSIS_MAX_STRING_BYTES];
+} HV_EFI_ANALYSIS_FIELD_VALUE;
+
+typedef struct HV_EFI_ANALYSIS_EXTRACTED_FIELD {
+    char FieldName[HV_EFI_ANALYSIS_IDENTIFIER_BYTES];
+    uint32_t Type;
+    uint32_t ValueBytes;
+    HV_EFI_ANALYSIS_FIELD_VALUE Value;
+} HV_EFI_ANALYSIS_EXTRACTED_FIELD;
+
+typedef struct HV_EFI_ANALYSIS_REQUEST {
+    uint32_t Size;
+    uint16_t Version;
+    uint16_t Operation;
+    uint64_t Sequence;
+    uint64_t ProcessId;
+    uint32_t ScanMode;
+    uint32_t RegionFilter;
+    uint32_t StructureType;
+    uint32_t FieldType;
+    uint32_t SignatureCount;
+    uint32_t RegionCount;
+    uint32_t ResultLimit;
+    uint32_t NodeLimit;
+    uint32_t ResultOffset;
+    uint32_t RegionOffset;
+    uint64_t Address;
+    uint64_t AuxiliaryAddress;
+    uint64_t MaxBytes;
+    uint64_t TimeoutTsc;
+    uint32_t ElementCount;
+    uint32_t SecondaryCount;
+    uint32_t Stride;
+    uint32_t NextOffset;
+    uint32_t PreviousOffset;
+    uint32_t Child0Offset;
+    uint32_t Child1Offset;
+    uint32_t Flags;
+    char FieldName[HV_EFI_ANALYSIS_IDENTIFIER_BYTES];
+    HV_EFI_ANALYSIS_MEMORY_SIGNATURE Signatures[
+        HV_EFI_ANALYSIS_MAX_SIGNATURES];
+    HV_EFI_ANALYSIS_MEMORY_REGION Regions[
+        HV_EFI_ANALYSIS_MAX_CONFIG_REGIONS];
+} HV_EFI_ANALYSIS_REQUEST;
+
+typedef struct HV_EFI_ANALYSIS_RESPONSE {
+    uint32_t Size;
+    uint16_t Version;
+    uint16_t Reserved16;
+    uint32_t Status;
+    uint32_t SessionActive;
+    uint64_t Generation;
+    uint64_t Sequence;
+    uint64_t ProcessId;
+    uint64_t ScannedBytes;
+    uint32_t TotalRegionCount;
+    uint32_t TotalResultCount;
+    uint32_t TotalNodeCount;
+    uint32_t TotalFieldCount;
+    uint32_t ReturnedRegionCount;
+    uint32_t ReturnedResultCount;
+    uint32_t ReturnedNodeCount;
+    uint32_t ReturnedFieldCount;
+    uint32_t RegionsTruncated;
+    uint32_t Reserved32;
+    HV_EFI_ANALYSIS_MEMORY_REGION Regions[
+        HV_EFI_ANALYSIS_RESPONSE_REGIONS];
+    HV_EFI_ANALYSIS_SCAN_RESULT Results[
+        HV_EFI_ANALYSIS_RESPONSE_RESULTS];
+    uint64_t Nodes[HV_EFI_ANALYSIS_RESPONSE_NODES];
+    HV_EFI_ANALYSIS_EXTRACTED_FIELD Fields[
+        HV_EFI_ANALYSIS_RESPONSE_FIELDS];
+} HV_EFI_ANALYSIS_RESPONSE;
+
+typedef struct HV_EFI_ANALYSIS_MAILBOX {
+    uint32_t Magic;
+    uint16_t Version;
+    uint16_t HeaderSize;
+    volatile uint32_t State;
+    uint32_t Reserved;
+    uint64_t Generation;
+    HV_EFI_ANALYSIS_REQUEST Request;
+    HV_EFI_ANALYSIS_RESPONSE Response;
+} HV_EFI_ANALYSIS_MAILBOX;
+
+#pragma pack(pop)
+
+#ifdef __cplusplus
+}
+static_assert(sizeof(HV_EFI_ANALYSIS_MEMORY_SIGNATURE) == 176,
+              "analysis signature ABI drift");
+static_assert(sizeof(HV_EFI_ANALYSIS_SCAN_RESULT) == 60,
+              "analysis result ABI drift");
+static_assert(sizeof(HV_EFI_ANALYSIS_MEMORY_REGION) == 32,
+              "analysis region ABI drift");
+static_assert(sizeof(HV_EFI_ANALYSIS_EXTRACTED_FIELD) == 104,
+              "analysis field ABI drift");
+static_assert(sizeof(HV_EFI_ANALYSIS_MAILBOX) <= 49152 - 84,
+              "analysis mailbox exceeds authenticated payload");
+#endif
+
+#endif /* HYPERSINV_EFI_RUNTIME_ANALYSIS_ABI_H */

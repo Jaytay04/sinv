@@ -963,6 +963,8 @@ ResidentCrAccess:
     and r10d, 0Fh
     cmp r10d, 0
     je ResidentCrNumberReady
+    cmp r10d, 3
+    je ResidentCrNumberReady
     cmp r10d, 4
     jne ResidentFatal
 ResidentCrNumberReady:
@@ -971,6 +973,9 @@ ResidentCrNumberReady:
     mov dx, DEBUGCON_PORT
     mov al, '0'
     cmp r10d, 0
+    je ResidentCrNumberMarkerReady
+    mov al, '3'
+    cmp r10d, 3
     je ResidentCrNumberMarkerReady
     mov al, '4'
 ResidentCrNumberMarkerReady:
@@ -1059,6 +1064,8 @@ ResidentCrValueR13:
 ResidentCrValueR14:
     mov r8, qword ptr [r11 + CONTEXT_GUEST_R14]
 ResidentCrValueReady:
+    cmp r10d, 3
+    je ResidentCr3Write
     cmp r10d, 4
     je ResidentCr4Write
     mov rax, r8
@@ -1092,6 +1099,28 @@ ResidentCr4Write:
     RESIDENT_VMWRITE_REG VMCS_GUEST_CR4, rax
     mov rax, r8
     RESIDENT_VMWRITE_REG VMCS_CTRL_CR4_READ_SHADOW, rax
+    jmp ResidentCrWriteComplete
+ResidentCr3Write:
+    mov rax, r8
+    RESIDENT_VMWRITE_REG VMCS_GUEST_CR3, rax
+    mov rdx, SHADOW_CR3_ADDRESS_MASK
+    and rax, rdx
+    cmp dword ptr [r11 + CONTEXT_SHADOW_STATE], SHADOW_EPT_STATE_BOUND
+    jne ResidentCr3UseIdentity
+    cmp rax, qword ptr [r11 + CONTEXT_SHADOW_TARGET_CR3]
+    jne ResidentCr3UseIdentity
+    mov rax, qword ptr [r11 + CONTEXT_SHADOW_EPT_POINTER]
+    test rax, rax
+    jz ResidentCr3UseIdentity
+    RESIDENT_VMWRITE_REG VMCS_CTRL_EPT_POINTER, rax
+    mov dword ptr [r11 + CONTEXT_SHADOW_ACTIVE], 1
+    call ResidentInvalidateShadowTranslations
+    jmp ResidentCrWriteComplete
+ResidentCr3UseIdentity:
+    mov rax, qword ptr [r11 + CONTEXT_EPT_POINTER]
+    RESIDENT_VMWRITE_REG VMCS_CTRL_EPT_POINTER, rax
+    mov dword ptr [r11 + CONTEXT_SHADOW_ACTIVE], 0
+    call ResidentInvalidateShadowTranslations
 ResidentCrWriteComplete:
     mov ecx, VMCS_VM_EXIT_INSTRUCTION_LEN
     vmread rax, rcx
@@ -1104,6 +1133,25 @@ ResidentEptViolation:
     mov ecx, VMCS_GUEST_PHYSICAL_ADDRESS
     vmread r8, rcx
     jbe ResidentFatal
+    cmp dword ptr [r11 + CONTEXT_SHADOW_ACTIVE], 1
+    jne ResidentEptViolationFatal
+    ; Both views map the same HPA. Retry under identity permissions without
+    ; injecting a guest exception; guest data and page-table writes require no
+    ; content copy because the backing frame is shared by construction.
+    inc qword ptr [r11 + CONTEXT_SHADOW_VIOLATION_COUNT]
+    mov ecx, VMCS_VM_EXIT_QUALIFICATION
+    vmread rax, rcx
+    jbe ResidentFatal
+    test eax, 2
+    jz ResidentEptViolationNoWrite
+    inc qword ptr [r11 + CONTEXT_SHADOW_WRITE_REDIRECT_COUNT]
+ResidentEptViolationNoWrite:
+    mov rax, qword ptr [r11 + CONTEXT_EPT_POINTER]
+    RESIDENT_VMWRITE_REG VMCS_CTRL_EPT_POINTER, rax
+    mov dword ptr [r11 + CONTEXT_SHADOW_ACTIVE], 0
+    call ResidentInvalidateShadowTranslations
+    jmp ResidentResume
+ResidentEptViolationFatal:
     mov dx, DEBUGCON_PORT
     mov al, 0Ah
     out dx, al
@@ -1279,6 +1327,14 @@ ResidentVmcall:
     je ResidentQueryRuntimeSession
     cmp ecx, HV_EFI_CALL_PREPARE_NATIVE_DETACH
     je ResidentPrepareNativeDetach
+    cmp ecx, HV_EFI_CALL_RUNTIME_SCAN
+    je ResidentRuntimeScan
+    cmp ecx, HV_EFI_CALL_PROCESS_LOCATE
+    je ResidentProcessLocate
+    cmp ecx, HV_EFI_CALL_SHADOW_CONTROL
+    je ResidentShadowControl
+    cmp ecx, HV_EFI_CALL_ANALYSIS_CONTROL
+    je ResidentAnalysisControl
     jmp ResidentFatal
 
 ResidentValidateRuntimeCaller:
@@ -1545,6 +1601,297 @@ ResidentPrepareDetachRecordReady:
 ResidentPrepareDetachIsolationReady:
     mov r9d, dword ptr [r11 + CONTEXT_LAST_EXIT_LENGTH]
     jmp ResidentAdvanceRip
+
+ResidentRuntimeScan:
+    ; The LocalSystem-only companion authenticates the HVR1 envelope before
+    ; entering this route. Root independently proves same-CPU ownership with
+    ; the per-boot token and generation. VMCALL already exits unconditionally,
+    ; so this command needs no MSR/I/O bitmap or other VMCS control change.
+    call ResidentValidateRuntimeCaller
+    mov rax, qword ptr [r11 + CONTEXT_GUEST_RDX]
+    cmp rax, qword ptr [r11 + CONTEXT_RUNTIME_TOKEN0]
+    jne ResidentFatal
+    mov rax, qword ptr [r11 + CONTEXT_GUEST_RBX]
+    cmp rax, qword ptr [r11 + CONTEXT_RUNTIME_TOKEN1]
+    jne ResidentFatal
+    mov rax, qword ptr [r11 + CONTEXT_GUEST_R8]
+    cmp rax, qword ptr [r11 + CONTEXT_RUNTIME_TOKEN2]
+    jne ResidentFatal
+    mov rax, qword ptr [r11 + CONTEXT_GUEST_R9]
+    cmp rax, qword ptr [r11 + CONTEXT_RUNTIME_TOKEN3]
+    jne ResidentFatal
+    mov rax, qword ptr [r11 + CONTEXT_GUEST_R12]
+    cmp rax, qword ptr [r11 + CONTEXT_RUNTIME_GENERATION]
+    jne ResidentFatal
+    mov r9, qword ptr [r11 + CONTEXT_GUEST_R13]
+    test r9, r9
+    jz ResidentFatal
+    mov rdx, qword ptr [r11 + CONTEXT_GUEST_R10]
+    test rdx, rdx
+    jz ResidentFatal
+    test edx, 0FFFh
+    jnz ResidentFatal
+    mov rax, qword ptr [r11 + CONTEXT_RUNTIME_SCANNER_ENTRY]
+    test rax, rax
+    jz ResidentFatal
+    mov rcx, qword ptr [r11 + CONTEXT_RUNTIME_SCANNER_CODE_BASE]
+    cmp rax, rcx
+    jb ResidentFatal
+    add rcx, qword ptr [r11 + CONTEXT_RUNTIME_SCANNER_CODE_SIZE]
+    jc ResidentFatal
+    cmp rax, rcx
+    jae ResidentFatal
+
+    mov r15, r11
+    mov rcx, r11                    ; HV_EFI_CONTEXT*
+    mov r8, HVR1_MAILBOX_BYTES      ; bounded contiguous mailbox bytes
+    sub rsp, 20h                    ; Microsoft x64 shadow space
+    call rax
+    add rsp, 20h
+    mov r11, r15
+    mov qword ptr [r11 + CONTEXT_GUEST_RAX], rax
+    mov qword ptr [r11 + CONTEXT_GUEST_RDX], rax
+    mov ecx, VMCS_VM_EXIT_INSTRUCTION_LEN
+    vmread rax, rcx
+    jbe ResidentFatal
+    mov dword ptr [r11 + CONTEXT_LAST_EXIT_LENGTH], eax
+    mov r9d, eax
+    jmp ResidentAdvanceRip
+
+ResidentProcessLocate:
+    ; Process introspection is a distinct authenticated operation, but reuses
+    ; the resident read-only scanner image and host mapping window. Capture
+    ; the live guest paging state from the VMCS before entering C++.
+    call ResidentValidateRuntimeCaller
+    mov rax, qword ptr [r11 + CONTEXT_GUEST_RDX]
+    cmp rax, qword ptr [r11 + CONTEXT_RUNTIME_TOKEN0]
+    jne ResidentFatal
+    mov rax, qword ptr [r11 + CONTEXT_GUEST_RBX]
+    cmp rax, qword ptr [r11 + CONTEXT_RUNTIME_TOKEN1]
+    jne ResidentFatal
+    mov rax, qword ptr [r11 + CONTEXT_GUEST_R8]
+    cmp rax, qword ptr [r11 + CONTEXT_RUNTIME_TOKEN2]
+    jne ResidentFatal
+    mov rax, qword ptr [r11 + CONTEXT_GUEST_R9]
+    cmp rax, qword ptr [r11 + CONTEXT_RUNTIME_TOKEN3]
+    jne ResidentFatal
+    mov rax, qword ptr [r11 + CONTEXT_GUEST_R12]
+    cmp rax, qword ptr [r11 + CONTEXT_RUNTIME_GENERATION]
+    jne ResidentFatal
+    mov r9, qword ptr [r11 + CONTEXT_GUEST_R13]
+    test r9, r9
+    jz ResidentFatal
+    mov rdx, qword ptr [r11 + CONTEXT_GUEST_R10]
+    test rdx, rdx
+    jz ResidentFatal
+    test edx, 0FFFh
+    jnz ResidentFatal
+    mov ecx, VMCS_GUEST_CR3
+    vmread rax, rcx
+    jbe ResidentFatal
+    mov qword ptr [r11 + CONTEXT_GUEST_CR3], rax
+    mov ecx, VMCS_GUEST_CR4
+    vmread rax, rcx
+    jbe ResidentFatal
+    mov qword ptr [r11 + CONTEXT_GUEST_CR4], rax
+    mov rax, qword ptr [r11 + CONTEXT_RUNTIME_PROCESS_ENTRY]
+    test rax, rax
+    jz ResidentFatal
+    mov rcx, qword ptr [r11 + CONTEXT_RUNTIME_SCANNER_CODE_BASE]
+    cmp rax, rcx
+    jb ResidentFatal
+    add rcx, qword ptr [r11 + CONTEXT_RUNTIME_SCANNER_CODE_SIZE]
+    jc ResidentFatal
+    cmp rax, rcx
+    jae ResidentFatal
+
+    mov r15, r11
+    mov rcx, r11
+    mov r8, HVR1_MAILBOX_BYTES
+    sub rsp, 20h
+    call rax
+    add rsp, 20h
+    mov r11, r15
+    mov qword ptr [r11 + CONTEXT_GUEST_RAX], rax
+    mov qword ptr [r11 + CONTEXT_GUEST_RDX], rax
+    mov ecx, VMCS_VM_EXIT_INSTRUCTION_LEN
+    vmread rax, rcx
+    jbe ResidentFatal
+    mov dword ptr [r11 + CONTEXT_LAST_EXIT_LENGTH], eax
+    mov r9d, eax
+    jmp ResidentAdvanceRip
+
+ResidentAnalysisControl:
+    ; Authenticated, process-bound read-only analysis. The C++ resident entry
+    ; translates through the cached target CR3 and the private scanner window.
+    call ResidentValidateRuntimeCaller
+    mov rax, qword ptr [r11 + CONTEXT_GUEST_RDX]
+    cmp rax, qword ptr [r11 + CONTEXT_RUNTIME_TOKEN0]
+    jne ResidentFatal
+    mov rax, qword ptr [r11 + CONTEXT_GUEST_RBX]
+    cmp rax, qword ptr [r11 + CONTEXT_RUNTIME_TOKEN1]
+    jne ResidentFatal
+    mov rax, qword ptr [r11 + CONTEXT_GUEST_R8]
+    cmp rax, qword ptr [r11 + CONTEXT_RUNTIME_TOKEN2]
+    jne ResidentFatal
+    mov rax, qword ptr [r11 + CONTEXT_GUEST_R9]
+    cmp rax, qword ptr [r11 + CONTEXT_RUNTIME_TOKEN3]
+    jne ResidentFatal
+    mov rax, qword ptr [r11 + CONTEXT_GUEST_R12]
+    cmp rax, qword ptr [r11 + CONTEXT_RUNTIME_GENERATION]
+    jne ResidentFatal
+    mov r9, qword ptr [r11 + CONTEXT_GUEST_R13]
+    test r9, r9
+    jz ResidentFatal
+    mov rdx, qword ptr [r11 + CONTEXT_GUEST_R10]
+    test rdx, rdx
+    jz ResidentFatal
+    test edx, 0FFFh
+    jnz ResidentFatal
+    mov ecx, VMCS_GUEST_CR4
+    vmread rax, rcx
+    jbe ResidentFatal
+    mov qword ptr [r11 + CONTEXT_GUEST_CR4], rax
+    mov rax, qword ptr [r11 + CONTEXT_RUNTIME_ANALYSIS_ENTRY]
+    test rax, rax
+    jz ResidentFatal
+    mov rcx, qword ptr [r11 + CONTEXT_RUNTIME_SCANNER_CODE_BASE]
+    cmp rax, rcx
+    jb ResidentFatal
+    add rcx, qword ptr [r11 + CONTEXT_RUNTIME_SCANNER_CODE_SIZE]
+    jc ResidentFatal
+    cmp rax, rcx
+    jae ResidentFatal
+
+    mov r15, r11
+    mov rcx, r11
+    mov r8, HVR1_MAILBOX_BYTES
+    sub rsp, 20h
+    call rax
+    add rsp, 20h
+    mov r11, r15
+    mov qword ptr [r11 + CONTEXT_GUEST_RAX], rax
+    mov qword ptr [r11 + CONTEXT_GUEST_RDX], rax
+    mov ecx, VMCS_VM_EXIT_INSTRUCTION_LEN
+    vmread rax, rcx
+    jbe ResidentFatal
+    mov dword ptr [r11 + CONTEXT_LAST_EXIT_LENGTH], eax
+    mov r9d, eax
+    jmp ResidentAdvanceRip
+
+ResidentShadowControl:
+    ; The kernel companion authenticates the mailbox envelope; root also
+    ; proves same-CPU ownership using the boot token and generation.
+    call ResidentValidateRuntimeCaller
+    mov rax, qword ptr [r11 + CONTEXT_GUEST_RDX]
+    cmp rax, qword ptr [r11 + CONTEXT_RUNTIME_TOKEN0]
+    jne ResidentFatal
+    mov rax, qword ptr [r11 + CONTEXT_GUEST_RBX]
+    cmp rax, qword ptr [r11 + CONTEXT_RUNTIME_TOKEN1]
+    jne ResidentFatal
+    mov rax, qword ptr [r11 + CONTEXT_GUEST_R8]
+    cmp rax, qword ptr [r11 + CONTEXT_RUNTIME_TOKEN2]
+    jne ResidentFatal
+    mov rax, qword ptr [r11 + CONTEXT_GUEST_R9]
+    cmp rax, qword ptr [r11 + CONTEXT_RUNTIME_TOKEN3]
+    jne ResidentFatal
+    mov rax, qword ptr [r11 + CONTEXT_GUEST_R12]
+    cmp rax, qword ptr [r11 + CONTEXT_RUNTIME_GENERATION]
+    jne ResidentFatal
+    mov r9, qword ptr [r11 + CONTEXT_GUEST_R13]
+    test r9, r9
+    jz ResidentFatal
+    mov rdx, qword ptr [r11 + CONTEXT_GUEST_R10]
+    test rdx, rdx
+    jz ResidentFatal
+    test edx, 0FFFh
+    jnz ResidentFatal
+    mov rax, qword ptr [r11 + CONTEXT_RUNTIME_SHADOW_ENTRY]
+    test rax, rax
+    jz ResidentFatal
+    mov rcx, qword ptr [r11 + CONTEXT_RUNTIME_SCANNER_CODE_BASE]
+    cmp rax, rcx
+    jb ResidentFatal
+    add rcx, qword ptr [r11 + CONTEXT_RUNTIME_SCANNER_CODE_SIZE]
+    jc ResidentFatal
+    cmp rax, rcx
+    jae ResidentFatal
+
+    mov r15, r11
+    mov rcx, r11
+    mov r8, HVR1_MAILBOX_BYTES
+    sub rsp, 20h
+    call rax
+    add rsp, 20h
+    mov r11, r15
+    mov r14, rax
+
+    ; Enable CR3-load exits only while bound. This keeps the normal identity
+    ; path free of context-switch exits when the facility is unused.
+    mov eax, dword ptr [r11 + CONTEXT_CPU_CONTROLS]
+    cmp dword ptr [r11 + CONTEXT_SHADOW_STATE], SHADOW_EPT_STATE_BOUND
+    jne ResidentShadowDisable
+    or eax, VM_CPU_CR3_LOAD_EXITING
+    mov dword ptr [r11 + CONTEXT_CPU_CONTROLS], eax
+    RESIDENT_VMWRITE_REG VMCS_CTRL_CPU_BASED, rax
+    mov ecx, VMCS_GUEST_CR3
+    vmread rax, rcx
+    jbe ResidentFatal
+    mov rdx, SHADOW_CR3_ADDRESS_MASK
+    and rax, rdx
+    cmp rax, qword ptr [r11 + CONTEXT_SHADOW_TARGET_CR3]
+    jne ResidentShadowUseIdentity
+    mov rax, qword ptr [r11 + CONTEXT_SHADOW_EPT_POINTER]
+    test rax, rax
+    jz ResidentShadowDisable
+    RESIDENT_VMWRITE_REG VMCS_CTRL_EPT_POINTER, rax
+    mov dword ptr [r11 + CONTEXT_SHADOW_ACTIVE], 1
+    jmp ResidentShadowInvalidate
+ResidentShadowDisable:
+    and eax, NOT VM_CPU_CR3_LOAD_EXITING
+    mov dword ptr [r11 + CONTEXT_CPU_CONTROLS], eax
+    RESIDENT_VMWRITE_REG VMCS_CTRL_CPU_BASED, rax
+ResidentShadowUseIdentity:
+    mov rax, qword ptr [r11 + CONTEXT_EPT_POINTER]
+    RESIDENT_VMWRITE_REG VMCS_CTRL_EPT_POINTER, rax
+    mov dword ptr [r11 + CONTEXT_SHADOW_ACTIVE], 0
+ResidentShadowInvalidate:
+    call ResidentInvalidateShadowTranslations
+    mov qword ptr [r11 + CONTEXT_GUEST_RAX], r14
+    mov qword ptr [r11 + CONTEXT_GUEST_RDX], r14
+    mov ecx, VMCS_VM_EXIT_INSTRUCTION_LEN
+    vmread rax, rcx
+    jbe ResidentFatal
+    mov dword ptr [r11 + CONTEXT_LAST_EXIT_LENGTH], eax
+    mov r9d, eax
+    jmp ResidentAdvanceRip
+
+ResidentInvalidateShadowTranslations:
+    mov rax, qword ptr [r11 + CONTEXT_EPT_VPID_CAPABILITIES]
+    mov rdx, EPT_CAP_INVEPT OR EPT_CAP_INVEPT_SINGLE_CONTEXT OR \
+        VPID_CAP_INVVPID OR VPID_CAP_INVVPID_SINGLE_CONTEXT
+    and rax, rdx
+    cmp rax, rdx
+    jne ResidentFatal
+    sub rsp, 20h
+    mov rax, qword ptr [r11 + CONTEXT_SHADOW_EPT_POINTER]
+    mov qword ptr [rsp], rax
+    mov qword ptr [rsp + 8], 0
+    mov eax, 1
+    invept rax, oword ptr [rsp]
+    jbe ResidentInvalidateFailure
+    mov qword ptr [rsp], 0
+    mov qword ptr [rsp + 8], 0
+    mov ax, word ptr [r11 + CONTEXT_VPID]
+    mov word ptr [rsp], ax
+    mov eax, 1
+    invvpid rax, oword ptr [rsp]
+    jbe ResidentInvalidateFailure
+    add rsp, 20h
+    ret
+ResidentInvalidateFailure:
+    add rsp, 20h
+    jmp ResidentFatal
 
 ; Map one physical MMIO/ECAM page into the private host scanner window.
 ; Input RAX=physical address. Output RDX=window address including page offset.

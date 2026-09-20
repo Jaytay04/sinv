@@ -23,6 +23,12 @@ extern "C" {
 #define HV_EFI_MAX_PHYSICAL_ADDRESS UINT64_C(0x3fffffff)
 #define HV_EFI_CONTEXT_PAGES UINT32_C(1)
 #define HV_EFI_RESIDENT_CODE_PAGES UINT32_C(2)
+#define HV_EFI_RUNTIME_SCANNER_CODE_PAGES UINT32_C(16)
+#define HV_EFI_RUNTIME_SCANNER_STATE_PAGES UINT32_C(7)
+#define HV_EFI_RUNTIME_SCANNER_RANGE_PAGES UINT32_C(4)
+#define HV_EFI_RUNTIME_SCANNER_MAX_RAM_RANGES \
+    ((HV_EFI_RUNTIME_SCANNER_RANGE_PAGES * HV_EFI_PAGE_SIZE) / \
+     UINT32_C(16))
 #define HV_EFI_GUEST_TRANSITION_CODE_PAGES UINT32_C(1)
 #define HV_EFI_PROCESSOR_STATUS_AS_BSP UINT32_C(0x00000001)
 #define HV_EFI_PROCESSOR_STATUS_ENABLED UINT32_C(0x00000002)
@@ -31,7 +37,7 @@ extern "C" {
 #define HV_EFI_AP_OPERATION_TIMEOUT_US UINT64_C(60000000)
 #define HV_EFI_VMXON_PAGES UINT32_C(1)
 #define HV_EFI_VMCS_PAGES UINT32_C(1)
-#define HV_EFI_HOST_STACK_PAGES UINT32_C(1)
+#define HV_EFI_HOST_STACK_PAGES UINT32_C(4)
 #define HV_EFI_GUEST_STACK_PAGES UINT32_C(1)
 #define HV_EFI_PAGE_TABLE_PAGES UINT32_C(8)
 #define HV_EFI_MSR_BITMAP_PAGE UINT32_C(3)
@@ -60,8 +66,10 @@ extern "C" {
      HV_EFI_EPT_GLOBAL_SPLIT_RESERVE)
 #define HV_EFI_EPT_TABLE_PAGES \
     (HV_EFI_EPT_BASE_TABLE_PAGES + HV_EFI_EPT_MAX_SPLIT_PAGES)
+/* Six global runtime ranges, five fixed VT-d/ACPI ranges, and up to eight
+ * VT-d unit MMIO ranges, plus nine private ranges per processor. */
 #define HV_EFI_EPT_MAX_DENY_RANGES \
-    (UINT32_C(10) + UINT32_C(7) * HV_EFI_MAX_SUPPORTED_PROCESSORS)
+    (UINT32_C(19) + UINT32_C(9) * HV_EFI_MAX_SUPPORTED_PROCESSORS)
 #define HV_EFI_GUEST_DESCRIPTOR_STORAGE_PAGES UINT32_C(3)
 #define HV_EFI_HOST_DESCRIPTOR_STORAGE_PAGES UINT32_C(3)
 #define HV_EFI_DESCRIPTOR_STORAGE_PAGES \
@@ -103,6 +111,10 @@ extern "C" {
 #define HV_EFI_CALL_QUERY_RUNTIME_SESSION UINT32_C(3)
 #define HV_EFI_CALL_PREPARE_NATIVE_DETACH UINT32_C(4)
 #define HV_EFI_CALL_COMMIT_NATIVE_DETACH UINT32_C(5)
+#define HV_EFI_CALL_RUNTIME_SCAN UINT32_C(6)
+#define HV_EFI_CALL_PROCESS_LOCATE UINT32_C(7)
+#define HV_EFI_CALL_SHADOW_CONTROL UINT32_C(8)
+#define HV_EFI_CALL_ANALYSIS_CONTROL UINT32_C(9)
 
 #define HV_EFI_RUNTIME_ABI_VERSION UINT32_C(1)
 #define HV_EFI_RUNTIME_STATE_UNAVAILABLE UINT32_C(0)
@@ -113,9 +125,21 @@ extern "C" {
 #define HV_EFI_RUNTIME_CAP_SHUTDOWN (UINT32_C(1) << 1)
 #define HV_EFI_RUNTIME_CAP_SUSPEND_PREPARE (UINT32_C(1) << 2)
 #define HV_EFI_RUNTIME_CAP_CRASH_MARKER (UINT32_C(1) << 3)
+#define HV_EFI_RUNTIME_CAP_SCAN (UINT32_C(1) << 4)
+#define HV_EFI_RUNTIME_CAP_PROCESS (UINT32_C(1) << 5)
+#define HV_EFI_RUNTIME_CAP_SHADOW_EPT (UINT32_C(1) << 6)
+#define HV_EFI_RUNTIME_CAP_ANALYSIS (UINT32_C(1) << 7)
+#if HYPERSINV_KERNEL_PROFILE_AVAILABLE
+#define HV_EFI_RUNTIME_PROFILE_CAPABILITY \
+    (HV_EFI_RUNTIME_CAP_PROCESS | HV_EFI_RUNTIME_CAP_SHADOW_EPT | \
+     HV_EFI_RUNTIME_CAP_ANALYSIS)
+#else
+#define HV_EFI_RUNTIME_PROFILE_CAPABILITY UINT32_C(0)
+#endif
 #define HV_EFI_RUNTIME_CAPABILITIES \
     (HV_EFI_RUNTIME_CAP_STATUS | HV_EFI_RUNTIME_CAP_SHUTDOWN | \
-     HV_EFI_RUNTIME_CAP_SUSPEND_PREPARE | HV_EFI_RUNTIME_CAP_CRASH_MARKER)
+     HV_EFI_RUNTIME_CAP_SUSPEND_PREPARE | HV_EFI_RUNTIME_CAP_CRASH_MARKER | \
+     HV_EFI_RUNTIME_CAP_SCAN | HV_EFI_RUNTIME_PROFILE_CAPABILITY)
 
 #define HV_EFI_PROBE_PASS_MARKER "UEFI_HYPERVISOR_PROBE:PASS\n"
 #define HV_EFI_PROBE_FAIL_MARKER "UEFI_HYPERVISOR_PROBE:FAIL\n"
@@ -227,6 +251,7 @@ extern "C" {
 #define HV_EFI_VMCS_CTRL_EPT_POINTER UINT32_C(0x201a)
 #define HV_EFI_VMCS_CTRL_VPID UINT32_C(0x0000)
 #define HV_EFI_VM_CPU_UNCOND_IO_EXITING (UINT32_C(1) << 24)
+#define HV_EFI_VM_CPU_CR3_LOAD_EXITING (UINT32_C(1) << 15)
 #define HV_EFI_VM_CPU_USE_IO_BITMAPS (UINT32_C(1) << 25)
 #define HV_EFI_VM_CPU_USE_MSR_BITMAPS (UINT32_C(1) << 28)
 #define HV_EFI_VM_CPU_ACTIVATE_SECONDARY (UINT32_C(1) << 31)
@@ -241,6 +266,10 @@ extern "C" {
 #define HV_EFI_EPT_CAP_EPTP_MEMORY_TYPE_WB (UINT64_C(1) << 14)
 #define HV_EFI_EPT_CAP_2MB_PAGE (UINT64_C(1) << 16)
 #define HV_EFI_EPT_CAP_1GB_PAGE (UINT64_C(1) << 17)
+#define HV_EFI_EPT_CAP_INVEPT (UINT64_C(1) << 20)
+#define HV_EFI_EPT_CAP_INVEPT_SINGLE_CONTEXT (UINT64_C(1) << 25)
+#define HV_EFI_VPID_CAP_INVVPID (UINT64_C(1) << 32)
+#define HV_EFI_VPID_CAP_INVVPID_SINGLE_CONTEXT (UINT64_C(1) << 41)
 #define HV_EFI_EPT_MEMORY_TYPE_UC UINT32_C(0)
 #define HV_EFI_EPT_MEMORY_TYPE_WB UINT32_C(6)
 #define HV_EFI_EPTP_WALK_LENGTH_4 (UINT64_C(3) << 3)
@@ -374,6 +403,7 @@ extern "C" {
 #define HV_EFI_GUEST_UNUSABLE_ACCESS UINT32_C(0x10000)
 #define HV_EFI_GUEST_RESET_CR0 UINT64_C(0x60000010)
 #define HV_EFI_CR0_PE (UINT64_C(1) << 0)
+#define HV_EFI_CR0_WP (UINT64_C(1) << 16)
 #define HV_EFI_CR0_PG (UINT64_C(1) << 31)
 #define HV_EFI_GUEST_VMX_CR0_NE (UINT64_C(1) << 5)
 #define HV_EFI_GUEST_RESET_CR0_VMX \
@@ -382,6 +412,7 @@ extern "C" {
 #define HV_EFI_GUEST_RESET_PAT UINT64_C(0x0007040600070406)
 #define HV_EFI_EFER_LME (UINT64_C(1) << 8)
 #define HV_EFI_EFER_LMA (UINT64_C(1) << 10)
+#define HV_EFI_EFER_NXE (UINT64_C(1) << 11)
 
 #define HV_EFI_AP_STARTUP_RESULT_INVALID UINT32_C(0)
 #define HV_EFI_AP_STARTUP_RESULT_WAITING UINT32_C(1)
@@ -390,7 +421,7 @@ extern "C" {
 #define HV_EFI_SIPI_VECTOR_MASK UINT64_C(0xff)
 
 #define HV_EFI_CONTEXT_MAGIC UINT64_C(0x55454649564d5831)
-#define HV_EFI_CONTEXT_VERSION UINT32_C(3)
+#define HV_EFI_CONTEXT_VERSION UINT32_C(6)
 
 #define HV_EFI_AP_PREFLIGHT_UNAVAILABLE UINT32_C(0)
 #define HV_EFI_AP_PREFLIGHT_BSP_ONLY UINT32_C(1)
@@ -517,6 +548,8 @@ typedef struct HV_EFI_PROCESSOR_RECORD {
     uint64_t PageTablePhysical;
     uint64_t DescriptorStoragePhysical;
     uint64_t EptPhysical;
+    uint64_t ShadowEptPhysical;
+    uint64_t ShadowEptStatePhysical;
 } HV_EFI_PROCESSOR_RECORD;
 
 typedef struct HV_EFI_MEMORY_DESCRIPTOR_VIEW {
@@ -704,6 +737,29 @@ typedef struct HV_EFI_CONTEXT {
     uint64_t AcpiShadowPhysical;           /* 992 */
     uint64_t AcpiGuestRsdpPage;            /* 1000 */
     uint64_t AcpiGuestXsdtPage;            /* 1008 */
+    uint64_t RuntimeScannerCodeBase;        /* 1016 */
+    uint64_t RuntimeScannerCodeSize;        /* 1024 */
+    uint64_t RuntimeScannerEntry;           /* 1032 */
+    uint64_t RuntimeScannerStatePhysical;   /* 1040 */
+    uint64_t RuntimeScannerRamRangesPhysical; /* 1048 */
+    uint32_t RuntimeScannerCodePages;       /* 1056 */
+    uint32_t RuntimeScannerRamRangePages;   /* 1060 */
+    uint32_t RuntimeScannerRamRangeCount;   /* 1064 */
+    uint32_t ReservedRuntimeScanner;        /* 1068 */
+    uint64_t RuntimeProcessEntry;           /* 1072 */
+    uint64_t RuntimeShadowEntry;            /* 1080 */
+    uint64_t ShadowEptPhysical;              /* 1088 */
+    uint64_t ShadowEptPointer;               /* 1096 */
+    uint64_t ShadowEptStatePhysical;          /* 1104 */
+    uint64_t ShadowTargetCr3;                /* 1112 */
+    uint32_t ShadowState;                    /* 1120 */
+    uint32_t ShadowActive;                   /* 1124 */
+    uint64_t ShadowViolationCount;           /* 1128 */
+    uint64_t ShadowWriteRedirectCount;       /* 1136 */
+    uint64_t RuntimeAnalysisEntry;            /* 1144 */
+    uint64_t RuntimeAnalysisStatePhysical;    /* 1152 */
+    uint32_t RuntimeAnalysisStatePages;       /* 1160 */
+    uint32_t ReservedRuntimeAnalysis;         /* 1164 */
 } HV_EFI_CONTEXT;
 
 /* Source-compatible descriptive aliases for the guest descriptor fields. */
@@ -780,9 +836,29 @@ _Static_assert(offsetof(HV_EFI_CONTEXT, PhysicalIommuStatePhysical) == 960,
                "physical IOMMU state ABI drift");
 _Static_assert(offsetof(HV_EFI_CONTEXT, AcpiShadowPhysical) == 992,
                "ACPI shadow ABI drift");
+_Static_assert(offsetof(HV_EFI_CONTEXT, RuntimeScannerCodeBase) == 1016,
+               "runtime scanner code ABI drift");
+_Static_assert(offsetof(HV_EFI_CONTEXT, RuntimeScannerEntry) == 1032,
+               "runtime scanner entry ABI drift");
+_Static_assert(offsetof(HV_EFI_CONTEXT, RuntimeScannerStatePhysical) == 1040,
+               "runtime scanner state ABI drift");
+_Static_assert(offsetof(HV_EFI_CONTEXT, RuntimeScannerRamRangeCount) == 1064,
+               "runtime scanner range ABI drift");
+_Static_assert(offsetof(HV_EFI_CONTEXT, RuntimeProcessEntry) == 1072,
+               "runtime process entry ABI drift");
+_Static_assert(offsetof(HV_EFI_CONTEXT, RuntimeShadowEntry) == 1080,
+               "runtime shadow entry ABI drift");
+_Static_assert(offsetof(HV_EFI_CONTEXT, ShadowEptPhysical) == 1088,
+               "shadow EPT storage ABI drift");
+_Static_assert(offsetof(HV_EFI_CONTEXT, ShadowState) == 1120,
+               "shadow EPT state ABI drift");
+_Static_assert(offsetof(HV_EFI_CONTEXT, RuntimeAnalysisEntry) == 1144,
+               "runtime analysis entry ABI drift");
+_Static_assert(offsetof(HV_EFI_CONTEXT, RuntimeAnalysisStatePhysical) == 1152,
+               "runtime analysis state ABI drift");
 _Static_assert(sizeof(HV_EFI_MEMORY_DESCRIPTOR_VIEW) == 40,
                "UEFI memory descriptor view ABI drift");
-_Static_assert(sizeof(HV_EFI_PROCESSOR_RECORD) == 88,
+_Static_assert(sizeof(HV_EFI_PROCESSOR_RECORD) == 104,
                "processor record ABI drift");
 _Static_assert(sizeof(HV_EFI_CONTEXT) <= HV_EFI_PAGE_SIZE,
                "EFI context must fit in one runtime page");

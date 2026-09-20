@@ -43,6 +43,10 @@ guests and the WSL2/KVM environment used by this project:
   authenticated Guest Variables mailbox while VMware Tools is healthy. The
   post-handoff health proof uses a temporary dedicated COM2 named pipe instead,
   so it does not depend on VMware Tools while Windows runs under the monitor.
+- `RunWindowsDirectScannerE2E` uses the same boot and authenticated control
+  path, invokes the bounded read-only physical scanner, and publishes success
+  before detach. It isolates scanner validation from the shutdown gate while
+  retaining automatic VM stop, snapshot restore, and topology restoration.
 - The installer host gate signs test copies with `signtool`, validates the embedded Authenticode signer against the supplied public MOK certificate without modifying Windows trust stores, and verifies transactional ESP staging with the vendored Ubuntu shim.
 
 The public interface exposes fixed actions only. Live runs use exact per-VM shared leases, bounded timeouts, SHA-256-pinned staging, and sticky quarantine after uncertain failures. A passing run stops the VM; the Windows profile then restores its configured clean snapshot.
@@ -260,6 +264,18 @@ explicit permission to stop and restore the VM):
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Runner -Action RunWindowsDirectHypervisorE2E -Profile Windows -AuthorizeLiveVmRun -AuthorizeVmStop -AuthorizeSnapshotRevert
 ~~~
 
+Scanner-only runtime gate:
+
+~~~powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File $Runner -Action RunWindowsDirectScannerE2E -Profile Windows -AuthorizeLiveVmRun -AuthorizeVmStop -AuthorizeSnapshotRevert
+~~~
+
+When the Windows profile defines `KernelProfileImage` and
+`KernelProfilePdb`, the direct gate requires both files to remain under
+`ProjectRoot`, builds the EFI payload with the configured
+`ExpectedWindowsBuild`/`ExpectedWindowsUbr`, and proves an authenticated lookup
+of the guest `System` process before reporting PASS.
+
 The accepted compatibility topology is 20 vCPUs. `-WindowsDirectProcessorCount`
 also accepts 1 and 4 only for bounded regression diagnosis; those settings do
 not broaden the compatibility claim.
@@ -267,7 +283,8 @@ not broaden the compatibility claim.
 This gate also builds the standalone HVR1 WDM companion and service. Inside
 the disposable VM, setup creates a short-lived test certificate, trusts only
 its public half, signs the companion, and enables test signing for the one
-boot. The startup verifier rejects a corrupted HMAC, performs authenticated
+boot. The startup verifier first executes an authenticated read-only runtime
+scan over allowlisted RAM, rejects a corrupted HMAC, performs authenticated
 detach on all 20 processors, rejects replay of the consumed sequence, proves
 the hypervisor CPUID contract disappeared, unloads the driver, removes the
 temporary certificate, and reports the complete result over the authenticated

@@ -17,7 +17,7 @@ param(
         'RunWindowsProbe', 'RunWindowsCapture', 'RunWindowsNestedPrep',
         'RunWindowsExactBuildUpdate',
         'ResumeWindowsExactBuildUpdate',
-        'RunWindowsDirectHypervisorE2E',
+        'RunWindowsDirectHypervisorE2E', 'RunWindowsDirectScannerE2E',
         'CreateWindowsSnapshot',
         'ClearQuarantine')]
     [string]$Action = 'Doctor',
@@ -30,6 +30,8 @@ param(
     [string]$WslDistribution = 'Ubuntu',
     [ValidateSet(1, 4, 20)]
     [int]$WindowsDirectProcessorCount = 20,
+    [ValidateRange(2048, 32768)]
+    [int]$WindowsDirectMemoryMib = 8192,
     [switch]$SkipBuild,
     [switch]$AuthorizeLiveVmRun,
     [switch]$AuthorizeVmStop,
@@ -1010,7 +1012,8 @@ function Wait-WindowsDirectHypervisorResult {
         $SerialText = [Text.Encoding]::ASCII.GetString(
             $Capture.Bytes.GetBuffer(), 0, [int]$Capture.Bytes.Length)
         $Frames = [regex]::Matches($SerialText,
-            '(?m)^UEFI2HSINV-DIRECT:([A-Za-z0-9+/]+={0,2})\r?$')
+            'UEFI2HSINV-DIRECT:([A-Za-z0-9+/]+={0,2})' +
+            '(?=UEFI2HSINV-DIRECT:|\r|\n|$)')
         $Result = $null
         foreach ($Frame in $Frames) {
             $Encoded = $Frame.Groups[1].Value
@@ -2005,7 +2008,10 @@ function Assert-HostDiskCapacity {
 }
 
 function Assert-HostCapacity {
-    param([Parameter(Mandatory=$true)]$Selected)
+    param(
+        [Parameter(Mandatory=$true)]$Selected,
+        [int]$VmMemoryMibOverride = 0
+    )
     $MinimumFreeDiskMib = [uint64]$Config.Policy.MinimumHostFreeDiskMib
     $DiskRoots = @(
         [IO.Path]::GetPathRoot([IO.Path]::GetFullPath(
@@ -2039,7 +2045,11 @@ function Assert-HostCapacity {
     }
     $FreeMib = [uint64][Math]::Floor(
         [double]$AvailableBytes / 1MB)
-    $VmMib = Get-ConfiguredVmMemoryMib $Selected
+    $VmMib = if ($VmMemoryMibOverride -gt 0) {
+        $VmMemoryMibOverride
+    } else {
+        Get-ConfiguredVmMemoryMib $Selected
+    }
     $RequiredMib = [uint64]$VmMib +
         [uint64]$Config.Policy.MinimumHostReserveMib
     if ($FreeMib -lt $RequiredMib) {
@@ -2162,10 +2172,61 @@ function Invoke-HypervisorEfiBuild {
     $UefiSourceCmake = $UefiProjectRoot.Replace('\', '/').Replace('$', '\$')
     $UefiSupportCmake = (Join-Path $UefiProjectRoot 'src\vendor').Replace(
         '\', '/').Replace('$', '\$')
+    $WindowsProfile = $Config.Profiles.Windows
+    $KernelProfileEnabled = $false
     $PathCache = Join-Path $BuildRoot 'uhr-uefi-paths.cmake'
-    [IO.File]::WriteAllText($PathCache,
+    $CacheText =
         "set(HYPERSINV_UEFI_SOURCE_DIR `"$UefiSourceCmake`" CACHE PATH `"`" FORCE)`n" +
-        "set(HYPERSINV_UEFI_SUPPORT_DIR `"$UefiSupportCmake`" CACHE PATH `"`" FORCE)`n",
+        "set(HYPERSINV_UEFI_SUPPORT_DIR `"$UefiSupportCmake`" CACHE PATH `"`" FORCE)`n" +
+        "set(HYPERSINV_KERNEL_IMAGE `"`" CACHE FILEPATH `"`" FORCE)`n" +
+        "set(HYPERSINV_KERNEL_PDB `"`" CACHE FILEPATH `"`" FORCE)`n" +
+        "set(HYPERSINV_KERNEL_BUILD `"`" CACHE STRING `"`" FORCE)`n" +
+        "set(HYPERSINV_KERNEL_UBR `"`" CACHE STRING `"`" FORCE)`n" +
+        "set(HYPERSINV_REQUIRE_KERNEL_PROFILE OFF CACHE BOOL `"`" FORCE)`n"
+    $HasKernelImage = $null -ne $WindowsProfile.PSObject.Properties[
+        'KernelProfileImage'] -and -not [string]::IsNullOrWhiteSpace(
+            [string]$WindowsProfile.KernelProfileImage)
+    $HasKernelPdb = $null -ne $WindowsProfile.PSObject.Properties[
+        'KernelProfilePdb'] -and -not [string]::IsNullOrWhiteSpace(
+            [string]$WindowsProfile.KernelProfilePdb)
+    if ($HasKernelImage -xor $HasKernelPdb) {
+        throw 'Windows KernelProfileImage and KernelProfilePdb must be configured together.'
+    }
+    if ($HasKernelImage) {
+        if ($null -eq $WindowsProfile.PSObject.Properties[
+                'ExpectedWindowsBuild'] -or
+            $null -eq $WindowsProfile.PSObject.Properties[
+                'ExpectedWindowsUbr']) {
+            throw 'A pinned kernel profile requires ExpectedWindowsBuild and ExpectedWindowsUbr.'
+        }
+        $KernelImage = [IO.Path]::GetFullPath(
+            [string]$WindowsProfile.KernelProfileImage)
+        $KernelPdb = [IO.Path]::GetFullPath(
+            [string]$WindowsProfile.KernelProfilePdb)
+        foreach ($ProfileInput in @($KernelImage, $KernelPdb)) {
+            if (-not (Test-UhrPathWithin -Root $Config.ProjectRoot `
+                    -Path $ProfileInput) -or
+                -not (Test-Path -LiteralPath $ProfileInput -PathType Leaf)) {
+                throw "Kernel profile input must be an existing file under ProjectRoot: $ProfileInput"
+            }
+        }
+        $KernelBuild = [uint64]$WindowsProfile.ExpectedWindowsBuild
+        $KernelUbr = [uint64]$WindowsProfile.ExpectedWindowsUbr
+        if ($KernelBuild -eq 0 -or $KernelBuild -gt [uint64]4294967295 -or
+            $KernelUbr -gt [uint64]4294967295) {
+            throw 'Pinned kernel build metadata must fit unsigned 32-bit fields.'
+        }
+        $KernelImageCmake = $KernelImage.Replace('\', '/').Replace('$', '\$')
+        $KernelPdbCmake = $KernelPdb.Replace('\', '/').Replace('$', '\$')
+        $CacheText +=
+            "set(HYPERSINV_KERNEL_IMAGE `"$KernelImageCmake`" CACHE FILEPATH `"`" FORCE)`n" +
+            "set(HYPERSINV_KERNEL_PDB `"$KernelPdbCmake`" CACHE FILEPATH `"`" FORCE)`n" +
+            "set(HYPERSINV_KERNEL_BUILD `"$KernelBuild`" CACHE STRING `"`" FORCE)`n" +
+            "set(HYPERSINV_KERNEL_UBR `"$KernelUbr`" CACHE STRING `"`" FORCE)`n" +
+            "set(HYPERSINV_REQUIRE_KERNEL_PROFILE ON CACHE BOOL `"`" FORCE)`n"
+        $KernelProfileEnabled = $true
+    }
+    [IO.File]::WriteAllText($PathCache, $CacheText,
         [Text.UTF8Encoding]::new($false))
     $ConfigureCommand = 'call {0} -arch=x64 -host_arch=x64' -f `
         [string]$Config.Tools.VsDevCmdPath
@@ -2206,6 +2267,7 @@ function Invoke-HypervisorEfiBuild {
         PostEbsInterruptProbePath = $PostEbsInterruptProbe
         PostEbsInterruptProbeSha256 = (Get-FileHash -LiteralPath `
             $PostEbsInterruptProbe -Algorithm SHA256).Hash
+        KernelProfileEnabled = $KernelProfileEnabled
     }
 }
 
@@ -2282,6 +2344,7 @@ function Invoke-CombinedHostBuild {
         HypervisorPostEbsProbeEfiSha256 = $HypervisorBuild.PostEbsProbeSha256
         HypervisorPostEbsInterruptProbeEfiPath = $HypervisorBuild.PostEbsInterruptProbePath
         HypervisorPostEbsInterruptProbeEfiSha256 = $HypervisorBuild.PostEbsInterruptProbeSha256
+        KernelProfileEnabled = $HypervisorBuild.KernelProfileEnabled
     }
     if ($null -ne $CompanionBuild) {
         $Result.CompanionDriverPath = $CompanionBuild.DriverPath
@@ -2290,6 +2353,24 @@ function Invoke-CombinedHostBuild {
         $Result.CompanionServiceSha256 = $CompanionBuild.ServiceSha256
     }
     return [pscustomobject]$Result
+}
+
+function Compress-UhrArtifactBytes {
+    param(
+        [Parameter(Mandatory=$true)]
+        [AllowEmptyCollection()]
+        [byte[]]$Bytes
+    )
+    if ($Bytes.Length -eq 0) { return ,([byte[]]@()) }
+    $Output = [IO.MemoryStream]::new()
+    try {
+        $Compressor = [IO.Compression.DeflateStream]::new(
+            $Output, [IO.Compression.CompressionLevel]::Optimal, $true)
+        try { $Compressor.Write($Bytes, 0, $Bytes.Length) }
+        finally { $Compressor.Dispose() }
+        return ,$Output.ToArray()
+    }
+    finally { $Output.Dispose() }
 }
 
 function New-HostStage {
@@ -2313,6 +2394,8 @@ function New-HostStage {
         [string]$HypervisorEfiPath,
         [string]$LoaderEfiPath,
         [string]$DirectVerifyRunId,
+        [switch]$DirectScannerOnly,
+        [switch]$DirectProcessProfileEnabled,
         [string]$CompanionDriverPath,
         [string]$CompanionServicePath,
         [string]$HypervisorProbeEfiPath,
@@ -2627,14 +2710,14 @@ function New-HostStage {
         $Placeholder = '__NESTED_SCRIPT_BASE64__'
         $ServicePlaceholder = '__NESTED_SERVICE_BASE64__'
         $DirectModePlaceholder = '__DIRECT_HYPERVISOR_MODE__'
-        $DirectLoaderPlaceholder = '__DIRECT_LOADER_EFI_BASE64__'
-        $DirectEfiPlaceholder = '__DIRECT_HYPERVISOR_EFI_BASE64__'
-        $DirectInstallerPlaceholder = '__DIRECT_INSTALLER_BASE64__'
+        $DirectLoaderPlaceholder = '__DIRECT_LOADER_EFI_DEFLATE_BASE64__'
+        $DirectEfiPlaceholder = '__DIRECT_HYPERVISOR_EFI_DEFLATE_BASE64__'
+        $DirectInstallerPlaceholder = '__DIRECT_INSTALLER_DEFLATE_BASE64__'
         $DirectStartupPlaceholder = '__DIRECT_STARTUP_SCRIPT_BASE64__'
         $DirectCompanionDriverPlaceholder = `
-            '__DIRECT_COMPANION_DRIVER_BASE64__'
+            '__DIRECT_COMPANION_DRIVER_DEFLATE_BASE64__'
         $DirectCompanionServicePlaceholder = `
-            '__DIRECT_COMPANION_SERVICE_BASE64__'
+            '__DIRECT_COMPANION_SERVICE_DEFLATE_BASE64__'
         $DirectCompanionCertificatePlaceholder = `
             '__DIRECT_COMPANION_CERTIFICATE_BASE64__'
         $DirectProcessorCountPlaceholder = '__DIRECT_PROCESSOR_COUNT__'
@@ -2684,6 +2767,8 @@ function New-HostStage {
         $DirectStartupBytes = [byte[]]@()
         $DirectCompanionDriverBytes = [byte[]]@()
         $DirectCompanionServiceBytes = [byte[]]@()
+        $DirectCompanionDriverCompressedBytes = [byte[]]@()
+        $DirectCompanionServiceCompressedBytes = [byte[]]@()
         $DirectCompanionCertificateBytes = [byte[]]@()
         if ($Workflow -eq 'WindowsDirectHypervisorSetup') {
             if ([string]::IsNullOrWhiteSpace($LoaderEfiPath) -or
@@ -2800,17 +2885,30 @@ function New-HostStage {
             $DirectStartupTemplate = Get-Content -Raw -LiteralPath `
                 $DirectStartupTemplatePath
             $DirectVerifyPlaceholder = '__DIRECT_VERIFY_RUN_ID__'
+            $DirectScannerOnlyPlaceholder = '__DIRECT_SCANNER_ONLY__'
+            $DirectProcessProfilePlaceholder = `
+                '__DIRECT_PROCESS_PROFILE_ENABLED__'
             if ([regex]::Matches($DirectStartupTemplate,
                     [regex]::Escape($DirectVerifyPlaceholder)).Count -ne 1 -or
                 [regex]::Matches($DirectStartupTemplate,
                     [regex]::Escape(
-                        $DirectProcessorCountPlaceholder)).Count -ne 1) {
+                        $DirectProcessorCountPlaceholder)).Count -ne 1 -or
+                [regex]::Matches($DirectStartupTemplate,
+                    [regex]::Escape(
+                        $DirectScannerOnlyPlaceholder)).Count -ne 1 -or
+                [regex]::Matches($DirectStartupTemplate,
+                    [regex]::Escape(
+                        $DirectProcessProfilePlaceholder)).Count -ne 1) {
                 throw 'Direct startup template has invalid run/topology placeholders.'
             }
             $DirectStartupText = $DirectStartupTemplate.Replace(
                 $DirectVerifyPlaceholder, $DirectVerifyRunId).Replace(
                 $DirectProcessorCountPlaceholder,
-                [string]$WindowsDirectProcessorCount)
+                [string]$WindowsDirectProcessorCount).Replace(
+                $DirectScannerOnlyPlaceholder,
+                $(if ($DirectScannerOnly) { '$true' } else { '$false' })).Replace(
+                $DirectProcessProfilePlaceholder,
+                $(if ($DirectProcessProfileEnabled) { '$true' } else { '$false' }))
             $DirectStartupBytes = [Text.Encoding]::UTF8.GetBytes(
                 $DirectStartupText)
         }
@@ -2827,24 +2925,42 @@ function New-HostStage {
         }
         $GeneratedGuestTest = Join-Path $RunRoot `
             'Invoke-WindowsGuestTest.ps1'
+        $DirectLoaderCompressedBytes = [byte[]]@()
+        $DirectEfiCompressedBytes = [byte[]]@()
+        $DirectInstallerCompressedBytes = [byte[]]@()
         try {
+            $DirectLoaderCompressedBytes =
+                Compress-UhrArtifactBytes $DirectLoaderBytes
+            $DirectEfiCompressedBytes =
+                Compress-UhrArtifactBytes $DirectEfiBytes
+            $DirectInstallerCompressedBytes =
+                Compress-UhrArtifactBytes $DirectInstallerBytes
+            $DirectCompanionDriverCompressedBytes =
+                Compress-UhrArtifactBytes $DirectCompanionDriverBytes
+            $DirectCompanionServiceCompressedBytes =
+                Compress-UhrArtifactBytes $DirectCompanionServiceBytes
             $GeneratedGuestTestText = $GuestTestTemplate.Replace($Placeholder,
                 [Convert]::ToBase64String($NestedScriptBytes)).Replace(
                 $ServicePlaceholder,
                 [Convert]::ToBase64String($NestedServiceBytes)).Replace(
                 $DirectModePlaceholder, $DirectMode).Replace(
                 $DirectLoaderPlaceholder,
-                [Convert]::ToBase64String($DirectLoaderBytes)).Replace(
+                [Convert]::ToBase64String(
+                    $DirectLoaderCompressedBytes)).Replace(
                 $DirectEfiPlaceholder,
-                [Convert]::ToBase64String($DirectEfiBytes)).Replace(
+                [Convert]::ToBase64String(
+                    $DirectEfiCompressedBytes)).Replace(
                 $DirectInstallerPlaceholder,
-                [Convert]::ToBase64String($DirectInstallerBytes)).Replace(
+                [Convert]::ToBase64String(
+                    $DirectInstallerCompressedBytes)).Replace(
                 $DirectStartupPlaceholder,
                 [Convert]::ToBase64String($DirectStartupBytes)).Replace(
                 $DirectCompanionDriverPlaceholder,
-                [Convert]::ToBase64String($DirectCompanionDriverBytes)).Replace(
+                [Convert]::ToBase64String(
+                    $DirectCompanionDriverCompressedBytes)).Replace(
                 $DirectCompanionServicePlaceholder,
-                [Convert]::ToBase64String($DirectCompanionServiceBytes)).Replace(
+                [Convert]::ToBase64String(
+                    $DirectCompanionServiceCompressedBytes)).Replace(
                 $DirectCompanionCertificatePlaceholder,
                 [Convert]::ToBase64String(
                     $DirectCompanionCertificateBytes)).Replace(
@@ -2863,6 +2979,18 @@ function New-HostStage {
                 [Array]::Clear($DirectInstallerBytes, 0,
                     $DirectInstallerBytes.Length)
             }
+            if ($DirectLoaderCompressedBytes.Length -gt 0) {
+                [Array]::Clear($DirectLoaderCompressedBytes, 0,
+                    $DirectLoaderCompressedBytes.Length)
+            }
+            if ($DirectEfiCompressedBytes.Length -gt 0) {
+                [Array]::Clear($DirectEfiCompressedBytes, 0,
+                    $DirectEfiCompressedBytes.Length)
+            }
+            if ($DirectInstallerCompressedBytes.Length -gt 0) {
+                [Array]::Clear($DirectInstallerCompressedBytes, 0,
+                    $DirectInstallerCompressedBytes.Length)
+            }
             if ($DirectStartupBytes.Length -gt 0) {
                 [Array]::Clear($DirectStartupBytes, 0,
                     $DirectStartupBytes.Length)
@@ -2874,6 +3002,14 @@ function New-HostStage {
             if ($DirectCompanionServiceBytes.Length -gt 0) {
                 [Array]::Clear($DirectCompanionServiceBytes, 0,
                     $DirectCompanionServiceBytes.Length)
+            }
+            if ($DirectCompanionDriverCompressedBytes.Length -gt 0) {
+                [Array]::Clear($DirectCompanionDriverCompressedBytes, 0,
+                    $DirectCompanionDriverCompressedBytes.Length)
+            }
+            if ($DirectCompanionServiceCompressedBytes.Length -gt 0) {
+                [Array]::Clear($DirectCompanionServiceCompressedBytes, 0,
+                    $DirectCompanionServiceCompressedBytes.Length)
             }
             if ($DirectCompanionCertificateBytes.Length -gt 0) {
                 [Array]::Clear($DirectCompanionCertificateBytes, 0,
@@ -3033,6 +3169,7 @@ function Set-WindowsDirectHypervisorTopology {
             '(?im)^firmware\s*=\s*"efi"\s*$',
             '(?im)^numvcpus\s*=\s*"[0-9]+"\s*$',
             '(?im)^cpuid\.coresPerSocket\s*=\s*"[0-9]+"\s*$',
+            '(?im)^memsize\s*=\s*"[0-9]+"\s*$',
             '(?im)^vhv\.enable\s*=\s*"(?:TRUE|FALSE)"\s*$')) {
         if ([regex]::Matches($Text, $Pattern).Count -ne 1) {
             throw "The disposable Windows VMX lacks one exact direct EFI setting: $Pattern"
@@ -3050,6 +3187,9 @@ function Set-WindowsDirectHypervisorTopology {
     $Text = [regex]::Replace($Text,
         '(?im)^cpuid\.coresPerSocket\s*=\s*"[0-9]+"\s*$',
         "cpuid.coresPerSocket = `"$ProcessorCount`"")
+    $Text = [regex]::Replace($Text,
+        '(?im)^memsize\s*=\s*"[0-9]+"\s*$',
+        "memsize = `"$WindowsDirectMemoryMib`"")
     $Text = [regex]::Replace($Text,
         '(?im)^vhv\.enable\s*=\s*"(?:TRUE|FALSE)"\s*$',
         'vhv.enable = "TRUE"')
@@ -3084,6 +3224,7 @@ serial1.tryNoRxLoss = "FALSE"
     foreach ($Expected in @(
             "numvcpus = `"$ProcessorCount`"",
             "cpuid.coresPerSocket = `"$ProcessorCount`"",
+            "memsize = `"$WindowsDirectMemoryMib`"",
             'vhv.enable = "TRUE"', 'uefi.secureBoot.enabled = "FALSE"',
             'serial1.present = "TRUE"', 'serial1.fileType = "pipe"',
             'serial1.fileName = "\\.\pipe\uefiloader_direct_result"',
@@ -3096,7 +3237,7 @@ serial1.tryNoRxLoss = "FALSE"
     }
     [IO.File]::WriteAllText((Join-Path $EvidenceRoot `
         'direct-topology.txt'),
-        "processors=$ProcessorCount`r`ncores_per_socket=$ProcessorCount`r`nnested_vmx=TRUE`r`nsecure_boot=FALSE`r`ndirect_result_pipe=serial1`r`n",
+        "processors=$ProcessorCount`r`ncores_per_socket=$ProcessorCount`r`nmemory_mib=$WindowsDirectMemoryMib`r`nnested_vmx=TRUE`r`nsecure_boot=FALSE`r`ndirect_result_pipe=serial1`r`n",
         [Text.ASCIIEncoding]::new())
 }
 
@@ -3229,7 +3370,13 @@ function Start-ConfiguredVm {
     try {
         $StartupLease = Acquire-StartupLease $RunId
         Assert-ConcurrentVmSetSafe $Selected
-        Assert-HostCapacity $Selected
+        if ($DirectHypervisorTopology) {
+            Assert-HostCapacity $Selected `
+                -VmMemoryMibOverride $WindowsDirectMemoryMib
+        }
+        else {
+            Assert-HostCapacity $Selected
+        }
         if (-not [string]::IsNullOrWhiteSpace([string]$Selected.SnapshotName)) {
             Invoke-ConfiguredVmrun -Selected $Selected -Operation @(
                 'revertToSnapshot', [string]$Selected.VmxPath,
@@ -3476,6 +3623,7 @@ function Save-WindowsDirectHypervisorFailureEvidence {
 }
 
 function Invoke-WindowsDirectHypervisorE2E {
+    param([switch]$ScannerOnly)
     if (-not $AuthorizeLiveVmRun -or -not $AuthorizeVmStop -or
         -not $AuthorizeSnapshotRevert) {
         throw 'The direct Windows EFI gate requires live-run, VM-stop, and snapshot-revert authorization.'
@@ -3503,7 +3651,9 @@ function Invoke-WindowsDirectHypervisorE2E {
         -HypervisorEfiPath ([string]$Build.HypervisorEfiPath) `
         -CompanionDriverPath ([string]$Build.CompanionDriverPath) `
         -CompanionServicePath ([string]$Build.CompanionServicePath) `
-        -DirectVerifyRunId $VerifyRunId
+        -DirectVerifyRunId $VerifyRunId `
+        -DirectScannerOnly:$ScannerOnly `
+        -DirectProcessProfileEnabled:([bool]$Build.KernelProfileEnabled)
     $VerifyPaths = New-HostStage -RunId $VerifyRunId `
         -Workflow WindowsDirectHypervisorVerify
     $Lease = $null
@@ -3512,6 +3662,8 @@ function Invoke-WindowsDirectHypervisorE2E {
     $DirectCapture = $null
     $DirectDebugCapture = $null
     $StageTwoMarkerVariable = $null
+    $DirectResultTimeoutSeconds = [Math]::Min(600, [Math]::Max(
+        180, [int]$Config.Policy.GuestReadyTimeoutSeconds))
     $LiveTouched = $false
     $Success = $false
     try {
@@ -3559,7 +3711,7 @@ function Invoke-WindowsDirectHypervisorE2E {
             -Selected $Selected -Capture $DirectCapture -RunId $VerifyRunId `
             -DebugCapture $DirectDebugCapture `
             -MinimumCompletedUtc $InitialResetRequestedUtc `
-            -TimeoutSeconds 180
+            -TimeoutSeconds $DirectResultTimeoutSeconds
         if ($FirstBoot.Kind -ceq 'DIRECT_RESULT') {
             $VerifyResult = $FirstBoot.DirectResult
             $StageTwoMarkerVariable = $null
@@ -3580,7 +3732,7 @@ function Invoke-WindowsDirectHypervisorE2E {
                 -DebugCapture $DirectDebugCapture `
                 -RunId $VerifyRunId `
                 -MinimumCompletedUtc $ResetRequestedUtc `
-                -TimeoutSeconds 180
+                -TimeoutSeconds $DirectResultTimeoutSeconds
         }
         else {
             throw 'The direct first-boot outcome is invalid.'
@@ -3625,12 +3777,24 @@ function Invoke-WindowsDirectHypervisorE2E {
         $VerifyStdout = [string]$VerifyResult.Stdout
         $CpuPasses = [regex]::Matches($VerifyStdout,
             '(?m)^UEFI_HYPERVISOR_WINDOWS_CPU:[0-9]+:[0-9]+:PASS\r?$')
-        if ($CpuPasses.Count -ne $WindowsDirectProcessorCount -or
+        $CommonProofMissing =
+            $CpuPasses.Count -ne $WindowsDirectProcessorCount -or
             [regex]::Matches($VerifyStdout,
                 '(?m)^UEFI_HYPERVISOR_WINDOWS_CPUID:PASS\r?$').Count -ne 1 -or
             $VerifyStdout -notmatch
                 ("(?m)^DIRECT_HYPERVISOR_VERIFIED_PROCESSORS={0}\r?$" -f
                     $WindowsDirectProcessorCount) -or
+            [regex]::Matches($VerifyStdout,
+                '(?m)^HVR1_RUNTIME_SCAN=PASS\r?$').Count -ne 1
+        $ScannerProofMissing = $ScannerOnly -and
+            [regex]::Matches($VerifyStdout,
+                '(?m)^HVR1_RUNTIME_SCAN_ONLY=PASS\r?$').Count -ne 1
+        $ProcessProofMissing = [bool]$Build.KernelProfileEnabled -and
+            ([regex]::Matches($VerifyStdout,
+                '(?m)^HVR1_PROCESS_LOCATE=PASS\r?$').Count -ne 1 -or
+             [regex]::Matches($VerifyStdout,
+                '(?m)^HVR1_DYNAMIC_ANALYSIS=PASS\r?$').Count -ne 1)
+        $DetachProofMissing = -not $ScannerOnly -and (
             [regex]::Matches($VerifyStdout,
                 '(?m)^HVR1_CRASH_RECOVERY_PRIOR_BOOT=PASS\r?$').Count -ne 1 -or
             [regex]::Matches($VerifyStdout,
@@ -3652,8 +3816,11 @@ function Invoke-WindowsDirectHypervisorE2E {
                 [regex]::Matches($VerifyStdout,
                     '(?m)^HVR1_BITLOCKER_PROTECTORS_RESTORED=PASS\r?$').Count -ne 1) -or
             [regex]::Matches($VerifyStdout,
-                '(?m)^HVR1_COMPANION_UNLOADED=PASS\r?$').Count -ne 1) {
-            throw "Host validation did not find the complete $WindowsDirectProcessorCount-processor health and authenticated-detach proof."
+                '(?m)^HVR1_COMPANION_UNLOADED=PASS\r?$').Count -ne 1)
+        if ($CommonProofMissing -or $ScannerProofMissing -or
+            $ProcessProofMissing -or
+            $DetachProofMissing) {
+            throw "Host validation did not find the complete $WindowsDirectProcessorCount-processor health and authenticated runtime proof."
         }
         Stop-WindowsDirectResultCapture $DirectCapture
         $DirectCapture = $null
@@ -3670,7 +3837,11 @@ function Invoke-WindowsDirectHypervisorE2E {
         $Success = $true
         return [pscustomobject]@{
             Result = 'PASS'
-            Workflow = 'WindowsDirectHypervisorE2E'
+            Workflow = $(if ($ScannerOnly) {
+                    'WindowsDirectScannerE2E'
+                } else {
+                    'WindowsDirectHypervisorE2E'
+                })
             ProcessorCount = $WindowsDirectProcessorCount
             SetupRunId = $SetupRunId
             SetupEvidence = $SetupPaths.Evidence
@@ -5378,6 +5549,10 @@ switch ($Action) {
     }
     'RunWindowsDirectHypervisorE2E' {
         Invoke-WindowsDirectHypervisorE2E
+        break
+    }
+    'RunWindowsDirectScannerE2E' {
+        Invoke-WindowsDirectHypervisorE2E -ScannerOnly
         break
     }
     'CreateWindowsSnapshot' {

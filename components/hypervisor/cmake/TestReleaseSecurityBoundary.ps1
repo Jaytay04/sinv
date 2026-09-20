@@ -74,7 +74,8 @@ function Verify([string]$Driver,[string]$Interface,[string]$Loader,[string]$Gate
   Assert-T ($CMake.Contains($Token)) "Release-qualification CMake missing: $Token"
  }
 }
-$Text=@($DriverMain,$InterfacePath,$LoaderMain,$GateScript,$DocPath,$TestsCMake|ForEach-Object{[IO.File]::ReadAllText((Resolve-Path $_))})
+$Text=@(@($DriverMain,$InterfacePath,$LoaderMain,$GateScript,$DocPath,$TestsCMake) |
+ ForEach-Object{[IO.File]::ReadAllText((Resolve-Path $_)).Replace("`r`n","`n")})
 Verify @Text
 $Mutations=@(
  @{Index=0;Text=$Text[0].Replace('D:P(A;;GA;;;SY)(A;;GA;;;BA)','D:P(A;;GA;;;WD)')},

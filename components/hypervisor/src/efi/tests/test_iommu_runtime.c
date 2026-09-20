@@ -289,7 +289,7 @@ static int TestDmarParsing(void)
 
     image[0x2000 + 40] ^= 1;
     {
-        HV_EFI_IOMMU_PHYSICAL_VIEW view = { image, 0, 0x4000 };
+        HV_EFI_IOMMU_PHYSICAL_VIEW view = { image, 0, 0x4000, 0, 0 };
         HV_EFI_IOMMU_DMAR_STORAGE storage = {
             units, 2, rmrrs, 2, scopes, 4, paths, 4
         };
@@ -301,7 +301,7 @@ static int TestDmarParsing(void)
     }
     BuildDmarImage(image, sizeof(image));
     {
-        HV_EFI_IOMMU_PHYSICAL_VIEW view = { image, 0, 0x4000 };
+        HV_EFI_IOMMU_PHYSICAL_VIEW view = { image, 0, 0x4000, 0, 0 };
         HV_EFI_IOMMU_DMAR_STORAGE storage = {
             units, 0, rmrrs, 2, scopes, 4, paths, 4
         };
