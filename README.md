@@ -5,6 +5,9 @@ overlay under [`tools/overlay`](tools/overlay/README.md). It is a pure user-mode
 Direct3D 11/Direct2D application and does not alter or link into the
 hypervisor/companion runtime.
 
+For a complete architecture, capability, protocol, workflow, constraint, and
+extension handoff, see [`docs/DEVELOPMENT_HANDOFF.md`](docs/DEVELOPMENT_HANDOFF.md).
+
 `uefi2hsinv` is a Windows/x86-64 VM research composition: UEFILoader owns
 the UEFI boot handoff, and Hypervisor supplies a small EFI VMX payload. The
 root project is a static-first superbuild; the original projects remain
