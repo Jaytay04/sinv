@@ -161,12 +161,56 @@ if(COMBINED_BUILD_HYPERVISOR_EFI)
     )
 endif()
 
+# ---------------------------------------------------------------------------
+# ESP analysis module ? user-mode game-state + entity pipeline (optional).
+# ---------------------------------------------------------------------------
+option(COMBINED_BUILD_ESP "Build the ESP user-mode module" ON)
+set(COMBINED_ESP_SOURCE_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/modules/esp_analysis"
+    CACHE PATH "ESP user-mode module source directory")
+
+if(COMBINED_BUILD_ESP AND NOT EXISTS "${COMBINED_ESP_SOURCE_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR "ESP source has no CMakeLists.txt: ${COMBINED_ESP_SOURCE_DIR}")
+endif()
+
+if(COMBINED_BUILD_ESP AND EXISTS "${COMBINED_ESP_SOURCE_DIR}/CMakeLists.txt")
+    ExternalProject_Add(esp_module
+        SOURCE_DIR "${COMBINED_ESP_SOURCE_DIR}"
+        BINARY_DIR "${COMBINED_BUILD_ROOT}/esp_analysis"
+        DOWNLOAD_COMMAND ""
+        UPDATE_COMMAND ""
+        PATCH_COMMAND ""
+        CMAKE_ARGS
+            ${_combined_common_cmake_args}
+        BUILD_COMMAND
+            ${CMAKE_COMMAND} --build <BINARY_DIR>
+                --config ${COMBINED_CONFIG} --parallel
+        TEST_COMMAND ""
+        INSTALL_COMMAND ""
+        BUILD_ALWAYS 1
+        STEP_TARGETS build
+        EXCLUDE_FROM_ALL FALSE
+    )
+
+    # Convenience root target: explicitly builds both module archives.
+    add_custom_target(combined_esp
+        COMMAND ${CMAKE_COMMAND} --build "${COMBINED_BUILD_ROOT}/esp_analysis"
+            --config ${COMBINED_CONFIG} --target esp_analysis hardened_esp --parallel
+        DEPENDS esp_module
+        USES_TERMINAL
+        COMMENT "Build ESP user-mode archives"
+    )
+endif()
+
 set(_combined_build_dependencies)
 if(TARGET uefi_loader_component)
     list(APPEND _combined_build_dependencies uefi_loader_component)
 endif()
 if(TARGET hypervisor_component)
     list(APPEND _combined_build_dependencies hypervisor_component)
+endif()
+if(TARGET esp_module)
+    list(APPEND _combined_build_dependencies esp_module)
 endif()
 
 if(_combined_build_dependencies)

@@ -1,366 +1,281 @@
 #ifdef MODULE_ESP
-
+#include "esp_analysis.h"
+#include "arc_raiders/offsets.h"
+#include "hv_bridge/hv_bridge.h"
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
 #include <cwchar>
-#include <map>
-#include <mutex>
-#include <unordered_map>
-#include <vector>
-#include "esp_analysis.h"
-#include "arc_raiders/offsets.h"
+#include <windows.h>
 
-/* Forward declarations for hypervisor APIs */
-extern "C" {
-    bool HvAnalysisStart(uint32_t pid);
-    bool HvScanProcess(uint32_t pid, const void* pattern, const void* mask, size_t pattern_len, void** out_results, size_t* out_count);
-    bool HvReadGuestMemory(uint32_t pid, uint64_t address, void* buffer, size_t size);
-    bool HvWriteSharedMemory(const void* data, size_t size);
-}
-
-/* Internal function declarations */
+/* Forward decl: world-to-screen (worldtoscreen.cpp). */
 namespace hypersinv::esp::arc_raiders {
-    void DecryptFName(const uint8_t* input, uint8_t* output, size_t length,
-                      const uint8_t* key, size_t key_len,
-                      uint32_t seed, uint32_t step, int rotate);
-    void DecryptString(const uint8_t* input, char* output, size_t length,
-                       uint8_t multiplier, uint8_t addend);
-    uint64_t ReadPointerChain(uint32_t pid, uint64_t base_address, 
-                              const uint32_t* offsets, size_t offset_count);
-    bool ReadTArray(uint32_t pid, uint64_t array_address, 
-                    uint64_t* out_data, int32_t* out_count, int32_t* out_max);
-    bool ReadCamera(uint32_t pid, uint64_t camera_manager_address,
-                    struct FVector* out_location, struct FRotator* out_rotation,
-                    float* out_fov);
-    bool ExtractCameraMatrix(uint32_t pid, uint64_t player_controller_address,
-                            float viewport_width, float viewport_height,
-                            float* out_view_projection);
-    bool WorldToScreen(float world_x, float world_y, float world_z,
-                       const float* view_projection,
-                       float viewport_width, float viewport_height,
-                       float* out_screen_x, float* out_screen_y);
-    bool ProjectBoundingBox(float world_x, float world_y, float world_z,
-                           float width, float height, float depth,
-                           const float* view_projection,
-                           float viewport_width, float viewport_height,
-                           float* out_screen_x, float* out_screen_y,
-                           float* out_screen_width, float* out_screen_height);
+bool ProjectBoundingBox(float wx, float wy, float wz, float w, float h, float d, const float* vp, float vw, float vh, float* sx, float* sy, float* sw, float* sh);
 }
 
-namespace hypersinv::esp::arc_raiders {
 
-/*
- * Placeholder implementations for the hypervisor analysis APIs.
- *
- * The EFI payload does not export these symbols yet, so the module carries
- * memory-backed fakes until it does. HvAnalysisStart() registers a backing
- * store for the pid, HvReadGuestMemory() serves registered pages, and the
- * other two are no-op stubs.
- */
-
-namespace {
-    /* Fake guest-memory backing store: pid -> address -> page bytes. */
-    std::unordered_map<uint32_t, std::map<uint64_t, std::vector<uint8_t>>> g_memory_cache;
-    std::mutex g_cache_mutex;
-}
-
-bool HvAnalysisStart(uint32_t pid) {
-    std::lock_guard<std::mutex> lock(g_cache_mutex);
-    if (g_memory_cache.find(pid) != g_memory_cache.end()) return true;
-
-    g_memory_cache.emplace(pid, std::map<uint64_t, std::vector<uint8_t>>{});
-    return true;
-}
-
-bool HvScanProcess(uint32_t pid, const void* pattern, const void* mask, size_t pattern_len, void** out_results, size_t* out_count) {
-    std::lock_guard<std::mutex> lock(g_cache_mutex);
-    auto proc_it = g_memory_cache.find(pid);
-    if (proc_it == g_memory_cache.end()) {
-        if (out_count) *out_count = 0;
-        if (out_results) *out_results = nullptr;
-        return false;
-    }
-
-    std::vector<uint64_t> results;
-    for (const auto& entry : proc_it->second) {
-        if (entry.second.size() < pattern_len) continue;
-        bool found = true;
-        const uint8_t* page = entry.second.data();
-        for (size_t i = 0; i < pattern_len && found; ++i) {
-            if (((const uint8_t*)pattern)[i] != page[i]) {
-                found = false;
-            }
-        }
-        if (found) results.push_back(entry.first);
-    }
-    if (out_count) *out_count = results.size();
-    if (out_results) *out_results = results.empty() ? nullptr : static_cast<void*>(results.data());
-    return !results.empty();
-}
-
-bool HvReadGuestMemory(uint32_t pid, uint64_t address, void* buffer, size_t size) {
-    std::lock_guard<std::mutex> lock(g_cache_mutex);
-    auto proc_it = g_memory_cache.find(pid);
-    if (proc_it == g_memory_cache.end()) return false;
-
-    auto page_it = proc_it->second.find(address);
-    if (page_it == proc_it->second.end()) return false;
-
-    const auto& page = page_it->second;
-    if (page.size() < size) return false;
-
-    std::copy_n(page.begin(), size, static_cast<uint8_t*>(buffer));
-    return true;
-}
-
-bool HvWriteSharedMemory(const void* data, size_t size) {
-    (void)data;
-    (void)size;
-    /* Placeholder for shared memory publication to the overlay. */
-    return true;
-}
-
-} // namespace hypersinv::esp::arc_raiders
-
+#include "../../components/hypervisor/src/efi/runtime_analysis_abi.h"
 
 namespace hypersinv::esp {
+using namespace hypersinv::esp::arc_raiders;
 
-/* Internal state */
-static bool g_initialized = false;
-static uint32_t g_target_pid = 0;
-static uint64_t g_uworld_address = 0;
-static uint64_t g_gnames_address = 0;
-static uint64_t g_camera_manager_address = 0;
-static float g_view_projection[16] = {0};
-static float g_viewport_width = 1920.0f;
-static float g_viewport_height = 1080.0f;
-
-/* Entity cache functions (defined in entity_cache.cpp) */
+/* Entity cache (entity_cache.cpp). */
 void EntityCacheInitialize();
 void EntityCacheClear();
 bool EntityCacheAdd(const Entity* entity);
 void EntityCacheGet(Entity* out_buffer, size_t max_count, size_t* out_count);
 void EntityCacheShutdown();
 
-/*
- * Initialize the ESP analysis module.
- */
+namespace {
+constexpr size_t kChunk = HV_EFI_ANALYSIS_MAX_STRING_BYTES;
+bool ReadBlob(uint32_t pid, uint64_t address, void* dst, size_t size) {
+    uint8_t* out = static_cast<uint8_t*>(dst);
+    while (size > 0) {
+        const size_t n = size < kChunk ? size : kChunk;
+        if (!HvAnalysisBackendRead(pid, address, out, static_cast<uint32_t>(n))) {
+            return false;
+        }
+        out += n;
+        address += n;
+        size -= n;
+    }
+    return true;
+}
+bool ReadPtr(uint32_t pid, uint64_t address, uint64_t* out) {
+    return ReadBlob(pid, address, out, sizeof(uint64_t));
+}
+bool ReadArray(uint32_t pid, uint64_t address, uint64_t* data, int32_t* count, size_t cap) {
+    struct TArray {
+        uint64_t Data;
+        int32_t Count;
+        int32_t Max;
+    };
+    TArray a{};
+    if (!ReadBlob(pid, address, &a, sizeof(a))) {
+        return false;
+    }
+    if (a.Data == 0 || a.Count <= 0 || a.Count > a.Max ||
+        a.Count > static_cast<int32_t>(cap)) {
+        return false;
+    }
+    *data = a.Data;
+    *count = a.Count;
+    return true;
+}
+}; // anon helpers
+namespace {
+struct EspSession {
+    bool active = false;
+    uint32_t pid = 0;
+    uint64_t uworld = 0;
+    uint64_t player_controller = 0;
+    uint64_t camera_manager = 0;
+    double cam_loc[3] = {};
+    float cam_rot[3] = {};
+    float fov = 90.0f;
+    float vp[16] = {};
+    float viewport_w = 1920.0f;
+    float viewport_h = 1080.0f;
+    bool camera_ok = false;
+};
+static EspSession g_session;
+}
+
+namespace {
+float Rad(float d) {
+    return d * static_cast<float>(3.14159265358979323846) / 180.0f;
+}
+void BuildVP(const double loc[3], const float rot[3], float fov, float vw, float vh, float vp[16]) {
+    memset(vp, 0, sizeof(float) * 16);
+    const double p = Rad(rot[0]) * (double)1.0;
+    const double y = Rad(rot[1]) * (double)1.0;
+    const double r = Rad(rot[2]) * (double)1.0;
+    const double sp = sin(p), cp = cos(p);
+    const double sy = sin(y), cy = cos(y);
+    const double sr = sin(r), cr = cos(r);
+    const double rm[3][3] = {
+        {cp * cy, cp * sy, sp},
+        {sr * sp * cy - cr * sy, sr * sp * sy + cr * cy, -sr * cp},
+        {cr * sp * cy + sr * sy, cr * sp * sy - sr * cy, cr * cp}
+    };
+    const float vm[4][4] = {
+        {(float)rm[0][0], (float)rm[1][0], (float)rm[2][0], -(float)(rm[0][0]*loc[0]+rm[1][0]*loc[1]+rm[2][0]*loc[2])},
+        {(float)rm[0][1], (float)rm[1][1], (float)rm[2][1], -(float)(rm[0][1]*loc[0]+rm[1][1]*loc[1]+rm[2][1]*loc[2])},
+        {(float)rm[0][2], (float)rm[1][2], (float)rm[2][2], -(float)(rm[0][2]*loc[0]+rm[1][2]*loc[1]+rm[2][2]*loc[2])},
+        {0.0f, 0.0f, 0.0f, 1.0f}
+    };
+    const double fov_rad = Rad(fov);
+    const double aspect = vw / vh;
+    const double th = tan(fov_rad / 2.0);
+    const float pm[4][4] = {
+        {1.0f / (float)(aspect * th), 0.0f, 0.0f, 0.0f},
+        {0.0f, 1.0f / (float)th, 0.0f, 0.0f},
+        {0.0f, 0.0f, 0.0f, 1.0f},
+        {0.0f, 0.0f, 0.0f, 0.0f}
+    };
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            double acc = 0.0;
+            for (int k = 0; k < 4; ++k) {
+                acc += vm[i][k] * pm[k][j];
+            }
+            vp[i * 4 + j] = static_cast<float>(acc);
+        }
+    }
+}
+}; // anon
+
 bool EspInitialize(const EspConfig* config) {
-    if (!config || config->target_pid == 0) {
+    if (config == nullptr || config->target_pid == 0) {
         return false;
     }
-    
-    /* Start analysis session with hypervisor */
-    if (!HvAnalysisStart(config->target_pid)) {
+    if (!HvBridgeOpen(nullptr)) {
         return false;
     }
-    
-    g_target_pid = config->target_pid;
-    
-    /* Scan for UWorld using signature */
-    /* This would use HvScanProcess with the UWorld pattern */
-    /* For now, we simulate the scan result */
-    g_uworld_address = config->uworld_signature;
-    
-    /* Initialize entity cache */
+    if (!HvAnalysisBackendStart(config->target_pid)) {
+        HvBridgeClose();
+        return false;
+    }
+    g_session.pid = config->target_pid;
+    /* UWorld from its known RVA. */
+    g_session.uworld = arc_raiders::kWORLD_RVA;
+    /* Walk: UWorld -> GameInstance -> LocalPlayers -> PlayerController. */
+    uint64_t game_instance = 0;
+    if (!ReadPtr(g_session.pid, g_session.uworld + arc_raiders::kGAME_WORLD_ALT, &game_instance) || game_instance == 0) {
+        HvAnalysisBackendStop(g_session.pid);
+        HvBridgeClose();
+        return false;
+    }
+    uint64_t players_data = 0;
+    int32_t players_count = 0;
+    if (!ReadArray(g_session.pid, game_instance + arc_raiders::kGI_LOCAL_PLAYERS, &players_data, &players_count, 8) ||
+        players_data == 0) {
+        HvAnalysisBackendStop(g_session.pid);
+        HvBridgeClose();
+        return false;
+    }
+    uint64_t local_player = 0;
+    if (!ReadPtr(g_session.pid, players_data, &local_player) || local_player == 0) {
+        HvAnalysisBackendStop(g_session.pid);
+        HvBridgeClose();
+        return false;
+    }
+    if (!ReadPtr(g_session.pid, local_player + arc_raiders::kGI_PLAYER_CONTROLLER, &g_session.player_controller) ||
+        g_session.player_controller == 0) {
+        HvAnalysisBackendStop(g_session.pid);
+        HvBridgeClose();
+        return false;
+    }
+    /* PCM is live-pinned (per the post, +0x4E0 is CheatClass until re-scanned). */
+    g_session.camera_manager = g_session.player_controller + arc_raiders::kPC_PLAYER_CAMERA_MGR;
+    /* Prime the view-projection with a neutral camera so ESP boxes still project. */
+    double zero_loc[3] = {};
+    float zero_rot[3] = {};
+    BuildVP(zero_loc, zero_rot, 90.0f, g_session.viewport_w, g_session.viewport_h, g_session.vp);
     EntityCacheInitialize();
-    
-    g_initialized = true;
+    g_session.active = true;
     return true;
 }
 
-/*
- * Update entity data from the target process.
- */
 bool EspUpdate() {
-    if (!g_initialized || g_target_pid == 0 || g_uworld_address == 0) {
+    if (!g_session.active || g_session.pid == 0) {
         return false;
     }
-    
-    /* Clear previous frame's entities */
-    EntityCacheClear();
-    
-    /* Read UWorld -> OwningGameInstance */
-    uint64_t game_instance = 0;
-    if (!HvReadGuestMemory(g_target_pid, 
-                          g_uworld_address + arc_raiders::kUWorld_OwningGameInstance,
-                          &game_instance, sizeof(game_instance))) {
+    /* Camera: PCM +0xCA0 FVector3d, +0xCC0 FRotator, +0xCE8 FOV. */
+    if (g_session.camera_manager != 0) {
+        double loc[3] = {};
+        float rot[3] = {};
+        float fov = 0.0f;
+        const bool ok_loc = ReadBlob(g_session.pid, g_session.camera_manager + arc_raiders::kPCM_CAMERA_LOCATION, loc, sizeof(loc));
+        const bool ok_rot = ok_loc && ReadBlob(g_session.pid, g_session.camera_manager + arc_raiders::kPCM_CAMERA_ROTATION, rot, sizeof(rot));
+        const bool ok_fov = ok_rot && ReadBlob(g_session.pid, g_session.camera_manager + arc_raiders::kPCM_CAMERA_FOV, &fov, sizeof(fov));
+        if (ok_loc && ok_rot && ok_fov) {
+            memcpy(g_session.cam_loc, loc, sizeof(loc));
+            memcpy(g_session.cam_rot, rot, sizeof(rot));
+            if (fov > 0.0f && fov < 180.0f) {
+                g_session.fov = fov;
+            }
+            /* Recompute VP with the live camera. */
+            BuildVP(g_session.cam_loc, g_session.cam_rot, g_session.fov,
+                    g_session.viewport_w, g_session.viewport_h, g_session.vp);
+            g_session.camera_ok = true;
+        }
+    }
+    /* Read UWorld -> PersistentLevel. */
+    uint64_t level = 0;
+    if (!ReadPtr(g_session.pid, g_session.uworld + arc_raiders::kPERSISTENT_LEVEL, &level) || level == 0) {
         return false;
     }
-    
-    if (game_instance == 0) {
-        return false;
-    }
-    
-    /* Read GameInstance -> LocalPlayers array */
-    uint64_t local_players_data = 0;
-    int32_t local_players_count = 0;
-    if (!arc_raiders::ReadTArray(g_target_pid,
-                                game_instance + arc_raiders::kGameInstance_LocalPlayers,
-                                &local_players_data, &local_players_count, nullptr)) {
-        return false;
-    }
-    
-    if (local_players_count <= 0 || local_players_data == 0) {
-        return false;
-    }
-    
-    /* Read first LocalPlayer */
-    uint64_t local_player = 0;
-    if (!HvReadGuestMemory(g_target_pid, local_players_data, &local_player, sizeof(local_player))) {
-        return false;
-    }
-    
-    if (local_player == 0) {
-        return false;
-    }
-    
-    /* Read LocalPlayer -> PlayerController */
-    uint64_t player_controller = 0;
-    if (!HvReadGuestMemory(g_target_pid,
-                          local_player + arc_raiders::kLocalPlayer_PlayerController,
-                          &player_controller, sizeof(player_controller))) {
-        return false;
-    }
-    
-    if (player_controller == 0) {
-        return false;
-    }
-    
-    /* Extract camera matrix */
-    if (arc_raiders::ExtractCameraMatrix(g_target_pid, player_controller,
-                                        g_viewport_width, g_viewport_height,
-                                        g_view_projection)) {
-        /* Camera matrix successfully extracted */
-    }
-    
-    /* Read UWorld -> PersistentLevel -> Actors array */
-    uint64_t persistent_level = 0;
-    if (!HvReadGuestMemory(g_target_pid,
-                          g_uworld_address + arc_raiders::kUWorld_PersistentLevel,
-                          &persistent_level, sizeof(persistent_level))) {
-        return false;
-    }
-    
-    if (persistent_level == 0) {
-        return false;
-    }
-    
+    /* PersistentLevel +0x98 = TArray<AActor*> (classic). */
     uint64_t actors_data = 0;
     int32_t actors_count = 0;
-    if (!arc_raiders::ReadTArray(g_target_pid,
-                                persistent_level + arc_raiders::kLevel_Actors,
-                                &actors_data, &actors_count, nullptr)) {
+    if (!ReadArray(g_session.pid, level + arc_raiders::kLEVEL_Actors, &actors_data, &actors_count, arc_raiders::kMAX_ACTORS_PER_FRAME) ||
+        actors_data == 0) {
         return false;
     }
-    
-    if (actors_count <= 0 || actors_data == 0) {
-        return false;
-    }
-    
-    /* Iterate through actors and extract entities */
+    EntityCacheClear();
     for (int32_t i = 0; i < actors_count; ++i) {
-        uint64_t actor_address = 0;
-        if (!HvReadGuestMemory(g_target_pid,
-                              actors_data + i * sizeof(uint64_t),
-                              &actor_address, sizeof(actor_address))) {
+        uint64_t actor = 0;
+        if (!ReadPtr(g_session.pid, actors_data + static_cast<size_t>(i) * sizeof(uint64_t), &actor) || actor == 0) {
             continue;
         }
-        
-        if (actor_address == 0) {
+        /* AActor +0x250 = RootComponent. */
+        uint64_t root = 0;
+        if (!ReadPtr(g_session.pid, actor + arc_raiders::kACTOR_ROOT_COMPONENT, &root) || root == 0) {
             continue;
         }
-        
-        /* Read actor's root component */
-        uint64_t root_component = 0;
-        if (!HvReadGuestMemory(g_target_pid,
-                              actor_address + arc_raiders::kActor_RootComponent,
-                              &root_component, sizeof(root_component))) {
+        /* FTransform (96B): +0x2E0, translation at +0x20 (double x,y,z). */
+        double xform[arc_raiders::kTRANSFORM_SIZE / sizeof(double)] = {};
+        if (!ReadBlob(g_session.pid, root + arc_raiders::kCOMPONENT_TO_WORLD, xform, sizeof(xform))) {
             continue;
         }
-        
-        if (root_component == 0) {
-            continue;
-        }
-        
-        /* Read component transform */
-        struct FTransform {
-            float Rotation[4];  /* FQuat */
-            float Translation[3]; /* FVector */
-            float Padding1;
-            float Scale3D[3];
-            float Padding2;
-        };
-        
-        FTransform transform = {};
-        if (!HvReadGuestMemory(g_target_pid,
-                              root_component + arc_raiders::kSceneComponent_ComponentToWorld,
-                              &transform, sizeof(transform))) {
-            continue;
-        }
-        
-        /* Create entity */
-        Entity entity = {};
-        entity.world_x = transform.Translation[0];
-        entity.world_y = transform.Translation[1];
-        entity.world_z = transform.Translation[2];
-        entity.coordinate_space = 1; /* World space */
-        entity.is_visible = 1;
-        entity.color = arc_raiders::kCOLOR_AI; /* Default to enemy color */
-        
-        /* Project to screen space */
-        float screen_x, screen_y, width, height;
-        if (arc_raiders::ProjectBoundingBox(entity.world_x, entity.world_y, entity.world_z,
-                                           1.0f, 2.0f, 1.0f, /* Default bounding box */
-                                           g_view_projection,
-                                           g_viewport_width, g_viewport_height,
-                                           &screen_x, &screen_y, &width, &height)) {
-            entity.screen_x = screen_x;
-            entity.screen_y = screen_y;
-            entity.width = width;
-            entity.height = height;
+        /* Entity slot */
+        Entity e = {};
+        e.world_x = static_cast<float>(xform[4]); /* Trans.X */
+        e.world_y = static_cast<float>(xform[5]); /* Trans.Y */
+        e.world_z = static_cast<float>(xform[6]); /* Trans.Z */
+        e.coordinate_space = 1; /* world */
+        e.is_visible = 1;
+        e.color = arc_raiders::kCOLOR_AI; /* default */
+        /* TODO: read actor name + classify (player/AI/vehicle/loot). */
+        swprintf_s(e.name, 32, L"actor_%d", i);
+        /* Bounding box: 1m x 1.8m x 1m centred on the root component. */
+        float sx = 0, sy = 0, sw = 0, sh = 0;
+        if (ProjectBoundingBox(e.world_x, e.world_y, e.world_z, 1.0f, 1.8f, 1.0f, g_session.vp, g_session.viewport_w, g_session.viewport_h, &sx, &sy, &sw, &sh)) {
+            e.screen_x = sx;
+            e.screen_y = sy;
+            e.width = sw;
+            e.height = sh;
         } else {
-            entity.is_visible = 0;
+            e.is_visible = 0;
         }
-        
-        /* Set entity name */
-        swprintf_s(entity.name, 32, L"Actor_%d", i);
-        
-        /* Add to cache */
-        EntityCacheAdd(&entity);
+        EntityCacheAdd(&e);
     }
-    
     return true;
 }
 
-/*
- * Retrieve extracted entities.
- */
 void EspGetEntities(Entity* out_buffer, size_t max_count, size_t* out_count) {
+    if (out_count != nullptr) {
+        *out_count = 0;
+    }
+    if (out_buffer == nullptr || max_count == 0 || !g_session.active) {
+        return;
+    }
     EntityCacheGet(out_buffer, max_count, out_count);
 }
 
-/*
- * Shut down the ESP analysis module.
- */
 void EspShutdown() {
-    if (!g_initialized) {
+    if (!g_session.active) {
         return;
     }
-    
+    (void)HvAnalysisBackendStop(g_session.pid);
+    HvBridgeClose();
     EntityCacheShutdown();
-    
-    g_initialized = false;
-    g_target_pid = 0;
-    g_uworld_address = 0;
-    g_gnames_address = 0;
-    g_camera_manager_address = 0;
-    
-    std::memset(g_view_projection, 0, sizeof(g_view_projection));
+    memset(&g_session, 0, sizeof(g_session));
 }
 
-} // namespace hypersinv::esp
+}; /* hypersinv::esp */
 
-#endif /* MODULE_ESP */
+#endif // MODULE_ESP
