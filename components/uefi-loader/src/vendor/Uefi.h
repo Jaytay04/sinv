@@ -1,5 +1,5 @@
 /*
- * Uefi.h — Vendored UEFI base types and Boot/System table layout for MSVC
+ * Uefi.h ??? Vendored UEFI base types and Boot/System table layout for MSVC
  * EFI-application builds.
  *
  * Compiled and linked as a freestanding EFI application:
@@ -7,7 +7,7 @@
  *     cl /GS- /c ... && link /SUBSYSTEM:EFI_APPLICATION /ENTRY:EfiMain /NODEFAULTLIB
  *
  * P2 shipped a minimal subset (Hdr + three pool functions) sufficient to link
- * a smoke app. The loader (P4) needs the REAL table layouts — the EFI_BOOT_SERVICES
+ * a smoke app. The loader (P4) needs the REAL table layouts ??? the EFI_BOOT_SERVICES
  * and EFI_SYSTEM_TABLE structures are fixed-order tables of function pointers, so
  * a member's offset is dictated by the specification, and any omission above a
  * needed member shifts every later member. This header now declares the full
@@ -173,6 +173,31 @@ typedef struct {
 typedef struct _EFI_DEVICE_PATH_PROTOCOL EFI_DEVICE_PATH_PROTOCOL;
 typedef struct _EFI_OPEN_PROTOCOL_INFORMATION_ENTRY EFI_OPEN_PROTOCOL_INFORMATION_ENTRY;
 typedef struct _EFI_RUNTIME_SERVICES EFI_RUNTIME_SERVICES;
+
+#define EFI_VARIABLE_NON_VOLATILE       0x00000001
+#define EFI_VARIABLE_BOOTSERVICE_ACCESS 0x00000002
+#define EFI_VARIABLE_RUNTIME_ACCESS     0x00000004
+
+typedef EFI_STATUS (EFIAPI *EFI_SET_VARIABLE)(
+    EFI_GUID *VariableName, EFI_GUID *VendorGuid,
+    UINT32 Attributes, UINTN DataSize, VOID *Data);
+
+struct _EFI_RUNTIME_SERVICES {
+    EFI_TABLE_HEADER               Hdr;
+    VOID                          *GetTime;
+    VOID                          *SetTime;
+    VOID                          *GetWakeupTime;
+    VOID                          *SetWakeupTime;
+    VOID                          *SetVirtualAddressMap;
+    VOID                          *ConvertPointer;
+    VOID                          *GetVariable;
+    EFI_SET_VARIABLE               SetVariable;
+    VOID                          *GetNextVariableName;
+    VOID                          *QueryVariableInfo;
+    VOID                          *UpdateCapsule;
+    VOID                          *QueryCapsuleCapabilities;
+    VOID                          *ResetSystem;
+};
 
 /* ------------------------------------------------------------------------- */
 /* Loaded image and filesystem protocols                                     */
@@ -452,7 +477,7 @@ typedef EFI_STATUS (EFIAPI *EFI_CREATE_EVENT_EX)(
     const VOID *NotifyContext, const EFI_GUID *EventGroup, EFI_EVENT *Event);
 
 /* ------------------------------------------------------------------------- */
-/* EFI_BOOT_SERVICES — full table layout (fixed member order per UEFI spec)   */
+/* EFI_BOOT_SERVICES ??? full table layout (fixed member order per UEFI spec)   */
 /* ------------------------------------------------------------------------- */
 typedef struct {
     EFI_TABLE_HEADER                  Hdr;
@@ -533,14 +558,14 @@ typedef struct {
 } EFI_CONFIGURATION_TABLE;
 
 /* ------------------------------------------------------------------------- */
-/* EFI_SYSTEM_TABLE — full layout                                             */
+/* EFI_SYSTEM_TABLE ??? full layout                                             */
 /* ------------------------------------------------------------------------- */
 typedef struct {
     EFI_TABLE_HEADER                  Hdr;
     CHAR16                           *FirmwareVendor;
     UINT32                            FirmwareRevision;
     EFI_HANDLE                        ConsoleInHandle;
-    /* EFI_SIMPLE_TEXT_INPUT_PROTOCOL — pointer only, not dereferenced. */
+    /* EFI_SIMPLE_TEXT_INPUT_PROTOCOL ??? pointer only, not dereferenced. */
     VOID                             *ConIn;
     EFI_HANDLE                        ConsoleOutHandle;
     EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL  *ConOut;

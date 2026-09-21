@@ -59,6 +59,7 @@ else()
             runtime_scanner.cpp
             runtime_shadow.cpp
             runtime_teardown.cpp
+            user_vmcall_dispatch.c
             runtime_transport.cpp
             scanner.cpp
             efi_hypervisor.asm
@@ -94,6 +95,12 @@ else()
             /FIXED:NO
             /MANIFEST:NO
             /NODEFAULTLIB)
+        # Phase 6: Strip debug info and remove identifiable PE metadata
+        target_link_options(uefi_hypervisor PRIVATE
+            /DEBUG:NONE
+            /OPT:REF
+            /OPT:ICF
+            /DYNAMICBASE:NO)
         find_program(HYPERSINV_DUMPBIN_EXECUTABLE NAMES dumpbin.exe)
         find_program(HYPERSINV_POWERSHELL_EXECUTABLE
             NAMES powershell.exe pwsh.exe)

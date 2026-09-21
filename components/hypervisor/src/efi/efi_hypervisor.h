@@ -116,6 +116,16 @@ extern "C" {
 #define HV_EFI_CALL_SHADOW_CONTROL UINT32_C(8)
 #define HV_EFI_CALL_ANALYSIS_CONTROL UINT32_C(9)
 
+/* Ring-3 user-mode VMCALL command.  The resident handler validates CPL=3,
+ * reads the shared mailbox, executes the command, and resumes the guest. */
+#define HV_EFI_CALL_USER_COMMAND UINT32_C(10)
+#define HV_EFI_USER_VMCALL_MAGIC UINT64_C(0x55535233564D5831) /* "USR3VMX1" */
+
+/* User-mode mailbox and command state. */
+#define HV_EFI_USER_STATE_UNAVAILABLE UINT32_C(0)
+#define HV_EFI_USER_STATE_READY UINT32_C(1)
+#define HV_EFI_USER_STATE_PROCESSING UINT32_C(2)
+
 #define HV_EFI_RUNTIME_ABI_VERSION UINT32_C(1)
 #define HV_EFI_RUNTIME_STATE_UNAVAILABLE UINT32_C(0)
 #define HV_EFI_RUNTIME_STATE_ACTIVE UINT32_C(1)
@@ -255,6 +265,7 @@ extern "C" {
 #define HV_EFI_VM_CPU_USE_IO_BITMAPS (UINT32_C(1) << 25)
 #define HV_EFI_VM_CPU_USE_MSR_BITMAPS (UINT32_C(1) << 28)
 #define HV_EFI_VM_CPU_ACTIVATE_SECONDARY (UINT32_C(1) << 31)
+#define HV_EFI_VM_CPU_RDTSC_EXITING (UINT32_C(1) << 10)
 #define HV_EFI_VM_SECONDARY_ENABLE_EPT (UINT32_C(1) << 1)
 #define HV_EFI_VM_SECONDARY_ENABLE_RDTSCP (UINT32_C(1) << 3)
 #define HV_EFI_VM_SECONDARY_ENABLE_VPID (UINT32_C(1) << 5)
@@ -274,6 +285,9 @@ extern "C" {
 #define HV_EFI_EPT_MEMORY_TYPE_WB UINT32_C(6)
 #define HV_EFI_EPTP_WALK_LENGTH_4 (UINT64_C(3) << 3)
 #define HV_EFI_EPT_ACCESS_RWX UINT64_C(7)
+#define HV_EFI_EPT_ACCESS_RX UINT64_C(5)
+#define HV_EFI_EPT_ACCESS_RW UINT64_C(3)
+#define HV_EFI_EPT_ACCESS_R UINT64_C(1)
 #define HV_EFI_EPT_LARGE_PAGE (UINT64_C(1) << 7)
 #define HV_EFI_EPT_2MB_SHIFT UINT32_C(21)
 #define HV_EFI_EPT_1GB_SHIFT UINT32_C(30)
@@ -760,6 +774,8 @@ typedef struct HV_EFI_CONTEXT {
     uint64_t RuntimeAnalysisStatePhysical;    /* 1152 */
     uint32_t RuntimeAnalysisStatePages;       /* 1160 */
     uint32_t ReservedRuntimeAnalysis;         /* 1164 */
+    /* Ring-3 user-mode VMCALL state. */
+        uint32_t UserCommandState;                /* 1168 */
 } HV_EFI_CONTEXT;
 
 /* Source-compatible descriptive aliases for the guest descriptor fields. */
@@ -856,6 +872,8 @@ _Static_assert(offsetof(HV_EFI_CONTEXT, RuntimeAnalysisEntry) == 1144,
                "runtime analysis entry ABI drift");
 _Static_assert(offsetof(HV_EFI_CONTEXT, RuntimeAnalysisStatePhysical) == 1152,
                "runtime analysis state ABI drift");
+_Static_assert(offsetof(HV_EFI_CONTEXT, UserCommandState) == 1168,
+               "user command state ABI drift");
 _Static_assert(sizeof(HV_EFI_MEMORY_DESCRIPTOR_VIEW) == 40,
                "UEFI memory descriptor view ABI drift");
 _Static_assert(sizeof(HV_EFI_PROCESSOR_RECORD) == 104,

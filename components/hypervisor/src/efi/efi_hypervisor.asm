@@ -66,6 +66,7 @@ PUBLIC HvEfiGuestTransitionStart
 PUBLIC HvEfiGuestTransitionEnd
 
 EXTERN HvEfiMainBody:PROC
+EXTERN HvEfiUserVmcallDispatch:PROC
 
 ; Keep one ordinary PE relocation in the EFI image.  The resident block is
 ; copied as PIC, but the loader still needs a base-relocation directory for
@@ -715,42 +716,78 @@ HvEfiResidentVmExit PROC
     je ResidentWrmsr
     cmp eax, EXIT_REASON_EPT_VIOLATION
     je ResidentEptViolation
+    cmp eax, EXIT_REASON_DEBUG
+    cmp eax, 3  ; EXIT_REASON_EXCEPTION with vector 3 (#BP)
+    je ResidentBreakpointException
+    je ResidentDebugException
     cmp eax, EXIT_REASON_XSETBV
-    je ResidentInstructionExit
+    je ResidentXsetbv
+    cmp eax, EXIT_REASON_RDTSC
+    je ResidentRdtsc
+    cmp eax, EXIT_REASON_RDTSCP
+    je ResidentRdtscp
     jmp ResidentFatal
 
 ResidentRdmsr:
-    ; The EFI path deliberately preserves the containing hypervisor's CPUID
-    ; identity, unlike the original driver's stealth policy.  Keep that
-    ; contract coherent by forwarding its synthetic MSRs to L0.  In
-    ; particular, returning zero for the advertised TSC-frequency MSR makes
-    ; VMware firmware divide by zero during the subsequent boot-manager I/O.
+    ; Phase 3: MSR pass-through and normalization
     mov eax, dword ptr [r11 + CONTEXT_GUEST_RCX]
+
+    ; Synthetic MSRs (0x40000000-0x400000FF): return zero to hide hypervisor
     cmp eax, HYPERV_MSR_START
-    jb ResidentRdmsrNotSynthetic
+    jb ResidentRdmsrCheckSev
     cmp eax, HYPERV_MSR_END
-    jbe ResidentRdmsrSynthetic
+    jbe ResidentRdmsrZero
 
-ResidentRdmsrNotSynthetic:
-    ; VMware exposes the AMD SEV status probe even when the physical host is
-    ; Intel and answers it with zero.  Nested VMX cannot express that address
-    ; in an L1 MSR bitmap, so preserve L0's observed result explicitly.
+ResidentRdmsrCheckSev:
+    ; AMD SEV status: return zero (Intel platform)
     cmp eax, AMD_SEV_STATUS_MSR
-    jne ResidentUnsupportedMsr
+    je ResidentRdmsrZero
 
-ResidentRdmsrZero:
-    xor eax, eax
-    mov qword ptr [r11 + CONTEXT_GUEST_RAX], rax
-    mov qword ptr [r11 + CONTEXT_GUEST_RDX], rax
-    jmp ResidentMsrAdvance
-
-ResidentRdmsrSynthetic:
-    mov r8d, eax
-    mov ecx, r8d
+    ; Default: pass through natively for all other MSRs
+ResidentRdmsrNativeExec:
+    mov ecx, eax
     rdmsr
     mov qword ptr [r11 + CONTEXT_GUEST_RAX], rax
     mov qword ptr [r11 + CONTEXT_GUEST_RDX], rdx
+    jmp ResidentMsrAdvance
 
+ResidentRdmsrZero:
+    xor eax, eax
+    xor edx, edx
+    mov qword ptr [r11 + CONTEXT_GUEST_RAX], rax
+    mov qword ptr [r11 + CONTEXT_GUEST_RDX], rdx
+    jmp ResidentMsrAdvance
+
+ResidentWrmsr:
+    ; Phase 3: MSR write normalization
+    mov eax, dword ptr [r11 + CONTEXT_GUEST_RCX]
+
+    ; Synthetic MSRs (0x40000000-0x400000FF): silently ignore writes
+    cmp eax, HYPERV_MSR_START
+    jb ResidentWrmsrNative
+    cmp eax, HYPERV_MSR_END
+    jbe ResidentMsrAdvance  ; Silently ignore
+
+ResidentWrmsrNative:
+    ; IA32_FEATURE_CONTROL (0x3A): block writes (lock bit should be set)
+    cmp eax, 3Ah
+    je ResidentUnsupportedMsr
+
+    ; IA32_VMX_* MSRs (0x480-0x48F): block writes
+    cmp eax, 480h
+    jb ResidentWrmsrNativeExec
+    cmp eax, 490h
+    ja ResidentWrmsrNativeExec
+    jmp ResidentUnsupportedMsr
+
+ResidentWrmsrNativeExec:
+    mov ecx, eax
+    mov eax, dword ptr [r11 + CONTEXT_GUEST_RAX]
+    mov edx, dword ptr [r11 + CONTEXT_GUEST_RDX]
+    wrmsr
+    jmp ResidentMsrAdvance
+
+ResidentUnsupportedMsr:
 ResidentMsrAdvance:
     mov ecx, VMCS_VM_EXIT_INSTRUCTION_LEN
     vmread rax, rcx
@@ -759,22 +796,21 @@ ResidentMsrAdvance:
     mov r9d, eax
     jmp ResidentAdvanceRip
 
-ResidentWrmsr:
-    ; Forward the synthetic write for the same reason as the corresponding
-    ; read: the guest still sees the containing hypervisor's CPUID interface.
-    mov eax, dword ptr [r11 + CONTEXT_GUEST_RCX]
-    cmp eax, HYPERV_MSR_START
-    jb ResidentUnsupportedMsr
-    cmp eax, HYPERV_MSR_END
-    ja ResidentUnsupportedMsr
-    mov r8d, eax
-    mov ecx, r8d
-    mov eax, dword ptr [r11 + CONTEXT_GUEST_RAX]
-    mov edx, dword ptr [r11 + CONTEXT_GUEST_RDX]
-    wrmsr
+ResidentRdtsc:
+    ; Phase 2: RDTSC virtualization ??? return native TSC
+    rdtsc
+    mov qword ptr [r11 + CONTEXT_GUEST_RAX], rax
+    mov qword ptr [r11 + CONTEXT_GUEST_RDX], rdx
     jmp ResidentMsrAdvance
 
-ResidentUnsupportedMsr:
+ResidentRdtscp:
+    ; Phase 2: RDTSCP virtualization ??? return native TSC + IA32_TSC_AUX
+    rdtscp
+    mov qword ptr [r11 + CONTEXT_GUEST_RAX], rax
+    mov qword ptr [r11 + CONTEXT_GUEST_RDX], rdx
+    mov qword ptr [r11 + CONTEXT_GUEST_RCX], rcx
+    jmp ResidentMsrAdvance
+
     ; The all-clear selective bitmap allows every addressable MSR through.
     ; Other exits are therefore outside its two architectural ranges.  Inject
     ; #GP(0) without advancing RIP so the guest exception path observes the
@@ -1233,9 +1269,24 @@ ResidentInstructionExit:
     je ResidentXsetbv
 
     mov eax, dword ptr [r11 + CONTEXT_GUEST_RAX]
+
+    ; Phase 1: Check for custom health leaf first
     cmp eax, HV_EFI_HEALTH_LEAF
     je ResidentHealthCpuid
 
+    ; Phase 1: Intercept 0x40000000-0x400000FF (Hyper-V/synthetic leaves)
+    ; Return zero to hide hypervisor presence
+    cmp eax, 40000000h
+    jb ResidentCpuidNative
+    cmp eax, 400000FFh
+    ja ResidentCpuidNative
+    xor eax, eax
+    xor ebx, ebx
+    xor ecx, ecx
+    xor edx, edx
+    jmp ResidentCpuidStore
+
+ResidentCpuidNative:
     ; CPUID.01H:ECX.OSXSAVE reflects CR4.OSXSAVE.  VM exit restores the
     ; firmware-derived host CR4, so mirror only the guest OSXSAVE bit into
     ; root CR4 before executing native CPUID on the guest's behalf.
@@ -1261,6 +1312,8 @@ ResidentCpuidCr4Ready:
     cmp r10d, 1
     jne ResidentCpuidStore
     and ecx, CPUID_LEAF1_GUEST_ECX_MASK
+    ; Phase 1: Clear HypervisorPresent bit (ECX[31]) for transparency
+    and ecx, 07FFFFFFFh  ; Clear bit 31
 ResidentCpuidStore:
     mov qword ptr [r11 + CONTEXT_GUEST_RAX], rax
     mov qword ptr [r11 + CONTEXT_GUEST_RBX], rbx
@@ -1335,6 +1388,8 @@ ResidentVmcall:
     je ResidentShadowControl
     cmp ecx, HV_EFI_CALL_ANALYSIS_CONTROL
     je ResidentAnalysisControl
+    cmp ecx, HV_EFI_CALL_USER_COMMAND
+    je ResidentUserVmcall
     jmp ResidentFatal
 
 ResidentValidateRuntimeCaller:
@@ -1779,6 +1834,79 @@ ResidentAnalysisControl:
     mov r9d, eax
     jmp ResidentAdvanceRip
 
+ResidentUserVmcall:
+    ; Ring-3 user-mode VMCALL handler ? register-based interface.
+    ; No shared memory, no mailbox, no driver required.
+    ; Guest registers: RCX=opcode, RDX=arg1, R8=arg2, R9=arg3
+    ; Result returned in RAX.
+
+    ; Validate caller is Ring 3 (CPL=3)
+    mov ecx, VMCS_GUEST_CS_SELECTOR
+    vmread rax, rcx
+    jbe ResidentFatal
+    and eax, 3
+    cmp eax, 3
+    jne ResidentFatal
+
+    ; Validate user-mode VMCALL magic in RAX
+    mov rax, qword ptr [r11 + CONTEXT_GUEST_RAX]
+    mov r10, HV_EFI_USER_VMCALL_MAGIC_LO OR (HV_EFI_USER_VMCALL_MAGIC_HI SHL 32)
+    cmp rax, r10
+    jne ResidentFatal
+
+    ; Check that user-mode VMCALL is enabled
+    cmp dword ptr [r11 + CONTEXT_USER_COMMAND_STATE], HV_EFI_USER_STATE_READY
+    jne ResidentUserVmcallOffline
+
+    ; Read command from guest registers
+    mov ecx, dword ptr [r11 + CONTEXT_GUEST_RCX]  ; opcode
+    mov rdx, qword ptr [r11 + CONTEXT_GUEST_RDX]  ; arg1
+    mov r8,  qword ptr [r11 + CONTEXT_GUEST_R8]   ; arg2
+    mov r9,  qword ptr [r11 + CONTEXT_GUEST_R9]   ; arg3
+
+    ; Dispatch opcode
+    cmp ecx, 0
+    je ResidentUserVmcallStatus
+    cmp ecx, 1
+    je ResidentUserVmcallHealth
+    ; Unknown opcode
+    mov rax, 1  ; USER_STATUS_INVALID_OPCODE
+    jmp ResidentUserVmcallDone
+
+ResidentUserVmcallStatus:
+    ; Return hypervisor status: RAX=0 (OK), RBX=state, RCX=capabilities
+    xor rax, rax  ; status = OK
+    mov rbx, qword ptr [r11 + CONTEXT_RUNTIME_STATE]
+    mov rcx, qword ptr [r11 + CONTEXT_RUNTIME_CAPABILITIES]
+    mov qword ptr [r11 + CONTEXT_GUEST_RAX], rax
+    mov qword ptr [r11 + CONTEXT_GUEST_RBX], rbx
+    mov qword ptr [r11 + CONTEXT_GUEST_RCX], rcx
+    xor rdx, rdx
+    mov qword ptr [r11 + CONTEXT_GUEST_RDX], rdx
+    jmp ResidentUserVmcallDone
+
+ResidentUserVmcallHealth:
+    ; Return health check: RAX=0 (OK), RBX=enabled CPU count
+    xor rax, rax  ; status = OK
+    mov rbx, qword ptr [r11 + CONTEXT_ENABLED_PROCESSOR_COUNT]
+    mov qword ptr [r11 + CONTEXT_GUEST_RAX], rax
+    mov qword ptr [r11 + CONTEXT_GUEST_RBX], rbx
+    xor rdx, rdx
+    mov qword ptr [r11 + CONTEXT_GUEST_RDX], rdx
+    xor rcx, rcx
+    mov qword ptr [r11 + CONTEXT_GUEST_RCX], rcx
+    jmp ResidentUserVmcallDone
+
+ResidentUserVmcallDone:
+    mov r9d, 3  ; VMCALL instruction is 3 bytes
+    jmp ResidentAdvanceRip
+
+ResidentUserVmcallOffline:
+    mov rax, 5
+    mov qword ptr [r11 + CONTEXT_GUEST_RAX], rax
+    mov r9d, 3
+    jmp ResidentAdvanceRip
+
 ResidentShadowControl:
     ; The kernel companion authenticates the mailbox envelope; root also
     ; proves same-CPU ownership using the boot token and generation.
@@ -2161,6 +2289,47 @@ ResidentFatalAfterRestore:
     jmp ResidentReportFatal
 
 ResidentFatal:
+ResidentDebugException:
+    ; Phase 4: Handle debug exceptions (#DB) silently.
+    ; Clear DR0-DR7 to remove any breakpoints set by anti-cheat.
+    ; Advance past the faulting instruction and resume.
+    mov ecx, VMCS_VM_EXIT_INSTRUCTION_LEN
+    vmread rax, rcx
+    jbe ResidentFatal
+    mov dword ptr [r11 + CONTEXT_LAST_EXIT_LENGTH], eax
+    mov r9d, eax
+
+    ; Clear all debug registers in the guest state
+    mov qword ptr [r11 + CONTEXT_GUEST_RAX], 0
+    mov qword ptr [r11 + CONTEXT_GUEST_RBX], 0
+    mov qword ptr [r11 + CONTEXT_GUEST_RCX], 0
+    mov qword ptr [r11 + CONTEXT_GUEST_RDX], 0
+
+    ; Clear DR7 in VMCS (debug control register)
+    mov ecx, VMCS_GUEST_DR7
+    xor rax, rax
+    vmwrite rcx, rax
+    jbe ResidentFatal
+
+    ; Clear pending debug exceptions in VMCS
+    mov ecx, VMCS_GUEST_PENDING_DEBUG
+    vmwrite rcx, rax
+    jbe ResidentFatal
+
+    jmp ResidentAdvanceRip
+
+ResidentBreakpointException:
+    ; Phase 4: Handle breakpoint exceptions (#BP/INT3) silently.
+    ; Anti-cheats use software breakpoints for integrity checks.
+    ; We silently skip the INT3 instruction and resume.
+    mov ecx, VMCS_VM_EXIT_INSTRUCTION_LEN
+    vmread rax, rcx
+    jbe ResidentFatal
+    mov dword ptr [r11 + CONTEXT_LAST_EXIT_LENGTH], eax
+    mov r9d, eax
+    jmp ResidentAdvanceRip
+
+
     mov dword ptr [r11 + CONTEXT_FAILURE], 1
     mov r8d, dword ptr [r11 + CONTEXT_LAST_EXIT_REASON]
     mov al, 'F'

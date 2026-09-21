@@ -1,4 +1,4 @@
-/* Production loader.efi replay, restore, and handoff entry. */
+﻿/* Production loader.efi replay, restore, and handoff entry. */
 #include "Uefi.h"
 #include "Tcg2Protocol.h"
 
@@ -511,5 +511,29 @@ handoff:
     }
     reference_log_release(&reference);
     efi_file_release(&reference_bytes);
+
+    /* Phase 5: Delete BootNext variable to remove NVRAM traces.
+     * This must happen before ExitBootServices so the firmware
+     * runtime services are still available. */
+    {
+        EFI_STATUS nvram_status;
+        static const EFI_GUID global_guid =
+            { 0x8BE4DF61, 0x93CA, 0x11D2,
+              { 0xAA, 0x0D, 0x00, 0xE0, 0x98, 0x03, 0x2B, 0x8C } };
+        nvram_status = gST->RuntimeServices->SetVariable(
+            (CHAR16 *)L"BootNext",
+            (EFI_GUID *)&global_guid,
+            EFI_VARIABLE_NON_VOLATILE |
+            EFI_VARIABLE_BOOTSERVICE_ACCESS |
+            EFI_VARIABLE_RUNTIME_ACCESS,
+            0, NULL);
+        if (EFI_ERROR(nvram_status) && nvram_status != EFI_NOT_FOUND) {
+            con_print(L"WARNING: BootNext cleanup failed: ");
+            con_print_hex(nvram_status, 8u);
+            con_print(L"\r\n");
+        } else {
+            con_print(L"BootNext cleanup: PASS\r\n");
+        }
+    }
     return restore_and_handoff(image_handle, replay_succeeded);
 }

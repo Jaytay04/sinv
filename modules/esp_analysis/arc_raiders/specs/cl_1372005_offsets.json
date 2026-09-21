@@ -1,0 +1,26 @@
+{
+  "build": "CL-1372005",
+  "date": "2026-09-09",
+  "uworld": {
+    "base_rva": "0xE782D78",
+    "game_instance": "0x478"
+  },
+  "game_instance": {
+    "local_players": "0x138"
+  },
+  "local_player": {
+    "player_controller": "0x0A0"
+  },
+  "player_controller": {
+    "player_camera_manager": "0x4E0",
+    "control_rotation": "0x438"
+  },
+  "player_camera_manager": {
+    "camera_location": "0xCA0",
+    "camera_rotation": "0xCC0",
+    "camera_fov": "0xCE8"
+  },
+  "player_state": {
+    "player_name_private": "0x468"
+  }
+}

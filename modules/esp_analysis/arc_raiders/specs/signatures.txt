@@ -1,0 +1,5 @@
+# GUObjectArray signature pattern
+48 8B 05 ?? ?? ?? ?? 48 85 C0 74 ?? 48 8B 40
+
+# PlayerCameraManager class name pattern
+63 61 6D 65 72 61 6D 61 6E 61 67 65 72 00  ; "cameramanager"
