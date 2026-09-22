@@ -1,9 +1,16 @@
-﻿#ifdef MODULE_ESP
+#ifdef MODULE_ESP
 
 #include <cstdint>
 #include <cstring>
 
 namespace hypersinv::esp::arc_raiders {
+
+/*
+ * TODO(2026-09-22 patch): routines below are stale CL-1372005. The new
+ * FField/FName/FString decrypt chains are specified in
+ * arc_raiders/specs/patch_2026_09_22_offsets.json; rewrite once
+ * live-verified in the VM.
+ */
 
 /*
  * Rolling XOR decryption for FName indices.
@@ -75,3 +82,4 @@ void DecryptStringInverse(const char* input, uint8_t* output, size_t length,
 } // namespace hypersinv::esp::arc_raiders
 
 #endif /* MODULE_ESP */
+

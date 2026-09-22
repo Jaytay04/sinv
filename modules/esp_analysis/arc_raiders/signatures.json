@@ -26,17 +26,7 @@
     }
   },
   "decryption": {
-    "FName": {
-      "algorithm": "rolling_xor",
-      "key": "10 20 30 40 50 60 70 80",
-      "seed": "0x12345678",
-      "step": "0x01020304",
-      "rotate": 5
-    },
-    "String": {
-      "algorithm": "affine_substitution",
-      "multiplier": 197,
-      "addend": 123
-    }
+    "reference": "specs/patch_2026_09_22_offsets.json",
+    "note": "stale CL-1372005 rolling_xor/affine replaced; see specs/patch_2026_09_22_offsets.json"
   }
 }

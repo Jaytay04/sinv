@@ -70,6 +70,12 @@ bool EspInitialize(const EspConfig* config);
 bool EspUpdate();
 
 /*
+ * Set the client-area projection viewport used for world-to-screen
+ * transforms. Called when the target window size changes.
+ */
+void EspViewportSize(float vw, float vh);
+
+/*
  * Retrieve extracted entities in overlay-compatible format.
  * 
  * Copies up to max_count entities into out_buffer and sets out_count

@@ -1,0 +1,91 @@
+{
+  "build": "patch-2026-09-22",
+  "date": "2026-09-22",
+  "supersedes": "cl_1372005_offsets.json",
+  "statics": {
+    "gworld": "0x10971338",
+    "gworld_alt": "0x10839A98",
+    "gnames": "0x10987D40",
+    "keytable": "0x1082B26C",
+    "fstring_verification": "0xD3C29A0"
+  },
+  "uworld": {
+    "game_instance": "0x478"
+  },
+  "game_instance": {
+    "local_players": "0x138"
+  },
+  "local_player": {
+    "player_controller": "0x0A0"
+  },
+  "player_controller": {
+    "player_camera_manager": "0x4E0",
+    "camera_manager_note": "still NEEDS LIVE-PIN via cameramanager class scan",
+    "control_rotation": "0x438"
+  },
+  "player_camera_manager": {
+    "camera_location": "0xCA0",
+    "camera_rotation": "0xCC0",
+    "camera_fov": "0xCE8",
+    "note": "unchanged from CL-1372005; re-verify once PCM is live-pinned"
+  },
+  "scene_component": {
+    "c2w_rotation": "0x310",
+    "c2w_translation": "0x330",
+    "note": "96B FTransform split: quat4d @0x310, FVector3d @0x330"
+  },
+  "mesh_bone": {
+    "seed": "0x7B0",
+    "seed_pipeline": {
+      "xmm_xor": "0xC05F21012B46E100",
+      "xmm_add": "0x3FA0DEFFD4B91F00"
+    },
+    "selector": "0x848",
+    "selector_extract": "(u32 >> 15) & 1",
+    "table_address": {
+      "lo": {
+        "src": "mesh+0x7B0",
+        "xor": "0x2B46E100",
+        "rol32": 3,
+        "add": "0xD4B91F00"
+      },
+      "hi": {
+        "src": "mesh+0x7B4",
+        "xor": "0xC05F2101",
+        "rol32": 3,
+        "add": "0x3FA0DEFF"
+      }
+    }
+  },
+  "decrypt": {
+    "ffield_name": {
+      "lo_field": "+0x90",
+      "hi_field": "+0x98",
+      "stage1": {
+        "add_const": "0x44CB31F912F95FFF",
+        "rol64": 17
+      },
+      "xor_src": "+0x98",
+      "stage2": {
+        "add_const": "0xBB34B0C01E5AA000",
+        "rol64": 47
+      }
+    },
+    "fname": {
+      "field_lo": "+0x90",
+      "field_hi": "+0x98",
+      "rol8": 17,
+      "aux_sub_const": "0x44CB4F3FE1A56000",
+      "pool_selector_base": "0x44CB31F912F95FFF",
+      "status": "pending live-pin (pool/keytable buffers needed)"
+    },
+    "ffield_offset": {
+      "addr": "+0xBC",
+      "xor": "0xDE28E18D",
+      "bswap32": true
+    },
+    "player_name": {
+      "status": "pending; CL-1372005 SIMD_MASK_RVA 0xAD2FC50 / XMM_XOR_VAL 0xA738DD8241D227C2 stale"
+    }
+  }
+}

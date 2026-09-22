@@ -143,7 +143,7 @@ bool EspInitialize(const EspConfig* config) {
     g_session.uworld = arc_raiders::kWORLD_RVA;
     /* Walk: UWorld -> GameInstance -> LocalPlayers -> PlayerController. */
     uint64_t game_instance = 0;
-    if (!ReadPtr(g_session.pid, g_session.uworld + arc_raiders::kGAME_WORLD_ALT, &game_instance) || game_instance == 0) {
+    if (!ReadPtr(g_session.pid, g_session.uworld + arc_raiders::kUWORLD_GAME_INSTANCE, &game_instance) || game_instance == 0) {
         HvAnalysisBackendStop(g_session.pid);
         HvBridgeClose();
         return false;
@@ -162,7 +162,7 @@ bool EspInitialize(const EspConfig* config) {
         HvBridgeClose();
         return false;
     }
-    if (!ReadPtr(g_session.pid, local_player + arc_raiders::kGI_PLAYER_CONTROLLER, &g_session.player_controller) ||
+    if (!ReadPtr(g_session.pid, local_player + arc_raiders::kLP_PLAYER_CONTROLLER, &g_session.player_controller) ||
         g_session.player_controller == 0) {
         HvAnalysisBackendStop(g_session.pid);
         HvBridgeClose();
@@ -226,16 +226,16 @@ bool EspUpdate() {
         if (!ReadPtr(g_session.pid, actor + arc_raiders::kACTOR_ROOT_COMPONENT, &root) || root == 0) {
             continue;
         }
-        /* FTransform (96B): +0x2E0, translation at +0x20 (double x,y,z). */
-        double xform[arc_raiders::kTRANSFORM_SIZE / sizeof(double)] = {};
-        if (!ReadBlob(g_session.pid, root + arc_raiders::kCOMPONENT_TO_WORLD, xform, sizeof(xform))) {
+        /* 2026-09-22: world position = translation FVector3d @0x330 (rotation quat @0x310). */
+        double trans[3] = {};
+        if (!ReadBlob(g_session.pid, root + arc_raiders::kCOMPONENT_C2W_TRANSLATION, trans, sizeof(trans))) {
             continue;
         }
         /* Entity slot */
         Entity e = {};
-        e.world_x = static_cast<float>(xform[4]); /* Trans.X */
-        e.world_y = static_cast<float>(xform[5]); /* Trans.Y */
-        e.world_z = static_cast<float>(xform[6]); /* Trans.Z */
+        e.world_x = static_cast<float>(trans[0]); /* X */
+        e.world_y = static_cast<float>(trans[1]); /* Y */
+        e.world_z = static_cast<float>(trans[2]); /* Z */
         e.coordinate_space = 1; /* world */
         e.is_visible = 1;
         e.color = arc_raiders::kCOLOR_AI; /* default */
@@ -254,6 +254,25 @@ bool EspUpdate() {
         EntityCacheAdd(&e);
     }
     return true;
+}
+
+void EspViewportSize(float vw, float vh) {
+    if (!g_session.active || vw <= 0.0f || vh <= 0.0f) {
+        return;
+    }
+    if (g_session.viewport_w != vw || g_session.viewport_h != vh) {
+        g_session.viewport_w = vw;
+        g_session.viewport_h = vh;
+        if (g_session.camera_ok) {
+            BuildVP(g_session.cam_loc, g_session.cam_rot, g_session.fov, vw, vh,
+                    g_session.vp);
+        } else {
+            /* Keep the neutral-camera fallback matrix in sync. */
+            double zero_loc[3] = {};
+            float zero_rot[3] = {};
+            BuildVP(zero_loc, zero_rot, 90.0f, vw, vh, g_session.vp);
+        }
+    }
 }
 
 void EspGetEntities(Entity* out_buffer, size_t max_count, size_t* out_count) {
