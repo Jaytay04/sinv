@@ -1,12 +1,62 @@
 # Hypervisor development handoff
 
 This document is the technical entry point for an agent continuing development
-of `uefi2hsinv`. It describes the implementation as it exists in source, the
+of `hsinv`. It describes the implementation as it exists in source, the
 interfaces between components, the validated scope, and the remaining work.
+
+## Current 26200.9457 migration checkpoint (2026-09-23)
+
+Work in this checkpoint is in `C:\Users\jayli\OneDrive\Documents\Projects\hsinv`.
+The host reports Windows 11 25H2 build `26200.9457`; the existing disposable
+VM and its only snapshot are still `26200.9445`. Do not run the direct EFI gate
+against that snapshot while the runner expects `.9457`.
+
+Changes made in `hsinv` for this checkpoint:
+
+- `components/hypervisor/src/efi/efi_hypervisor.h` increases
+  `HV_EFI_RESIDENT_CODE_PAGES` from 2 to 3; the matching assertion in
+  `src/efi/tests/test_efi_hypervisor_math.c` now expects 3 and checks the
+  current `HV_EFI_CONTEXT` size of 1176 bytes. The linked 8,356-byte resident
+  image exceeded the old 8,192-byte allocation. The header's
+  `offsetof(UserCommandState) == 1168` assertion remains unchanged.
+- `tools/host-runner/host-runner.config.example.json` now uses `hsinv` paths,
+  targets build `26200.9457`, and keeps the Windows profile disabled with no
+  snapshot name until a matching snapshot is verified. Its source contract
+  test reflects that staged configuration and still checks invalid transport
+  and build metadata with the test fixture explicitly enabled.
+- The ignored local `tools/host-runner/host-runner.config.json` was initialized
+  with three existing DPAPI-protected credential files. Its Windows profile
+  points at the host-derived `.9457` image/PDB, but remains disabled; its old
+  `.9445` snapshot name is retained only to identify the currently available
+  rollback point. Do not enable this profile until replacing that snapshot
+  reference with a verified `.9457` snapshot.
+- The host `C:\Windows\System32\ntoskrnl.exe` was copied to ignored
+  `.analysis/pinned-kernel-profile/ntoskrnl.exe`. Microsoft's matching
+  `ntkrnlmp.pdb` was fetched and verified by `symchk` (CodeView GUID
+  `C29EBFB0-6B78-B3C0-20DC-A66D99713F9E`, age 1), then copied beside it.
+  The existing `kernel_profile_generator` produced a `26200.9457` header and
+  JSON manifest under `.analysis/kernel-profile-generated/`; no profile bytes
+  were hand-edited.
+
+Static validation: the `.9457`-pinned EFI image builds under
+`.analysis/efi-9457-build`, including its generated profile. CTest passes
+20 of 20 tests after correcting the stale structure-size expectation.
+The direct VM gate has **not** run on `.9457`, and no VM was started during
+this checkpoint. The source-only `Test-HostRunnerContracts.ps1` suite also
+passes after the example change.
+
+The historical `Invoke-WindowsExactBuildUpdate.ps1` and its host action remain
+unchanged and pinned to `26200.9445` / `KB5124008`; they cannot provision
+`.9457`. [Microsoft's `KB5129195`](https://support.microsoft.com/en-us/servicing/os/windows-11/2026/09/kb5129195-windows-11-24h2-25h2-security-update)
+is the cumulative update for `.9457`.
+Provision and verify a disposable `.9457` Windows guest through a separate
+controlled servicing route, retain a clean snapshot, set that snapshot name
+in the local config, and only then re-enable its Windows profile and run the
+leased direct gate. Preserve the `.9445` snapshot as rollback evidence.
 
 ## 1. Project identity and safety model
 
-`uefi2hsinv` combines two independently buildable components:
+`hsinv` combines two independently buildable components:
 
 - `components/uefi-loader` owns the UEFI boot/loading path and the disposable-VM
   host runner.

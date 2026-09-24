@@ -1094,9 +1094,9 @@ int main(void)
                                 RuntimeAnalysisEntry) == 1144 &&
                        offsetof(HV_EFI_CONTEXT,
                                 RuntimeAnalysisStatePhysical) == 1152 &&
-                       sizeof(HV_EFI_CONTEXT) == 1168,
+                       sizeof(HV_EFI_CONTEXT) == 1176,
                        "AP activation, EPT audit, and guest transition state append without ABI drift");
-    failures += expect(HV_EFI_RESIDENT_CODE_PAGES == 2 &&
+    failures += expect(HV_EFI_RESIDENT_CODE_PAGES == 3 &&
                        HV_EFI_GUEST_TRANSITION_CODE_PAGES == 1,
                        "root and guest code images have disjoint runtime allocations");
     failures += expect(HV_EFI_MAX_SUPPORTED_PROCESSORS == 64 &&

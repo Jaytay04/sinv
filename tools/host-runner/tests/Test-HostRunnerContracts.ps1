@@ -101,7 +101,10 @@ try {
     Assert-True ([uint64]$Config.Profiles.Windows.ExpectedWindowsBuild -eq
         [uint64]26200) 'Example Windows build expectation changed unexpectedly.'
     Assert-True ([uint64]$Config.Profiles.Windows.ExpectedWindowsUbr -eq
-        [uint64]9445) 'Example Windows UBR expectation changed unexpectedly.'
+        [uint64]9457) 'Example Windows UBR expectation changed unexpectedly.'
+    Assert-True (-not [bool]$Config.Profiles.Windows.Enabled -and
+        [string]::IsNullOrWhiteSpace([string]$Config.Profiles.Windows.SnapshotName)) (
+        'Example Windows profile must stay disabled until a verified 26200.9457 snapshot exists.')
     Assert-True (@($Config.AdditionalKnownVms | Where-Object {
                 [string]$_.LeaseResource -ceq 'vm-hypervisor-v3h-gate4'
             }).Count -eq 1) (
@@ -142,6 +145,7 @@ try {
     $InvalidConfig = Get-Content -Raw -LiteralPath (
         Join-Path $RunnerRoot 'host-runner.config.example.json') |
         ConvertFrom-Json
+    $InvalidConfig.Profiles.Windows.Enabled = $true
     $InvalidConfig.Profiles.Windows.GuestTransport = 'VmrunGuest'
     $InvalidConfig.Profiles.Windows.GuestCredentialFile = ''
     $InvalidConfigPath = Join-Path $TestRoot 'invalid-vmrun-config.json'
@@ -174,6 +178,7 @@ try {
         $InvalidVersionConfig = Get-Content -Raw -LiteralPath (
             Join-Path $RunnerRoot 'host-runner.config.example.json') |
             ConvertFrom-Json
+        $InvalidVersionConfig.Profiles.Windows.Enabled = $true
         $InvalidVersionConfig.Profiles.Windows.$Property = 'not-a-number'
         $InvalidVersionPath = Join-Path $TestRoot (
             "invalid-$Property.json")

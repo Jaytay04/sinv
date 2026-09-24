@@ -1,9 +1,9 @@
 {
   "SchemaVersion": 1,
-  "ProjectRoot": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\uefi2hsinv",
-  "UefiProjectRoot": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\uefi2hsinv\\components\\uefi-loader",
-  "HypervisorProjectRoot": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\uefi2hsinv\\components\\hypervisor",
-  "StateRoot": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\uefi2hsinv\\.analysis\\host-runner",
+  "ProjectRoot": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv",
+  "UefiProjectRoot": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\components\\uefi-loader",
+  "HypervisorProjectRoot": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\components\\hypervisor",
+  "StateRoot": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.analysis\\host-runner",
   "Tools": {
     "VmrunPath": "C:\\Program Files\\VMware\\VMware Workstation\\vmrun.exe",
     "VsDevCmdPath": "C:\\PROGRA~1\\MICROS~3\\18\\COMMUN~1\\Common7\\Tools\\VsDevCmd.bat"
@@ -41,10 +41,10 @@
       "LeaseResource": "vm-uefiloader-ubuntu64"
     },
     "Windows": {
-      "Enabled": true,
+      "Enabled": false,
       "VmxPath": "C:\\Users\\jayli\\OneDrive\\Documents\\Virtual Machines\\UEFILoader-Win11-vTPM-ExactBuild-Gate\\UEFILoader-Win11-vTPM-ExactBuild-Gate.vmx",
       "DisplayName": "UEFILoader-Win11-vTPM-ExactBuild-Gate",
-      "SnapshotName": "UEFILoader-Win11-26200.9445-vTPM-Base",
+      "SnapshotName": "",
       "GuestTransport": "VmwareGuestInfo",
       "MailboxCredentialFile": "windows-clone-mailbox-key.xml",
       "GuestUser": "UEFILoaderVm",
@@ -54,9 +54,9 @@
       "LeaseResource": "vm-uefiloader-windows-exactbuild-vtpm",
       "ExpectedProbeVerdict": "NOT_MET",
       "ExpectedWindowsBuild": 26200,
-      "ExpectedWindowsUbr": 9445,
-      "KernelProfileImage": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\uefi2hsinv\\.analysis\\pinned-kernel-profile\\ntoskrnl.exe",
-      "KernelProfilePdb": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\uefi2hsinv\\.analysis\\pinned-kernel-profile\\ntkrnlmp.pdb"
+      "ExpectedWindowsUbr": 9457,
+      "KernelProfileImage": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.analysis\\pinned-kernel-profile\\ntoskrnl.exe",
+      "KernelProfilePdb": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.analysis\\pinned-kernel-profile\\ntkrnlmp.pdb"
     }
   }
 }
