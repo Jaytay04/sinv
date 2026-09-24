@@ -453,6 +453,10 @@ add_test(NAME uefi_hypervisor_runtime_transport_tests
     COMMAND uefi_hypervisor_runtime_transport_tests)
 
 if(WIN32)
+    add_test(NAME uefi_hypervisor_vmexit_asm_contracts
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/Test-EfiVmExitContracts.ps1"
+            -EfiSourceRoot "${CMAKE_CURRENT_SOURCE_DIR}")
     add_test(NAME uefi_hypervisor_runtime_detach_asm_contracts
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
             -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/Test-EfiRuntimeDetachContracts.ps1"

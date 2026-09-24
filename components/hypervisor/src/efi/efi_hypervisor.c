@@ -1500,7 +1500,7 @@ static int HvEfiWriteControls(HV_EFI_CONTEXT *context)
         HvEfiWriteField(HV_EFI_VMCS_CTRL_CR4_MASK, 0) &&
         HvEfiWriteField(HV_EFI_VMCS_CTRL_CR0_READ_SHADOW, 0) &&
         HvEfiWriteField(HV_EFI_VMCS_CTRL_CR4_READ_SHADOW, 0) &&
-        HvEfiWriteField(HV_EFI_VMCS_CTRL_EXCEPTION_BITMAP, (UINT32_C(1) << 1) | (UINT32_C(1) << 3)) &&  /* Phase 4: Trap #DB and #BP */
+        HvEfiWriteField(HV_EFI_VMCS_CTRL_EXCEPTION_BITMAP, 0) &&
         HvEfiWriteField(HV_EFI_VMCS_CTRL_PF_ERROR_CODE_MASK, 0) &&
         HvEfiWriteField(HV_EFI_VMCS_CTRL_PF_ERROR_CODE_MATCH, 0) &&
         HvEfiWriteField(HV_EFI_VMCS_CTRL_CR3_TARGET_COUNT, 0) &&
@@ -1556,7 +1556,7 @@ static int HvEfiPrepareGuestState(HV_EFI_CONTEXT *context)
         !HvEfiWriteField(HV_EFI_VMCS_GUEST_TR_BASE, context->TrBase) ||
         !HvEfiWriteField(HV_EFI_VMCS_GUEST_GDTR_BASE, context->GdtrBase) ||
         !HvEfiWriteField(HV_EFI_VMCS_GUEST_IDTR_BASE, context->IdtrBase) ||
-        !HvEfiWriteField(HV_EFI_VMCS_GUEST_DR7, 0) ||  /* Phase 4: Clear debug registers */
+        !HvEfiWriteField(HV_EFI_VMCS_GUEST_DR7, context->Dr7) ||
         !HvEfiWriteField(HV_EFI_VMCS_GUEST_RSP, context->GuestRsp) ||
         !HvEfiWriteField(HV_EFI_VMCS_GUEST_RIP, context->GuestBootstrapRip) ||
         !HvEfiWriteField(HV_EFI_VMCS_GUEST_RFLAGS, context->GuestRflags) ||

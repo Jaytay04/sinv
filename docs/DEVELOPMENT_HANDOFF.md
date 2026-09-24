@@ -54,6 +54,27 @@ controlled servicing route, retain a clean snapshot, set that snapshot name
 in the local config, and only then re-enable its Windows profile and run the
 leased direct gate. Preserve the `.9445` snapshot as rollback evidence.
 
+## EFI VM-exit compatibility port (2026-09-24)
+
+Ported the boot compatibility fixes from `hypervm_test` into this checkout's
+`components/hypervisor/src/efi`: preserve the containing hypervisor's CPUID
+identity and synthetic MSR behavior, remove the broken #DB/#BP VM-exit path,
+inject #GP for unsupported MSRs without advancing RIP, and route XSETBV
+through the instruction-length read before RIP advancement. Guest DR7 now
+uses `context->Dr7`, and the exception bitmap no longer intercepts #DB/#BP.
+The native-detach PREPARE path also accepts a null SS selector in its
+configured 64-bit host mode while retaining RPL/TI validation and the host
+SS VMCS write. The header and assembler include were not copied from the
+other tree: their only observed differences were whitespace or none.
+
+`Test-EfiVmExitContracts.ps1` is registered as
+`uefi_hypervisor_vmexit_asm_contracts`. The `.9457`-pinned Release EFI image
+built and passed its `.hvscan` self-containment check; the component CTest
+suite passed **21/21**, including the new contract. The source-only host-runner
+contract also passed. No live `hsinv` VM boot or detach run was performed for
+this port; the example Windows profile remains disabled pending a verified
+`.9457` snapshot.
+
 ## 1. Project identity and safety model
 
 `hsinv` combines two independently buildable components:
