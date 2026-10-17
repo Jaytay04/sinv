@@ -1,0 +1,37 @@
+{
+    "schema":  "storage-host-prepare-parser-fix.v1",
+    "capturedUtc":  "2026-10-17T20:31:31.3819075Z",
+    "cause":  "Mandatory string-array binding rejected empty strings in BCDEdit output before baseline capture.",
+    "beforeFix":  "Production helper regression reproduced: Cannot bind argument to parameter Lines because it is an empty string.",
+    "fix":  "Accept empty strings/collections at the production parser boundary; retain caller command exit-code checks.",
+    "afterFix":  {
+                     "pureAssertions":  66,
+                     "passed":  66,
+                     "failed":  0
+                 },
+    "liveValidation":  {
+                           "prepareRun":  false,
+                           "driverPolicyTrustFirmwareChanged":  false,
+                           "toolTokenElevated":  false,
+                           "bcdProbeResult":  "Not validated: read-only live BCD store access returned Access is denied from the tool token; no elevation prompt or setting write attempted."
+                       },
+    "priorManifestScope":  "changed-files.json and validation.json describe commit e5c184d; this report covers the subsequent parser correction.",
+    "evidenceDirectory":  "spoof-handoff/reports/storage-host-prep-20261017/prepare-parser-fix",
+    "files":  [
+                  {
+                      "path":  "spoof-handoff/tools/storage_host/read.ps1",
+                      "bytes":  17145,
+                      "sha256":  "DFA348A36C9BCD77A9B3D8FC9D0FE489EEEF4EF1201363A88DF90E3FD5997803"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/storage_host/tests.ps1",
+                      "bytes":  17338,
+                      "sha256":  "61C60ECD202A37805292994CDF5C2D087B058342E02B95395849333E2FC2106E"
+                  },
+                  {
+                      "path":  "spoof-handoff/docs/STORAGE_BAREMETAL_RUNBOOK.md",
+                      "bytes":  9988,
+                      "sha256":  "369B957E2F5C8C663F0280A81119A11A3600C0C5F5D560E78FD4925D8DA79091"
+                  }
+              ]
+}

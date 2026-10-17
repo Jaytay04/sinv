@@ -82,6 +82,19 @@ Assert-True (-not $missingSigning.exists) 'absent testsigning value is preserved
 Assert-True (Test-StorageHostPolicyRestore -Expected $missingSigning -Actual (Get-StorageHostTestSigningElement -BcdLines @('identifier {current}')) -ExpectedRoot $false -ActualRoot $false -ExpectedPublisher $false -ActualPublisher $false -ExpectedCodeIntegrityOptions 0x400 -ActualCodeIntegrityOptions 0x20400) 'absent BCD testsigning and unrelated CI bits restore correctly'
 Assert-True (-not (Test-StorageHostPolicyRestore -Expected $missingSigning -Actual (Get-StorageHostTestSigningElement -BcdLines @('testsigning Yes')) -ExpectedRoot $false -ActualRoot $false -ExpectedPublisher $false -ActualPublisher $false -ExpectedCodeIntegrityOptions 0x400 -ActualCodeIntegrityOptions 0x402)) 'unexpected testsigning presence fails pristine policy check'
 
+# Exercise the real read-helper boundary without executing its native or device code.
+$bcdReadTokens=$null;$bcdReadErrors=$null
+$bcdReadAst=[System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'read.ps1'),[ref]$bcdReadTokens,[ref]$bcdReadErrors)
+$bcdReaders=@($bcdReadAst.FindAll({param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Get-StorageHostBcdElement'},$true))
+Assert-Equal 1 $bcdReaders.Count 'exactly one production BCD read helper is tested'
+. ([scriptblock]::Create($bcdReaders[0].Extent.Text))
+$signingWithBlanks=Get-StorageHostBcdElement -Lines @('','Windows Boot Loader','-------------------','identifier {current}','','testsigning Yes','')
+Assert-True ($signingWithBlanks.exists -and $signingWithBlanks.value -ceq 'yes') 'production helper accepts normal BCDEdit blank lines around testsigning Yes'
+$unsignedWithBlanks=Get-StorageHostBcdElement -Lines @('','identifier {current}','','testsigning No','')
+Assert-True ($unsignedWithBlanks.exists -and $unsignedWithBlanks.value -ceq 'no') 'production helper preserves explicit testsigning No with blank lines'
+Assert-True (-not (Get-StorageHostBcdElement -Lines @('','identifier {current}','')).exists) 'blank lines do not invent a testsigning element'
+Assert-True (-not (Get-StorageHostBcdElement -Lines @()).exists) 'empty command output does not invent testsigning; command exit checks remain with the caller'
+
 $transparentProof=[pscustomobject]@{
     expectedMode='Original';result='PASS';mismatches=@();nativeSerial='0000_0000_0100_0000_E4D2_5CDF_3227_5501.';wmiSerial='0000_0000_0100_0000_E4D2_5CDF_3227_5501.'
     fileIo=[pscustomobject]@{match=$true};filterService=[pscustomobject]@{present=$true;services=@([pscustomobject]@{State='Running'});registry=[pscustomobject]@{start=0}}

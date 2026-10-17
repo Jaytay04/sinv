@@ -24,6 +24,36 @@ The host values are pinned by the runner:
 The runner also pins the captured disk PnP instance and hardware IDs. If the
 current disk does not match those values, stop; do not force-install the INF.
 
+## Exact prerequisites by stage
+
+Before `Prepare`, use elevated 64-bit Windows PowerShell at the repository root.
+Keep the PC's normal Secure Boot and test-signing settings unchanged so the
+snapshot records the state to restore. Have these items ready:
+
+- The signed storage release; it already exists on the captured host. A source-only
+  clone must first run `build-storage-host-release.ps1`, which requires the
+  existing signing private key, MSVC, CMake/Ninja, and the configured WDK.
+- The external recovery disk connected and writable, at the default
+  `E:\CodexBackup\Recovery\hsinv-storage-test` or an explicitly supplied
+  `-RecoveryDirectory` on another physical disk.
+- A bootable Windows 11 recovery USB, a known-good pre-test restore point or
+  system image, and the BitLocker/device-encryption recovery key stored outside
+  this PC if encryption is enabled. The runner does not create a restore point,
+  system image, recovery USB, or recovery key, or verify that those are usable.
+- The captured Intel boot disk showing its original serial, with no existing
+  test storage filter. `Prepare` checks this identity and the signed packages.
+
+| Stage | Secure Boot | Windows test-signing |
+| --- | --- | --- |
+| `Prepare` | Keep the original setting; ON is supported | Keep the original setting; OFF/absent is supported |
+| `EnableTestMode` | OFF, changed manually in firmware after `Prepare` succeeds | The action enables it and adds only the required existing public certificate trust |
+| `InstallTransparent` / `InstallReplacement` | OFF | ON and effective in the kernel after a reboot following `EnableTestMode` |
+| Final cleanup | Restore the captured original setting after filter removal | `RestorePolicy` restores the captured original setting; reboot before `FinalVerify` |
+
+No firmware test-signing setting, new MOK enrollment, new signing key, or other
+BIOS setting change is part of this procedure. Do not proceed past a failed
+`Prepare` or change boot policy to work around a script error.
+
 ## Before changing boot policy
 
 Have a bootable Windows 11 recovery USB and a known-good system restore point or

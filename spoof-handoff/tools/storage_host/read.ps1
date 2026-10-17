@@ -144,7 +144,7 @@ function Invoke-StorageHostCapture {
 }
 
 function Get-StorageHostBcdElement {
-    param([Parameter(Mandatory=$true)][string[]]$Lines)
+    param([Parameter(Mandatory=$true)][AllowEmptyString()][AllowEmptyCollection()][string[]]$Lines)
     return Get-StorageHostTestSigningElement -BcdLines $Lines
 }
 

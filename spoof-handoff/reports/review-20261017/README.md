@@ -34,6 +34,10 @@ keys, VM disks, raw recovery snapshots, and machine-local build directories.
 
 Evidence in this directory:
 
+- `prepare-parser-fix.json`: subsequent correction for blank BCDEdit lines at the
+  production parser boundary, 66 passing workflow assertions, and explicit
+  prerequisites by stage. The original validation and source manifest below
+  retain their scope at commit `e5c184d`.
 - `validation.json`: scoped VM, pure-test, read-only host, and signature verdicts.
 - `vm-bugcheck-excerpt.txt`: the recorded VM bug-check and parameters.
 - `vm-binary-comparison.json`: the transparent code comparison.
