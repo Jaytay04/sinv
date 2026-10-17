@@ -195,6 +195,8 @@ function Assert-StorageHostPolicyEnabled {
     if (-not $trust.Root -or -not $trust.TrustedPublisher) { throw ('Pinned certificate trust required in LocalMachine Root and TrustedPublisher; actual Root='+$trust.Root+' TrustedPublisher='+$trust.TrustedPublisher) }
 }
 function Invoke-StorageHostEnableTestMode {
+    $release=Get-StorageHostActiveRelease
+    $publicCert=[Security.Cryptography.X509Certificates.X509Certificate2]::new([IO.File]::ReadAllBytes($release.certificatePath))
     Assert-StorageHostRecoveryCopy
     $baseline=$script:StorageHostState.baseline
     $inventoryResult=Write-StorageHostInventory -EvidenceDirectory $script:StorageHostActionDirectory -Name 'before-enable-inventory.json'
@@ -203,9 +205,7 @@ function Invoke-StorageHostEnableTestMode {
     if ([bool]$inventory.policy.secureBoot) { throw 'Secure Boot is still ON. Disable Secure Boot manually in firmware, boot Windows, then rerun EnableTestMode.' }
     if ($inventory.disk.pnpDeviceId -cne $baseline.inventory.disk.pnpDeviceId) { throw 'Pinned disk PnP instance changed since Prepare.' }
     if ($inventory.disk.serial -cne $baseline.inventory.disk.serial -or $inventory.disk.wmiSerial -cne $baseline.inventory.disk.wmiSerial) { throw ('Disk serial drift before policy change: native='+$inventory.disk.serial+' WMI='+$inventory.disk.wmiSerial) }
-    $script:StorageHostState.ownedTrustAdds=@()
     Set-StorageHostPhase -Phase 'EnablingTestMode' -ActionName $Action -Message 'Persisted intent before importing the pinned public certificate and setting BCD testsigning.'
-    $publicCert=[Security.Cryptography.X509Certificates.X509Certificate2]::new([IO.File]::ReadAllBytes($script:StorageHostRelease.certificatePath))
     foreach($storeName in @('Root','TrustedPublisher')){
         $wasPresent=[bool]$baseline.trustStores.$storeName
         $store=Get-StorageHostStoreObject -Name $storeName
@@ -213,11 +213,15 @@ function Invoke-StorageHostEnableTestMode {
         try{
             $currentlyPresent=@($store.Certificates|Where-Object {$_.Thumbprint -ceq $script:StorageHostCertThumb}).Count -gt 0
             if(-not $wasPresent -and -not $currentlyPresent){
+                if($storeName -notin @($script:StorageHostState.ownedTrustAdds)){
+                    $script:StorageHostState.ownedTrustAdds=@($script:StorageHostState.ownedTrustAdds)+@($storeName)
+                    $script:StorageHostState.updatedUtc=[DateTime]::UtcNow.ToString('o')
+                    Save-StorageHostState
+                }
                 $store.Add($publicCert)
-                $script:StorageHostState.ownedTrustAdds=@($script:StorageHostState.ownedTrustAdds)+@($storeName)
-                $script:StorageHostState.updatedUtc=[DateTime]::UtcNow.ToString('o')
-                Save-StorageHostState
                 Add-StorageHostEvent -Kind 'trust-import' -Message 'Added the existing public signer certificate to one LocalMachine store.' -Data @{store=$storeName;thumbprint=$script:StorageHostCertThumb}
+            } elseif(-not $wasPresent -and $currentlyPresent -and $storeName -notin @($script:StorageHostState.ownedTrustAdds)) {
+                throw ('Pinned certificate appeared in LocalMachine '+$storeName+' after Prepare without this run owning its import; refusing to claim external trust membership.')
             } elseif($wasPresent -and -not $currentlyPresent) {
                 throw ('Certificate was present in the Prepare snapshot but disappeared from LocalMachine '+$storeName+'; refusing to recreate an externally removed trust entry.')
             }

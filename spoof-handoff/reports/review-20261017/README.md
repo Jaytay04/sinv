@@ -34,6 +34,9 @@ keys, VM disks, raw recovery snapshots, and machine-local build directories.
 
 Evidence in this directory:
 
+- `enable-release-fix.json`: fresh-process release loading and journaled policy
+  retry correction, with 80 passing pure/synthetic action assertions. No live
+  policy enable or driver installation is claimed by those tests.
 - `prepare-parser-fix.json`: subsequent correction for blank BCDEdit lines at the
   production parser boundary, 66 passing workflow assertions, and explicit
   prerequisites by stage. The original validation and source manifest below

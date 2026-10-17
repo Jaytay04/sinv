@@ -1,0 +1,66 @@
+{
+    "schema":  "storage-host-enable-release-fix.v1",
+    "capturedUtc":  "2026-10-17T20:41:12.5622632Z",
+    "priorCommit":  "7424d0390b90f6c1b489170e827850758a859ff2",
+    "cause":  "Fresh EnableTestMode invocation dispatched before reloading the prepared release, leaving the certificatePath owner null.",
+    "reproducedError":  "The property \u0027certificatePath\u0027 cannot be found on this object. Verify that the property exists.",
+    "fix":  [
+                "Validate the pinned prepared release and parse its public certificate before policy intent or trust changes",
+                "Permit a journaled EnablingTestMode retry without resetting certificate ownership",
+                "Persist ownership before an import and reject unowned external trust membership"
+            ],
+    "beforeFixTestExit":  1,
+    "afterFixPureAssertions":  80,
+    "liveMutationRun":  false,
+    "observedFailureState":  {
+                                 "runId":  "20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e",
+                                 "phase":  "EnablingTestMode",
+                                 "ownedTrustAdds":  [
+
+                                                    ],
+                                 "ownedPackagesAbsent":  true,
+                                 "serviceRegistryAbsent":  true,
+                                 "localMachineRootBaseline":  false,
+                                 "localMachineRootCurrent":  false,
+                                 "localMachinePublisherBaseline":  false,
+                                 "localMachinePublisherCurrent":  false,
+                                 "recordedBcdBeforeFailure":  "testsigning No",
+                                 "bcdWriteLogAbsent":  true
+                             },
+    "evidenceDirectory":  "spoof-handoff/reports/storage-host-prep-20261017/enable-release-fix",
+    "testScope":  "Synthetic execution of production dispatcher, enable action and active-release loader; all host and mutation dependencies mocked. Existing public CER is parsed without store import. Not live policy or driver evidence.",
+    "files":  [
+                  {
+                      "path":  "spoof-handoff/tools/storage_host/run.ps1",
+                      "bytes":  91760,
+                      "sha256":  "924DE65FD1D4B48CB55C9F35F1245B8A9E96DF760CAB100A5E75A6239A7CEB23"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/storage_host/model.psm1",
+                      "bytes":  11467,
+                      "sha256":  "D7E1E97CDB830A91EBD0F6CDE3BFD6A9ABB9140F0EBB1917190AF282BF5D1872"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/storage_host/tests.ps1",
+                      "bytes":  17404,
+                      "sha256":  "25E3323554D00382E809CE92DF0AFB6EE86C28B9CED7F3619F9A14B04FA42334"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/storage_host/tests-enable.ps1",
+                      "bytes":  6154,
+                      "sha256":  "DCE650E3FC67E7144BD5888D4B9DBA3A28BCD44E149D846CE3F22694CEC4F5E6"
+                  },
+                  {
+                      "path":  "spoof-handoff/docs/STORAGE_BAREMETAL_RUNBOOK.md",
+                      "bytes":  10363,
+                      "sha256":  "F8BD575177DF6FD0ABF80300786CB55D80E90A1FF925107B88F0B32C270F7AC5"
+                  }
+              ],
+    "independentReview":  {
+                              "verdict":  "PASS",
+                              "assertions":  80,
+                              "log":  "spoof-handoff/reports/storage-host-prep-20261017/consolidated-tests/storage-host-enable-review-20261017.log",
+                              "logSha256":  "01B0F89531ABA74E706474922C1FC2A4F99541E432100BA9ABF18EEB237A594A",
+                              "liveOperations":  false
+                          }
+}

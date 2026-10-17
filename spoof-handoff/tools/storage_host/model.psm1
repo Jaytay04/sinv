@@ -12,6 +12,7 @@ function Get-StorageHostAllowedTransition {
     $transitions = @{
         'New|Prepare' = 'Prepared'
         'Prepared|EnableTestMode' = 'PolicyPendingReboot'
+        'EnablingTestMode|EnableTestMode' = 'PolicyPendingReboot'
         'PolicyPendingReboot|InstallTransparent' = 'TransparentInstallPendingReboot'
         'TransparentInstallInProgress|Remove' = 'TransparentRemovalPendingReboot'
         'TransparentInstallPendingReboot|Remove' = 'TransparentRemovalPendingReboot'

@@ -111,6 +111,12 @@ instructed; the runner does not reboot automatically.
 powershell -NoProfile -ExecutionPolicy Bypass -File .\spoof-handoff\commands\storage-host-test.ps1 EnableTestMode
 ```
 
+Wait for `POLICY_PENDING_REBOOT` before rebooting. If this action was interrupted
+in phase `EnablingTestMode`, the same action can retry: it revalidates the pinned
+release and recovery copy, preserves the recorded certificate ownership, and
+does not install a driver. Keep the original `Prepare` snapshot; do not edit the
+state file or start another run to bypass an error.
+
 Reboot Windows. Then run the transparent test, which loads the filter with
 serial rewriting disabled:
 
