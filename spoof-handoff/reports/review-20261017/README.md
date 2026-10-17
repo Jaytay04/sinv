@@ -11,7 +11,12 @@ This establishes a start-policy failure in that VM. It does not establish the
 exact cause of the restored physical machine's failure: no surviving host crash
 dump was available. The VM used build 26200.9445 and virtual NVMe; the physical
 host uses build 26200.9711 and an Intel NVMe device. Physical controller
-compatibility and live NIC behavior remain unproven.
+compatibility was unproven at that VM-only phase. The subsequent user-run host
+cycle passed the recorded native/WMI round trip and cleanup on the selected
+Intel boot disk; its scope and hashes are in `storage-host-round-trip.json`.
+Secure Boot was OFF in both the prepared snapshot and final check; return to ON
+remains unverified. Live NIC behavior, broader storage/power/stress coverage and
+physical WinRE recovery remain untested.
 
 The change sets the storage INF and package contract to boot-start, retains the
 old activation quarantine, and adds a separate user-run storage-only workflow.
@@ -34,6 +39,9 @@ keys, VM disks, raw recovery snapshots, and machine-local build directories.
 
 Evidence in this directory:
 
+- `storage-host-round-trip.json`: completed user-run physical storage round trip,
+  cleanup verdicts, explicit Secure Boot OFF baseline, scope limits, and every
+  raw run evidence file's path, size and SHA-256. Raw snapshots stay local.
 - `install-journal-fix.json`: timestamp correction and receipt/ownership-checked
   resume for an install that completed before journal finalization. Includes
   126 passing pure/synthetic assertions, an exact-error synthetic negative

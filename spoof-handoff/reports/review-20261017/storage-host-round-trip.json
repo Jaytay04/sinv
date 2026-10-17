@@ -1,0 +1,627 @@
+{
+    "schema":  "storage-host-round-trip.v1",
+    "recordedUtc":  "2026-10-17T21:31:18.7702006Z",
+    "runId":  "20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e",
+    "runPhase":  "Complete",
+    "result":  "PASS",
+    "testOutcome":  "BOTH_PACKAGES_VERIFIED_AND_REMOVED",
+    "operator":  "User executed elevated actions and reboots; agent verified saved evidence read-only",
+    "host":  {
+                 "manufacturer":  "MAINGEAR",
+                 "model":  "VYBE",
+                 "windowsBuild":  "26200.9711",
+                 "displayVersion":  "25H2",
+                 "selectedDiskPnpInstanceId":  "SCSI\\DISK\u0026VEN_NVME\u0026PROD_INTEL_SSDPEKNU01\\5\u00268432851\u00260\u0026000000"
+             },
+    "pathsTested":  [
+                        "CreateFileW + IOCTL_STORAGE_QUERY_PROPERTY / StorageDeviceProperty",
+                        "Fresh Win32_DiskDrive CIM/WMI"
+                    ],
+    "originalSerial":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+    "replacementSerial":  "1111_1111_1111_1111_A1B2_C3D4_5566_7788.",
+    "restoredNativeSerial":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+    "restoredWmiSerial":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+    "bootProofs":  [
+                       {
+                           "mode":  "transparent",
+                           "nativeSerial":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+                           "wmiSerial":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+                           "result":  "PASS",
+                           "service":  {
+                                           "present":  true,
+                                           "services":  [
+                                                            {
+                                                                "Name":  "client_storage_filter",
+                                                                "State":  "Running",
+                                                                "StartMode":  "Boot",
+                                                                "PathName":  "C:\\WINDOWS\\system32\\DriverStore\\FileRepository\\client_storage_filter.inf_amd64_16619633f1a3434a\\client_storage_filter.sys"
+                                                            }
+                                                        ],
+                                           "registry":  {
+                                                            "start":  0,
+                                                            "type":  1,
+                                                            "imagePath":  "System32\\DriverStore\\FileRepository\\client_storage_filter.inf_amd64_16619633f1a3434a\\client_storage_filter.sys",
+                                                            "group":  null,
+                                                            "errorControl":  1
+                                                        }
+                                       },
+                           "actualStack":  [
+                                               "partmgr",
+                                               "client_storage_filter",
+                                               "disk",
+                                               "EhStorClass",
+                                               "stornvme"
+                                           ],
+                           "fileIo":  {
+                                          "bytes":  1048576,
+                                          "expectedSha256":  "78DC0EEEDDF295D5789033880CC5424C971E272227BABE3E096D2023AC2A0F0D",
+                                          "actualSha256":  "78DC0EEEDDF295D5789033880CC5424C971E272227BABE3E096D2023AC2A0F0D",
+                                          "match":  true,
+                                          "writeThrough":  true
+                                      },
+                           "proofSha256":  "9C10EB9805EE5E7868A3C7E7C0D5070849DB0FBF7E6CFC8E22C0EC5182821648",
+                           "proofPath":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/verifytransparent.20261017T211153259Z.650af0049e8743e89b0fba9de33f6e56/verification.json"
+                       },
+                       {
+                           "mode":  "replacement",
+                           "nativeSerial":  "1111_1111_1111_1111_A1B2_C3D4_5566_7788.",
+                           "wmiSerial":  "1111_1111_1111_1111_A1B2_C3D4_5566_7788.",
+                           "result":  "PASS",
+                           "service":  {
+                                           "present":  true,
+                                           "services":  [
+                                                            {
+                                                                "Name":  "client_storage_filter",
+                                                                "State":  "Running",
+                                                                "StartMode":  "Boot",
+                                                                "PathName":  "C:\\WINDOWS\\system32\\DriverStore\\FileRepository\\client_storage_filter.inf_amd64_4d922106ef0b9935\\client_storage_filter.sys"
+                                                            }
+                                                        ],
+                                           "registry":  {
+                                                            "start":  0,
+                                                            "type":  1,
+                                                            "imagePath":  "System32\\DriverStore\\FileRepository\\client_storage_filter.inf_amd64_4d922106ef0b9935\\client_storage_filter.sys",
+                                                            "group":  null,
+                                                            "errorControl":  1
+                                                        }
+                                       },
+                           "actualStack":  [
+                                               "partmgr",
+                                               "client_storage_filter",
+                                               "disk",
+                                               "EhStorClass",
+                                               "stornvme"
+                                           ],
+                           "fileIo":  {
+                                          "bytes":  1048576,
+                                          "expectedSha256":  "78DC0EEEDDF295D5789033880CC5424C971E272227BABE3E096D2023AC2A0F0D",
+                                          "actualSha256":  "78DC0EEEDDF295D5789033880CC5424C971E272227BABE3E096D2023AC2A0F0D",
+                                          "match":  true,
+                                          "writeThrough":  true
+                                      },
+                           "proofSha256":  "E143550D584D14493953441B0D6DCEE16E718CACC6A6B575A1C64F5C85304CA5",
+                           "proofPath":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/verifyreplacement.20261017T212015434Z.7a7408861b3a44efb0df954587a16cc9/verification.json"
+                       }
+                   ],
+    "removedPackages":  [
+                            {
+                                "mode":  "transparent",
+                                "publishedName":  "oem100.inf",
+                                "infSha256":  "3BD7ABB48150667F99E677EF85B6CB31831DD5696BAB8780E1431E639FD467FC",
+                                "removedUtc":  "2026-10-17T21:17:10.8464411Z"
+                            },
+                            {
+                                "mode":  "replacement",
+                                "publishedName":  "oem100.inf",
+                                "infSha256":  "3E7183B9342AE036464B3454E81BDC8148AC01A8D3A703A6473C96FC2032A37F",
+                                "removedUtc":  "2026-10-17T21:25:31.9179475Z"
+                            }
+                        ],
+    "cleanup":  {
+                    "filterServiceAbsent":  true,
+                    "filterRegistryAbsent":  true,
+                    "actualStack":  [
+                                        "partmgr",
+                                        "disk",
+                                        "EhStorClass",
+                                        "stornvme"
+                                    ],
+                    "filterAbsentFromStack":  true,
+                    "fileIoPassed":  true,
+                    "testSigning":  {
+                                        "exists":  true,
+                                        "value":  "no"
+                                    },
+                    "kernelTestSigningOff":  true,
+                    "trustStores":  {
+                                        "Root":  false,
+                                        "TrustedPublisher":  false
+                                    },
+                    "trustStoreBaseline":  {
+                                               "Root":  false,
+                                               "TrustedPublisher":  false
+                                           },
+                    "secureBootPreparedBaseline":  false,
+                    "secureBootAtFinalVerification":  false,
+                    "secureBootVariableAtFinalVerification":  {
+                                                                  "supported":  true,
+                                                                  "win32Error":  0,
+                                                                  "win32ErrorText":  null,
+                                                                  "size":  1,
+                                                                  "attributes":  6,
+                                                                  "bytesHex":  "00",
+                                                                  "bytesBase64":  "AA==",
+                                                                  "value":  "00",
+                                                                  "privilegeEnabled":  true,
+                                                                  "privilegeError":  0,
+                                                                  "privilegeRestored":  true,
+                                                                  "privilegeRestoreError":  0
+                                                              },
+                    "checkedPolicyAndDeviceBaselineRestored":  true,
+                    "desiredSecureBootOnVerified":  false,
+                    "remainingUserStep":  "Manually enable Secure Boot in firmware, boot Windows, then Confirm-SecureBootUEFI must return True",
+                    "finalReportSha256":  "B1CF6B772E5C0C52E2BF8C4F8ADB0F1135B8FA1B12AE77F74950858016649BB2",
+                    "finalReportPath":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/finalverify.20261017T212924400Z.7dddb31574594aa4b344e87c04f4d488/final-verification.json"
+                },
+    "scope":  {
+                  "onePinnedPhysicalIntelBootDisk":  true,
+                  "nativeAndWmiRoundTripPassed":  true,
+                  "allStorageInterfacesTested":  false,
+                  "allDisksTested":  false,
+                  "nicFilterLiveTested":  false,
+                  "driverVerifierStressAndPowerTestsRun":  false,
+                  "physicalWinReRecoveryTested":  false,
+                  "originalPhysicalCrashCauseProven":  false,
+                  "notes":  "This successful test establishes only the recorded disk, two read paths, boots, removal and 1 MiB file I/O checks. The earlier physical crash had no surviving dump; the VM reproduced a demand-start failure separately."
+              },
+    "workflowFixCommits":  [
+                               "7424d0390b90f6c1b489170e827850758a859ff2",
+                               "d0e8bf691ef70981010b740a53cf891369f1810a",
+                               "a89d306323c3a6caabeefe648da25d28f0452638"
+                           ],
+    "rawFailureEvidenceRetained":  true,
+    "releaseManifestSha256":  "E35C2AACD47E59F07A0AE12AE6973C751FD0D13267645385471FA516048221C5",
+    "externalRecoveryManifestSha256":  "3A913849932E577A371DF24A862FABF2BD18A7E3780C1955CE3BE171AC903FC2",
+    "evidenceFiles":  [
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/enabletestmode.20261017T203831452Z.c18cf5fc59dc4d4e96c74def7e38916f/action-summary.json",
+                              "bytes":  238,
+                              "sha256":  "AE3DC6F1ADF754E428F66A8427AA360B79CCFD44543E53FB7BED524F02B1405E"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/enabletestmode.20261017T203831452Z.c18cf5fc59dc4d4e96c74def7e38916f/before-enable-inventory.json",
+                              "bytes":  7903,
+                              "sha256":  "373757241A8E29CE8EB24F28AA60A1F1F207E9D18115A827AB43C43EAF1600EB"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/enabletestmode.20261017T203831452Z.c18cf5fc59dc4d4e96c74def7e38916f/failure.txt",
+                              "bytes":  97,
+                              "sha256":  "6A699DEAEF54E7D4A928763DD5E230B83DFEEA6E08BE481C5A7BBA105186498F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/enabletestmode.20261017T204206666Z.499b731ccd69475b88ababe0fc24bdf2/action-summary.json",
+                              "bytes":  7267,
+                              "sha256":  "676F0F5B4265E610484A2D3EAEE2EE8DA2CCF29A76977BCE145D757CBA5258B6"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/enabletestmode.20261017T204206666Z.499b731ccd69475b88ababe0fc24bdf2/bcd-test-signing-on.json",
+                              "bytes":  382,
+                              "sha256":  "9A64C0C569DB816DFD642B9D1FAB30B9E4E31486F52C066D984E01D93852E429"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/enabletestmode.20261017T204206666Z.499b731ccd69475b88ababe0fc24bdf2/before-enable-inventory.json",
+                              "bytes":  7903,
+                              "sha256":  "DE4BC6248505BA6FC46553832BF0A0DFC4EC7C168BDA07E3DD7165F4DF88BEF8"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/finalverify.20261017T212924400Z.7dddb31574594aa4b344e87c04f4d488/action-summary.json",
+                              "bytes":  1709,
+                              "sha256":  "4C701C5AC5C24F4BD1F96AB25F3F49D4600422DDF8C98DC7CDDF52CE67E0E6CB"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/finalverify.20261017T212924400Z.7dddb31574594aa4b344e87c04f4d488/final-native-wmi-readback.json",
+                              "bytes":  7903,
+                              "sha256":  "A066B2B547B6612ABA1427180344754006C1935EB1A7AE7A8FE168AD587B90E3"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/finalverify.20261017T212924400Z.7dddb31574594aa4b344e87c04f4d488/final-verification.json",
+                              "bytes":  22522,
+                              "sha256":  "B1CF6B772E5C0C52E2BF8C4F8ADB0F1135B8FA1B12AE77F74950858016649BB2"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/installreplacement.20261017T211824148Z.f476ea260f504e87b677db35ff38cbb2/action-summary.json",
+                              "bytes":  418,
+                              "sha256":  "8416BB35B328C8F3356ED0B1338409D1F8AC146CAF8145E90CB11717A6058601"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/installreplacement.20261017T211824148Z.f476ea260f504e87b677db35ff38cbb2/before-replacement-install.json",
+                              "bytes":  7911,
+                              "sha256":  "A68840BE034F6CE8679C49E73958723726DD7824A04C019EBE179AB21A6B7079"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/installreplacement.20261017T211824148Z.f476ea260f504e87b677db35ff38cbb2/replacement-pnputil-add.json",
+                              "bytes":  1025,
+                              "sha256":  "54DFE495F02F79342A58258A8766517789D295BC0E56F538B79CF422BED85099"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/installtransparent.20261017T204546042Z.72840a8083054f7eb1f3519cec5dcfb8/action-summary.json",
+                              "bytes":  239,
+                              "sha256":  "964C624EBEC722B9D04D63119FCAFBC7C06B0EF9A0E9F5885808325FB952EE19"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/installtransparent.20261017T204546042Z.72840a8083054f7eb1f3519cec5dcfb8/before-transparent-install.json",
+                              "bytes":  7911,
+                              "sha256":  "D77A66A2FE30392F6750DDEE15C664303049A0E987414F82B166A3B288F470B4"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/installtransparent.20261017T204546042Z.72840a8083054f7eb1f3519cec5dcfb8/failure.txt",
+                              "bytes":  94,
+                              "sha256":  "F89BC9A4EFE0B644D135305A2C77F43DF88265AB87DEADA815382972E15E082D"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/installtransparent.20261017T204546042Z.72840a8083054f7eb1f3519cec5dcfb8/transparent-pnputil-add.json",
+                              "bytes":  1025,
+                              "sha256":  "1F5700C553FDB8ED9A254711AD3255B45B6D9B7568988711461C6FCAE3C007DD"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/prepare.20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/action-summary.json",
+                              "bytes":  861,
+                              "sha256":  "45EDC70F2A4205E0EF06AA2C15145EFF76717996E70BBFC084217AD87F3DE794"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/prepare.20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/prepare-inventory.json",
+                              "bytes":  7903,
+                              "sha256":  "6851245678429907B0EB8C45120B7D957B86F11510D7B188C8B5E4DACE70AA96"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/prepare.20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/release-verification.json",
+                              "bytes":  3879,
+                              "sha256":  "605ED42EC58DC668DD9AD9CC2F8AC156A793D23730EDCC78CC88825CB542C3E5"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/remove.20261017T211427984Z.7658366a756344d196e0c110af297297/action-summary.json",
+                              "bytes":  331,
+                              "sha256":  "5D5DBECB59E94D4FE5D2CDD16C55CA22221AD211D3E19B80D38BFC2D1480D883"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/remove.20261017T211427984Z.7658366a756344d196e0c110af297297/before-remove-inventory.json",
+                              "bytes":  9101,
+                              "sha256":  "D863BF8415DC840233ECDEB9F9B5459EAA8AD78A8EE2BFCCCB0F1145C6095D22"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/remove.20261017T211427984Z.7658366a756344d196e0c110af297297/transparent-pnputil-delete.json",
+                              "bytes":  602,
+                              "sha256":  "705DBECAB718AFB494FC37E0220C6009EBF7238A9A46B638874FAAD770B063A9"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/remove.20261017T212152849Z.d3b8f5394e2848c9a66593af2b038e77/action-summary.json",
+                              "bytes":  331,
+                              "sha256":  "304E121AFAAE45CF2A6FB65AFE5407CDBF27158338338E71D77966A33107E6D6"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/remove.20261017T212152849Z.d3b8f5394e2848c9a66593af2b038e77/before-remove-inventory.json",
+                              "bytes":  9101,
+                              "sha256":  "03719C1185CA0BA64B99535D15635DF70399EB43804C4265AD2DD1AAFA7D1D61"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/remove.20261017T212152849Z.d3b8f5394e2848c9a66593af2b038e77/replacement-pnputil-delete.json",
+                              "bytes":  602,
+                              "sha256":  "A1FA5BFCEB0EB78D4C3616C27CEA2558C89E2F25C3EF96D531166386A92A9195"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/restorepolicy.20261017T212646589Z.4127015d188944809f352860e6b34b10/action-summary.json",
+                              "bytes":  646,
+                              "sha256":  "8FDB138CFCC7E0474B69847999BE74E4BD3D357AF08AC835F664C721770FEB19"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/restorepolicy.20261017T212646589Z.4127015d188944809f352860e6b34b10/bcd-test-signing-restore.json",
+                              "bytes":  383,
+                              "sha256":  "38A5828532C65E6228BEE751A109149FAACC8A60F2AC3DD73ED40B1D12445DF3"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/restorepolicy.20261017T212646589Z.4127015d188944809f352860e6b34b10/before-policy-restore.json",
+                              "bytes":  7911,
+                              "sha256":  "41CD2AFAD833CD2A7117437C4A63C81D495B17689039567881AF3B3E2E6D81EE"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/resumeinstall.20261017T210847519Z.553090ad4f0347de87f912c7e55ad036/action-summary.json",
+                              "bytes":  401,
+                              "sha256":  "2BA44575508900D3EB1402BEB1546235D2EF9E1F2A397A654CBB4F23FBF10488"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/resumeinstall.20261017T210847519Z.553090ad4f0347de87f912c7e55ad036/resume-before-reboot-inventory.json",
+                              "bytes":  8944,
+                              "sha256":  "91B743DEAF3D44A3C731DB3B1B8D848510DC77A153E58CBBA3234E037A4B2063"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/resumeinstall.20261017T210847519Z.553090ad4f0347de87f912c7e55ad036/resume-install-verification.json",
+                              "bytes":  1026,
+                              "sha256":  "37A49CCF3A78FC2BD9D72932B30B210E487A5DFCD41BD18AECD25B4E8504C0EA"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/verifyoriginal.20261017T211659711Z.92fe73389b2e4430aa5404b940cad015/action-summary.json",
+                              "bytes":  859,
+                              "sha256":  "7388879EEC066D07FFB72AE633B0DC18808A4310BE9B364651A636A35FB611AF"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/verifyoriginal.20261017T211659711Z.92fe73389b2e4430aa5404b940cad015/fresh-native-wmi-readback.json",
+                              "bytes":  7911,
+                              "sha256":  "2D94B2F11C406DDBD839D504D7530E48CECF3E3E7C50A0A1416759C0031CDA75"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/verifyoriginal.20261017T211659711Z.92fe73389b2e4430aa5404b940cad015/verification-original.json",
+                              "bytes":  2478,
+                              "sha256":  "2D2F06337996ED3F9E480D8940A2A32C8DE9B9711122A6C6123C1EE8E6510B89"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/verifyoriginal.20261017T212524174Z.1681c6a9b377407abd43b411f68e056b/action-summary.json",
+                              "bytes":  859,
+                              "sha256":  "7388879EEC066D07FFB72AE633B0DC18808A4310BE9B364651A636A35FB611AF"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/verifyoriginal.20261017T212524174Z.1681c6a9b377407abd43b411f68e056b/fresh-native-wmi-readback.json",
+                              "bytes":  7911,
+                              "sha256":  "E5CBA59BA30AEF3493342B4E4258616B47A4A2A592E614034D8FC8CE108A15A7"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/verifyoriginal.20261017T212524174Z.1681c6a9b377407abd43b411f68e056b/verification-original.json",
+                              "bytes":  2478,
+                              "sha256":  "ACF144FF76CCDD047765360C0B0065024FAA01676017878180BF914FDEF132A5"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/verifyreplacement.20261017T212015434Z.7a7408861b3a44efb0df954587a16cc9/action-summary.json",
+                              "bytes":  1754,
+                              "sha256":  "912CA4659A1FFE29518915FB7B0C836C7E4209867F7C2EFBF7D687760B8A46BF"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/verifyreplacement.20261017T212015434Z.7a7408861b3a44efb0df954587a16cc9/fresh-native-wmi-readback.json",
+                              "bytes":  9101,
+                              "sha256":  "EE0AFEA3F2FA52CB210BD6FC98BF12DBA94B04DF9056604C9DB92137DE51868F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/verifyreplacement.20261017T212015434Z.7a7408861b3a44efb0df954587a16cc9/verification.json",
+                              "bytes":  3486,
+                              "sha256":  "E143550D584D14493953441B0D6DCEE16E718CACC6A6B575A1C64F5C85304CA5"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/verifytransparent.20261017T211153259Z.650af0049e8743e89b0fba9de33f6e56/action-summary.json",
+                              "bytes":  1754,
+                              "sha256":  "2FEED064302719D7AC5EED73519B7BE88467665913A003440A014BA8F0968125"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/verifytransparent.20261017T211153259Z.650af0049e8743e89b0fba9de33f6e56/fresh-native-wmi-readback.json",
+                              "bytes":  9101,
+                              "sha256":  "B3103EFBE255E8D1ACFAC6DD1D3F79C7C0F418AB7315F173C9A806E270BCD79B"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/verifytransparent.20261017T211153259Z.650af0049e8743e89b0fba9de33f6e56/verification.json",
+                              "bytes":  3483,
+                              "sha256":  "9C10EB9805EE5E7868A3C7E7C0D5070849DB0FBF7E6CFC8E22C0EC5182821648"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/journal.jsonl",
+                              "bytes":  6737,
+                              "sha256":  "F9F0B99F52B2E7B3643CE51623CBACEC5219C9D14E8845FDD5E66E5ADD8950A5"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/recovery-copy-manifest.json",
+                              "bytes":  4685,
+                              "sha256":  "3A913849932E577A371DF24A862FABF2BD18A7E3780C1955CE3BE171AC903FC2"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/recovery-kit/offline-recover.cmd",
+                              "bytes":  3555,
+                              "sha256":  "2358F5793B25CE946C9AA62A90A0D36E9E553B4865C201486BF80D03FFF86C49"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/recovery-kit/README.txt",
+                              "bytes":  732,
+                              "sha256":  "D7B19F8958BD388FFAAAAA800511FCF64790989CF6BAAE87E3887AE987414CFF"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/recovery-kit/replacement/client_storage_filter.inf",
+                              "bytes":  1324,
+                              "sha256":  "3E7183B9342AE036464B3454E81BDC8148AC01A8D3A703A6473C96FC2032A37F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/recovery-kit/STORAGE_BAREMETAL_RUNBOOK.md",
+                              "bytes":  9988,
+                              "sha256":  "369B957E2F5C8C663F0280A81119A11A3600C0C5F5D560E78FD4925D8DA79091"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/recovery-kit/STORAGE_BOOT_RECOVERY.md",
+                              "bytes":  8833,
+                              "sha256":  "7519AD630B5D617C1B6569442534B7B8C06F70694EA96203D0A26E1C1823D988"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/recovery-kit/transparent/client_storage_filter.inf",
+                              "bytes":  1324,
+                              "sha256":  "3BD7ABB48150667F99E677EF85B6CB31831DD5696BAB8780E1431E639FD467FC"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/snapshot/baseline.json",
+                              "bytes":  10993,
+                              "sha256":  "5AE5BA7EB2E72893F1BBAF300E1B8B592F1C40392BB685FA472137C2F58B8FAB"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/snapshot/bcd-all.txt",
+                              "bytes":  6756,
+                              "sha256":  "BAD3FD0BF251E14E1799683547CA7BC4A8EFAE956CAE78235F22A92582FAEE75"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/snapshot/bcd-current.txt",
+                              "bytes":  810,
+                              "sha256":  "761F63D382CF2CDD9BEA7B3D07698D8FD5EDA31B5FCE40BB37A01A7EC42C3020"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/snapshot/bcd-export-output.txt",
+                              "bytes":  39,
+                              "sha256":  "628CF8574E0EE47404307EA99081598635E1CA5B32B75BEB61CEE87607CDC4B5"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/snapshot/bcd-firmware.txt",
+                              "bytes":  1885,
+                              "sha256":  "D2093FE6E4733CE11533D097D4122851E9BEAFDA065346A1D6DECBF158232138"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/snapshot/bitlocker-status-only.json",
+                              "bytes":  2568,
+                              "sha256":  "8740E72948C5FE5A8A7A2C31492C0CD4B49B5BDE65FD0E38E2AA19397A036408"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/snapshot/boot-store-export.bcd",
+                              "bytes":  32768,
+                              "sha256":  "5FFEE54CA7490533A875143100EC397F61462DF05AD6254DB5ED3ADF902D306A"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/snapshot/disk-layout.json",
+                              "bytes":  8757,
+                              "sha256":  "7CD7516F3401A4A27B4AAD40E48811B7721070D6A83B8F4D111EF483BCACDAEC"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/snapshot/hypersinv.cer",
+                              "bytes":  764,
+                              "sha256":  "B3C4D8955151A56F2F2D1B4F50BA358C7FC95C75ADCAD49EED0C669FC034F3BE"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/snapshot/reagentc-status.json",
+                              "bytes":  1041,
+                              "sha256":  "BB0436CA528C315C51DF61413D885AB67C7A8874C2D1BA376535D7787C63E9C4"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/snapshot/release-manifest.json",
+                              "bytes":  5709,
+                              "sha256":  "E35C2AACD47E59F07A0AE12AE6973C751FD0D13267645385471FA516048221C5"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json",
+                              "bytes":  19939,
+                              "sha256":  "A136AA9C1A6469C4765B263E80CA774D043A0DEB4F1EB4156A1783EFD2CDB12E"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T203833019Z.0407e5da26104d2db61e5ae6b6fef528",
+                              "bytes":  15387,
+                              "sha256":  "B58F08A22FC4AAEA84D35602A8167CAF22BBFFE9F04FA610B99E0D95F465E4AB"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T203833042Z.ce1bbecfef794fbaa281609555195423",
+                              "bytes":  15402,
+                              "sha256":  "44AE18341E040E90F632B1C7254ED8FE25144B3DD048A22B323F268EA6B269E0"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T204208908Z.d0ac46d38b044a0fad0b4e78b3c921c6",
+                              "bytes":  15693,
+                              "sha256":  "8D14D7648406FA9A79BB616D247A734A08328F559F7DFC7F37D3529A08D459DD"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T204208933Z.2ff5c3309e4b4150866c2e0279eee0f0",
+                              "bytes":  15693,
+                              "sha256":  "CA96D186F36E4A101D4DC6CB032A64E00BB700A41B6929A88E685F793B0C283B"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T204208948Z.73866633ffc649b690f49ad89b669b90",
+                              "bytes":  15726,
+                              "sha256":  "D76C9362AE4C34D77811BEF4387384D2B0E6E8D8BFEC1280C6AAF01C1D5AAFF4"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T204208994Z.2078fa36284f47edbc56c4182aef9208",
+                              "bytes":  15774,
+                              "sha256":  "AF62998794066CE33A083A2FDA770235592381316B222F0593F169ECB46707D8"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T204553844Z.8c1a643b305b43c8a2e5713fb521f1e9",
+                              "bytes":  16295,
+                              "sha256":  "4A342FCE27B5860A1BBF98181666640086D5045001D3B33AFC9F9711BD9B391A"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T204554487Z.8b23bde3b1c042139d8cd155d0d6458b",
+                              "bytes":  16860,
+                              "sha256":  "8803A6798647671919321A01F015CC34669FDD9BA318A408C983E97356A14326"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T210855624Z.5bc2fe2dc9094f07b5230de300f418f4",
+                              "bytes":  17343,
+                              "sha256":  "0F622DE49226EA07892DAB041E750A967B3FACBFD06A6A6BBF19224A1BDDA876"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T211200654Z.b5726dd76db74244b4c91f8598987ad7",
+                              "bytes":  17485,
+                              "sha256":  "D8D436A1596EC135466DFA44FAB5BFFEEF1CE982F90E86CC9BF0A6A7411B3ED0"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T211429910Z.710d34e012b54052b93516535613bec2",
+                              "bytes":  17498,
+                              "sha256":  "107EEA29D7EEFAAC6C95BA3C343C82CF25330DB565BC53659574A1EEFAA00AE7"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T211430248Z.b84c9f45f011407b9d19ae74f99f6710",
+                              "bytes":  18703,
+                              "sha256":  "377EC5374AE562B33675C841B7C878A72769934F93FCFB3BFA7C3CFD2BD99D77"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T211430254Z.932c7650a2444d03a24095c2aafc2dc2",
+                              "bytes":  18759,
+                              "sha256":  "05E56870FB9C69541DD099502BC5C239D6719757B5AF47344F95CC9E3C062F3F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T211710852Z.70d6b46db2bd44629ee8b3e0d9831688",
+                              "bytes":  18762,
+                              "sha256":  "6BEE67CA46A793D90570E414DD770B4127996846C2E90317276BF175B80527A6"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T211826257Z.a364e0a847d14907a4c14822058ac070",
+                              "bytes":  17382,
+                              "sha256":  "36013F4F02C235556BB851A3950BC436F0270D35B17A0EE43D3EE81EB91059DE"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T211826936Z.9d2d6f3e540d48c1800fc46ca0515c31",
+                              "bytes":  17948,
+                              "sha256":  "E18976117CC76100AAC45AC57AF4C24647790C2DE5F873B7EF76C8AB14464A71"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T211826945Z.4a51ea80f88948679c0f380784f2d418",
+                              "bytes":  18548,
+                              "sha256":  "92CBF1868FCF8552C498C8044C1697B8C8E1FDF38B5D09A192E2A0C41A2AEC28"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T212022928Z.1ce08fdb1d874568be2b69130dd6a1b8",
+                              "bytes":  18551,
+                              "sha256":  "E26019E5F0B1871DA4EA64904C4E624B6B081355DAA08F6F7909733C56B7800D"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T212154902Z.ae2538c61e8a4228bd5b6a4b14b937ff",
+                              "bytes":  18550,
+                              "sha256":  "886370A46F047E47B33A8D47D7E2EC8A6AEBFCD2E42A0A0DE26C32BF7CE45951"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T212155281Z.3c59b2c4bc6f4e8dacca1b7c1ad7b3d3",
+                              "bytes":  19758,
+                              "sha256":  "4E281368EE12801F34A4ABA01C786BF1C693B0B92A352DEDD7B1C362E0F46DAE"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T212155289Z.62bf9d7131534c69ac3e8afa483e47ac",
+                              "bytes":  19814,
+                              "sha256":  "4DB5C4C99222236DE43F20194413BD8DA21B509DA584BFA8C1529D7A86B24AF4"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T212531925Z.f6238df691564022a042ba12e4494d6f",
+                              "bytes":  19817,
+                              "sha256":  "DB11B2F9CD23863854498344843BD726E9EBFBB0C0006F72BF6BC4DDF111EA85"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T212648586Z.7bea823d45c64d5687ab4399e61a1b8a",
+                              "bytes":  18437,
+                              "sha256":  "2A23DF4845DBA06361912C197B42D8D441EA9082D359FBE8ACE7809EC41866D2"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T212648691Z.850094ce0f6148298d3327b279a9dc16",
+                              "bytes":  18672,
+                              "sha256":  "F6F01929EB5212A5374EE97D462EDF8653B0BA688FD6B41A9E569554CD724575"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/state.json.backup.20261017T212932476Z.098f42e30bd14b0cb174f7d99ccb0bac",
+                              "bytes":  19647,
+                              "sha256":  "D5975441DE09E525BAE0070965ADA2B690D5FC0EF9D6F82E0868FD3FCB8A8D2E"
+                          }
+                      ]
+}
