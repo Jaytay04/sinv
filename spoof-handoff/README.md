@@ -91,8 +91,12 @@ native/WMI round trip. The user then completed the transparent and replacement
 boot-start tests on the pinned physical Intel boot disk, with native IOCTL and
 fresh WMI original/replacement/restored values, successful package removal and
 file I/O checks. Test-signing and temporary public certificate trust returned to
-their prepared baseline. The snapshot and final check both had Secure Boot OFF;
-manual return to Secure Boot ON remains to be verified. The scoped report and
+their prepared baseline. The snapshot and final check both had Secure Boot OFF.
+The user subsequently enabled Secure Boot and reported an elevated
+`Confirm-SecureBootUEFI` result of `True`, corroborated by the Windows boot-state
+flag. Fresh native/WMI reads still returned the original serial, kernel
+test-signing was OFF, and filter registration and temporary certificate trust
+were absent. The scoped report and
 raw evidence hashes are in
 [storage-host-round-trip.json](reports/review-20261017/storage-host-round-trip.json).
 This establishes the two tested read paths on that selected disk; other disks,

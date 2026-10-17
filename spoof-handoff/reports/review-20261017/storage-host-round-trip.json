@@ -158,8 +158,8 @@
                                                                   "privilegeRestoreError":  0
                                                               },
                     "checkedPolicyAndDeviceBaselineRestored":  true,
-                    "desiredSecureBootOnVerified":  false,
-                    "remainingUserStep":  "Manually enable Secure Boot in firmware, boot Windows, then Confirm-SecureBootUEFI must return True",
+                    "desiredSecureBootOnVerified":  true,
+                    "remainingUserStep":  null,
                     "finalReportSha256":  "B1CF6B772E5C0C52E2BF8C4F8ADB0F1135B8FA1B12AE77F74950858016649BB2",
                     "finalReportPath":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/actions/finalverify.20261017T212924400Z.7dddb31574594aa4b344e87c04f4d488/final-verification.json"
                 },
@@ -404,6 +404,11 @@
                               "sha256":  "F9F0B99F52B2E7B3643CE51623CBACEC5219C9D14E8845FDD5E66E5ADD8950A5"
                           },
                           {
+                              "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/post-secureboot-confirmation.json",
+                              "bytes":  1607,
+                              "sha256":  "490B48CA7FC7044BCDDC5E78B61D155CA1A13B3EFF47B60EBD9C3EFFA23AA53B"
+                          },
+                          {
                               "path":  "spoof-handoff/reports/storage-host-runs/20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e/recovery-copy-manifest.json",
                               "bytes":  4685,
                               "sha256":  "3A913849932E577A371DF24A862FABF2BD18A7E3780C1955CE3BE171AC903FC2"
@@ -623,5 +628,37 @@
                               "bytes":  19647,
                               "sha256":  "D5975441DE09E525BAE0070965ADA2B690D5FC0EF9D6F82E0868FD3FCB8A8D2E"
                           }
-                      ]
+                      ],
+    "postCleanupSecureBootConfirmation":  {
+                                              "recordedUtc":  "2026-10-17T21:39:37.6067305Z",
+                                              "userReportedCommand":  "Confirm-SecureBootUEFI",
+                                              "userReportedOutput":  true,
+                                              "directAgentFirmwareQuery":  {
+                                                                               "result":  null,
+                                                                               "error":  "Unable to set proper privileges. Access was denied.",
+                                                                               "tokenElevated":  false
+                                                                           },
+                                              "windowsBootState":  {
+                                                                       "source":  "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\SecureBoot\\State\\UEFISecureBootEnabled",
+                                                                       "value":  1,
+                                                                       "interpretation":  "Cached Windows boot-state corroboration; not a direct firmware-variable read"
+                                                                   },
+                                              "freshNativeSerial":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+                                              "nativeReadError":  null,
+                                              "freshWmiSerial":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+                                              "wmiReadError":  null,
+                                              "codeIntegrity":  {
+                                                                    "ntStatus":  "0x00000000",
+                                                                    "success":  true,
+                                                                    "options":  49153,
+                                                                    "returnLength":  8
+                                                                },
+                                              "filterRegistryPresent":  false,
+                                              "pinnedCertificateTrustStores":  {
+                                                                                   "Root":  false,
+                                                                                   "TrustedPublisher":  false
+                                                                               },
+                                              "agentChangesMade":  "Repository evidence files only; no driver, trust, BCD, firmware, ESP, reboot or networking change"
+                                          },
+    "postCleanupEvidenceSha256":  "490B48CA7FC7044BCDDC5E78B61D155CA1A13B3EFF47B60EBD9C3EFFA23AA53B"
 }
