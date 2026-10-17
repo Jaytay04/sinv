@@ -11,8 +11,14 @@ EFI_BOOT_SERVICES *gBS;
 EFI_SYSTEM_TABLE *gST;
 
 static EFI_STATUS g_start_status;
+static EFI_STATUS g_load_status;
+static EFI_STATUS g_file_read_status;
+static EFI_STATUS g_device_path_status;
+static int g_load_error_with_child;
 static UINTN g_load_calls;
 static UINTN g_start_calls;
+static UINTN g_file_read_calls;
+static UINTN g_device_path_calls;
 static UINTN g_unload_calls;
 static UINTN g_handle_calls;
 static UINTN g_entry_calls;
@@ -30,6 +36,8 @@ EFI_STATUS efi_file_read(EFI_HANDLE ImageHandle, const CHAR16 *Path,
     static UINT8 bytes[4] = { 'P', 'E', 0, 0 };
     (void)ImageHandle;
     (void)Path;
+    ++g_file_read_calls;
+    if (EFI_ERROR(g_file_read_status)) return g_file_read_status;
     Out->bytes = g_direct_source ? g_direct_bytes : bytes;
     Out->size = g_direct_source ? sizeof(g_direct_bytes) : sizeof(bytes);
     return EFI_SUCCESS;
@@ -48,6 +56,8 @@ EFI_STATUS efi_file_build_device_path(
 {
     (void)ImageHandle;
     (void)Path;
+    ++g_device_path_calls;
+    if (EFI_ERROR(g_device_path_status)) return g_device_path_status;
     *Out = g_path;
     return EFI_SUCCESS;
 }
@@ -69,6 +79,10 @@ static EFI_STATUS EFIAPI mock_load(
     (void)SourceBuffer;
     (void)SourceSize;
     ++g_load_calls;
+    if (EFI_ERROR(g_load_status)) {
+        if (g_load_error_with_child) *ImageHandle = g_child;
+        return g_load_status;
+    }
     *ImageHandle = g_child;
     return EFI_SUCCESS;
 }
@@ -120,8 +134,14 @@ static void reset_fixture(void)
     memset(&g_loaded_image, 0, sizeof(g_loaded_image));
     memset(g_direct_bytes, 0, sizeof(g_direct_bytes));
     g_start_status = EFI_SUCCESS;
+    g_load_status = EFI_SUCCESS;
+    g_file_read_status = EFI_SUCCESS;
+    g_device_path_status = EFI_SUCCESS;
+    g_load_error_with_child = 0;
     g_load_calls = 0;
     g_start_calls = 0;
+    g_file_read_calls = 0;
+    g_device_path_calls = 0;
     g_unload_calls = 0;
     g_handle_calls = 0;
     g_entry_calls = 0;
@@ -149,6 +169,8 @@ int main(void)
                 "ordinary child starts") ||
         !expect(g_load_calls == 1 && g_start_calls == 1,
                 "ordinary child is loaded and started once") ||
+        !expect(child_status == EFI_SUCCESS,
+                "successful child returns its exact status") ||
         !expect(g_unload_calls == 1, "ordinary child is unloaded") ||
         !expect(g_release_calls == 1 && g_path_release_calls == 1,
                 "temporary file resources are released")) {
@@ -161,7 +183,72 @@ int main(void)
                     (EFI_HANDLE)1, path, &child_status) ==
                     IMAGE_LAUNCH_ERR_START,
                 "failed child reports start failure") ||
+        !expect(child_status == EFI_DEVICE_ERROR,
+                "start failure preserves the raw EFI_STATUS") ||
         !expect(g_unload_calls == 1, "failed child is unloaded")) {
+        return 1;
+    }
+
+    reset_fixture();
+    g_start_status = EFI_SECURITY_VIOLATION;
+    if (!expect(image_launch_start(
+                    (EFI_HANDLE)1, path, &child_status) ==
+                    IMAGE_LAUNCH_ERR_START,
+                "child Secure Boot denial reports start failure") ||
+        !expect(child_status == EFI_SECURITY_VIOLATION,
+                "child security denial preserves the raw EFI_STATUS") ||
+        !expect(g_unload_calls == 1,
+                "Security2 child denial unloads the returned image")) {
+        return 1;
+    }
+
+    reset_fixture();
+    g_load_status = EFI_SECURITY_VIOLATION;
+    g_load_error_with_child = 1;
+    if (!expect(image_launch_start(
+                    (EFI_HANDLE)1, path, &child_status) ==
+                    IMAGE_LAUNCH_ERR_LOAD,
+                "LoadImage security denial reports load failure") ||
+        !expect(child_status == EFI_SECURITY_VIOLATION,
+                "LoadImage failure preserves the raw EFI_STATUS") ||
+        !expect(g_unload_calls == 1,
+                "failed LoadImage handle is unloaded")) {
+        return 1;
+    }
+
+    reset_fixture();
+    g_file_read_status = EFI_NOT_FOUND;
+    if (!expect(image_launch_start((EFI_HANDLE)1, path, &child_status) ==
+                    IMAGE_LAUNCH_ERR_NOT_FOUND,
+                "missing child reports not found") ||
+        !expect(child_status == EFI_NOT_FOUND,
+                "missing child preserves the raw EFI_STATUS") ||
+        !expect(g_device_path_calls == 0 && g_load_calls == 0,
+                "missing child stops before device-path construction")) {
+        return 1;
+    }
+
+    reset_fixture();
+    g_file_read_status = EFI_DEVICE_ERROR;
+    if (!expect(image_launch_start((EFI_HANDLE)1, path, &child_status) ==
+                    IMAGE_LAUNCH_ERR_READ,
+                "source read failure reports read error") ||
+        !expect(child_status == EFI_DEVICE_ERROR,
+                "source read failure preserves the raw EFI_STATUS") ||
+        !expect(g_device_path_calls == 0 && g_load_calls == 0,
+                "source read failure stops before device-path construction")) {
+        return 1;
+    }
+
+    reset_fixture();
+    g_device_path_status = EFI_ACCESS_DENIED;
+    if (!expect(image_launch_start((EFI_HANDLE)1, path, &child_status) ==
+                    IMAGE_LAUNCH_ERR_DEVICE_PATH,
+                "device-path failure reports its phase") ||
+        !expect(child_status == EFI_ACCESS_DENIED,
+                "device-path failure preserves the raw EFI_STATUS") ||
+        !expect(g_load_calls == 0 && g_release_calls == 1,
+                "device-path failure releases source without loading")) {
         return 1;
     }
 
@@ -171,6 +258,17 @@ int main(void)
                     IMAGE_LAUNCH_ERR_ARGUMENT,
                 "launch requires child status output") ||
         !expect(g_load_calls == 0, "invalid launch has no side effects")) {
+        return 1;
+    }
+
+    reset_fixture();
+    if (!expect(image_launch_start(NULL, path, &child_status) ==
+                    IMAGE_LAUNCH_ERR_ARGUMENT,
+                "invalid parent is rejected") ||
+        !expect(child_status == EFI_INVALID_PARAMETER,
+                "valid output receives invalid-parameter EFI_STATUS") ||
+        !expect(g_file_read_calls == 0 && g_load_calls == 0,
+                "invalid parent has no image side effects")) {
         return 1;
     }
 
@@ -196,6 +294,19 @@ int main(void)
                 "resident child bypasses StartImage exactly once") ||
         !expect(g_unload_calls == 0,
                 "successful resident child remains loaded")) {
+        return 1;
+    }
+
+    reset_fixture();
+    g_direct_source = 1;
+    if (!expect(image_launch_start_resident(
+                    (EFI_HANDLE)1, path, &child_status) ==
+                    IMAGE_LAUNCH_ERR_IMAGE_FORMAT,
+                "invalid resident image reports image-format failure") ||
+        !expect(child_status == EFI_LOAD_ERROR,
+                "resident image-format failure preserves EFI_LOAD_ERROR") ||
+        !expect(g_load_calls == 0 && g_release_calls == 1,
+                "invalid resident image is not loaded")) {
         return 1;
     }
 

@@ -2,9 +2,10 @@
 #include "image_launch.h"
 
 #include "efi_file.h"
+#include "shim_chain.h"
 
-#if defined(TCGLOG_UEFI) && defined(_MSC_VER) && \
-    (defined(_M_IX86) || defined(_M_X64))
+#if defined(IB_QEMU_DEBUG_PORTS) && IB_QEMU_DEBUG_PORTS && \
+    defined(_MSC_VER) && (defined(_M_IX86) || defined(_M_X64))
 #include <intrin.h>
 #pragma intrinsic(__outbyte)
 static void image_launch_debug_marker(char first, char second)
@@ -93,15 +94,19 @@ image_launch_status_t image_launch_start(
     UINTN exit_data_size = 0;
     EFI_STATUS st;
 
-    if (ParentImageHandle == NULL || Path == NULL || ChildStatus == NULL ||
-        gBS == NULL) {
+    if (ChildStatus == NULL) {
         return IMAGE_LAUNCH_ERR_ARGUMENT;
     }
     *ChildStatus = EFI_NOT_STARTED;
+    if (ParentImageHandle == NULL || Path == NULL || gBS == NULL) {
+        *ChildStatus = EFI_INVALID_PARAMETER;
+        return IMAGE_LAUNCH_ERR_ARGUMENT;
+    }
     source.bytes = NULL;
     source.size = 0;
 
     st = efi_file_read(ParentImageHandle, Path, &source);
+    *ChildStatus = st;
     if (st == EFI_NOT_FOUND) {
         return IMAGE_LAUNCH_ERR_NOT_FOUND;
     }
@@ -111,11 +116,12 @@ image_launch_status_t image_launch_start(
     st = efi_file_build_device_path(
         ParentImageHandle, Path, &device_path);
     if (EFI_ERROR(st)) {
+        *ChildStatus = st;
         efi_file_release(&source);
         return IMAGE_LAUNCH_ERR_DEVICE_PATH;
     }
 
-    st = gBS->LoadImage(
+    st = shim_chain_load_image(
         FALSE, ParentImageHandle, device_path,
         source.bytes, source.size, &child);
     efi_file_device_path_release(&device_path);
@@ -123,6 +129,9 @@ image_launch_status_t image_launch_start(
     if (EFI_ERROR(st) || child == NULL) {
         *ChildStatus = child == NULL && !EFI_ERROR(st) ?
                        EFI_DEVICE_ERROR : st;
+        if (child != NULL) {
+            (void)gBS->UnloadImage(child);
+        }
         return IMAGE_LAUNCH_ERR_LOAD;
     }
 
@@ -156,14 +165,18 @@ image_launch_status_t image_launch_start_resident(
     UINT32 entry_rva = 0;
     UINT32 size_of_image = 0;
 
-    if (ParentImageHandle == NULL || Path == NULL || ChildStatus == NULL ||
-        gBS == NULL || gST == NULL) {
+    if (ChildStatus == NULL) {
         return IMAGE_LAUNCH_ERR_ARGUMENT;
     }
     *ChildStatus = EFI_NOT_STARTED;
+    if (ParentImageHandle == NULL || Path == NULL || gBS == NULL || gST == NULL) {
+        *ChildStatus = EFI_INVALID_PARAMETER;
+        return IMAGE_LAUNCH_ERR_ARGUMENT;
+    }
     source.bytes = NULL;
     source.size = 0;
     st = efi_file_read(ParentImageHandle, Path, &source);
+    *ChildStatus = st;
     if (st == EFI_NOT_FOUND) {
         return IMAGE_LAUNCH_ERR_NOT_FOUND;
     }
@@ -171,21 +184,26 @@ image_launch_status_t image_launch_start_resident(
         return IMAGE_LAUNCH_ERR_READ;
     }
     if (!image_launch_pe_entry_rva(&source, &entry_rva, &size_of_image)) {
+        *ChildStatus = EFI_LOAD_ERROR;
         efi_file_release(&source);
         return IMAGE_LAUNCH_ERR_IMAGE_FORMAT;
     }
     st = efi_file_build_device_path(ParentImageHandle, Path, &device_path);
     if (EFI_ERROR(st)) {
+        *ChildStatus = st;
         efi_file_release(&source);
         return IMAGE_LAUNCH_ERR_DEVICE_PATH;
     }
-    st = gBS->LoadImage(FALSE, ParentImageHandle, device_path,
-                        source.bytes, source.size, &child);
+    st = shim_chain_load_image(FALSE, ParentImageHandle, device_path,
+                               source.bytes, source.size, &child);
     efi_file_device_path_release(&device_path);
     efi_file_release(&source);
     if (EFI_ERROR(st) || child == NULL) {
         *ChildStatus = child == NULL && !EFI_ERROR(st) ?
                        EFI_DEVICE_ERROR : st;
+        if (child != NULL) {
+            (void)gBS->UnloadImage(child);
+        }
         return IMAGE_LAUNCH_ERR_LOAD;
     }
     st = gBS->HandleProtocol(child, &loaded_image_guid, (VOID **)&loaded);

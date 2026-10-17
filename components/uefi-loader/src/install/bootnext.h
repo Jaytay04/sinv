@@ -7,6 +7,12 @@
 
 #define IB_BOOTNEXT_VARIABLE_ATTRIBUTES 0x00000007ul
 
+typedef enum {
+    IB_BOOTNEXT_PROFILE_LEGACY = 0,
+    IB_BOOTNEXT_PROFILE_INVENTORY = 1,
+    IB_BOOTNEXT_PROFILE_SHIM_INVENTORY = 2
+} ib_bootnext_profile_t;
+
 typedef struct {
     uint32_t partition_number;
     uint64_t partition_start;
@@ -36,13 +42,26 @@ typedef struct {
 
 int ib_bootnext_serialize(const ib_bootnext_partition_t *partition,
                           unsigned char *output, size_t *output_size);
+int ib_bootnext_serialize_profile(const ib_bootnext_partition_t *partition,
+                                  ib_bootnext_profile_t profile,
+                                  unsigned char *output, size_t *output_size);
 int ib_bootnext_is_owned(const unsigned char *data, size_t data_size,
                          const ib_bootnext_partition_t *partition);
+int ib_bootnext_is_owned_profile(const unsigned char *data, size_t data_size,
+                                 const ib_bootnext_partition_t *partition,
+                                 ib_bootnext_profile_t profile);
 int ib_bootnext_set(const ib_bootnext_request_t *request,
                     unsigned short *boot_number,
                     wchar_t *error, size_t error_count);
+int ib_bootnext_set_profile(const ib_bootnext_request_t *request,
+                            ib_bootnext_profile_t profile,
+                            unsigned short *boot_number,
+                            wchar_t *error, size_t error_count);
 int ib_bootnext_clear_owned(const ib_bootnext_request_t *request,
                             wchar_t *error, size_t error_count);
+int ib_bootnext_clear_owned_profile(const ib_bootnext_request_t *request,
+                                    ib_bootnext_profile_t profile,
+                                    wchar_t *error, size_t error_count);
 int ib_bootnext_enable_privilege(wchar_t *error, size_t error_count);
 void ib_bootnext_default_ops(ib_bootnext_variable_ops_t *ops);
 

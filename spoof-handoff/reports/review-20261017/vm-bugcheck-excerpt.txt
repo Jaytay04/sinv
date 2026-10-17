@@ -1,0 +1,5 @@
+2026-10-17T05:45:28.665Z -WARNING vmware-vmx.exe 7904 [ws@4413 threadName="vcpu-1"] WinBSOD: Synthetic MSR[0x40000100] 0x7b
+2026-10-17T05:45:28.665Z -WARNING vmware-vmx.exe 7904 [ws@4413 threadName="vcpu-1"] WinBSOD: Synthetic MSR[0x40000101] 0xfffff904f08077e8
+2026-10-17T05:45:28.665Z -WARNING vmware-vmx.exe 7904 [ws@4413 threadName="vcpu-1"] WinBSOD: Synthetic MSR[0x40000102] 0xffffffffc0000034
+2026-10-17T05:45:28.665Z -WARNING vmware-vmx.exe 7904 [ws@4413 threadName="vcpu-1"] WinBSOD: Synthetic MSR[0x40000103] 0x0
+2026-10-17T05:45:28.665Z -WARNING vmware-vmx.exe 7904 [ws@4413 threadName="vcpu-1"] WinBSOD: Synthetic MSR[0x40000104] 0x1

@@ -1,0 +1,4 @@
+#ifndef SMBIOS_BUILD_IDENTITY_H
+#define SMBIOS_BUILD_IDENTITY_H
+#define SM_BUILD_ID "@SM_BUILD_ID@"
+#endif

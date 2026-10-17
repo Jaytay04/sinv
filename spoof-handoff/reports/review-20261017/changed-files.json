@@ -1,0 +1,1279 @@
+{
+    "schema":  "reviewed-source-manifest.v1",
+    "baseCommit":  "9b82c1dc5409b36829842bae6ac841ef60481c72",
+    "branch":  "feat/smbios-boot-serial-probe",
+    "capturedUtc":  "2026-10-17T06:34:49.3080073Z",
+    "hashConvention":  "SHA256 covers local file bytes; Git blob IDs identify staged content after line-ending normalization.",
+    "excludedSelfGeneratedFiles":  [
+                                       "changed-files.json",
+                                       "diff-stat.txt"
+                                   ],
+    "files":  [
+                  {
+                      "path":  "components/uefi-loader/CMakeLists.txt",
+                      "bytes":  29508,
+                      "sha256":  "6B0DA1013E5B4D2D91A856BA6360501F05CF88E410DA128165DEE0CBB4293AC7",
+                      "gitBlobId":  "cff69d62fd0978d574450fb3d7a70378a5e5369b"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/fixtures/tests/image_launch_test.c",
+                      "bytes":  10859,
+                      "sha256":  "BC96BDA47E7DC9B97BBC85C84BA9F7E2AA2A2160A0D8AEE2CC4946B9E2296FA2",
+                      "gitBlobId":  "388468383797fd625d412d4a0b3f89eca32d8e1f"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/fixtures/tests/install_bootnext_test.c",
+                      "bytes":  30193,
+                      "sha256":  "BC75498F9AC606FB7D46F2FF1A99811FB27BDF4D1D1155036D4DA39B897F753A",
+                      "gitBlobId":  "a9016fdb676c6b5b7502af64aa9bb1eb5c0aaac4"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/fixtures/tests/install_oneshot_test.c",
+                      "bytes":  30924,
+                      "sha256":  "ACEA44735011D0B7175387C5B612503ACDD85C53FBD5B522D9AEA6DC628A7E42",
+                      "gitBlobId":  "4014c40f1d5ca9993ca1673cf71a738ad77fcc7b"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/fixtures/tests/inventory_entry_test.c",
+                      "bytes":  5805,
+                      "sha256":  "5B2E27BAA3927BEADA325E4463E25FA29480FBFD94BD7E9A91A6D029FC446C71",
+                      "gitBlobId":  "b666c03e9e55c9cde839d69fb3fcfe0a252d335c"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/fixtures/tests/shim_chain_test.c",
+                      "bytes":  16870,
+                      "sha256":  "A75F82C0D4B55B138639D97671039B0AFD6AA4C56CFA4122F6F4C23A26187CB3",
+                      "gitBlobId":  "aa038e16c274bdb792a52d7d62a8a365778c07bd"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/fixtures/tests/shim_inventory_test.c",
+                      "bytes":  23615,
+                      "sha256":  "722229CFFC5FE1D7653C4A6DDE2FD3458F8C62F5BFB13241108D6CA3A839D67F",
+                      "gitBlobId":  "22d6b0aa66babb8badbb0a30ed104eb1ed69b168"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/fixtures/tests/shim_verify_abi_test_x64.asm",
+                      "bytes":  3511,
+                      "sha256":  "CBD2A7D7CC5A50A48730979C6300153394753C926E5DC9318F4EFDAC269192CF",
+                      "gitBlobId":  "f08870b90a940a27a6c62a4a70af17b085a13b7c"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/fixtures/tests/uefi_runtime_abi_test.c",
+                      "bytes":  1211,
+                      "sha256":  "80684E97ABD5368E9599B63466E1EC6E19C1D75AF5132080F9A82F5C8784A9E8",
+                      "gitBlobId":  "1794203c0f166b7a4d67f0ac74e8e27a1f575139"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/install/bootnext.c",
+                      "bytes":  24848,
+                      "sha256":  "AB4D1E663F8199D97E54A33A8CAAD4BDB89398861BD87D97C92795DD484ABEB3",
+                      "gitBlobId":  "f3652c1c0523abb716ffbe7dd9716cb42f7c4c4c"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/install/bootnext.h",
+                      "bytes":  3019,
+                      "sha256":  "911B4559A554666EF12EE22E50991DD720171BAA33C16330EEBD1C433582449D",
+                      "gitBlobId":  "6dd97a5a31d8fa9ed55fe566d47d21ed93ce35d3"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/install/main.c",
+                      "bytes":  16339,
+                      "sha256":  "224DD64E384AAED271290A570DAF2E6AABF6F7A06D1ECAC851611D5EB27688D5",
+                      "gitBlobId":  "a83af606a31f820610577504a8a27d8f6fdb61bf"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/install/oneshot.c",
+                      "bytes":  48688,
+                      "sha256":  "D0BC9087BEB69A0CBFB127554A37D8B38DC361B15C5D53FD51815574A3B825BA",
+                      "gitBlobId":  "90157007d18143c50b153064426e195104b045e4"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/install/oneshot.h",
+                      "bytes":  2434,
+                      "sha256":  "A6C1E0D4D25CE9FE39C58C8329AB62F3D5C88F11CED6CB0EBA023E09AB31823D",
+                      "gitBlobId":  "5a3cbbf552add7920588ce70b3da394fb1c4579e"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/loader/efi_entry.c",
+                      "bytes":  22944,
+                      "sha256":  "6A27926BF8987D881FD4F364145A21AC2605DE3CBE601850BC3DA2A741EA977F",
+                      "gitBlobId":  "2848f264c3f0a0f9b75cc88fcbb7913e1630ab8e"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/loader/image_launch.c",
+                      "bytes":  8027,
+                      "sha256":  "078899DA502814683B3996B807E34C9763231755B24083A2CA5180BD8E6E71B6",
+                      "gitBlobId":  "6f53944d94b58d6b6bd1b34180d21af5f96539a5"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/loader/image_launch.h",
+                      "bytes":  1498,
+                      "sha256":  "F8CADF3F5FB356D12CA274B93709550A004A14EAD631361D48ECAC5D22866EDA",
+                      "gitBlobId":  "5624769e8832fb254bad1c7a9c3d8dd646275964"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/loader/inventory_entry.c",
+                      "bytes":  3575,
+                      "sha256":  "074A1CEE3EFAA09CE4E338244C0DE90C9CE2985590493A4A8B5767A1C0E68960",
+                      "gitBlobId":  "03aebb2378ced9403513ed3c02410f644e74eb18"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/loader/sbat.c",
+                      "bytes":  451,
+                      "sha256":  "29683B5D63E556A4D970DCBD63CC5A307A44AC4191EEA84ACA348BB00B4B6031",
+                      "gitBlobId":  "f867e8d0a8eaf1664630238ba37fd8a4e80d8e17"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/loader/shim_chain.c",
+                      "bytes":  11912,
+                      "sha256":  "DF4C68435C7BD3E95306634BF755AC51983B34CA93714DA4C76CC670EF85D36A",
+                      "gitBlobId":  "e8742667df775484dd7205b1fb07ab8f32b06940"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/loader/shim_chain.h",
+                      "bytes":  853,
+                      "sha256":  "57DBF56EA44E1CEF6DC2E11943BF2DC9B955B41423EABC44E714E9A0DE704844",
+                      "gitBlobId":  "b560ad7f1fcbf3bda2c8b5a223c58d6c827ebee2"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/loader/shim_inventory.c",
+                      "bytes":  14214,
+                      "sha256":  "5977D513DB1D94E159FF049C951C9E75842A3926A5E6300159D277EEF29AD451",
+                      "gitBlobId":  "42c6ad7da02bdbfe5832ec740c0c26bd6dfa7d18"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/loader/shim_inventory.h",
+                      "bytes":  894,
+                      "sha256":  "83E581BE8900F86C7C925C4DEE6FFEF8E4253A6BD02AB8CB0001D77E2287D557",
+                      "gitBlobId":  "8312ffc4a32f8441198e2880210e930898db1c30"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/loader/shim_verify_x64.asm",
+                      "bytes":  1730,
+                      "sha256":  "033AA4E4C9DF81FE87010137CE4E4A7D3A53DC607B11E9884FA0FA77F085B3D7",
+                      "gitBlobId":  "1cd96b3bc09fde97991a11307dc22c5f95c19502"
+                  },
+                  {
+                      "path":  "components/uefi-loader/src/vendor/Uefi.h",
+                      "bytes":  24394,
+                      "sha256":  "4324F058AAAEDF63B192E938B24FDA3CD7574578F021B91DA3BCE19E554AB770",
+                      "gitBlobId":  "e80aebc219eed6c442f465dbaf14a878de9d028e"
+                  },
+                  {
+                      "path":  "docs/BUILD_BOOT_TEST.md",
+                      "bytes":  7576,
+                      "sha256":  "ABEDCFE5195C80F492524140C67C6BA9181B020836C2AA4CA99725A82545AFBB",
+                      "gitBlobId":  "34cab911a1c372d1b7af123d2819a3467fb666b1"
+                  },
+                  {
+                      "path":  "docs/EFI_INVENTORY_BAREMETAL_STEPS.md",
+                      "bytes":  5133,
+                      "sha256":  "203C34FE4F384E66271CA5F0DAD74A18F0806DA3CFE5263A436BF706B217CC89",
+                      "gitBlobId":  "f541d2b0f78c2947f73bc4ce24e412e037ac972d"
+                  },
+                  {
+                      "path":  "docs/EFI_INVENTORY_PATH_B.md",
+                      "bytes":  17915,
+                      "sha256":  "11D9317C20DAA695B1521CEA9F82951DF44D6B3DFFF5863110292CA3B74D9738",
+                      "gitBlobId":  "4932b7e76674e78686bdce20f6443bac2deecc67"
+                  },
+                  {
+                      "path":  "docs/EFI_INVENTORY_PATH_B_UNSIGNED.md",
+                      "bytes":  12080,
+                      "sha256":  "F44B3B9920E30691C1482A9E16C590DEEA6E06145BCB2AB3E306127B88CD3DBA",
+                      "gitBlobId":  "01b6df0ebb28b793e9c63088f8109c388a630fd5"
+                  },
+                  {
+                      "path":  "docs/EFI_INVENTORY_TOOL_USAGE.md",
+                      "bytes":  5666,
+                      "sha256":  "53A8177982B15836B65CAEAA04A6065C9C4450E9AA643706A8880DF801B013EB",
+                      "gitBlobId":  "873c5b79fa006811db6ffea46a2bfa29c45c2fe2"
+                  },
+                  {
+                      "path":  "spoof-handoff/.gitignore",
+                      "bytes":  441,
+                      "sha256":  "3EF8E4B6966798C57836D85A8E35F5EC111728C77816CE11C95CDDB820C36B6B",
+                      "gitBlobId":  "07d2e119413d26f66ed27a0bf36946b7e9a2832c"
+                  },
+                  {
+                      "path":  "spoof-handoff/CMakeLists.txt",
+                      "bytes":  4466,
+                      "sha256":  "AF258CC9D55CBA3B80B9196EB23467376AE21B14628DF52827D45ECB1BFEB4D8",
+                      "gitBlobId":  "019c1f522c96f84871f7e126b8dfaf6b111f779f"
+                  },
+                  {
+                      "path":  "spoof-handoff/README.md",
+                      "bytes":  6410,
+                      "sha256":  "B44429A7108D0C40C5BCEC48E5DD545C18EF184173EFA1CA1AE480362408AB94",
+                      "gitBlobId":  "9c2cb2c9041b77d411c1b2b77e91de3fcedae0ef"
+                  },
+                  {
+                      "path":  "spoof-handoff/commands/build-storage-host-release.ps1",
+                      "bytes":  667,
+                      "sha256":  "CF34810664C2952E35AD2E128800971787386F777AB25FE9412DA89B6A6B44E8",
+                      "gitBlobId":  "20b3d9e5a13f51b32369c8fdafa7f7496a273172"
+                  },
+                  {
+                      "path":  "spoof-handoff/commands/check-device-runtime-package.ps1",
+                      "bytes":  743,
+                      "sha256":  "7C8095DB418AFFE3A2152DB85E07B54784EA7CEC04E7E23B6D5FB4BF3F76D6B1",
+                      "gitBlobId":  "1ee3a03476aabf5b1efe2955a4fdda5230979e2f"
+                  },
+                  {
+                      "path":  "spoof-handoff/commands/device-reboot-cycle.ps1",
+                      "bytes":  2023,
+                      "sha256":  "EC1C368B8F6C6DCE6EFB3BEC3945A2A8BF1B223C86CD44286CABB16F2D678222",
+                      "gitBlobId":  "db8c930d496eba8b41fa2251539750dcb24779f5"
+                  },
+                  {
+                      "path":  "spoof-handoff/commands/diagnose-bcd-store-writability.ps1",
+                      "bytes":  15438,
+                      "sha256":  "E7A56F2169BD4C0B3EDEB7FA358393FBAA523C8627FC5AA0E373B8FCD40A19E1",
+                      "gitBlobId":  "2de79bd586250c2d44c6220a8528d215de9f05b6"
+                  },
+                  {
+                      "path":  "spoof-handoff/commands/diagnose-live-bcd-variants.ps1",
+                      "bytes":  14719,
+                      "sha256":  "CAB8DA0B0388D5EF1370D5D799AD88084CE4F6854133AAC9894E43998D33252D",
+                      "gitBlobId":  "edb57b813a924006d3f58b71107a140007a75f51"
+                  },
+                  {
+                      "path":  "spoof-handoff/commands/read-device-filter-values.ps1",
+                      "bytes":  4846,
+                      "sha256":  "B6566FC241E285936061E08BDA20CB8F4885C0C4CDDA2590427BAF564A9878DE",
+                      "gitBlobId":  "69bdaa1578016df04e4c9bb862857fa291ce0a42"
+                  },
+                  {
+                      "path":  "spoof-handoff/commands/review-live-bcd.ps1",
+                      "bytes":  6250,
+                      "sha256":  "733293963C2F1CD48F26098E39392C3AD8D227115C159787190CDB51E366F000",
+                      "gitBlobId":  "d6d4b1514bb3760ecb1cec286ade84140bc0e1b7"
+                  },
+                  {
+                      "path":  "spoof-handoff/commands/review-local-driver-signing.ps1",
+                      "bytes":  9028,
+                      "sha256":  "D545BB1F963A57DE369187AEDD806807782C5956298FF7DF5CBA22CB6DF9E149",
+                      "gitBlobId":  "905ac17f86ece55b5c6c7348dc65c971ff7e458f"
+                  },
+                  {
+                      "path":  "spoof-handoff/commands/review-temporary-cycle.ps1",
+                      "bytes":  9760,
+                      "sha256":  "385AC0796A7E2D5FDF22E670762108B5D81A4CE76918777C2731DC73C671A2F8",
+                      "gitBlobId":  "c02d338d4187375ad227cc4029c2619387bbdd8a"
+                  },
+                  {
+                      "path":  "spoof-handoff/commands/rollback-device-reboot-cycle.ps1",
+                      "bytes":  298,
+                      "sha256":  "493ED630D626B15C724E958FBB85D2AD8CE16C6BFB31893A2D2566288D56951C",
+                      "gitBlobId":  "9cf40f671641eab6261600016f562486c90b44a6"
+                  },
+                  {
+                      "path":  "spoof-handoff/commands/rollback-secureboot-write-probe.ps1",
+                      "bytes":  560,
+                      "sha256":  "1AB4F79032CCE448DBC88CBF78C48F4D02457C584CCDEE8AE4A165E2059B4E8B",
+                      "gitBlobId":  "5fe1bce32dd2f9f6e140519aa02c4ca8b1d56d2d"
+                  },
+                  {
+                      "path":  "spoof-handoff/commands/secureboot-read-probe.ps1",
+                      "bytes":  834,
+                      "sha256":  "C68ED943E92BF25F135B5F4D698235851E911859C6112FD75E64DB5B08D77D0A",
+                      "gitBlobId":  "678feb0690274e46f0bd949ae57f8a390c0fc6b6"
+                  },
+                  {
+                      "path":  "spoof-handoff/commands/secureboot-write-probe.ps1",
+                      "bytes":  880,
+                      "sha256":  "6258013AF63D22D32967258A0A6792A04574E80F6C686AB986A9F5917F48B637",
+                      "gitBlobId":  "495f35e5d19c1947eaf1c236d5b39ebed1592e00"
+                  },
+                  {
+                      "path":  "spoof-handoff/commands/smbios-serial-probe.ps1",
+                      "bytes":  847,
+                      "sha256":  "9F97242EB5DB484D317A4C4D556000C890ADB6D81C22514A3168E7CAC0B7B8AC",
+                      "gitBlobId":  "6badce845dc7550e8252beff9ca9514093d2b40e"
+                  },
+                  {
+                      "path":  "spoof-handoff/commands/smbios-seven-probe.ps1",
+                      "bytes":  874,
+                      "sha256":  "1C0FBF7571CA4BE3319DC23C3875F47F6C4A74BF243A353064C706742286599A",
+                      "gitBlobId":  "0eb53b84440a202d735c1a3a55df8d357e064441"
+                  },
+                  {
+                      "path":  "spoof-handoff/commands/storage-host-test.ps1",
+                      "bytes":  2067,
+                      "sha256":  "1FD1D1873900C6ADBC138F93443F00DC06EC26926A5C6BC8F608033FDD1CCF1F",
+                      "gitBlobId":  "f4dfe4d5c3fd0f883a9d9c1c3d0dd6cde7e39a85"
+                  },
+                  {
+                      "path":  "spoof-handoff/commands/verify-live-bcd-variants.ps1",
+                      "bytes":  5491,
+                      "sha256":  "176849AAAFBA4045AEA6740F01FF9C4B40AB89DE5C56385286B9FA1A8CDF31C4",
+                      "gitBlobId":  "2bde97c1505484d44ca3cd4a4725b5c8ec545ba7"
+                  },
+                  {
+                      "path":  "spoof-handoff/commands/verify-secureboot-read-restore.ps1",
+                      "bytes":  770,
+                      "sha256":  "6FE1588803E46935C10B9F79A372EFA0F3FC06A87A0642E309E66ECD002066E9",
+                      "gitBlobId":  "e1ed186737296ba56d3f67806ac0d6a8739f48d0"
+                  },
+                  {
+                      "path":  "spoof-handoff/docs/CLIENT_IDENTIFIER_INTERCEPTION.md",
+                      "bytes":  7650,
+                      "sha256":  "FEEFD4B57461E99FECE8C32195BEB79C73B4EFE9A5EC6FEC51251E6012D4B7F7",
+                      "gitBlobId":  "12bc0ddf4bbd88232be3283b744b12072ab4a748"
+                  },
+                  {
+                      "path":  "spoof-handoff/docs/STORAGE_BAREMETAL_RUNBOOK.md",
+                      "bytes":  7974,
+                      "sha256":  "3805FEBE36FFCC1472DDFCB80483560B6ED343105B02F9945B6E76E018C4D277",
+                      "gitBlobId":  "4bfef69fdc8e169dd07ec41a3b4beb1acf5a10a3"
+                  },
+                  {
+                      "path":  "spoof-handoff/docs/STORAGE_BOOT_RECOVERY.md",
+                      "bytes":  8833,
+                      "sha256":  "7519AD630B5D617C1B6569442534B7B8C06F70694EA96203D0A26E1C1823D988",
+                      "gitBlobId":  "7fd74d0ff3b4c26e799cc9076dc51b08bf2a2a1b"
+                  },
+                  {
+                      "path":  "spoof-handoff/docs/WINDOWS_RUNTIME_INVENTORY.md",
+                      "bytes":  4592,
+                      "sha256":  "8026213A949C5F421144C904BCBBF30BCA1F45076A5B03BCFE0B22C2BCAC202D",
+                      "gitBlobId":  "652c69a0efa505e290e6b9761feb16a847bd7cf1"
+                  },
+                  {
+                      "path":  "spoof-handoff/reports/client-host-proof.20261012T225155686Z.txt",
+                      "bytes":  2758,
+                      "sha256":  "1F9481E5731BE59029E7D1A22E844D37663A6F8C3819BFCF4C25BF8F5CFC9545",
+                      "gitBlobId":  "a8ce327156e563082bc6697b0f32b669254dc615"
+                  },
+                  {
+                      "path":  "spoof-handoff/reports/client-originals.tsv",
+                      "bytes":  1102,
+                      "sha256":  "F628CB25D18F549A877C1529A82986B524BFD3D8B9801A776405F969FC4F42C3",
+                      "gitBlobId":  "ae15e8759bd4b4a2512bfcb5fcce6806afd75f6d"
+                  },
+                  {
+                      "path":  "spoof-handoff/reports/host-smbios.txt",
+                      "bytes":  2524,
+                      "sha256":  "EC4BC96F6D93A4F41FAA973F53C0E7DAE05E3DD1E4ACEB77CC0CEDEE20BBE755",
+                      "gitBlobId":  "c2ce7e83a4aecdf5a7ad98f354c006cddf08fb9c"
+                  },
+                  {
+                      "path":  "spoof-handoff/reports/review-20261017/README.md",
+                      "bytes":  3183,
+                      "sha256":  "274D83BBE3638139CAA1D289792F68670D1BE9E40B09B99F34F4545BE0ADD902",
+                      "gitBlobId":  "01383271c8765aa9c6f816bc43c14e2ef0c03ceb"
+                  },
+                  {
+                      "path":  "spoof-handoff/reports/review-20261017/storage-host-tests.txt",
+                      "bytes":  346,
+                      "sha256":  "3E92D0B00759B6F5FE8B973D49F0B6324AAA9373780C301535E082EE9E60332D",
+                      "gitBlobId":  "46585714e6f2479130241f14389d64571e9d5891"
+                  },
+                  {
+                      "path":  "spoof-handoff/reports/review-20261017/validation.json",
+                      "bytes":  4736,
+                      "sha256":  "E76512C586DCEAA6A1917A43BFD18B0C59B051D49C658393A988B09AEAA804CE",
+                      "gitBlobId":  "f1a8e4d78338bc8fb10d7059ca059d61eda9f601"
+                  },
+                  {
+                      "path":  "spoof-handoff/reports/review-20261017/vm-binary-comparison.json",
+                      "bytes":  1833,
+                      "sha256":  "B651394EE8E01AEA298FB6DF0FEFEAF6EEB7ACFD22FDF555E2149E7045B1248C",
+                      "gitBlobId":  "3379032424f168e99fe303cf1cedfd8384e7dc8d"
+                  },
+                  {
+                      "path":  "spoof-handoff/reports/review-20261017/vm-bugcheck-excerpt.txt",
+                      "bytes":  651,
+                      "sha256":  "8FC9ACE03615F2688F4BA3121CA4D279548162119963E97805BF155FE251BBB2",
+                      "gitBlobId":  "6abedbbeb0dd5d62415b1c541b8f33f6fdaa59af"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_cycle_packages/README.md",
+                      "bytes":  2917,
+                      "sha256":  "435EF7228A399A8F5F467EA720EFEF950381541091E2A64A2D12A03957EA35D2",
+                      "gitBlobId":  "fa6070f7a9c185959d76c340c12139025426af79"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_cycle_packages/build-packages.ps1",
+                      "bytes":  18171,
+                      "sha256":  "5E12CBCE0C314F1C7C6F9AD6E64A1BD8A3EFAE035560CE32A52EA558BCFDC1F3",
+                      "gitBlobId":  "b5bf45eb8a0f0a243e73e81ce0417cc155eb8536"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_cycle_packages/client_storage_filter_pnp.inf",
+                      "bytes":  1324,
+                      "sha256":  "4ED7DD7C4EF541231ED4133626EABE6BB3A2F378A2722CF9B13D566438D53C4E",
+                      "gitBlobId":  "1180b7a60404846501c24fede1a5457b2061594f"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_cycle_prepare/activate-reviewed-baseline.ps1",
+                      "bytes":  10012,
+                      "sha256":  "FAFD88BF1E76CE0AD2275ED6532CE7C67BD89FEA97B332A0EBFA13D383ECE6A8",
+                      "gitBlobId":  "1c9cfc71a0e109567cac74deffba28115df85418"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_cycle_prepare/prepare.ps1",
+                      "bytes":  15542,
+                      "sha256":  "D80E7858FC3F07EB14ED076C7CCFAC699A23F4B72030CB7AD6C0E5F60D4D515F",
+                      "gitBlobId":  "d66d394ff0a5f623d3f376a320cd810a62eb4dd4"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_cycle_prepare/read-only-preflight.ps1",
+                      "bytes":  3800,
+                      "sha256":  "153E13A8445CA851D990A5CB8835608B4CC5B5E0C7EDCCB0589CCDA7D1BA9E8D",
+                      "gitBlobId":  "9e92a48eebc5f0666bd6e0f628089768383d7bc5"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_cycle_prepare/repair-bcd-parser.ps1",
+                      "bytes":  12954,
+                      "sha256":  "E4284A27FFAD7F6F84AD39D2FD1A28D52006A8FD63218A5C59A9CFEB5EF85C7A",
+                      "gitBlobId":  "47e43dc324ec4e8522cb14273cf12f75ded5d747"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_cycle_proof/device-cycle-proof.psm1",
+                      "bytes":  28972,
+                      "sha256":  "2B56F34574A679845DCEE83650910A5E671CA5836CDD3618499B4D9E4CD6C7C1",
+                      "gitBlobId":  "0b8905f78d0d392bf8f0c8d2a44bfec7c532d862"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_cycle_proof/tests.ps1",
+                      "bytes":  14951,
+                      "sha256":  "AC84D8A59260E2B36F363A54B925B9E709D6E09AC164F9A74CBD12582CD4CAB6",
+                      "gitBlobId":  "c3cc0fcf816e5b42ac96d99632c3ec265aa88c3a"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_cycle_runtime/runner.ps1",
+                      "bytes":  116184,
+                      "sha256":  "97BAADCE32312430FC24DB19C43D366EC97FF1F9FD240922094AD18FC7709955",
+                      "gitBlobId":  "ab5f9fef69601d206bfebacda426f35f03f94f65"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_cycle_runtime/runtime-tests.ps1",
+                      "bytes":  27002,
+                      "sha256":  "2CB50FF1F7E4B854C5E5327C51C66CFF2FD02CD1E63C7A65DFF89796E886FEA5",
+                      "gitBlobId":  "e5b1d978eec1102bff8072438735299b4e56dbe9"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_cycle_runtime/runtime.psm1",
+                      "bytes":  22025,
+                      "sha256":  "1F41C381A0A672136DE6DA18010FB774CDC81F3B1EA9009D1FFAAB7694EE286D",
+                      "gitBlobId":  "0e466453055ff89ffc1538d32bc7a67d3fab3ce6"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_filter/CMakeLists.txt",
+                      "bytes":  4817,
+                      "sha256":  "30F0B397ED1A4C98E63CCB063CA3140EB4D508E98D5C0626D1F52B8C44E0CF0C",
+                      "gitBlobId":  "b70d56f175bdb29bde826a6cf40ddf9402541689"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_filter/README.md",
+                      "bytes":  4934,
+                      "sha256":  "F63CF1FC575EECF77DA87EFC3890801CDC5A6A17FDEC77C92287334B59D1E284",
+                      "gitBlobId":  "4ee9a64964c145a39f916a771034eb7e2986fb22"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_filter/build.ps1",
+                      "bytes":  3822,
+                      "sha256":  "55CE5143A80F47EB63284DAA4B343D75C9402B9EDFF48FE44A02CD7E356E9737",
+                      "gitBlobId":  "fd4ce83bec46bc7e79632f56b1651a0a236cd132"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_filter/nic/README.md",
+                      "bytes":  3871,
+                      "sha256":  "043E3A2C4F404676FB9456E1D273936BCEF4029F742225B50B9CB5E97C00040B",
+                      "gitBlobId":  "6d9453ef7e1e24bbc8405aedf4b40ecd74dad7c7"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_filter/nic/host_test.c",
+                      "bytes":  6349,
+                      "sha256":  "7C9E4C769CD12B1C5F4FAD696F3D5BD0C9FA0E510948D95313268BF93D924D3E",
+                      "gitBlobId":  "81baf73c743f616cdac368d35825d2d77c7577f8"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_filter/nic/nic_filter.c",
+                      "bytes":  13608,
+                      "sha256":  "F0C2E54FD0AB4D380EF5894B08A417F7F6A62902580360461D697A6B93EA44BB",
+                      "gitBlobId":  "6fc27ace1dcdb8916c806b83a759921d62aa5ddb"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_filter/nic/nic_policy.c",
+                      "bytes":  4732,
+                      "sha256":  "291FD5D373AA8B5CEF386A7CF0D6E2A4331CF66CE8179D689EAC1BE692D32290",
+                      "gitBlobId":  "d0c79edb38bbdba1490e4c73aba302967a5e95a8"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_filter/nic/nic_policy.h",
+                      "bytes":  1571,
+                      "sha256":  "33C4AFA6AD840772DF493472E35466216C464E6B0AED4B74E99CA33C630DA113",
+                      "gitBlobId":  "b2aedb7e346da334d1141fe537a3b77a5f362f42"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_filter/sign.ps1",
+                      "bytes":  8729,
+                      "sha256":  "0E0DB7EB9837FA6D7008E68F832B30F24A128A3CA73754A8CE7E4E8AF5A116E9",
+                      "gitBlobId":  "7d091cc6ee1d7e1de37f96b6d49587761ea0ab07"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_filter/storage/storage_filter.c",
+                      "bytes":  11081,
+                      "sha256":  "48B180960E3DEB8ED59D4F0372E192591E0E1C90DA0BB406E3FEAAB964DBCB93",
+                      "gitBlobId":  "06722df4d6a2f4fefdc3ef4f8d5c589d6aed4bab"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_filter/storage/storage_serial_rewrite.c",
+                      "bytes":  3719,
+                      "sha256":  "F97026E7FE7AA9E0763E2DB516329BB0190420AA9747FDC2694C4688E920E624",
+                      "gitBlobId":  "517895b6179e95420832e133cd47be780c789427"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_filter/storage/storage_serial_rewrite.h",
+                      "bytes":  1105,
+                      "sha256":  "90A6C3CE5B3E1093A7A4347A1B9340DD03D4D3D986DF5AE6DFC6B3058991E215",
+                      "gitBlobId":  "3aec3893d0129355d583eaac32c6472e022d567b"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_filter/storage/test_storage_serial_rewrite.c",
+                      "bytes":  10948,
+                      "sha256":  "CFD54F252554394EE68CBAB6AA1AB9075C1513B583B4CBA05E6A4FFE623F2A38",
+                      "gitBlobId":  "26c2862d1a5a9578d3361e037a10401232c53eef"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_install/README.md",
+                      "bytes":  4368,
+                      "sha256":  "4D40F64ABA9FE8075C9B03F57676841F860CAE63BFB2FC45F699AD28C85AA444",
+                      "gitBlobId":  "f0a92f06563521be7b6ec9abb8d3eb92d7f100a7"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_install/build-packages.ps1",
+                      "bytes":  12590,
+                      "sha256":  "5A51A6882A53FE7234E08ADA2E0E4700CBD3BE887FD256002A8AB9CE9CCCECEA",
+                      "gitBlobId":  "4e4919f5e88229026271aca62401ce5bd74d5e4e"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_install/nic/client_nic_filter.inf",
+                      "bytes":  1570,
+                      "sha256":  "05E76BFCFF07724E45EB67451BA8CB842182C273C615A9397BA28E3A9D06530D",
+                      "gitBlobId":  "8b46ebb5a5b4614f5e294be429c66226db637bd4"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_install/storage/client_storage_filter.inf",
+                      "bytes":  1323,
+                      "sha256":  "476F688C30A55BBCC59504ECF8E67C714075BF7895A131C7207CE58C148A16BA",
+                      "gitBlobId":  "0a5f98b6ae3f641040a593299d807da2a09e6ca0"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_native_io/CMakeLists.txt",
+                      "bytes":  1079,
+                      "sha256":  "5A0EEA75576D36D9F70CEB1F61D240987947A1D99D4C451647D0BC0391436039",
+                      "gitBlobId":  "48091661812a8c9862d9ebe0dc3d4f3d40750154"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_native_io/README.md",
+                      "bytes":  2905,
+                      "sha256":  "40B11DF911F90631838967F64E8D8BB3105387850FAC763EB214AEF8BBC19B6F",
+                      "gitBlobId":  "a8633334f5c4742e81e238bb246b568618e4d4fa"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_native_io/build.ps1",
+                      "bytes":  5353,
+                      "sha256":  "08283A6828B9162FDE9BEEEBFE280C9590B05398F27CB48CE0D226630DDEA9E0",
+                      "gitBlobId":  "35c365a51389bd8bfb3d658cccb89865d730544a"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_native_io/device_native_io.cpp",
+                      "bytes":  18620,
+                      "sha256":  "BB2249314C84A3EDF265D4C6879C74E8204B427D2D743AA973D69AE3AA4A23B1",
+                      "gitBlobId":  "1912d48a6ef850555b94f40727093182df8a8e84"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_native_io/device_native_io_core.cpp",
+                      "bytes":  2901,
+                      "sha256":  "61B3F21433A1E1902152960278CD45A53CB2321DCD38F82CCAB1B65D7464E368",
+                      "gitBlobId":  "f075b1e19e72310367239656069b057ebef43fa1"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_native_io/device_native_io_core.h",
+                      "bytes":  510,
+                      "sha256":  "306BE82170CDB6696B42A2B31F961B87958D60B07FF4AD163300081DACF88858",
+                      "gitBlobId":  "728fd5e9a237b1e2a4139f0bb4e168cb5d5d4931"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_native_io/tests/device_native_io_core_tests.cpp",
+                      "bytes":  2698,
+                      "sha256":  "4A2FFA34B92B7928998CF5E04F2DF0326227A348BC7EB6F7766E35ACE9E935F3",
+                      "gitBlobId":  "e3381d480a3327586f43a8b3690326029dc7c6ca"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_package_check/check-with-temporary-trust.ps1",
+                      "bytes":  5795,
+                      "sha256":  "56DF8D228316781F95BF0BD4420E7FE5ABEE1B6C87F0236C37CC9232EF564387",
+                      "gitBlobId":  "47b62d61ae62ac4ccbdba80d176be98f228fde9a"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_package_check/check.ps1",
+                      "bytes":  8039,
+                      "sha256":  "F4D69210E2B3E4441256932713575A63023BA538F8A9E0E9B46972CF5CD965B3",
+                      "gitBlobId":  "6d5003cca1cd383146a330cc5f9b642e32cb3fee"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_package_check/stage-check.ps1",
+                      "bytes":  6616,
+                      "sha256":  "B346C2294714843F2ABAC9654133523A063402DB7F95698638D717F93B6F2981",
+                      "gitBlobId":  "5d6e11686e6c15a3d69e68973acae3d4426ab693"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_runtime_probe/capture-originals.ps1",
+                      "bytes":  6798,
+                      "sha256":  "D8DDEE43CAD0CFEB69DE84123CCAB62AD00BC66DEBE00F1DB7C40DDFBF20A6BB",
+                      "gitBlobId":  "6f9bba881c0ba02f586634abdf8f3577c0e91074"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_runtime_probe/native_originals.cpp",
+                      "bytes":  7273,
+                      "sha256":  "E2925833F6ADC1B13DCB471F50AB904A74CE98A5C860FF3DEEF3BDF52A9632D8",
+                      "gitBlobId":  "6035491308d7bcd99fa14823e75aaf913469f1fe"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_runtime_probe/verify-existing.ps1",
+                      "bytes":  4278,
+                      "sha256":  "312CA92C6F5BF0864D41ED358FCFE2A365C1BC1505C7FA3352A7C4083D5C3F94",
+                      "gitBlobId":  "e994d8cd75ca27f2a4edd1574f860b3740d1d3ae"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_vm/build-storage.ps1",
+                      "bytes":  27848,
+                      "sha256":  "B1AB1E1037693B3174AF7C4783A9273AB54BFA78025D266BE249A46400834124",
+                      "gitBlobId":  "85e1008fa22fd87885ca29d9c0f1c96210980f65"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_vm/fixtures/storage-profile.synthetic.json",
+                      "bytes":  525,
+                      "sha256":  "EA16C9FBD02D78B8327539ACEBDA2AA588E82662CF4446604CAB45E752E028C9",
+                      "gitBlobId":  "8733aa638fdf91efe460ea0f638c17e1237acbf6"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_vm/guest-probe.ps1",
+                      "bytes":  5920,
+                      "sha256":  "124ABBA20D64E26FD28146ABE330B95E04040E115578711CD609BCA3E369877C",
+                      "gitBlobId":  "343f89d5810fdc360a678b7ec897e8674e84c446"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_vm/invoke-mailbox.ps1",
+                      "bytes":  43632,
+                      "sha256":  "7EBB1FFFF0658425ADF36308C4EE1825F0781A4507FC3EAD6A2150875DB632A8",
+                      "gitBlobId":  "e8780b3b0bab1b2f02ba4316b9d00947430b8be8"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_vm/invoke-stage.ps1",
+                      "bytes":  1850,
+                      "sha256":  "0D22580A3D636807F4DB96D1D930F9CF985668FE7F99E5E1B899FBAB7F9C4F99",
+                      "gitBlobId":  "bca724b7fb174ce5cb969c6606371757ca110f3d"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_vm/render-guest-action.ps1",
+                      "bytes":  12801,
+                      "sha256":  "35E7FAD55E0C300FF3FD658A57F30CDF835922CFDAC567335DA63DA02B5B8685",
+                      "gitBlobId":  "480fc951333f17db042cca5d92c2fb84196fb14b"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/efi_inventory/capture-windows.ps1",
+                      "bytes":  11058,
+                      "sha256":  "348FCACCF230546308E40EE5B1F096749FAA165A0917E38C55755BCA0269E782",
+                      "gitBlobId":  "0ac83fb4443309677e7d3dff606e6258efe44c11"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/efi_inventory/include/inventory.h",
+                      "bytes":  894,
+                      "sha256":  "BC30E6EF085B1BA048D34F15ADFC3CC6532351A57FB73C360BA21E0D81291E41",
+                      "gitBlobId":  "dc321dc4080f9a2fa3f8afb84b3eae812554a364"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/efi_inventory/include/runtime_variables.h",
+                      "bytes":  707,
+                      "sha256":  "A080994B662E6A424A9CB5B439A46E7C7CEF39AD534A754A438A112FDA27A716",
+                      "gitBlobId":  "da07f20c971c37ca6aea018959fd34d32bb26c2f"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/efi_inventory/include/secure_pipe.h",
+                      "bytes":  2478,
+                      "sha256":  "B9FE7C5C54405059AAFEB547FE41B0F1A97990DBA5691C31D483C7ADC8A3BF28",
+                      "gitBlobId":  "191de66e2466825f61fbe7842385704635357d66"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/efi_inventory/src/inventory.cpp",
+                      "bytes":  39744,
+                      "sha256":  "6290B455782C07F084C7E6D8C3FAD3796E08ED28D2CA25FEB80C627319132698",
+                      "gitBlobId":  "adc5eb579cb774562e307429774696f0332a54fa"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/efi_inventory/src/main.cpp",
+                      "bytes":  17207,
+                      "sha256":  "52F9BA035BA7BEA929A1B1E42E9B86C70E4B641C3DE1947ED874B651E20BB541",
+                      "gitBlobId":  "f239030ae02c48474d026e3d10d1031dfccb8824"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/efi_inventory/src/runtime_variables.cpp",
+                      "bytes":  20236,
+                      "sha256":  "F41CD646307C96D2432FC6E631D9FE820DA09FF9C4067FF5769BA5E672ADA89C",
+                      "gitBlobId":  "fa70bbd540cfed1c18abf22d9122c7b73bda36d4"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/efi_inventory/src/secure_pipe.cpp",
+                      "bytes":  38546,
+                      "sha256":  "78BE9560119DF144F0E7389BC908460682570B1ECF744C5FF3C70001246895EB",
+                      "gitBlobId":  "1bcb25ef75554a06524ca8476e464138844cfb12"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/efi_inventory/tests/inventory_tests.cpp",
+                      "bytes":  16313,
+                      "sha256":  "99F1BD234923B67A6AC6E170C02896A83963C34AD2ED13817FAB7042FC7A0F40",
+                      "gitBlobId":  "0e0ca4621e56e2262312f6467596fd48055e109e"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/efi_inventory/tests/runtime_variables_tests.cpp",
+                      "bytes":  13576,
+                      "sha256":  "DB277560ADC9AB518A03CC7E13754077A23C1E3F0BF87D17381E902E6A49C9AE",
+                      "gitBlobId":  "3292a5283846b60e2b0d291be4ccde045094466e"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/efi_inventory/tests/secure_pipe_tests.cpp",
+                      "bytes":  2963,
+                      "sha256":  "E9003150F69D2AD9EF638BBF88B5B3F43529CF592A2513B3BCF41E4F18A5EB3A",
+                      "gitBlobId":  "4853033793482ce3a9c0b6bda8dc45e8613e33d5"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/hwid_spoofer/hwid_spoofer.c",
+                      "bytes":  24128,
+                      "sha256":  "3A049E44FFF0C57E5F5E7260A3C4218316EC123E12226E4D47FE02208B0E93D8",
+                      "gitBlobId":  "28847c80883c0a001f361bb3a150c0d4a42f5fab"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/hwid_spoofer/hwid_spoofer.h",
+                      "bytes":  3415,
+                      "sha256":  "B5E40972707874427931940FAAB192021BB6BE7774B6A28DDD798C8F0B9093F9",
+                      "gitBlobId":  "1d993aeddf50e73f410aa75295dee63ac3a659c4"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/hwid_spoofer/include/client_reads.h",
+                      "bytes":  1078,
+                      "sha256":  "9F6D4ECC58F4D598FAF9C14D99F27DFF8EDA6D530D10A68B2E53F2F967732789",
+                      "gitBlobId":  "7485fe7ae14d41ff4e9e7b1fb244be65aa133f70"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/hwid_spoofer/include/device_identifiers.h",
+                      "bytes":  798,
+                      "sha256":  "874CFB4DB5FE9351ECD08B085963C6136000B47FD3F1E5ED0DF97BA8EA581319",
+                      "gitBlobId":  "504841f33bba2f0d12cf00818d15ceea3cd6a794"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/hwid_spoofer/read_only_inventory.cpp",
+                      "bytes":  22235,
+                      "sha256":  "A6D0E5DAE39F2B51685925CEB3D3A113510717232E1826346B913B8BFFED6395",
+                      "gitBlobId":  "ac81507284c4c29b179f73095fab91880945e352"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/hwid_spoofer/read_only_inventory.h",
+                      "bytes":  753,
+                      "sha256":  "56FC6E838E285357900CDCE0E54A81969CF21D50841642636D52FBE00648C248",
+                      "gitBlobId":  "accb3579237187e84b92452dc9f89c02d4b2178e"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/hwid_spoofer/src/client_identifier_host_test.cpp",
+                      "bytes":  13873,
+                      "sha256":  "31C902CCEDA147B111C518DF2C6E4B34ADCEBE0BF454AC19550B52BE1B31297F",
+                      "gitBlobId":  "92bd0f5c814ac63edf728c059f88e8f7e9fa8ead"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/hwid_spoofer/src/client_reads.cpp",
+                      "bytes":  32173,
+                      "sha256":  "FAED8C3B30E358CE23C815ABE9EDCDDF892723AF4A3B0B5F932B9E8913456C2D",
+                      "gitBlobId":  "cf82557c39b2e80840d2f3266f757c678ca9ea18"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/hwid_spoofer/src/device_identifiers.cpp",
+                      "bytes":  29848,
+                      "sha256":  "95245B735B8CB2F1FFA6FE00B4CE62BE658FF809C03520046EAEFB561A0D56DF",
+                      "gitBlobId":  "bc7ae691f26b6e575fb23ccf1c0ed6e592e548bf"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/hwid_spoofer/test-client-identifiers.ps1",
+                      "bytes":  5470,
+                      "sha256":  "85A13C44F6A53FBA88F96A11213BF349247A8C1263F29CC81FE211B19C87A7C4",
+                      "gitBlobId":  "ed8220e832e820db7742f3bd220bd6da63561927"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/hwid_spoofer/tests/client_interceptor_tests.cpp",
+                      "bytes":  16204,
+                      "sha256":  "CF29BFC80B89652E90245C3970FE827BF0CC03D71D092767AAB230EBEE98180E",
+                      "gitBlobId":  "8819509d6f8d3bbd97cb610f0ee6c3ae47629f50"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/hwid_spoofer/tests/client_reads_tests.cpp",
+                      "bytes":  8560,
+                      "sha256":  "770D9983BF79DCD9F77A43E9AB6B0F62AB5DB85F197718B56659F43372FFFA59",
+                      "gitBlobId":  "d6c00de7f988f5bd44981ee42b18fbabd1414d97"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/hwid_spoofer/tests/device_identifiers_tests.cpp",
+                      "bytes":  2345,
+                      "sha256":  "762AD10CC901BAAEACB2799D39BB8379DA14C5C8B84FD7A5997B2CEB9D1C25B0",
+                      "gitBlobId":  "265aef51a194cec4289d978116405983765cb051"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/hwid_spoofer/tests/hwid_config_contract_tests.cpp",
+                      "bytes":  5016,
+                      "sha256":  "8C22FC4267D0FFAF1925D9CDE47C08539F5439575B9EC811E67E9D6C6983F245",
+                      "gitBlobId":  "94cc454a95d5c87e946cd018ab16dcc3e9eae762"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/hwid_spoofer/tests/read_only_inventory_tests.cpp",
+                      "bytes":  19521,
+                      "sha256":  "05C17324391021A3F2D4D6D609A2982254D6EC48EC03AC7967EA342363E61B7F",
+                      "gitBlobId":  "2d39187a2a39365e4cea25c634220f6d5bd8bed2"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/secureboot_read/CMakeLists.txt",
+                      "bytes":  2274,
+                      "sha256":  "690BEB6A8FA1C3A5EBFF3F465ACBE99D07B5503E901B496FA4BF0E2309A5ED4D",
+                      "gitBlobId":  "d9d397f23b808bb1821661d24df2575681c8c151"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/secureboot_read/boot_read.c",
+                      "bytes":  11632,
+                      "sha256":  "42C9DA87AD59D2E250B3C87964964FCD6A180EE967A648D07083C637B3144077",
+                      "gitBlobId":  "101fef5ea87679c3367bc77216664900f9088752"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/secureboot_read/build.ps1",
+                      "bytes":  5350,
+                      "sha256":  "43E21865FD56120CC5B00126BB573C6338E2693178DDF3387A18FC7D82495FBD",
+                      "gitBlobId":  "e9b741caa3ac7f124dff8176bbc429583a23c265"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/secureboot_read/build_identity.h.in",
+                      "bytes":  127,
+                      "sha256":  "9A51AF0960B710816A50561F6C192D4482C2240F484263C03D4B116BB86741C4",
+                      "gitBlobId":  "85a9cb47b6c12f682a1b250b071e86ea4e8fefde"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/secureboot_read/probe.c",
+                      "bytes":  5014,
+                      "sha256":  "ACBF0FA7D2AAFD9B0BAE826E290A3181692DE5EFAA32EC2D7E65459EF52915A3",
+                      "gitBlobId":  "ca96ffeb981ae608e7b13a67707e07a34cfe5c6b"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/secureboot_read/probe.h",
+                      "bytes":  1667,
+                      "sha256":  "4A9127668C588995708746B6E22B044EF1B43854B8A64A620948DA527B88346E",
+                      "gitBlobId":  "eeb7a3166cda11c3ba37b75b0c83cab73841082d"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/secureboot_read/run.ps1",
+                      "bytes":  18392,
+                      "sha256":  "A3938A52F65DDFBA7D7342FA7B0933C46E55154D4406B442FD416372693B45F0",
+                      "gitBlobId":  "7a56291816580885043205612e4981537cecc0ee"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/secureboot_read/snapshot.ps1",
+                      "bytes":  4845,
+                      "sha256":  "DEBA8F1FC556AD6F0A17A37120F61A00D68EC2B949671B02C0C3B14A72279330",
+                      "gitBlobId":  "1463599ff5327879251cdcd3fa09648f48bd7d38"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/secureboot_read/tests/probe_tests.c",
+                      "bytes":  11803,
+                      "sha256":  "E9D5FC190768B43A8099CB95A9CAB5119A69C6C40B3CB6A204CCF7763242CFBB",
+                      "gitBlobId":  "d1ee8a86d0865cbeb938fb8ed419f1e080652fdb"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/secureboot_read/tests/report_tests.ps1",
+                      "bytes":  2745,
+                      "sha256":  "8E5F6AB4491EA3C329F353F9406AD549BC4D3CE6DAE16A809BC43C2049FD3791",
+                      "gitBlobId":  "3cb89dfcf82e27a3d8603e56f6eb4005367a6df3"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/secureboot_restore_verify/esp-policy.ps1",
+                      "bytes":  2452,
+                      "sha256":  "FE8556C0DAFECDA9D6941918513B263E65DBA83E6D86103E4E16A258227E6513",
+                      "gitBlobId":  "b7c3f04c1cc4004dc06971e0ae7c18565bb4e48a"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/secureboot_restore_verify/tests.ps1",
+                      "bytes":  2960,
+                      "sha256":  "2AEC7C728549FA1C0C64DC0EFBD6FF6EB31914A9F59DBD24D1C6CF220FA48B10",
+                      "gitBlobId":  "0026f1966b9dcbf7570d0f8f4cb481537894f741"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/secureboot_restore_verify/verify.ps1",
+                      "bytes":  7034,
+                      "sha256":  "1F3CC548CA797EF20DDE807C0A8888BAE60475D2A73AA8A8028DC26486AC07FB",
+                      "gitBlobId":  "06204fad661bea7a1daa4de294766612a31816a7"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/secureboot_write_probe/CMakeLists.txt",
+                      "bytes":  2688,
+                      "sha256":  "D95450F961C15EF2C72BDD98A6DD1CBE8D4CE869467AF67183D653AA88B2C494",
+                      "gitBlobId":  "45006e61db003dcc0313699fbcf3174faddf8733"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/secureboot_write_probe/boot_write.c",
+                      "bytes":  34199,
+                      "sha256":  "8A593FFB6225F4D88803CCC6DAC2D8D9DFF8EB85E9B51B2BF03ADA44DED03B1B",
+                      "gitBlobId":  "3998e05f8b92313fb890bad4ebe4c4c3adedde41"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/secureboot_write_probe/build.ps1",
+                      "bytes":  6106,
+                      "sha256":  "9821286D9D61F0F6C5071B538626A0736978AFBA279F3C41FCE92D8718BF2240",
+                      "gitBlobId":  "32a85780c778e7e2ee044dc1ffe6ccae6c80a53a"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/secureboot_write_probe/build_identity.h.in",
+                      "bytes":  129,
+                      "sha256":  "06560AA10420AF429E008DA5F014A88609B89B6DE73CEBA64C986C2FA6E5D2EA",
+                      "gitBlobId":  "cf19e068d7bbd46ea3d9f65c5657852b1b7a9365"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/secureboot_write_probe/probe.c",
+                      "bytes":  9002,
+                      "sha256":  "7438C1378ABB1EB5A91B1DA5F1620734874127EC14A509DBB64E889BB7C2E7F2",
+                      "gitBlobId":  "fc2d26b49098d21807608ef7bedd0cd95d659c6e"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/secureboot_write_probe/probe.h",
+                      "bytes":  3726,
+                      "sha256":  "EF2F93D8982D64ADD3B92D3D6C2E80130AD9FADC63B247136EAE66697C28F0BD",
+                      "gitBlobId":  "27670dd3e7da44fadb5ae2d073198da347b6b941"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/secureboot_write_probe/run.ps1",
+                      "bytes":  40582,
+                      "sha256":  "700214447C78D1C5C0EEE55CA069663F01D6E2565FB6FF4671A11346109468F1",
+                      "gitBlobId":  "567d91aac9f5978e089dd7cfa9145e403773389f"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/secureboot_write_probe/tests/core_tests.c",
+                      "bytes":  16059,
+                      "sha256":  "2E9577D05F029C92D794A94738B3AC06A38DA167F3788004FCF000E71628DB33",
+                      "gitBlobId":  "f9d57dcd6ee654b4af64397947df2333aece8090"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/secureboot_write_probe/tests/fs_tests.c",
+                      "bytes":  7513,
+                      "sha256":  "918C7A0992CB5555D83F63E79B7C273D39F81516A729E35741C04E3E6BE42B55",
+                      "gitBlobId":  "c2a89f946e3f6bd3932c7e1d18ed4003c6c13104"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/secureboot_write_probe/tests/report_tests.ps1",
+                      "bytes":  12310,
+                      "sha256":  "BCE116C9B01551ABE02D0B47D221D8B461A5E677F0606CA7852C245CF22191DC",
+                      "gitBlobId":  "be3b6f74c007fda89f059f171e1adc99d7558bf2"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/smbios_boot/CMakeLists.txt",
+                      "bytes":  3175,
+                      "sha256":  "6B48E554755D3D706E2D3B9C047EF2BA3B1C3DAF325373C10B64A7657A312124",
+                      "gitBlobId":  "f7845e783ff682091efff83916f675e2f029d962"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/smbios_boot/boot_variant.c",
+                      "bytes":  5576,
+                      "sha256":  "DD211C70D3BF1B3184AAC4A5334BD616D27DF9DADD45F1BAE6D28E9C368B003E",
+                      "gitBlobId":  "8946d55c0e6ff722e426ad59779b71df8a3ab63b"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/smbios_boot/build-probe.ps1",
+                      "bytes":  8334,
+                      "sha256":  "19023022295B596C361D44B88BB1A7C06E78F41632CB6096557588930E5DD1EA",
+                      "gitBlobId":  "8cdb6f6dcb2adbfc7ba0a99d7073ba9ed2d93185"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/smbios_boot/build_identity.h.in",
+                      "bytes":  107,
+                      "sha256":  "55ABFBBA7928373AEACE466D8BF343ABA54B0B09318416C2444E9F631EAA1A62",
+                      "gitBlobId":  "6dd1258d07e79736396c7f4b870550392649a795"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/smbios_boot/efi_smbios.c",
+                      "bytes":  44075,
+                      "sha256":  "C248055D4EE61CDA3114351C5B6489DF171F15C66BDBC85B4154BD0A9B2A3A37",
+                      "gitBlobId":  "574177f9d25f9f12bae7040196ac8f86cbef4b7c"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/smbios_boot/efi_smbios.h",
+                      "bytes":  2393,
+                      "sha256":  "AF00CE508D19B02A68CB3E5F4907B340FD0CFF646880D2649DB7BD489AAD4DA1",
+                      "gitBlobId":  "a41094c60c0decb6acf0b6f97c7cb936a753cc06"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/smbios_boot/inventory_reference.c",
+                      "bytes":  18289,
+                      "sha256":  "D6B41990893069ACF91409637779067165D63615EA194C9FF11133C9F49CA107",
+                      "gitBlobId":  "da8c6e0525f9f4581824eff1f23407145095713e"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/smbios_boot/run-probe.ps1",
+                      "bytes":  29069,
+                      "sha256":  "F8ECBE883D9B466F07D5D7BB86E64E50178AADBDB2156790602AA7FD49A61482",
+                      "gitBlobId":  "e6f7366e8afb210935e31ffc185ecbdce31ab479"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/smbios_boot/smbios_table.c",
+                      "bytes":  29346,
+                      "sha256":  "F5D3733F77F84A7EB4D527A989A1974F05D8647BCC7E0F439970D96AC7E15176",
+                      "gitBlobId":  "cdd3da408d913e312324d1f77f15fa1af7562ee7"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/smbios_boot/smbios_table.h",
+                      "bytes":  3230,
+                      "sha256":  "636C4A60A2C1F406C560DF465A46AF21F6F7991E703D82AD660A8879FC076F63",
+                      "gitBlobId":  "0b49a12ef3cd75350aa859f65d166f6b664be01c"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/smbios_boot/smbios_values.h",
+                      "bytes":  1078,
+                      "sha256":  "9EA371DD5DF7C9B1FBFCD4FBED395A2EB3333FFE3E8A82237B4AF4BB34BCAE69",
+                      "gitBlobId":  "ada8aa19fc5bc0c0e3536cd68ad9632ff3d973c9"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/smbios_boot/snapshot-reference.ps1",
+                      "bytes":  18165,
+                      "sha256":  "CD7D3D928F24202D8FFFA31F5651EB900DDAB4017BFA073EF20774986B0DE3C7",
+                      "gitBlobId":  "a1c4959a32f3fffb66db90b1621d545162796740"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/smbios_boot/tests/efi_smbios_tests.c",
+                      "bytes":  32772,
+                      "sha256":  "5BE739329C943BBDD0B53893C7295B5FDFDBD42485DC16C38E54EEF9D7EDCEE2",
+                      "gitBlobId":  "a4e9450745154d46f7aae6d743ca261b3e022492"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/smbios_boot/tests/smbios_table_tests.c",
+                      "bytes":  24812,
+                      "sha256":  "436DDE6CD08CD3D91FF9FFAAB7B080350EBA6C919D9600289B0017DD3A0B9AE5",
+                      "gitBlobId":  "5009150cc92c46c4ef1411240b117dc682a962a0"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/smbios_boot/tests/snapshot_tests.ps1",
+                      "bytes":  14477,
+                      "sha256":  "22D2E5D1AAEE60FDB2AE33479EF285301A6343311006BA8C70366D92059CF743",
+                      "gitBlobId":  "c85498a705e94c45ec1543408b50d8185c8890cc"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/smbios_boot/tests/workflow_tests.ps1",
+                      "bytes":  56465,
+                      "sha256":  "CD8618392CBACCA236BC52AEBF908E839C0FC1AFC317FA361052173CFF1F7FD0",
+                      "gitBlobId":  "25171fddc648216e57109f583c0c204bd6bed17e"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/smbios_boot/verify-signatures.ps1",
+                      "bytes":  13137,
+                      "sha256":  "E12AFF15748976F304CAAAE88F84660BE16694A6275255F66ED9E825F1CAD92E",
+                      "gitBlobId":  "94c60a3595434128ae6d40827f304bfcc1121b53"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/smbios_boot/windows_readback.cpp",
+                      "bytes":  38719,
+                      "sha256":  "0AB6B5634B411D10305B3EAAD8B7727D430D460E76C7D70C66D246F737CAFFF6",
+                      "gitBlobId":  "37d1b3c4825ab2917ebd40e3ca0a031cda0b2991"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/smbios_boot_drift/audit.ps1",
+                      "bytes":  7359,
+                      "sha256":  "90668BD45085291130ACD5EBED1765FE8055E22DF0F163353477F5F81E6E3A50",
+                      "gitBlobId":  "dec27365408b5852e39e7b7da3c1cc49f7630071"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/smbios_boot_drift/recover.ps1",
+                      "bytes":  17553,
+                      "sha256":  "F2C2D1F1C52296C1E252548AC1FCCDDCC154441AF38AC742B42F00B766D0AEF2",
+                      "gitBlobId":  "f1ac30fbb550a116737bc459b8f973dd172b0773"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/smbios_boot_drift/tests.ps1",
+                      "bytes":  3483,
+                      "sha256":  "FE5791944270082050F83C99F5A6DC2FD869F96358735F0ED748C05F490B2195",
+                      "gitBlobId":  "ac8d5ebee7ccf945402deeb8ab18ecc76177a41a"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/storage_host/build-release.ps1",
+                      "bytes":  9335,
+                      "sha256":  "A5EAEE67F2EE69902EC8D8AD2AB050C1768BF6B66B0974D863611503145137E9",
+                      "gitBlobId":  "76b7e78e3ec4c0c51c49d9adcc55fd368ef112ac"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/storage_host/model.psm1",
+                      "bytes":  11401,
+                      "sha256":  "632F74815CE982FD28C34ED427D7739DC047568BB4DB6FF86CBEE2733C697E83",
+                      "gitBlobId":  "77deca08a99ab3905e41c326ef570b0c4155ce15"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/storage_host/offline-recover.cmd",
+                      "bytes":  3555,
+                      "sha256":  "2358F5793B25CE946C9AA62A90A0D36E9E553B4865C201486BF80D03FFF86C49",
+                      "gitBlobId":  "b2b3a7614adb370c51b4cae6dcca5b8525c39abf"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/storage_host/read.ps1",
+                      "bytes":  17101,
+                      "sha256":  "56702CB26744602267523AF47609D6D4F470602065C6A2E4F031E0E78A2305BA",
+                      "gitBlobId":  "c5e4f519367589d8688f70a54fe17f1332262fa7"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/storage_host/run.ps1",
+                      "bytes":  91362,
+                      "sha256":  "3A9B8CA57B7C63BBBB29E91D679C3C8B245C41D5AF45B19B5CC356172E520D1B",
+                      "gitBlobId":  "8f3e9cea58bb981e8ede1050ea5f5d92de894e50"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/storage_host/signatures.psm1",
+                      "bytes":  2097,
+                      "sha256":  "82A27EBE3615D8CF34A6C5DF4724DEB92978468F65FE6756018C8E9B69B0D8AB",
+                      "gitBlobId":  "f0a72ab3597deff33ad6ab8ffa3b98044795e366"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/storage_host/tests.ps1",
+                      "bytes":  15876,
+                      "sha256":  "26B7C4C61D404060EFB96BC450BF88B39614FC29E1CF4A5A7BFCE109BD8E4392",
+                      "gitBlobId":  "1f10ba2c2524dfe9546464219d786ad78e293872"
+                  },
+                  {
+                      "path":  "tools/efi_inventory/BARE_METAL_COLLECTOR_TEST.md",
+                      "bytes":  8538,
+                      "sha256":  "8CD7434605EF6228EAE5597557C188287BAD26A71FB885760D7B4C603340A496",
+                      "gitBlobId":  "70cf98db7a8e675bb49790cf50b5b5fa2bfc6140"
+                  },
+                  {
+                      "path":  "tools/efi_inventory/BARE_METAL_INVENTORY.md",
+                      "bytes":  3842,
+                      "sha256":  "16854957D33EEF36A51B2A7580BA47546B5C7C0E05D3D4C03D7E36E13AFC5DD6",
+                      "gitBlobId":  "fb0b0d6ff72741973824a586f566c9729af1c927"
+                  },
+                  {
+                      "path":  "tools/efi_inventory/CMakeLists.txt",
+                      "bytes":  2002,
+                      "sha256":  "88755DC895D56752B66F04EC0C66F312A77DCC6700CAC6BDB7E3C7B3EBD416CE",
+                      "gitBlobId":  "1be3f891c366f5c422a07a5547ab5f7cfe4c9a17"
+                  },
+                  {
+                      "path":  "tools/efi_inventory/LOADER_PAYLOAD_HANDOFF.md",
+                      "bytes":  4975,
+                      "sha256":  "79E0F128B29CE5C07FDD2D6863065AF42E76B8E4E661FBD35CD7E3A76B321BF2",
+                      "gitBlobId":  "528c84302b83cded0ffc39296abd3abf58ea01d5"
+                  },
+                  {
+                      "path":  "tools/efi_inventory/README.md",
+                      "bytes":  12329,
+                      "sha256":  "C62566C5A99A01CAA422D39F83DF51D80A9AAD02898908054143E570CA7340EF",
+                      "gitBlobId":  "87470e35e73e4cc965c039085b50cbdd282466b5"
+                  },
+                  {
+                      "path":  "tools/efi_inventory/bare-metal-collector.ps1",
+                      "bytes":  3361,
+                      "sha256":  "31C044394149382FB0697BE9BEF12DF7181B21A914D61E94352C732AD6E43147",
+                      "gitBlobId":  "2db7dc8acf993e5b3ca5aee9a88767c9fd17ce3e"
+                  },
+                  {
+                      "path":  "tools/efi_inventory/efi/CMakeLists.txt",
+                      "bytes":  1290,
+                      "sha256":  "BA7054594423FD0994538F58EDBDE5EFA28E10DE071547B6D094DCAB7AF0FF2F",
+                      "gitBlobId":  "dec17e66c4c9855f236177ef25aa74dbe5eee914"
+                  },
+                  {
+                      "path":  "tools/efi_inventory/efi/collector.c",
+                      "bytes":  18289,
+                      "sha256":  "D6B41990893069ACF91409637779067165D63615EA194C9FF11133C9F49CA107",
+                      "gitBlobId":  "da8c6e0525f9f4581824eff1f23407145095713e"
+                  },
+                  {
+                      "path":  "tools/efi_inventory/efi/sbat.c",
+                      "bytes":  622,
+                      "sha256":  "C55C38B8BF445E53D0505C16D3F2BAF488C93C2B46E7D91C70742F568295ED25",
+                      "gitBlobId":  "0fc4f6eef46f4a5fc2d84b02fb5fc601710c724a"
+                  },
+                  {
+                      "path":  "tools/efi_inventory/include/backup.h",
+                      "bytes":  655,
+                      "sha256":  "AA5603CD7EC08C90ADA16042EA47F3E5F827A5D34B8771ACF1A5E5A5D9863D08",
+                      "gitBlobId":  "25f075abb601d5c58953f480e74d9eacc641795a"
+                  },
+                  {
+                      "path":  "tools/efi_inventory/include/inventory.h",
+                      "bytes":  656,
+                      "sha256":  "723B6FDF64E893FEB713F18E2820FAF4D897A1DFACBEAA1645447249633CAE94",
+                      "gitBlobId":  "99dbcbce260734ee1f8650f2c4684a8846e0cd53"
+                  },
+                  {
+                      "path":  "tools/efi_inventory/include/secure_pipe.h",
+                      "bytes":  2478,
+                      "sha256":  "B9FE7C5C54405059AAFEB547FE41B0F1A97990DBA5691C31D483C7ADC8A3BF28",
+                      "gitBlobId":  "191de66e2466825f61fbe7842385704635357d66"
+                  },
+                  {
+                      "path":  "tools/efi_inventory/path-b-collector.ps1",
+                      "bytes":  41336,
+                      "sha256":  "F8C356E7099F4BBE06FB52F98BC795CA6628E638CB283DDEB2BA3E1E7E48C639",
+                      "gitBlobId":  "0aa158267b756f0b3c84db93fd8e3ff7dfb1c0fc"
+                  },
+                  {
+                      "path":  "tools/efi_inventory/shim-chain-collector.ps1",
+                      "bytes":  58484,
+                      "sha256":  "1B1D4FD20AC3DFD6E3D1FCEC548244C3EC84AA82D0B5391B6B76DA875BACFA25",
+                      "gitBlobId":  "803d2c843570c695a931aa45523066d811818ef5"
+                  },
+                  {
+                      "path":  "tools/efi_inventory/src/backup.cpp",
+                      "bytes":  8988,
+                      "sha256":  "8F50AA95FF8877FD74A447860D1BD4D61B60A86789F25580352B285737F47328",
+                      "gitBlobId":  "25fd60d5f4f5492054aeea0a70066c58cd8d8424"
+                  },
+                  {
+                      "path":  "tools/efi_inventory/src/inventory.cpp",
+                      "bytes":  35274,
+                      "sha256":  "8B9190A85D7B9E26532CCFBD47D6E0C4B1168885FA555EC977D7DB1132A0BA3C",
+                      "gitBlobId":  "e5fda60b06f7c64dfc6d929ea912b0510cfd4240"
+                  },
+                  {
+                      "path":  "tools/efi_inventory/src/main.cpp",
+                      "bytes":  7862,
+                      "sha256":  "EB166F92F83AB3D5D7F5F4B1987FFF0A987DC898020B500F3C6CB049C279A433",
+                      "gitBlobId":  "8104281c5b1928756de635f27e4f5279e7b39abd"
+                  },
+                  {
+                      "path":  "tools/efi_inventory/src/secure_pipe.cpp",
+                      "bytes":  38546,
+                      "sha256":  "78BE9560119DF144F0E7389BC908460682570B1ECF744C5FF3C70001246895EB",
+                      "gitBlobId":  "1bcb25ef75554a06524ca8476e464138844cfb12"
+                  },
+                  {
+                      "path":  "tools/efi_inventory/tests/Extract-QemuFatReport.ps1",
+                      "bytes":  3893,
+                      "sha256":  "057AC3014E55C29E1FB6D9C2EF70EE02994CAD655284A9D3CCB76F8788CC1513",
+                      "gitBlobId":  "d19b274bcaed77f221fa28767aae9d3ba0c5e4e4"
+                  },
+                  {
+                      "path":  "tools/efi_inventory/tests/inventory_tests.cpp",
+                      "bytes":  6579,
+                      "sha256":  "DAD32362FC761521F2C2DB03769E20B6D7D53EC3B8B2902D33A2FC01A777E8D9",
+                      "gitBlobId":  "47819a7579a6657acceab9ab55f44b0ac871637d"
+                  },
+                  {
+                      "path":  "tools/efi_inventory/tests/path-b-collector.tests.ps1",
+                      "bytes":  18039,
+                      "sha256":  "1ED372866D73522DAE97E4E33ABD68454D0F1BBE21FAAE7FE666EA28A751D579",
+                      "gitBlobId":  "5408b12e30bf0d7050e3bb9878d0538e7273df47"
+                  },
+                  {
+                      "path":  "tools/efi_inventory/tests/secure_pipe_tests.cpp",
+                      "bytes":  2963,
+                      "sha256":  "E9003150F69D2AD9EF638BBF88B5B3F43529CF592A2513B3BCF41E4F18A5EB3A",
+                      "gitBlobId":  "4853033793482ce3a9c0b6bda8dc45e8613e33d5"
+                  },
+                  {
+                      "path":  "tools/efi_inventory/tests/shim-chain-collector.tests.ps1",
+                      "bytes":  26961,
+                      "sha256":  "42C253E935D5672C499CF50262AA35CE247EE4C0CFF542480B752920718EA689",
+                      "gitBlobId":  "3ba1417d2f3baafaa9caf72e1f6fbc2c02c0d869"
+                  }
+              ]
+}

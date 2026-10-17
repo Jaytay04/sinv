@@ -179,7 +179,7 @@ typedef struct _EFI_RUNTIME_SERVICES EFI_RUNTIME_SERVICES;
 #define EFI_VARIABLE_RUNTIME_ACCESS     0x00000004
 
 typedef EFI_STATUS (EFIAPI *EFI_SET_VARIABLE)(
-    EFI_GUID *VariableName, EFI_GUID *VendorGuid,
+    CHAR16 *VariableName, EFI_GUID *VendorGuid,
     UINT32 Attributes, UINTN DataSize, VOID *Data);
 
 struct _EFI_RUNTIME_SERVICES {
@@ -191,12 +191,13 @@ struct _EFI_RUNTIME_SERVICES {
     VOID                          *SetVirtualAddressMap;
     VOID                          *ConvertPointer;
     VOID                          *GetVariable;
-    EFI_SET_VARIABLE               SetVariable;
     VOID                          *GetNextVariableName;
-    VOID                          *QueryVariableInfo;
+    EFI_SET_VARIABLE               SetVariable;
+    VOID                          *GetNextHighMonotonicCount;
+    VOID                          *ResetSystem;
     VOID                          *UpdateCapsule;
     VOID                          *QueryCapsuleCapabilities;
-    VOID                          *ResetSystem;
+    VOID                          *QueryVariableInfo;
 };
 
 /* ------------------------------------------------------------------------- */

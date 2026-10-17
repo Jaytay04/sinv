@@ -1,0 +1,77 @@
+{
+    "schema":  "reviewed-storage-validation.v1",
+    "vm":  {
+               "windowsBuild":  "26200.9445",
+               "configuredRamMiB":  4096,
+               "bugcheckReproduced":  "0x7B",
+               "failingStartType":  3,
+               "passingStartType":  0,
+               "transparentExecutableCodeIdentical":  true,
+               "nativeOriginal":  "5139_F30D_17C5_776C_000C_2963_11B0_D531.",
+               "nativeReplacement":  "1111_1111_1111_1111_A1B2_C3D4_5566_7788.",
+               "nativeRestored":  "5139_F30D_17C5_776C_000C_2963_11B0_D531.",
+               "wmiOriginal":  "5139_F30D_17C5_776C_000C_2963_11B0_D531.",
+               "wmiReplacement":  "1111_1111_1111_1111_A1B2_C3D4_5566_7788.",
+               "wmiRestored":  "5139_F30D_17C5_776C_000C_2963_11B0_D531.",
+               "enabledFileIoPassed":  true,
+               "removedFilterAbsent":  true,
+               "baselineRecovered":  true,
+               "poweredOff":  true
+           },
+    "tests":  {
+                  "previousPureHostCases":  49,
+                  "consolidatedLoaderFixtures":  27,
+                  "consolidatedIdentifierParserSuites":  8,
+                  "smbiosTableRoundTrip":  1,
+                  "syntheticLoaderFixtureSuite":  "PASS",
+                  "newReleaseBufferTestsPerMode":  2,
+                  "storageHostPureAssertions":  61,
+                  "storageHostIndependentReview":  "PASS; DISM 0/3010 regression corrected; WinRE not executed"
+              },
+    "physicalHost":  {
+                         "windowsBuild":  "26200.9711",
+                         "freshReadOnlyNativeWmiOriginalsMatch":  true,
+                         "driverInstallOrLoadRun":  false,
+                         "policyTrustFirmwareChangesRun":  false,
+                         "bareMetalCompatibilityProven":  false,
+                         "nicLiveTested":  false
+                     },
+    "release":  {
+                    "manifestSha256":  "E35C2AACD47E59F07A0AE12AE6973C751FD0D13267645385471FA516048221C5",
+                    "thumbprint":  "59DBD6780CFE60C020B3F4511211FEC22C397B85",
+                    "certificateSha256":  "B3C4D8955151A56F2F2D1B4F50BA358C7FC95C75ADCAD49EED0C669FC034F3BE",
+                    "transparentFiles":  [
+                                             {
+                                                 "name":  "client_storage_filter.sys",
+                                                 "sha256":  "BB9EE7C482554E092EEE5F5504D5C08589D9187FB29B167CAC7F4FEC6BFB1EE6"
+                                             },
+                                             {
+                                                 "name":  "client_storage_filter.inf",
+                                                 "sha256":  "3BD7ABB48150667F99E677EF85B6CB31831DD5696BAB8780E1431E639FD467FC"
+                                             },
+                                             {
+                                                 "name":  "client_storage_filter.cat",
+                                                 "sha256":  "49578247D3D15E3143CEE47034DD7D8BD0D5A4ED67A655F5026331FA87AEE741"
+                                             }
+                                         ],
+                    "replacementFiles":  [
+                                             {
+                                                 "name":  "client_storage_filter.sys",
+                                                 "sha256":  "2A550FF804810B9BD94580C9784A85411C1F50A1037901669034DFD024EFE79A"
+                                             },
+                                             {
+                                                 "name":  "client_storage_filter.inf",
+                                                 "sha256":  "3E7183B9342AE036464B3454E81BDC8148AC01A8D3A703A6473C96FC2032A37F"
+                                             },
+                                             {
+                                                 "name":  "client_storage_filter.cat",
+                                                 "sha256":  "CFFE1C98B189C6BCC56FAAE6681F6B4AC59DD1EDD84E4B177140FF6930EDD498"
+                                             }
+                                         ],
+                    "transparentNativeDigestValid":  true,
+                    "replacementNativeDigestValid":  true,
+                    "catalogPkcs7Valid":  true,
+                    "windowsKernelAdmissionProven":  false
+                },
+    "scope":  "VM and static/pure evidence; manual primary-host workflow prepared but not executed. NIC and physical-controller compatibility remain unproven."
+}

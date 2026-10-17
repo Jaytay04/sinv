@@ -1,0 +1,18 @@
+Machine identifier spoofing for a client application; process=2508; explicit read wrappers; native Windows values remain observable.
+BEGIN first field: SMBIOS system serial
+PROOF FakeSMBIOSSerial device="SMBIOS Type 1" original="3080-26" spoofed="4091-37" restored="3080-26" native_while_active=original PASS
+FIRST FIELD PASS: APPLY/read/REMOVE/read; native reads unchanged.
+PROOF FakeSMBIOSManufacturer device="SMBIOS Type 1" original="MAINGEAR" spoofed="NORTHLAB" restored="MAINGEAR" native_while_active=original PASS
+PROOF FakeSMBIOSProduct device="SMBIOS Type 1" original="VYBE" spoofed="NODE" restored="VYBE" native_while_active=original PASS
+PROOF FakeMotherboardSerial device="SMBIOS Type 2" original="07D3710_LC1E186916" spoofed="08E4821_MD2F297027" restored="07D3710_LC1E186916" native_while_active=original PASS
+PROOF FakeMotherboardManufacturer device="SMBIOS Type 2" original="Micro-Star International Co., Ltd." spoofed="Example Devices Corporation" restored="Micro-Star International Co., Ltd." native_while_active=original PASS
+PROOF FakeMotherboardProduct device="SMBIOS Type 2" original="PRO B660M-A CEC WIFI DDR4 (MS-7D37)" spoofed="Client Reference Board (CB-4200)" restored="PRO B660M-A CEC WIFI DDR4 (MS-7D37)" native_while_active=original PASS
+PROOF FakeSMBIOSUUID device="SMBIOS Type 1" original="C88B4631-C88C-871B-A6D7-D8BBC1D85720" spoofed="A17F24D0-68E2-4A09-9C31-2B7D8450E6F9" restored="C88B4631-C88C-871B-A6D7-D8BBC1D85720" native_while_active=original PASS
+PROOF FakeDiskSerial device="disk:\\\\.\\PHYSICALDRIVE0" original="0000_0000_0100_0000_E4D2_5CDF_3227_5501." spoofed="1111_1111_1111_1111_A1B2_C3D4_5566_7788." restored="0000_0000_0100_0000_E4D2_5CDF_3227_5501." native_while_active=original PASS
+PROOF FakeMacAddress device="adapter:0|ROOT\\VMWARE\\0001" original="00:50:56:C0:00:08" spoofed="02:90:10:20:30:40" restored="00:50:56:C0:00:08" native_while_active=original PASS
+PROOF FakeMacAddress device="adapter:3|ROOT\\VMWARE\\0000" original="00:50:56:C0:00:01" spoofed="02:90:10:20:30:41" restored="00:50:56:C0:00:01" native_while_active=original PASS
+PROOF FakeMacAddress device="adapter:4|PCI\\VEN_8086&DEV_7AF0&SUBSYS_00748086&REV_11\\3&11583659&1&A3" original="C4:BD:E5:32:06:D1" spoofed="02:90:10:20:30:42" restored="C4:BD:E5:32:06:D1" native_while_active=original PASS
+PROOF FakeMacAddress device="adapter:5|PCI\\VEN_10EC&DEV_8125&SUBSYS_7D371462&REV_05\\4&3FA6681&0&00E2" original="D8:BB:C1:D8:57:20" spoofed="02:90:10:20:30:43" restored="D8:BB:C1:D8:57:20" native_while_active=original PASS
+COMBINED PASS: all nine fields; 12 selected field/device rows; native reads unchanged.
+PASS: nine confirmed fields; 12 individual original/spoofed/restored proofs; process state removed.
+HARNESS_EXIT=0

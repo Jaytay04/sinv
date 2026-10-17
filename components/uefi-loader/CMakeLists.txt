@@ -23,7 +23,7 @@ project(UEFILoader
 # --- Compiler warnings -------------------------------------------------------
 # Match the /W4 contract from the design; Windows tools and the EFI app alike.
 if(MSVC)
-    add_compile_options(/W4)
+    add_compile_options("$<$<COMPILE_LANGUAGE:C>:/W4>")
 endif()
 
 # --- C standard --------------------------------------------------------------
@@ -40,6 +40,15 @@ option(IB_STATIC_RUNTIME
 option(IB_PAYLOAD_REPLAY_INDEPENDENT
     "Launch payload.efi even when PCR replay cannot run"
     OFF)
+
+option(IB_QEMU_DEBUG_PORTS
+    "Emit loader diagnostics to QEMU debug/serial I/O ports (VM-only)"
+    OFF)
+
+if(MSVC AND CMAKE_SIZEOF_VOID_P EQUAL 8)
+    enable_language(ASM_MASM)
+    add_library(ib_shim_verify_abi OBJECT src/loader/shim_verify_x64.asm)
+endif()
 
 enable_testing()
 
@@ -181,6 +190,16 @@ target_include_directories(image_launch_test PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/loader
 )
 add_test(NAME image_launch_test COMMAND image_launch_test)
+
+add_executable(inventory_entry_test
+    src/fixtures/tests/inventory_entry_test.c
+    src/loader/inventory_entry.c
+)
+target_include_directories(inventory_entry_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/vendor
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/loader
+)
+add_test(NAME inventory_entry_test COMMAND inventory_entry_test)
 
 add_executable(tcg2_test
     src/fixtures/tests/tcg2_test.c
@@ -461,9 +480,9 @@ target_include_directories(tcglog_efi_smoke PRIVATE
 )
 target_compile_definitions(tcglog_efi_smoke PRIVATE TCGLOG_UEFI)
 target_compile_options(tcglog_efi_smoke PRIVATE
-    "$<$<C_COMPILER_ID:MSVC>:/GS->")
+    "$<$<AND:$<COMPILE_LANGUAGE:C>,$<C_COMPILER_ID:MSVC>>:/GS->")
 if(MSVC)
-    target_compile_options(tcglog_efi_smoke PRIVATE /Oi-)
+    target_compile_options(tcglog_efi_smoke PRIVATE "$<$<COMPILE_LANGUAGE:C>:/Oi->")
 endif()
 set_target_properties(tcglog_efi_smoke PROPERTIES
     SUFFIX ".efi"
@@ -496,9 +515,9 @@ target_include_directories(replay_efi_smoke PRIVATE
 )
 target_compile_definitions(replay_efi_smoke PRIVATE TCGLOG_UEFI)
 target_compile_options(replay_efi_smoke PRIVATE
-    "$<$<C_COMPILER_ID:MSVC>:/GS->")
+    "$<$<AND:$<COMPILE_LANGUAGE:C>,$<C_COMPILER_ID:MSVC>>:/GS->")
 if(MSVC)
-    target_compile_options(replay_efi_smoke PRIVATE /Oi-)
+    target_compile_options(replay_efi_smoke PRIVATE "$<$<COMPILE_LANGUAGE:C>:/Oi->")
 endif()
 set_target_properties(replay_efi_smoke PROPERTIES
     SUFFIX ".efi"
@@ -526,9 +545,9 @@ target_include_directories(pe_rehash_efi_smoke PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/loader
 )
 target_compile_options(pe_rehash_efi_smoke PRIVATE
-    "$<$<C_COMPILER_ID:MSVC>:/GS->")
+    "$<$<AND:$<COMPILE_LANGUAGE:C>,$<C_COMPILER_ID:MSVC>>:/GS->")
 if(MSVC)
-    target_compile_options(pe_rehash_efi_smoke PRIVATE /Oi-)
+    target_compile_options(pe_rehash_efi_smoke PRIVATE "$<$<COMPILE_LANGUAGE:C>:/Oi->")
 endif()
 set_target_properties(pe_rehash_efi_smoke PROPERTIES
     SUFFIX ".efi"
@@ -561,9 +580,9 @@ target_include_directories(divergence_efi_smoke PRIVATE
 )
 target_compile_definitions(divergence_efi_smoke PRIVATE TCGLOG_UEFI)
 target_compile_options(divergence_efi_smoke PRIVATE
-    "$<$<C_COMPILER_ID:MSVC>:/GS->")
+    "$<$<AND:$<COMPILE_LANGUAGE:C>,$<C_COMPILER_ID:MSVC>>:/GS->")
 if(MSVC)
-    target_compile_options(divergence_efi_smoke PRIVATE /Oi-)
+    target_compile_options(divergence_efi_smoke PRIVATE "$<$<COMPILE_LANGUAGE:C>:/Oi->")
 endif()
 
 # --- P5 synthetic restore-and-handoff mechanics gate -----------------------
@@ -589,9 +608,9 @@ target_include_directories(handoff_efi_smoke PRIVATE
 )
 target_compile_definitions(handoff_efi_smoke PRIVATE TCGLOG_UEFI)
 target_compile_options(handoff_efi_smoke PRIVATE
-    "$<$<C_COMPILER_ID:MSVC>:/GS->")
+    "$<$<AND:$<COMPILE_LANGUAGE:C>,$<C_COMPILER_ID:MSVC>>:/GS->")
 if(MSVC)
-    target_compile_options(handoff_efi_smoke PRIVATE /Oi-)
+    target_compile_options(handoff_efi_smoke PRIVATE "$<$<COMPILE_LANGUAGE:C>:/Oi->")
 endif()
 set_target_properties(handoff_efi_smoke PROPERTIES
     SUFFIX ".efi"
@@ -615,9 +634,9 @@ foreach(_target IN ITEMS handoff_payload_stub handoff_bootmgr_stub)
         ${CMAKE_CURRENT_SOURCE_DIR}/src/vendor
     )
     target_compile_options(${_target} PRIVATE
-        "$<$<C_COMPILER_ID:MSVC>:/GS->")
+        "$<$<AND:$<COMPILE_LANGUAGE:C>,$<C_COMPILER_ID:MSVC>>:/GS->")
     if(MSVC)
-        target_compile_options(${_target} PRIVATE /Oi-)
+        target_compile_options(${_target} PRIVATE "$<$<COMPILE_LANGUAGE:C>:/Oi->")
     endif()
     set_target_properties(${_target} PROPERTIES
         SUFFIX ".efi"
@@ -677,14 +696,14 @@ target_include_directories(loader PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/loader
 )
 target_compile_options(loader PRIVATE
-    "$<$<C_COMPILER_ID:MSVC>:/GS->")
+    "$<$<AND:$<COMPILE_LANGUAGE:C>,$<C_COMPILER_ID:MSVC>>:/GS->")
 target_compile_definitions(loader PRIVATE TCGLOG_UEFI)
 if(IB_PAYLOAD_REPLAY_INDEPENDENT)
     target_compile_definitions(loader PRIVATE
         IB_PAYLOAD_REPLAY_INDEPENDENT=1)
 endif()
 if(MSVC)
-    target_compile_options(loader PRIVATE /Oi-)
+    target_compile_options(loader PRIVATE "$<$<COMPILE_LANGUAGE:C>:/Oi->")
 endif()
 set_target_properties(loader PROPERTIES
     SUFFIX ".efi"
@@ -700,6 +719,79 @@ if(MSVC)
     )
 endif()
 
+# --- inventory_loader.efi: fixed collector + Windows handoff only -----------
+# Keep this entry independent from the replay loader. Its only child paths are
+# the fixed inventory collector and Windows Boot Manager paths in
+# src/loader/inventory_entry.c; no replay, payload, or NVRAM code is linked.
+add_executable(inventory_loader
+    src/loader/efi_file.c
+    src/loader/image_launch.c
+    src/loader/inventory_entry.c
+    src/vendor/efi_crt.c
+)
+target_include_directories(inventory_loader PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/vendor
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/loader
+)
+target_compile_options(inventory_loader PRIVATE
+    "$<$<AND:$<COMPILE_LANGUAGE:C>,$<C_COMPILER_ID:MSVC>>:/GS->")
+if(MSVC)
+    target_compile_options(inventory_loader PRIVATE "$<$<COMPILE_LANGUAGE:C>:/Oi->")
+endif()
+set_target_properties(inventory_loader PROPERTIES
+    SUFFIX ".efi"
+    MSVC_RUNTIME_LIBRARY ""
+)
+if(MSVC)
+    target_link_options(inventory_loader PRIVATE
+        /SUBSYSTEM:EFI_APPLICATION
+        /ENTRY:EfiMain
+        /FIXED:NO
+        /INCREMENTAL:NO
+        /MANIFEST:NO
+        /NODEFAULTLIB
+    )
+endif()
+
+# Shared shim verification is used by the production and diagnostic paths.
+foreach(_shim_target IN ITEMS loader handoff_efi_smoke inventory_loader image_launch_test)
+    target_sources(${_shim_target} PRIVATE src/loader/shim_chain.c)
+    if(TARGET ib_shim_verify_abi)
+        target_sources(${_shim_target} PRIVATE $<TARGET_OBJECTS:ib_shim_verify_abi>)
+    endif()
+endforeach()
+target_sources(loader PRIVATE src/loader/shim_inventory.c src/loader/sbat.c)
+if(MSVC)
+    target_link_options(loader PRIVATE /INCLUDE:g_hypersinv_loader_sbat /INCREMENTAL:NO)
+endif()
+if(IB_QEMU_DEBUG_PORTS)
+    foreach(_debug_target IN ITEMS loader handoff_efi_smoke)
+        target_compile_definitions(${_debug_target} PRIVATE IB_QEMU_DEBUG_PORTS=1)
+    endforeach()
+endif()
+
+add_executable(shim_inventory_test
+    src/fixtures/tests/shim_inventory_test.c
+    src/loader/shim_inventory.c)
+target_include_directories(shim_inventory_test PRIVATE src/vendor src/loader)
+add_test(NAME shim_inventory_test COMMAND shim_inventory_test)
+
+add_executable(shim_chain_test
+    src/fixtures/tests/shim_chain_test.c
+    src/loader/shim_chain.c)
+target_include_directories(shim_chain_test PRIVATE src/vendor src/loader)
+target_compile_definitions(shim_chain_test PRIVATE IB_SHIM_CHAIN_HOST_TEST)
+if(TARGET ib_shim_verify_abi)
+    target_sources(shim_chain_test PRIVATE
+        $<TARGET_OBJECTS:ib_shim_verify_abi>
+        src/fixtures/tests/shim_verify_abi_test_x64.asm)
+endif()
+add_test(NAME shim_chain_test COMMAND shim_chain_test)
+
+add_executable(uefi_runtime_abi_test src/fixtures/tests/uefi_runtime_abi_test.c)
+target_include_directories(uefi_runtime_abi_test PRIVATE src/vendor)
+add_test(NAME uefi_runtime_abi_test COMMAND uefi_runtime_abi_test)
+
 # --- Static CRT wiring --------------------------------------------------------
 # Applied to every Windows host target (tcglog + pcr_gate libs, host tests,
 # ib-tcg-dump). tcglog_efi_smoke and loader are deliberately excluded: they are
@@ -713,6 +805,7 @@ if(IB_STATIC_RUNTIME AND MSVC)
                                tcglog_ib_test pcr_gate_test replay_test
                                divergence_test sha256_test reference_log_test
                                boot_restore_test efi_file_test image_launch_test tcg2_test
+                               inventory_entry_test shim_inventory_test shim_chain_test uefi_runtime_abi_test
                                replay_uefi_path_test
                                install_sign_test install_authenticode_test
                                install_stage_test install_oneshot_test

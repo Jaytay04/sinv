@@ -1,0 +1,21 @@
+{
+  "synthetic": true,
+  "machine": {
+    "model": "VMware Virtual Platform",
+    "manufacturer": "VMware, Inc."
+  },
+  "windows": {
+    "build": 26200,
+    "ubr": 0
+  },
+  "disk": {
+    "number": 0,
+    "isBoot": true,
+    "isSystem": true,
+    "pnpDeviceId": "SCSI\\DISK&VEN_VMWARE&PROD_VIRTUAL_DISK\\00000000000000000001",
+    "hardwareIds": ["SCSI\\DiskVMware____VMware_Virtual_Disk____1.0_"],
+    "serial": "VMWARE-ORIGINAL-0001",
+    "wmiSerial": "VMWARE-ORIGINAL-0001",
+    "devicePath": "\\\\.\\PHYSICALDRIVE0"
+  }
+}
