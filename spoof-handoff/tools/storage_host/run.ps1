@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory=$true)][ValidateSet('Prepare','EnableTestMode','InstallTransparent','VerifyTransparent','InstallReplacement','VerifyReplacement','Remove','VerifyOriginal','RecoverOriginal','RestorePolicy','FinalVerify','Status')][string]$Action,
+    [Parameter(Mandatory=$true)][ValidateSet('Prepare','EnableTestMode','InstallTransparent','ResumeInstall','VerifyTransparent','InstallReplacement','VerifyReplacement','Remove','VerifyOriginal','RecoverOriginal','RestorePolicy','FinalVerify','Status')][string]$Action,
     [Parameter(Mandatory=$true)][string]$RepositoryRoot,
     [string]$ReleaseDirectory,
     [string]$RunDirectory,
@@ -633,6 +633,7 @@ function Invoke-StorageHostAction {
             $null=Get-StorageHostActiveRelease
             switch($Action){
                 'InstallTransparent' { return Invoke-StorageHostInstallPackage -Mode transparent -PendingPhase 'TransparentInstallPendingReboot' }
+                'ResumeInstall' { return Invoke-StorageHostResumeInstall }
                 'VerifyTransparent' { return Invoke-StorageHostVerifyInstalled -Mode transparent -ExpectedMode Original -NextPhase 'TransparentVerified' }
                 'InstallReplacement' { return Invoke-StorageHostInstallPackage -Mode replacement -PendingPhase 'ReplacementInstallPendingReboot' }
                 'VerifyReplacement' { return Invoke-StorageHostVerifyInstalled -Mode replacement -ExpectedMode Replacement -NextPhase 'ReplacementVerified' }
@@ -756,7 +757,8 @@ function Invoke-StorageHostInstallPackage {
     if($before.inventory.storageFilter.present){throw 'client_storage_filter service already exists before installation.'}
     $phase=if($Mode -ceq 'transparent'){'TransparentInstallInProgress'}else{'ReplacementInstallInProgress'}
     $target=$PendingPhase
-    $script:StorageHostState.pendingOperation=[ordered]@{mode=$Mode;kind='install';startedUtc=[DateTime]::UtcNow.ToString('o');expectedInfSha256=$infHash;expectedPnpInstanceId=$release.manifest.pnpInstanceId;bootTimeBefore=$before.inventory.windows.lastBootUpTime}
+    $installStartedUtc=[DateTime]::UtcNow.ToString('o')
+    $script:StorageHostState.pendingOperation=[ordered]@{mode=$Mode;kind='install';startedUtc=$installStartedUtc;expectedInfSha256=$infHash;expectedPnpInstanceId=$release.manifest.pnpInstanceId;bootTimeBefore=$before.inventory.windows.lastBootUpTime}
     Set-StorageHostPhase -Phase $phase -ActionName $Action -Message ('Install intent persisted before pnputil adds the '+$Mode+' StartType 0 storage extension package.')
     $capture=Invoke-StorageHostCapture -Program (Join-Path $env:SystemRoot 'System32\pnputil.exe') -Arguments @('/add-driver',$infPath,'/install')
     Write-StorageHostAtomicJson -Path (Join-Path $script:StorageHostActionDirectory ($Mode+'-pnputil-add.json')) -Value ([ordered]@{program='pnputil.exe';arguments=@('/add-driver',$infPath,'/install');exitCode=$capture.exitCode;output=$capture.output;capturedUtc=[DateTime]::UtcNow.ToString('o')})
@@ -767,13 +769,51 @@ function Invoke-StorageHostInstallPackage {
         throw ('PnPUtil exited '+$capture.exitCode+' and exact package ownership was not established: '+$_.Exception.Message+'; output='+($capture.output -join ' | '))
     }
     Set-StorageHostProperty -Object $script:StorageHostState.ownedPackages -Name $Mode -Value $owned
-    $script:StorageHostState.pendingOperation=[ordered]@{mode=$Mode;kind='install';startedUtc=[DateTime]::UtcNow().ToString('o');expectedInfSha256=$infHash;expectedPnpInstanceId=$release.manifest.pnpInstanceId;publishedName=$owned.publishedName;bootTimeBefore=$before.inventory.windows.lastBootUpTime;pnputilExitCode=$capture.exitCode}
+    $script:StorageHostState.pendingOperation=[ordered]@{mode=$Mode;kind='install';startedUtc=$installStartedUtc;expectedInfSha256=$infHash;expectedPnpInstanceId=$release.manifest.pnpInstanceId;publishedName=$owned.publishedName;bootTimeBefore=$before.inventory.windows.lastBootUpTime;pnputilExitCode=$capture.exitCode}
     $script:StorageHostState.lastObservedBootTime=$before.inventory.windows.lastBootUpTime
     Save-StorageHostState
     Add-StorageHostEvent -Kind 'package-installed' -Message ('PnPUtil registered exact '+$Mode+' package; reboot is required before verification.') -Data @{publishedName=$owned.publishedName;infSha256=$owned.infSha256;exitCode=$capture.exitCode}
     if($capture.exitCode -notin @(0,3010)){throw ('pnputil /add-driver exited '+$capture.exitCode+': '+($capture.output -join ' | ')+'; exact INF is tracked for removal/recovery.')}
     Set-StorageHostPhase -Phase $target -ActionName $Action -Message 'Package registration complete; no reboot was issued.'
     return [ordered]@{status=($Mode.ToUpperInvariant()+'_INSTALL_PENDING_REBOOT');publishedName=$owned.publishedName;infSha256=$owned.infSha256;pnputilExitCode=$capture.exitCode;rebootIssued=$false;runDirectory=$script:StorageHostRun}
+}
+function Invoke-StorageHostResumeInstall {
+    Assert-StorageHostRecoveryCopy | Out-Null
+    $release=Get-StorageHostActiveRelease
+    $mode=Get-StorageHostPackageMode -CurrentPhase ([string]$script:StorageHostState.phase)
+    $pending=$script:StorageHostState.pendingOperation
+    $infHash=[string](@($release.manifest.packages.$mode.files|Where-Object {$_.name -ceq 'client_storage_filter.inf'})[0].sha256)
+    if($null -eq $pending -or $pending.kind -cne 'install' -or $pending.mode -cne $mode -or $pending.expectedInfSha256 -cne $infHash -or $pending.expectedPnpInstanceId -cne $release.manifest.pnpInstanceId){
+        throw 'ResumeInstall requires the matching persisted install intent; use the documented Remove/recovery path if ownership is unclear.'
+    }
+    $before=Write-StorageHostInventory -EvidenceDirectory $script:StorageHostActionDirectory -Name 'resume-before-reboot-inventory.json'
+    Assert-StorageHostBaselineIdentity -Inventory $before.inventory -RequireOriginal
+    Assert-StorageHostPolicyEnabled -Inventory $before.inventory
+    if([string]$before.inventory.windows.lastBootUpTime -cne [string]$pending.bootTimeBefore){throw 'ResumeInstall must run before the install reboot. Use the documented Remove/recovery path after a boot change.'}
+    $expectedArguments=@('/add-driver',(Join-Path $release.packagePaths[$mode] 'client_storage_filter.inf'),'/install')
+    $receipts=@(foreach($file in @(Get-ChildItem -LiteralPath (Join-Path $script:StorageHostRun 'actions') -Filter ($mode+'-pnputil-add.json') -File -Recurse)){
+        $receipt=Get-Content -LiteralPath $file.FullName -Raw|ConvertFrom-Json
+        $arguments=@($receipt.arguments)
+        if($receipt.program -cne 'pnputil.exe' -or $arguments.Count -ne 3){continue}
+        if($arguments[0] -cne $expectedArguments[0] -or $arguments[1] -cne $expectedArguments[1] -or $arguments[2] -cne $expectedArguments[2]){continue}
+        if([DateTime]::Parse([string]$receipt.capturedUtc).ToUniversalTime() -lt [DateTime]::Parse([string]$pending.startedUtc).ToUniversalTime()){continue}
+        if([int]$receipt.exitCode -notin @(0,3010)){throw ('Recorded PnPUtil install failed exit='+$receipt.exitCode+'; use Remove rather than resuming.')}
+        [pscustomobject]@{path=$file.FullName;sha256=(Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash;receipt=$receipt}
+    })
+    if($receipts.Count -ne 1){throw ('ResumeInstall requires exactly one successful matching PnPUtil receipt; actual='+$receipts.Count+'. Use Remove/recovery rather than reinstalling.')}
+    $owned=Find-StorageHostInstalledInf -Mode $mode -ExpectedPnp ([string]$release.manifest.pnpInstanceId)
+    $previousOwned=$script:StorageHostState.ownedPackages.$mode
+    if($null -ne $previousOwned -and ($previousOwned.publishedName -cne $owned.publishedName -or $previousOwned.infSha256 -cne $owned.infSha256)){throw 'Installed package differs from the journaled ownership record; refusing to resume.'}
+    Write-StorageHostAtomicJson -Path (Join-Path $script:StorageHostActionDirectory 'resume-install-verification.json') -Value ([ordered]@{
+        capturedUtc=[DateTime]::UtcNow.ToString('o');mode=$mode;ownedPackage=$owned;receiptPath=$receipts[0].path;receiptSha256=$receipts[0].sha256;pnputilExitCode=$receipts[0].receipt.exitCode;bootTimeBefore=$pending.bootTimeBefore;packageReinstalled=$false;driverLoadVerified=$false
+    })
+    Set-StorageHostProperty -Object $script:StorageHostState.ownedPackages -Name $mode -Value $owned
+    Set-StorageHostProperty -Object $pending -Name 'publishedName' -Value $owned.publishedName
+    Set-StorageHostProperty -Object $pending -Name 'pnputilExitCode' -Value ([int]$receipts[0].receipt.exitCode)
+    $script:StorageHostState.lastObservedBootTime=$pending.bootTimeBefore
+    $phase=if($mode -ceq 'transparent'){'TransparentInstallPendingReboot'}else{'ReplacementInstallPendingReboot'}
+    Set-StorageHostPhase -Phase $phase -ActionName $Action -Message 'Successful install receipt, unchanged boot, pinned release and exact installed INF revalidated; journal completed without invoking PnPUtil again.'
+    return [ordered]@{status=($mode.ToUpperInvariant()+'_INSTALL_PENDING_REBOOT');publishedName=$owned.publishedName;pnputilExitCode=$receipts[0].receipt.exitCode;packageReinstalled=$false;driverLoadVerified=$false;rebootIssued=$false;runDirectory=$script:StorageHostRun}
 }
 function Invoke-StorageHostVerifyInstalled {
     param([ValidateSet('transparent','replacement')][string]$Mode,[ValidateSet('Original','Replacement')][string]$ExpectedMode,[string]$NextPhase)

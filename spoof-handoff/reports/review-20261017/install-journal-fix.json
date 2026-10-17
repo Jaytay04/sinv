@@ -1,0 +1,82 @@
+{
+    "schema":  "storage-host-install-journal-fix.v1",
+    "capturedUtc":  "2026-10-17T20:51:28.2959057Z",
+    "priorCommit":  "d0e8bf691ef70981010b740a53cf891369f1810a",
+    "cause":  "Post-install bookkeeping called DateTime.UtcNow as a method after successful PnPUtil installation.",
+    "fix":  [
+                "Capture the UTC property once before PnPUtil and preserve that original intent time",
+                "ResumeInstall validates unchanged boot, pinned release, recovery copy, current disk/policy, exact successful command receipt and installed INF ownership before completing only the journal"
+            ],
+    "negativeControl":  {
+                            "type":  "Synthetic source fixture with original bad method call reintroduced only after mocked installation",
+                            "exitCode":  1,
+                            "exactError":  "Method invocation failed because [System.DateTime] does not contain a method named \u0027UtcNow\u0027.",
+                            "noLiveInstall":  true
+                        },
+    "tests":  {
+                  "pureAndSyntheticAssertions":  126,
+                  "passed":  126,
+                  "failed":  0,
+                  "independentReview":  "PASS",
+                  "reviewLog":  "spoof-handoff/reports/storage-host-prep-20261017/consolidated-tests/storage-host-resume-review-fix-20261017.log",
+                  "reviewLogSha256":  "D892938E15290CF0C034F83B17C422072944274A58FB793F64C0955F4401D5EE",
+                  "scope":  "Mocked action dependencies; no live install, resume, driver load, BCD/trust/firmware mutation or reboot by the agent"
+              },
+    "separateLiveReadOnlyObservation":  {
+                                            "capturedUtc":  "2026-10-17T20:50:46.9984166Z",
+                                            "scope":  "Read-only package, registry, recovery manifest and boot checks; no resume or native command mutation run",
+                                            "phase":  "TransparentInstallInProgress",
+                                            "installedInf":  "C:\\WINDOWS\\INF\\oem100.inf",
+                                            "installedInfSha256":  "3BD7ABB48150667F99E677EF85B6CB31831DD5696BAB8780E1431E639FD467FC",
+                                            "expectedInfSha256":  "3BD7ABB48150667F99E677EF85B6CB31831DD5696BAB8780E1431E639FD467FC",
+                                            "serviceStart":  0,
+                                            "externalRecoveryManifestMatches":  true,
+                                            "currentBootTime":  "2026-10-17T20:43:05.5000000Z",
+                                            "bootReadError":  null,
+                                            "pendingOriginalBootTime":  "2026-10-17T20:43:05.5000000Z",
+                                            "bootUnchanged":  true
+                                        },
+    "observedEvidenceSha256":  "DF442A0CDB0FED2FCD95AB69D90E23A123D93AB297E41C0D04DE27B44C4AF9C7",
+    "userRunId":  "20261017T203529659Z.0a3b1e6e3ae44a8f9780104c034aa87e",
+    "userPnpUtilExit":  3010,
+    "expectedNextUserAction":  "ResumeInstall; reboot only after TRANSPARENT_INSTALL_PENDING_REBOOT; then VerifyTransparent",
+    "sourceFiles":  [
+                        {
+                            "path":  "spoof-handoff/commands/storage-host-test.ps1",
+                            "bytes":  2083,
+                            "sha256":  "6B9BE40211C9A4D7EE227FE82AFC867841C5DA4C6E2553448331C6A41779BC18"
+                        },
+                        {
+                            "path":  "spoof-handoff/tools/storage_host/run.ps1",
+                            "bytes":  96254,
+                            "sha256":  "9164C3273ACA2DF6EADA4E940738BBA911CA290BF5781B349B15146363BDB059"
+                        },
+                        {
+                            "path":  "spoof-handoff/tools/storage_host/model.psm1",
+                            "bytes":  11645,
+                            "sha256":  "272A81D59F2F643D4ED8C9348023E778F6252A25747B1E617DD60832F248D46F"
+                        },
+                        {
+                            "path":  "spoof-handoff/tools/storage_host/tests.ps1",
+                            "bytes":  17452,
+                            "sha256":  "042D18937930E458948B730405256B604C534F514E80DA7C11F83FDBAAC3FF46"
+                        },
+                        {
+                            "path":  "spoof-handoff/tools/storage_host/tests-install.ps1",
+                            "bytes":  9242,
+                            "sha256":  "19215CECA3D5995DC228D521D24048073C1111BA8EDFB5D7226F351E73D6CFF3"
+                        },
+                        {
+                            "path":  "spoof-handoff/docs/STORAGE_BAREMETAL_RUNBOOK.md",
+                            "bytes":  11336,
+                            "sha256":  "C3A826D3656B271A60B944E847A0917AE0A53064AED5145229FE9104958454C4"
+                        },
+                        {
+                            "path":  "spoof-handoff/reports/review-20261017/README.md",
+                            "bytes":  3994,
+                            "sha256":  "8621CB8BC469AD0587A224B4C240203078A5CD79EA1CC101E19BDD0C9F37A4C3"
+                        }
+                    ],
+    "evidenceDirectory":  "spoof-handoff/reports/storage-host-prep-20261017/install-journal-fix",
+    "historicalManifestScope":  "Earlier change manifests remain tied to their original commits."
+}

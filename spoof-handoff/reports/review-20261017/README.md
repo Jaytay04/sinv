@@ -34,6 +34,10 @@ keys, VM disks, raw recovery snapshots, and machine-local build directories.
 
 Evidence in this directory:
 
+- `install-journal-fix.json`: timestamp correction and receipt/ownership-checked
+  resume for an install that completed before journal finalization. Includes
+  126 passing pure/synthetic assertions, an exact-error synthetic negative
+  control, and separately identified read-only installed-package observations.
 - `enable-release-fix.json`: fresh-process release loading and journaled policy
   retry correction, with 80 passing pure/synthetic action assertions. No live
   policy enable or driver installation is claimed by those tests.

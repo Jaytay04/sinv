@@ -156,5 +156,6 @@ $nonEmptyRunLines=@([IO.File]::ReadAllLines($runPath)|Where-Object {-not [string
 Assert-Equal 'Start-StorageHostWorkflow' $nonEmptyRunLines[$nonEmptyRunLines.Count-1] 'entry dispatch is the final statement after every function definition'
 
 . (Join-Path $PSScriptRoot 'tests-enable.ps1')
+. (Join-Path $PSScriptRoot 'tests-install.ps1')
 
 Write-Output ('PASS: '+$script:TestCount+' storage-host model, synthetic action, cleanup, recovery, release, and syntax assertions; no device, elevation, driver, BCD, firmware, DISM, reboot, or network operations were run.')

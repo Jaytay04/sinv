@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Position=0,Mandatory=$true)]
-    [ValidateSet('Prepare','EnableTestMode','InstallTransparent','VerifyTransparent','InstallReplacement','VerifyReplacement','Remove','VerifyOriginal','RecoverOriginal','RestorePolicy','FinalVerify','Status')]
+    [ValidateSet('Prepare','EnableTestMode','InstallTransparent','ResumeInstall','VerifyTransparent','InstallReplacement','VerifyReplacement','Remove','VerifyOriginal','RecoverOriginal','RestorePolicy','FinalVerify','Status')]
     [string]$Action,
     [string]$RunDirectory,
     [string]$ReleaseDirectory,

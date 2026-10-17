@@ -197,6 +197,23 @@ the repository or a report.
 
 ## If a command fails
 
+If `InstallTransparent` or `InstallReplacement` fails after a successful PnPUtil
+install receipt, do not repeat the install or reboot until the journal is
+reconciled. While the phase is `TransparentInstallInProgress` or
+`ReplacementInstallInProgress` and the Windows boot has not changed, run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\spoof-handoff\commands\storage-host-test.ps1 ResumeInstall
+```
+
+This action checks the original install intent, exact successful PnPUtil command
+receipt, installed INF hash and ownership, pinned release, recovery copy, current
+disk identity and policy. It completes only the journal, without invoking PnPUtil
+or claiming a loaded driver. Reboot only after it returns
+`TRANSPARENT_INSTALL_PENDING_REBOOT` or `REPLACEMENT_INSTALL_PENDING_REBOOT`, then
+use the corresponding verification action. If a check fails or the boot already
+changed, use the removal/recovery procedure below; do not edit the state file.
+
 Do not continue forward after any verification failure. Save the exact error
 and run `Status` if Windows starts. If the runner reports an installed or
 install-pending package, use `Remove` to request removal, reboot, then use
