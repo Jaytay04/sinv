@@ -1,0 +1,3201 @@
+{
+  "schema": "nic-vm-validation.v1",
+  "createdUtc": "2026-10-17T22:45:26.842191+00:00",
+  "result": "HOST_DEPLOYMENT_BLOCKED_BY_VM_READBACK",
+  "physicalNicReplacementTestExecuted": false,
+  "hostActivationRunbookReady": false,
+  "scope": "Four approved guest-profile adapter MAC pairs; no physical-host activation.",
+  "registrationFix": {
+    "revision1RawNdisStatus": "0xC0010005",
+    "revision2RawNdisStatus": "0x00000000",
+    "newDefaultRevision": 2,
+    "vmDiagnosticsDefault": false,
+    "evidenceRevision1": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222319-1fbeae2c5e/evidence/kernel-metadata.json",
+    "evidenceRevision2": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json"
+  },
+  "vm": {
+    "uuid": "D7C14D56-24D1-9894-8906-C0CE95A07790",
+    "manufacturer": "VMware, Inc.",
+    "model": "VMware20,1"
+  },
+  "coverage": [
+    {
+      "reader": "Get-NetAdapter.MacAddress",
+      "adapters": 4,
+      "roundTripPass": 0,
+      "replacementMatches": 0,
+      "restoredMatches": 4
+    },
+    {
+      "reader": "GetAdaptersAddresses",
+      "adapters": 4,
+      "roundTripPass": 0,
+      "replacementMatches": 0,
+      "restoredMatches": 4
+    },
+    {
+      "reader": "GetIfTable2",
+      "adapters": 4,
+      "roundTripPass": 0,
+      "replacementMatches": 0,
+      "restoredMatches": 4
+    },
+    {
+      "reader": "MSFT_NetAdapter.NetworkAddresses",
+      "adapters": 4,
+      "roundTripPass": 0,
+      "replacementMatches": 0,
+      "restoredMatches": 4
+    },
+    {
+      "reader": "OID_802_3_CURRENT_ADDRESS",
+      "adapters": 4,
+      "roundTripPass": 4,
+      "replacementMatches": 4,
+      "restoredMatches": 4
+    },
+    {
+      "reader": "Win32_NetworkAdapter.MACAddress",
+      "adapters": 4,
+      "roundTripPass": 4,
+      "replacementMatches": 4,
+      "restoredMatches": 4
+    }
+  ],
+  "proofs": [
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+      "reader": "OID_802_3_CURRENT_ADDRESS",
+      "original": "00:50:56:C0:00:08",
+      "expectedReplacement": "02:90:10:20:30:40",
+      "activeObserved": "02:90:10:20:30:40",
+      "restored": "00:50:56:C0:00:08",
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+      "reader": "GetAdaptersAddresses",
+      "original": "00:50:56:C0:00:08",
+      "expectedReplacement": "02:90:10:20:30:40",
+      "activeObserved": "00:50:56:C0:00:08",
+      "restored": "00:50:56:C0:00:08",
+      "originalMatches": true,
+      "replacementMatches": false,
+      "restoredMatches": true,
+      "roundTripPass": false,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+      "reader": "GetIfTable2",
+      "original": "00:50:56:C0:00:08",
+      "expectedReplacement": "02:90:10:20:30:40",
+      "activeObserved": "00:50:56:C0:00:08",
+      "restored": "00:50:56:C0:00:08",
+      "originalMatches": true,
+      "replacementMatches": false,
+      "restoredMatches": true,
+      "roundTripPass": false,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+      "reader": "Win32_NetworkAdapter.MACAddress",
+      "original": "00:50:56:C0:00:08",
+      "expectedReplacement": "02:90:10:20:30:40",
+      "activeObserved": "02:90:10:20:30:40",
+      "restored": "00:50:56:C0:00:08",
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+      "reader": "MSFT_NetAdapter.NetworkAddresses",
+      "original": "005056C00008",
+      "expectedReplacement": "02:90:10:20:30:40",
+      "activeObserved": "005056C00008",
+      "restored": "005056C00008",
+      "originalMatches": true,
+      "replacementMatches": false,
+      "restoredMatches": true,
+      "roundTripPass": false,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+      "reader": "Get-NetAdapter.MacAddress",
+      "original": "00-50-56-C0-00-08",
+      "expectedReplacement": "02:90:10:20:30:40",
+      "activeObserved": "00-50-56-C0-00-08",
+      "restored": "00-50-56-C0-00-08",
+      "originalMatches": true,
+      "replacementMatches": false,
+      "restoredMatches": true,
+      "roundTripPass": false,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+      "reader": "OID_802_3_CURRENT_ADDRESS",
+      "original": "00:50:56:C0:00:01",
+      "expectedReplacement": "02:90:10:20:30:41",
+      "activeObserved": "02:90:10:20:30:41",
+      "restored": "00:50:56:C0:00:01",
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+      "reader": "GetAdaptersAddresses",
+      "original": "00:50:56:C0:00:01",
+      "expectedReplacement": "02:90:10:20:30:41",
+      "activeObserved": "00:50:56:C0:00:01",
+      "restored": "00:50:56:C0:00:01",
+      "originalMatches": true,
+      "replacementMatches": false,
+      "restoredMatches": true,
+      "roundTripPass": false,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+      "reader": "GetIfTable2",
+      "original": "00:50:56:C0:00:01",
+      "expectedReplacement": "02:90:10:20:30:41",
+      "activeObserved": "00:50:56:C0:00:01",
+      "restored": "00:50:56:C0:00:01",
+      "originalMatches": true,
+      "replacementMatches": false,
+      "restoredMatches": true,
+      "roundTripPass": false,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+      "reader": "Win32_NetworkAdapter.MACAddress",
+      "original": "00:50:56:C0:00:01",
+      "expectedReplacement": "02:90:10:20:30:41",
+      "activeObserved": "02:90:10:20:30:41",
+      "restored": "00:50:56:C0:00:01",
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+      "reader": "MSFT_NetAdapter.NetworkAddresses",
+      "original": "005056C00001",
+      "expectedReplacement": "02:90:10:20:30:41",
+      "activeObserved": "005056C00001",
+      "restored": "005056C00001",
+      "originalMatches": true,
+      "replacementMatches": false,
+      "restoredMatches": true,
+      "roundTripPass": false,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+      "reader": "Get-NetAdapter.MacAddress",
+      "original": "00-50-56-C0-00-01",
+      "expectedReplacement": "02:90:10:20:30:41",
+      "activeObserved": "00-50-56-C0-00-01",
+      "restored": "00-50-56-C0-00-01",
+      "originalMatches": true,
+      "replacementMatches": false,
+      "restoredMatches": true,
+      "roundTripPass": false,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+      "reader": "OID_802_3_CURRENT_ADDRESS",
+      "original": "C4:BD:E5:32:06:D1",
+      "expectedReplacement": "02:90:10:20:30:42",
+      "activeObserved": "02:90:10:20:30:42",
+      "restored": "C4:BD:E5:32:06:D1",
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+      "reader": "GetAdaptersAddresses",
+      "original": "C4:BD:E5:32:06:D1",
+      "expectedReplacement": "02:90:10:20:30:42",
+      "activeObserved": "C4:BD:E5:32:06:D1",
+      "restored": "C4:BD:E5:32:06:D1",
+      "originalMatches": true,
+      "replacementMatches": false,
+      "restoredMatches": true,
+      "roundTripPass": false,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+      "reader": "GetIfTable2",
+      "original": "C4:BD:E5:32:06:D1",
+      "expectedReplacement": "02:90:10:20:30:42",
+      "activeObserved": "C4:BD:E5:32:06:D1",
+      "restored": "C4:BD:E5:32:06:D1",
+      "originalMatches": true,
+      "replacementMatches": false,
+      "restoredMatches": true,
+      "roundTripPass": false,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+      "reader": "Win32_NetworkAdapter.MACAddress",
+      "original": "C4:BD:E5:32:06:D1",
+      "expectedReplacement": "02:90:10:20:30:42",
+      "activeObserved": "02:90:10:20:30:42",
+      "restored": "C4:BD:E5:32:06:D1",
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+      "reader": "MSFT_NetAdapter.NetworkAddresses",
+      "original": "C4BDE53206D1",
+      "expectedReplacement": "02:90:10:20:30:42",
+      "activeObserved": "C4BDE53206D1",
+      "restored": "C4BDE53206D1",
+      "originalMatches": true,
+      "replacementMatches": false,
+      "restoredMatches": true,
+      "roundTripPass": false,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+      "reader": "Get-NetAdapter.MacAddress",
+      "original": "C4-BD-E5-32-06-D1",
+      "expectedReplacement": "02:90:10:20:30:42",
+      "activeObserved": "C4-BD-E5-32-06-D1",
+      "restored": "C4-BD-E5-32-06-D1",
+      "originalMatches": true,
+      "replacementMatches": false,
+      "restoredMatches": true,
+      "roundTripPass": false,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+      "reader": "OID_802_3_CURRENT_ADDRESS",
+      "original": "D8:BB:C1:D8:57:20",
+      "expectedReplacement": "02:90:10:20:30:43",
+      "activeObserved": "02:90:10:20:30:43",
+      "restored": "D8:BB:C1:D8:57:20",
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+      "reader": "GetAdaptersAddresses",
+      "original": "D8:BB:C1:D8:57:20",
+      "expectedReplacement": "02:90:10:20:30:43",
+      "activeObserved": "D8:BB:C1:D8:57:20",
+      "restored": "D8:BB:C1:D8:57:20",
+      "originalMatches": true,
+      "replacementMatches": false,
+      "restoredMatches": true,
+      "roundTripPass": false,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+      "reader": "GetIfTable2",
+      "original": "D8:BB:C1:D8:57:20",
+      "expectedReplacement": "02:90:10:20:30:43",
+      "activeObserved": "D8:BB:C1:D8:57:20",
+      "restored": "D8:BB:C1:D8:57:20",
+      "originalMatches": true,
+      "replacementMatches": false,
+      "restoredMatches": true,
+      "roundTripPass": false,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+      "reader": "Win32_NetworkAdapter.MACAddress",
+      "original": "D8:BB:C1:D8:57:20",
+      "expectedReplacement": "02:90:10:20:30:43",
+      "activeObserved": "02:90:10:20:30:43",
+      "restored": "D8:BB:C1:D8:57:20",
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+      "reader": "MSFT_NetAdapter.NetworkAddresses",
+      "original": "D8BBC1D85720",
+      "expectedReplacement": "02:90:10:20:30:43",
+      "activeObserved": "D8BBC1D85720",
+      "restored": "D8BBC1D85720",
+      "originalMatches": true,
+      "replacementMatches": false,
+      "restoredMatches": true,
+      "roundTripPass": false,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+      "reader": "Get-NetAdapter.MacAddress",
+      "original": "D8-BB-C1-D8-57-20",
+      "expectedReplacement": "02:90:10:20:30:43",
+      "activeObserved": "D8-BB-C1-D8-57-20",
+      "restored": "D8-BB-C1-D8-57-20",
+      "originalMatches": true,
+      "replacementMatches": false,
+      "restoredMatches": true,
+      "roundTripPass": false,
+      "sourceCaptures": [
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+        "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json"
+      ]
+    }
+  ],
+  "captures": {
+    "original": {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+      "bytes": 194694,
+      "sha256": "3A8215F9221BF58274C77F737467884AA89340AD303DBB1220E2E566FF322888"
+    },
+    "replacement": {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+      "bytes": 200072,
+      "sha256": "4DFD8F324E59D01F345ADA46AC7487E046CD8B2DD0D522E66173446102DEFCEF"
+    },
+    "restored": {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json",
+      "bytes": 179487,
+      "sha256": "9D782E9971C88CF13EBDFC5691E9E98CA34A4AED98B420E4FDB067AE9662E206"
+    },
+    "hostBefore": {
+      "path": "spoof-handoff/reports/nic-vm-20261017/host-originals-retry/readback.20261017T220316561Z.534ca308733c42848cbc25e34f05a9fd.json",
+      "bytes": 77292,
+      "sha256": "0AC2BB1049D7F192F8AE47ABB85B362F047D5FD4428F1707D776FA61AD1E7359"
+    },
+    "hostAfter": {
+      "path": "spoof-handoff/reports/nic-vm-20261017/host-originals-after/readback.20261017T224236496Z.8c62b1ef3df143ad99cd6069adf81a66.json",
+      "bytes": 77292,
+      "sha256": "BABC367977BF922A249F009E7230F326B71432B9107AFF6FB85BFB35F59292FA"
+    }
+  },
+  "finalGuestPolicy": {
+    "codeIntegrity": {
+      "ntStatus": "0x00000000",
+      "optionsHex": "0x00000005",
+      "returnedLength": 8,
+      "testSigning": false
+    },
+    "bcdTestSigning": {
+      "exists": false,
+      "value": null
+    },
+    "trustMembership": {
+      "Root": false,
+      "TrustedPublisher": false
+    },
+    "secureBoot": {
+      "value": false,
+      "error": null
+    },
+    "filterServiceAbsent": true
+  },
+  "finalState": {
+    "utc": "2026-10-17T22:43:15.9931511Z",
+    "readOnlyHostQueries": true,
+    "hostActivationExecuted": false,
+    "hostWindowsBuild": "26200.9711",
+    "hostSecureBootCachedFlag": 1,
+    "secureBootEvidenceScope": "Windows boot-state registry flag; user previously supplied elevated Confirm-SecureBootUEFI=True. No host firmware or boot-policy write was performed.",
+    "hostKernelIntegrityNtStatus": "0x00000000",
+    "hostKernelIntegrityOptions": "0x0000C001",
+    "hostKernelTestSigning": false,
+    "hostTrustMembership": {
+      "Root": false,
+      "TrustedPublisher": false
+    },
+    "hostNicServicePresent": false,
+    "hostStorageServicePresent": false,
+    "sourceVmx": "C:\\Users\\jayli\\OneDrive\\Documents\\Virtual Machines\\UEFILoader-Win11-ExactBuild-Gate\\UEFILoader-Win11-ExactBuild-Gate.vmx",
+    "sourceVmxSha256": "537BBE6D91DFA716D698A5E8301F5C2C59FC98CC65308BC905A9938A3129F0C9",
+    "sourceVmxUnchanged": true,
+    "mainCheckoutHead": "9b82c1dc5409b36829842bae6ac841ef60481c72",
+    "mainCheckoutHeadUnchanged": true,
+    "mainCheckoutIndexSha256": "C15E40DC497E9C24BE73197E96ACCC5B43D3C62F14AB0199C3286BE65198D2F9",
+    "mainCheckoutIndexUnchanged": true,
+    "virtualMachinesRunning": 0,
+    "vmrunList": [
+      "Total running VMs: 0"
+    ],
+    "hostBcdEspFirmwareScope": "No host deployment or changes; no fresh byte-for-byte BCD/ESP/firmware restore claim is made."
+  },
+  "finalStateEvidence": {
+    "path": "spoof-handoff/reports/nic-vm-20261017/final-state.json",
+    "bytes": 1561,
+    "sha256": "B8F35F762CCA69A0DC5E28FE86E0472563013CB4B7ACC3EF8C93404E039708ED"
+  },
+  "deploymentBoundary": "Close ordinary adapter API visibility and repeat the VM all-reader gate before physical-host deployment. OID/WMI success does not establish coverage of every reader.",
+  "physicalHostProvenCategories": {
+    "count": 8,
+    "confirmed": 9,
+    "priorEvidence": "Seven SMBIOS fields through RSMB/WMI and disk serial through storage IOCTL/WMI; NIC physical-host replacement remains unproven."
+  },
+  "softwareTests": {
+    "existingRegressionMatrix": {
+      "schema": "nic-vm-regression-matrix.v1",
+      "runId": "20261017T220258Z.14bedf2a11ba",
+      "capturedUtc": "2026-10-17T22:09:44.9936224Z",
+      "result": "PASS",
+      "scope": "Host-only regression tests. No VM execution, driver load/install, live device reads, firmware, BCD, ESP, Secure Boot, trust-store, or reboot operations.",
+      "suites": [
+        {
+          "name": "storage-host model",
+          "pass": 126,
+          "failed": 0,
+          "evidence": [
+            "storage-host-tests.log"
+          ]
+        },
+        {
+          "name": "default device-filter storage+NIC",
+          "pass": 2,
+          "failed": 0,
+          "configuration": "DEVICE_FILTER_BUILD_KERNEL=OFF; DEVICE_FILTER_ENABLE_REWRITE=OFF; profile headers unset",
+          "evidence": [
+            "device-filter/configure.log",
+            "device-filter/build.log",
+            "device-filter/ctest.log"
+          ]
+        },
+        {
+          "name": "identifier contract/parser suites",
+          "pass": 8,
+          "failed": 0,
+          "evidence": [
+            "identifiers/configure.log",
+            "identifiers/build.log",
+            "identifiers/ctest.log"
+          ]
+        },
+        {
+          "name": "SMBIOS host workflow + snapshot fixtures",
+          "pass": 46,
+          "failed": 0,
+          "breakdown": "30 workflow + 16 snapshot",
+          "evidence": [
+            "smbios-workflow-tests.log",
+            "smbios-snapshot-tests.log"
+          ]
+        },
+        {
+          "name": "SMBIOS CTest/table fixtures",
+          "pass": 2,
+          "failed": 0,
+          "additionalFixtureCases": "6/6 table fixtures",
+          "evidence": [
+            "smbios/configure.log",
+            "smbios/build.log",
+            "smbios/ctest.log",
+            "smbios/smbios-pins.log"
+          ]
+        },
+        {
+          "name": "UEFI loader",
+          "pass": 27,
+          "failed": 0,
+          "additionalFixtureSuite": "PASS, 8 events",
+          "evidence": [
+            "loader/configure.log",
+            "loader/build.log",
+            "loader/ctest.log",
+            "loader/fixture-build.log",
+            "loader/fixture-generate.log",
+            "loader/fixture-suite.log"
+          ]
+        },
+        {
+          "name": "native device-I/O core",
+          "pass": 1,
+          "failed": 0,
+          "evidence": [
+            "device-native-io-configure.log",
+            "device-native-io-build.log",
+            "device-native-io-ctest.log"
+          ]
+        },
+        {
+          "name": "device runtime model",
+          "pass": 33,
+          "failed": 0,
+          "firstAttempt": "Harness report-root mismatch. runtime-model.log records exact missing path: C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\device-reboot-cycle-20261016\\runtime-model\\readonly-reference.txt",
+          "rerun": "PASS 33/33 in isolated fixture repository",
+          "evidence": [
+            "runtime-model.log",
+            "runtime-model-rerun.log",
+            "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\artifacts\\nic-vm-20261017\\regression\\20261017T220258Z.14bedf2a11ba\\runtime-fixture-repo\\spoof-handoff\\reports\\device-reboot-cycle-20261016\\runtime-model.14bedf2a11ba\\runtime-tests.txt",
+            "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\artifacts\\nic-vm-20261017\\regression\\20261017T220258Z.14bedf2a11ba\\runtime-fixture-repo\\spoof-handoff\\reports\\device-reboot-cycle-20261016\\runtime-model.14bedf2a11ba\\runtime-tests.json"
+          ]
+        },
+        {
+          "name": "device proof model",
+          "pass": 13,
+          "failed": 0,
+          "evidence": [
+            "proof-model.log",
+            "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\artifacts\\nic-vm-20261017\\regression\\20261017T220258Z.14bedf2a11ba\\proof-fixture-repo\\spoof-handoff\\reports\\device-reboot-cycle-20261016\\proof-tests\\run.20261017T220836Z.a3f1142243e241c1aee99e4e219329c1\\device-cycle-proof-tests.txt",
+            "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\artifacts\\nic-vm-20261017\\regression\\20261017T220258Z.14bedf2a11ba\\proof-fixture-repo\\spoof-handoff\\reports\\device-reboot-cycle-20261016\\proof-tests\\run.20261017T220836Z.a3f1142243e241c1aee99e4e219329c1\\device-cycle-proof-test-manifest.json"
+          ]
+        }
+      ],
+      "purePrior49": {
+        "pass": 49,
+        "failed": 0,
+        "composition": "2 device-filter + 1 native device-I/O + 33 runtime model + 13 proof model"
+      },
+      "hypervisor": {
+        "status": "NOT_RUN",
+        "reason": "No repository-defined 49-test hypervisor selection was present. Current source defines 119 executable test targets and configured CTest lists 297 tests. Per parent direction, did not broaden into this unrelated suite or execute tests with unclear behavior.",
+        "evidence": [
+          "hypervisor/configure.log",
+          "hypervisor/ctest-list.log"
+        ]
+      },
+      "reportDirectory": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\nic-vm-20261017\\regression\\20261017T220258Z.14bedf2a11ba",
+      "artifactDirectory": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\artifacts\\nic-vm-20261017\\regression\\20261017T220258Z.14bedf2a11ba"
+    },
+    "existingRegressionEvidence": {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/regression-summary.json",
+      "bytes": 7592,
+      "sha256": "4F06C6268941A167DC302B9F4D89BC130359ABF3CA6A665D7F090F3AD6D7BCF7"
+    },
+    "newPowerShellAssertions": {
+      "status": "PASS",
+      "checks": 177,
+      "liveProof": false,
+      "evidence": {
+        "path": "spoof-handoff/reports/nic-vm-20261017/tests/result.20261017T224218123Z.0be7ae5d67d441a694299d77d8c51803.json",
+        "bytes": 82965,
+        "sha256": "948E7165E6CE3209D738EE28B9EAEEB72B6931536E27B784A992737C4795C65B"
+      }
+    },
+    "newDefaultNdisRevision": {
+      "compile": "PASS: unsigned driver built with revision 2",
+      "defaultHostCTest": "2/2 PASS",
+      "logs": "spoof-handoff/reports/nic-vm-20261017/default-release-validation/"
+    }
+  },
+  "evidenceManifest": {
+    "path": "spoof-handoff/reports/nic-vm-20261017/SHA256SUMS.txt",
+    "bytes": 78289,
+    "sha256": "AE6ADE293128B1376E9F6DAA4EDE488858AFB63E01B585F5B7CAB4DBEE4FF90A"
+  },
+  "evidenceFiles": [
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T220516Z.cc099596a214/build-profile.json",
+      "bytes": 13357,
+      "sha256": "A428E38AF9090D54EE2061A5E589E5DA732E8E9F1164129682E19D7011DDAAAD"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T220516Z.cc099596a214/cmake-build.log",
+      "bytes": 658,
+      "sha256": "55DABF7F0A55767A1FE1F582D2CF1E4CF40343277867DB855402F8518453593E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T220516Z.cc099596a214/cmake-configure.log",
+      "bytes": 575,
+      "sha256": "85BD1B6851434CDB5821C3D4D4FFB995280406101AA6872968FAD83935838550"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T220516Z.cc099596a214/inf2cat.log",
+      "bytes": 1504,
+      "sha256": "74E8182986B62358A2DE9AA898B827CD7D8217DFC5BA48695BBFF133AB5BC073"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T220516Z.cc099596a214/infverif.log",
+      "bytes": 143,
+      "sha256": "D0E53EF1C57B6504F72ABB80D50D3C0716B67DA32A70B5161D05FF7E5EA4DE31"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T220516Z.cc099596a214/nic-host-tests.log",
+      "bytes": 444,
+      "sha256": "AF1041A5BC8108C41196F81EB35CFCA7D384A3695D15094D0E385834EAD3B9C8"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T220516Z.cc099596a214/signtool-catalog-diagnostic.log",
+      "bytes": 747,
+      "sha256": "86DF27C032D83BDD8A9A9EC52406F6D71EAD835187A73814427B5A2A9786FA2D"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T220516Z.cc099596a214/signtool-kernel-diagnostic.log",
+      "bytes": 747,
+      "sha256": "226EB9A7DEEF4D9244E7035D4669BC0285CBE75E5317B410ADD66BBC0AF2B045"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T220516Z.cc099596a214/signtool-sign-catalog.log",
+      "bytes": 502,
+      "sha256": "F580C41A61FC8B830337540E984C9D181746FA9266751FC2A16B99E49CE1AFC2"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T220516Z.cc099596a214/signtool-sign-sys.log",
+      "bytes": 502,
+      "sha256": "9E551FB47E21001CAA014C068C0886E2D858EBD7B309C622BDF03FBC8489B4E1"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T220544Z.bbb02da0f8ca/build-profile.json",
+      "bytes": 13353,
+      "sha256": "6B2BC2F117E2741614AA10AA1B6DD3AF0E11A726E84DD4C6850D33F6EC6B4994"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T220544Z.bbb02da0f8ca/cmake-build.log",
+      "bytes": 658,
+      "sha256": "55DABF7F0A55767A1FE1F582D2CF1E4CF40343277867DB855402F8518453593E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T220544Z.bbb02da0f8ca/cmake-configure.log",
+      "bytes": 575,
+      "sha256": "03C4AA6190BB8E60FD9C682A4C4A27F58809CC92FFAFE3C4046DA928C9D02362"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T220544Z.bbb02da0f8ca/inf2cat.log",
+      "bytes": 1504,
+      "sha256": "2B6A5CFB30DB4176AEC0DEE3BBA55110B8254B7A03A6623F03092F15EF231D91"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T220544Z.bbb02da0f8ca/infverif.log",
+      "bytes": 142,
+      "sha256": "7BF84E68DB43CF76A80A9763E3EA37D86CA729150A5E5672BCABC06E33C65FC7"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T220544Z.bbb02da0f8ca/nic-host-tests.log",
+      "bytes": 444,
+      "sha256": "56182F613F566BE4330E9073A80AD14085FCC501CFCE6D041D87783D5C4A1E93"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T220544Z.bbb02da0f8ca/signtool-catalog-diagnostic.log",
+      "bytes": 747,
+      "sha256": "CDE96C189EB240752280C37D391BBE9531A9793A8511F535A6C7112D000E855D"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T220544Z.bbb02da0f8ca/signtool-kernel-diagnostic.log",
+      "bytes": 747,
+      "sha256": "0FD13FC037C7DD2CD4E63A6CD1CE1505B17DBDD3C89AB008D3B0D12BE536D622"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T220544Z.bbb02da0f8ca/signtool-sign-catalog.log",
+      "bytes": 502,
+      "sha256": "570793AE40C5D5CF06A5FFA348AD57E5127E25B8F5FF45E7CD45AD9CDC0372FB"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T220544Z.bbb02da0f8ca/signtool-sign-sys.log",
+      "bytes": 502,
+      "sha256": "3D861A5AB1DE23BB9FC9700D2DBB4647E56522E387ACE332595844134ED59EBB"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222104Z.6e0f39d06115/build-profile.json",
+      "bytes": 14548,
+      "sha256": "C9307D0321EC7E45CE2E1727431AED563CC56667E8215D6721521D1C0D9A22B0"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222104Z.6e0f39d06115/cmake-build.log",
+      "bytes": 658,
+      "sha256": "17ADCCAB7F67A73BA5E7460FFA6665DEF5F3A9926A4955645D0BC2513F442BD2"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222104Z.6e0f39d06115/cmake-configure.log",
+      "bytes": 575,
+      "sha256": "F41BCCF2FDDB3DB376B7EE65C5C16D88F51ADB2D31CFDF3C5AF0E4DBDCC3B97C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222104Z.6e0f39d06115/inf2cat.log",
+      "bytes": 1504,
+      "sha256": "85C36A30662747D161E875FBFD00DE916A6A7B31666C6120175AD48FB283335C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222104Z.6e0f39d06115/infverif.log",
+      "bytes": 143,
+      "sha256": "657FC68A74E1D708CC89348FBDE4FD7FD456A6C70490F095AEFE2D71B718C07F"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222104Z.6e0f39d06115/nic-host-tests.log",
+      "bytes": 444,
+      "sha256": "4316751167835AF7882B35FA298401BE8EDF30AACECA8A6FFE536825C0D9054F"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222104Z.6e0f39d06115/signtool-catalog-diagnostic.log",
+      "bytes": 747,
+      "sha256": "A3EB9FCF830A8AA833F2440B4455E02B3C184414C428D360EEE5EA28C79CC11B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222104Z.6e0f39d06115/signtool-kernel-diagnostic.log",
+      "bytes": 747,
+      "sha256": "CF2FAEB33F6926D5E75C3AD4B8051C0E0F5879C22151E2FDEC9A805EDFF3685E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222104Z.6e0f39d06115/signtool-sign-catalog.log",
+      "bytes": 502,
+      "sha256": "36C2AE437A228932B067E86822744A154A79CB9EF51BF02C78890B5D4568756D"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222104Z.6e0f39d06115/signtool-sign-sys.log",
+      "bytes": 502,
+      "sha256": "ADCA11B9646F04B9770B7ADB5D7FC15FD9B82206C0645014101D7A7D73C7B50C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222450Z.401a85faede9/build-profile.json",
+      "bytes": 14725,
+      "sha256": "9CEAAFC9DD19C3EC3048AA3499F533CACB36C6F09C1DF9FB9D3E17398121E0E7"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222450Z.401a85faede9/cmake-build.log",
+      "bytes": 658,
+      "sha256": "55DABF7F0A55767A1FE1F582D2CF1E4CF40343277867DB855402F8518453593E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222450Z.401a85faede9/cmake-configure.log",
+      "bytes": 575,
+      "sha256": "664118338E8DF446086D85D23232396B47025D19D2FA33285D516E9579B15185"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222450Z.401a85faede9/inf2cat.log",
+      "bytes": 1504,
+      "sha256": "703CDC1D88E7BBCFBAFFDEE40D2ED30913B990DA5A3369B6B89F4E86ADD48E92"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222450Z.401a85faede9/infverif.log",
+      "bytes": 143,
+      "sha256": "657FC68A74E1D708CC89348FBDE4FD7FD456A6C70490F095AEFE2D71B718C07F"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222450Z.401a85faede9/nic-host-tests.log",
+      "bytes": 444,
+      "sha256": "FD353BEAA7ADD96C3F9AB8FBF9DBE33F3EE6D4B2EA6FA918A5474008151F2818"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222450Z.401a85faede9/signtool-catalog-diagnostic.log",
+      "bytes": 747,
+      "sha256": "D625D47BD032746C6C4C9E97174ED3151B36EF18697A36EB7B71D623E094A195"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222450Z.401a85faede9/signtool-kernel-diagnostic.log",
+      "bytes": 747,
+      "sha256": "8561AE78CC0685031AC9B938274D5E57252E3D4E543224D181B8767A8286D474"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222450Z.401a85faede9/signtool-sign-catalog.log",
+      "bytes": 502,
+      "sha256": "F12E89C5DAC82E8AC4D4785AA4D4B9DF671F8DB926AE5E3AA069F73B6615B091"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222450Z.401a85faede9/signtool-sign-sys.log",
+      "bytes": 502,
+      "sha256": "BE257A194605C1F623C3BBBACB4CC2250E7DE366D1D73EE6F6A8BF7FF2966522"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222721Z.91c315a669dd/build-profile.json",
+      "bytes": 14721,
+      "sha256": "86E3FC37811B9061C000F77A6A1C87BE362BEA2499C8E053C7AA7CE41734C2AF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222721Z.91c315a669dd/cmake-build.log",
+      "bytes": 658,
+      "sha256": "55DABF7F0A55767A1FE1F582D2CF1E4CF40343277867DB855402F8518453593E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222721Z.91c315a669dd/cmake-configure.log",
+      "bytes": 575,
+      "sha256": "17CA459C0603518186ECBC6BDEA40550393D4DEAC40B003176139843AF781663"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222721Z.91c315a669dd/inf2cat.log",
+      "bytes": 1504,
+      "sha256": "40A238553AAF24A815E705309EBEF3EAEB28268E971C3591C3317222F0DB7140"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222721Z.91c315a669dd/infverif.log",
+      "bytes": 142,
+      "sha256": "7BF84E68DB43CF76A80A9763E3EA37D86CA729150A5E5672BCABC06E33C65FC7"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222721Z.91c315a669dd/nic-host-tests.log",
+      "bytes": 444,
+      "sha256": "24EC0657C58A95176C552F4CC75232CEEA2C8EE70A81392FFC5CEF2EAF04B847"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222721Z.91c315a669dd/signtool-catalog-diagnostic.log",
+      "bytes": 747,
+      "sha256": "855523BF2ADD40FF18CBE22314BF028D936E3FBDD454CA4908F438ECB3E43668"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222721Z.91c315a669dd/signtool-kernel-diagnostic.log",
+      "bytes": 747,
+      "sha256": "448F568D257EC72127A3FC60FA327D041C6EE624FC0FD1E2013C63DAA82A71C6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222721Z.91c315a669dd/signtool-sign-catalog.log",
+      "bytes": 502,
+      "sha256": "D98C55E726A6DCEBFD1B40DD05B81C63E677D6164D827B1DB27B241AC5EA9112"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T222721Z.91c315a669dd/signtool-sign-sys.log",
+      "bytes": 502,
+      "sha256": "1E4556CC9C91164201A113F5A490FE1AF1FB2C308A8CBC66A5E595E660389974"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T223024Z.b851f891c490/build-profile.json",
+      "bytes": 14721,
+      "sha256": "E29F4D4875C5C50EACB6479DBAEB91672A214913D329A5980705515F33FC454B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T223024Z.b851f891c490/cmake-build.log",
+      "bytes": 658,
+      "sha256": "2F3CD1F788A4BF7EECC684594E89EDFCE1C78981D7E272730F3A8BEA4A3BF344"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T223024Z.b851f891c490/cmake-configure.log",
+      "bytes": 575,
+      "sha256": "3B9E05B4C50817111BF8D701D9333343A53951B0074C308D165C1EC75CD397E3"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T223024Z.b851f891c490/inf2cat.log",
+      "bytes": 1504,
+      "sha256": "FC9282C79ECBD6043EFCAEA5E7C3F5BEEB0C3706B802A6A73CFE4F069CF12A9B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T223024Z.b851f891c490/infverif.log",
+      "bytes": 142,
+      "sha256": "AD9D72B066FBDC49275C6E025DBCFF919DD64E5644603267ED6F2F5C8C891872"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T223024Z.b851f891c490/nic-host-tests.log",
+      "bytes": 444,
+      "sha256": "E71126E486A9B78CE2E929EC5E13D9DBB901988213CF71A5F0C1B1CD47A0A63F"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T223024Z.b851f891c490/signtool-catalog-diagnostic.log",
+      "bytes": 747,
+      "sha256": "D561EF79569906BB21ECD23801078DC8E0B2A7A9F24DA8D09DA702468D1B8C1F"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T223024Z.b851f891c490/signtool-kernel-diagnostic.log",
+      "bytes": 747,
+      "sha256": "0BA485671C7DEB6BE3B184A9A36A0A352808613D8BE93339595CFB3122DD9769"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T223024Z.b851f891c490/signtool-sign-catalog.log",
+      "bytes": 502,
+      "sha256": "A0AB0A162D77C4530604F01DDFF145D2B6C475ACD9A8310494B4E1BFC5C03756"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/build/20261017T223024Z.b851f891c490/signtool-sign-sys.log",
+      "bytes": 502,
+      "sha256": "C5DE3B8809F802AE07F9FFBF84E5E75C054E14660813E6620C30D11218709986"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/clone-settings-before.json",
+      "bytes": 286,
+      "sha256": "3D9A7BE41F8E3936BA5D9BC1FE14E6B496E8F4D70D8E606ECC7024F296481DE1"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/clone.json",
+      "bytes": 827,
+      "sha256": "8DFE0FC7DC01CE6976E8870EF0D14B3EB3F8B470465F26C910C71152396B5ED2"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/default-release-validation/cmake-configure.log",
+      "bytes": 586,
+      "sha256": "153731433911581FF3B4BF35FA0710220020835EE786A427B56EE9ED5AC1F405"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/default-release-validation/configure.log",
+      "bytes": 2002,
+      "sha256": "E33202B465FE7ED42AA64E2F837C40BDD336FD86E9520C160FC2813883422AFA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/default-release-validation/host-build.log",
+      "bytes": 2794,
+      "sha256": "B05C8B1B38CC42AF428DB1B7321E54187892C351FC25B617FE443E09F85A9933"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/default-release-validation/host-ctest.log",
+      "bytes": 878,
+      "sha256": "208E2C7B7D299AD91C72626796EBE4B8FDA276476ADE9E750B3D9297341364C7"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/default-release-validation/nic-driver-build.log",
+      "bytes": 1304,
+      "sha256": "D3AB90F522E15F1E9F8FDDB63DF4805891324F37861A15480661F27C1E7C0AFC"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/final-state.json",
+      "bytes": 1561,
+      "sha256": "B8F35F762CCA69A0DC5E28FE86E0472563013CB4B7ACC3EF8C93404E039708ED"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/Install.20261017T221150224Z.6426298d555741e9b3e5e4d83779e875.ps1",
+      "bytes": 697357,
+      "sha256": "F9054154A3B517B32948535F620DFC10A888CBC906FC389976F32AF43E11DCB6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/Install.20261017T221337356Z.feef05bb5fb747638cdbc39770b6cdf6.ps1",
+      "bytes": 697544,
+      "sha256": "A4106489AC67EC5F0DAAB50255E483B7D6D326B927D7B61C24E17B8BE4C5D98D"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/Install.20261017T222145183Z.45799a777a8c403088ce2689ddc76715.ps1",
+      "bytes": 700241,
+      "sha256": "B239C83A22576E8020CEAFE2CE5D6CF72E58674BB294A410BA66827863127F22"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/Install.20261017T222555763Z.41d5be0e57ea477e83797a65a81175ad.ps1",
+      "bytes": 702024,
+      "sha256": "36EC1B9CEE56B5F09231CEB77F0247C14AC09FA9CFB4C5FB7F6B8D9B93C1D62A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/Install.20261017T223034127Z.744366ee59d545d09c4a80e3733280ed.ps1",
+      "bytes": 704338,
+      "sha256": "CE72D22463D3CCD177B6383D0E6402DE529E446FDFCAE36F0CEDED0476C00A55"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/PreparePolicy.20261017T220940805Z.266d34c9716d4ec0a8e426514424ccea.ps1",
+      "bytes": 661681,
+      "sha256": "749770380198F86266E1700EC314F731F2F7C088C41F6A4793E147191872BDE9"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/Readback.20261017T222318011Z.8205594b51db4f91b20fa3823bf70814.ps1",
+      "bytes": 662798,
+      "sha256": "B59D04E55C66FAD0C56C34679F793F601D08CED034AFD3A06DE060A0084B2759"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/Readback.20261017T222702286Z.e02692bceb5940489194c636df3821ab.ps1",
+      "bytes": 665014,
+      "sha256": "685AB6FF0810795EFDC2B6D3C830949DA01ED67E1F8B7F4A5D07986BDCC285DF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/Readback.20261017T223253270Z.c7364f3f4072434ca9a4e179f48d20b5.ps1",
+      "bytes": 665018,
+      "sha256": "3DB5335CF9F74D3FC3766EC0DF9A9AE280A3B99E339F7DEDEE5893B5CDB87051"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/Readback.20261017T223543295Z.a17e735bd54a4d63ae253a081e3c8c3f.ps1",
+      "bytes": 666243,
+      "sha256": "69FA921F0FB19D443447DFAB829E55A30DCDBF69B2F2AA201075413468900205"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/Readback.20261017T224208019Z.fb0356479e86465d9feecb3a82d6a0ad.ps1",
+      "bytes": 667432,
+      "sha256": "99A46F8847B48E8065D9FF4EE939E5A4A7534145EB01698279D9B3C416711985"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/Remove.20261017T221727678Z.2d5fcc31e9c24d3db052c475158df801.ps1",
+      "bytes": 661856,
+      "sha256": "A5CC46DF269CE165DD103F71405005FF7A5224F9D6B9AC53EA9721E3DDBC765D"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/Remove.20261017T222833358Z.e45166041f0d416fb15104b029330a33.ps1",
+      "bytes": 665006,
+      "sha256": "15FDDD21FDB3B629DEEFADA8C00F0B21F55A476D5EC1F1985E61E5AD744322CA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/Remove.20261017T223719794Z.39b1ac13d9d14cba83932d2596a04774.ps1",
+      "bytes": 666231,
+      "sha256": "7E3497ADED0FC56005C02AC094E36688E51CDEE8093AF8D49E78A1B8E75C24A4"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/RestorePolicy.20261017T221924803Z.504e30d4c48a43be8e7c383b5bd5c1e5.ps1",
+      "bytes": 661868,
+      "sha256": "1C2C59DD7015DB37843218F3ACF579FCF9B98475A9E085EB0F5B077EFE635ADA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/RestorePolicy.20261017T223842648Z.f1a32f6444184874a7bbefca5d37d245.ps1",
+      "bytes": 666239,
+      "sha256": "AED3CCD03A9F1E7B0EB3884D1E566CAEA963550CF367CAA3E7A1ADE1499FF976"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/Start.20261017T223448983Z.c3201e196b584ffba636a0fc28ebc97a.ps1",
+      "bytes": 666231,
+      "sha256": "9114E5D6EFC7A66DC5DC3492F5CC35B04BF118FD90E4E6E60BFBCF202CFB4C22"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-profile.json",
+      "bytes": 2269,
+      "sha256": "79FCFDD272C9F4F01630D9B0A6EBE756FE33846DFFAB6C3D0DBD7F299E79B5A1"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/host-originals/native.20261017T220032718Z.6b2fb7c3d7894c889f6450ba429cb046.json",
+      "bytes": 58662,
+      "sha256": "B9E968E6064774B802B81C09F5EFCB8E5D4C30908058018BA1523F9F0499F4A6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/host-originals/native.20261017T220032718Z.6b2fb7c3d7894c889f6450ba429cb046.stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/host-originals/native.20261017T220032718Z.6b2fb7c3d7894c889f6450ba429cb046.stdout.txt",
+      "bytes": 478,
+      "sha256": "EA6FBC2BBBAF0D9587D1E7D311D53B9E685359A553DFE2865CD09723AD344D8E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/host-originals-after/native.20261017T224236496Z.8c62b1ef3df143ad99cd6069adf81a66.json",
+      "bytes": 58662,
+      "sha256": "2FAE28452BFA0B1F8A6D4B8D86253C9A16A93AB6D63B156B13FD053DB410F7F3"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/host-originals-after/native.20261017T224236496Z.8c62b1ef3df143ad99cd6069adf81a66.stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/host-originals-after/native.20261017T224236496Z.8c62b1ef3df143ad99cd6069adf81a66.stdout.txt",
+      "bytes": 490,
+      "sha256": "FB4F5C10E21EA73E2F5F36A39DD985EA690BAE7F98CCAEBA720F792C74D71E7B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/host-originals-after/readback.20261017T224236496Z.8c62b1ef3df143ad99cd6069adf81a66.json",
+      "bytes": 77292,
+      "sha256": "BABC367977BF922A249F009E7230F326B71432B9107AFF6FB85BFB35F59292FA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/host-originals-preliminary.20261017T215638338Z.json",
+      "bytes": 16127,
+      "sha256": "44E8F16A3190CA46D3553CF8C740A181D2C99F0CF856F8A83B307FB662D44B82"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/host-originals-retry/native.20261017T220316561Z.534ca308733c42848cbc25e34f05a9fd.json",
+      "bytes": 58662,
+      "sha256": "4C5955D34D00AE392D530312DA89DF6590E16E9C5C557D4530946950AE051BCF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/host-originals-retry/native.20261017T220316561Z.534ca308733c42848cbc25e34f05a9fd.stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/host-originals-retry/native.20261017T220316561Z.534ca308733c42848cbc25e34f05a9fd.stdout.txt",
+      "bytes": 490,
+      "sha256": "D6ADD43BCC6903C5786636384ED2A5DD14D9F88D6CBF7B4B561D4DD679E99638"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/host-originals-retry/readback.20261017T220316561Z.534ca308733c42848cbc25e34f05a9fd.json",
+      "bytes": 77292,
+      "sha256": "0AC2BB1049D7F192F8AE47ABB85B362F047D5FD4428F1707D776FA61AD1E7359"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/host-read-retry.json",
+      "bytes": 331,
+      "sha256": "DD9C96AED2E5E44BDACB90E345EFA58B0D992096CC0C58BE5A20BC263EEFC3E2"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/inventory-template.ps1",
+      "bytes": 2773,
+      "sha256": "DF1687340E55C2192EDA0276F9FAF282800AFD51059C6D432CF654F2B0029473"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/inventory.ps1",
+      "bytes": 456051,
+      "sha256": "C27DEF0270F286033C238969ED3B8B57F783A55940490C82715ACADDAA39F9CF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/recovery.20261017T224309329Z.d9c95081e85b474aadb823c1a90a7103.json",
+      "bytes": 3144,
+      "sha256": "E52E0E2498BB9C15EEF6382933D43E31EA0D8968D8BD210488EC2FA306E8B073"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/BUILD_ARTIFACT_SHA256SUMS.txt",
+      "bytes": 5448,
+      "sha256": "C4D0D728BF3384DD0FC2D6C24EC1C7DD78F7F45DA78E51D9823288FDFEB81D0D"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/device-filter/build.log",
+      "bytes": 984,
+      "sha256": "8F3DD63D5E422E55738D8861912BFFAB0F682693CD0DE6C0397D70C819F4F0EE"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/device-filter/configure.log",
+      "bytes": 1178,
+      "sha256": "333495661E3C7B321D133D4114BF449E9C33699B89DFC6B2FEC8E3D0E766E44D"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/device-filter/ctest.log",
+      "bytes": 922,
+      "sha256": "EDD149676E15596A1788247579F1D2457DD2EA3B2D07895C3E071AB032F6159F"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/device-native-io-build.log",
+      "bytes": 2324,
+      "sha256": "9DA38E223D545DDA575C3670A937FC2C83A25633C07B946D3EC62695AA7B3698"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/device-native-io-configure.log",
+      "bytes": 1362,
+      "sha256": "8786B5720AD90EFC3F0086D34753EFC9CFCBB865387C3CC10C94FF95269D2127"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/device-native-io-ctest.log",
+      "bytes": 718,
+      "sha256": "A294DA4554316E0F6E657F5F5081A9418B79377615D012AE60129B1CE7B6ACAD"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/hypervisor/configure.log",
+      "bytes": 6002,
+      "sha256": "2601A6C2569A4B3D71E1F085E1CDCB588DCDF9DB69E8ED631550B48E854A104F"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/hypervisor/ctest-list.log",
+      "bytes": 735856,
+      "sha256": "5605BFF06369F9037F81FB1806179050459182D2E091BAD7A8447047CB5A4381"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/identifiers/build.log",
+      "bytes": 5366,
+      "sha256": "A2D115AA2D2425A46C4DF0133CC66FF884382C147DC04B2E763E5000E901B1DA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/identifiers/configure.log",
+      "bytes": 1900,
+      "sha256": "782254957685ABEE50E789D91A9BD2220C203A67713318B1E94B6F0BDCA28E05"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/identifiers/ctest.log",
+      "bytes": 2368,
+      "sha256": "8A28FFD1C316317D1BB586B07CA00413923FE88A366E518FB92692EF9C82B73C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/loader/build.log",
+      "bytes": 15542,
+      "sha256": "B93A746A342FFEFE73428FBE6233E6B0B18F0AA6B4700BF83A7038AB392BECE3"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/loader/configure.log",
+      "bytes": 1514,
+      "sha256": "E2CE65E7CD1E0AD1D6A79105764757654782E7FAE2CA83E9772A0C2124E28F58"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/loader/ctest.log",
+      "bytes": 6282,
+      "sha256": "4E2AE2F33718AAA0F1D4B26EB8FEB27087D9B71DE9B3CE1BBA68DAE8BF4B6717"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/loader/fixture-build.log",
+      "bytes": 1204,
+      "sha256": "7EC95F097AED79012CFD6F5BB9998706C59BA388A4030CDF534B6E5021D8935B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/loader/fixture-generate.log",
+      "bytes": 80,
+      "sha256": "343F9CC052B70917B1F4C860FDC0502E82F224A256E2E5B8B389FEABB2320B61"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/loader/fixture-suite.log",
+      "bytes": 126,
+      "sha256": "D4E9437073D2E71F9CCC33F1F127D6B3671C86542A549E2EA4EE27EFF1711324"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/proof-model.log",
+      "bytes": 1990,
+      "sha256": "3459DA015B1FFE7222496FFB6029F89F982A1D3D2F338137F2000D6D357B92EA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/regression-summary.json",
+      "bytes": 7592,
+      "sha256": "4F06C6268941A167DC302B9F4D89BC130359ABF3CA6A665D7F090F3AD6D7BCF7"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/runtime-model/fixtures/atomic-state.json",
+      "bytes": 26,
+      "sha256": "DD21DC0022334C9E0011DDB64035127C6A611DC1BE616DF5704F7348285ABE9B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/runtime-model/fixtures/atomic-state.json.bak.aa06685048f3453b9623232fad13ef8e",
+      "bytes": 16,
+      "sha256": "FA02354BD70E0B908B245C66BE4BBC6626F0E5C7DAE4B4953D802D0B647B1FFB"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/runtime-model/fixtures/payload/input.txt",
+      "bytes": 8,
+      "sha256": "D121BE3103007B41EDF96F8262925F8C7D61894AFE9A041843B631F69445BC57"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/runtime-model/fixtures/payload/manifest.json",
+      "bytes": 413,
+      "sha256": "A97BC2FB4C4EBA366BA5A291FEB7C8F0367E2AB7333DA9BFE942233A2742F6AC"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/runtime-model/fixtures/payload-repo-reference/manifest.json",
+      "bytes": 321,
+      "sha256": "352A34DD9E17B41D61395B7EA6BFAAD6A33332798DA369A191EB743F7D3BEFF1"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/runtime-model/fixtures/top-level-array.json",
+      "bytes": 164,
+      "sha256": "456FAE3E1445D75F00AA9A1D293DD61B9C4D20AD0BAC574ABEA9C5F70268FCCD"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/runtime-model/readonly-reference.txt",
+      "bytes": 9,
+      "sha256": "52367A6622B19F08825E915FAD80C542AD4F4C34DBCEBAD9F5007994B3E39208"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/runtime-model/runtime-tests.json",
+      "bytes": 8550,
+      "sha256": "F228894FE55FE64E3E097ACCD094ABA319E1122D3B3AEC1EB88CFCB6C3EF51E4"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/runtime-model/runtime-tests.txt",
+      "bytes": 2704,
+      "sha256": "7CAC1E7C4A05BBFF889AB1A9A744D9F63C9FC9078ABF4ACA028B2CFAE5FA44C4"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/runtime-model-rerun.log",
+      "bytes": 5074,
+      "sha256": "7BD787C0CC87BF8F8C8793C4D0A3DD486BBAD833F43F09AFA2418140741D909C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/runtime-model.log",
+      "bytes": 5410,
+      "sha256": "462675795E198A999A03C9F27FE6E02E6CA7CDCDCCE1267EC2941CBA407B3F76"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/smbios/build.log",
+      "bytes": 944,
+      "sha256": "254A4AF114CB6131386F2C29A9B0CA3B2DA524E5E3A217DD8C4B37AB8A81171A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/smbios/configure.log",
+      "bytes": 1890,
+      "sha256": "F8E5B85C73FD8A832DBE406F322B76C4C3EF18623A29C512F77CB28B99378F7E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/smbios/ctest.log",
+      "bytes": 960,
+      "sha256": "26453E1BE20F46BFEA18E1DD1530109DC91A13E7187AD6737648DEE4571730D0"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/smbios/smbios-pins.log",
+      "bytes": 72,
+      "sha256": "D18D129101ECA8932B5E5D39B890A97E9992021ED46119836827ADA6A3ECB86A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/smbios-snapshot-tests.log",
+      "bytes": 2046,
+      "sha256": "D0231A500B58B92101C0DD054EE5C3CB75500F47C23E329DC42E43EEB2DAEF73"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/smbios-workflow-tests.log",
+      "bytes": 68,
+      "sha256": "36C5CE7F0474BD7BCCD9C121328C800A1A5EC129A897D08FE56D0E5880A4D004"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/regression/20261017T220258Z.14bedf2a11ba/storage-host-tests.log",
+      "bytes": 384,
+      "sha256": "D892938E15290CF0C034F83B17C422072944274A58FB793F64C0955F4401D5EE"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/render-negative.log",
+      "bytes": 605,
+      "sha256": "F59C65F72EDCEFFA34CF397DF19697079E38D3F1B388E739805E192BDA9EFDD0"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/start-diagnostic.ps1",
+      "bytes": 3810,
+      "sha256": "BAF4F30CA25E15C40BC6358C8E174F0C125F9BC31181E7F9B1C1E6AB66C5F04E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/status-mapping.json",
+      "bytes": 317,
+      "sha256": "A4C9FA57E3FFF8E511D4C71BC6F47CCAFDB6B06273A7A246EAE679EED3D530D6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/status-mapping.ps1",
+      "bytes": 703,
+      "sha256": "9419F92897B05310ABB44C5A11CD81D4673175969361B2FFEB4EDED03F4C65E6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/console.20261017T221502871Z.cedf0151793347a2b64b92ec686fa7d2.txt",
+      "bytes": 2390,
+      "sha256": "9E6811FFF30C2B831169A20CAC3D75F13C98E4CD5AF3849309B46FBD6CE338D4"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/console.20261017T221512334Z.48c5026b778a46098b6b3ad446898018.txt",
+      "bytes": 2257,
+      "sha256": "E64258FC4568E35AFC5299D90851C031CBEB390341FBE69A2AED8AD435CCD606"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/console.20261017T222228220Z.366f362d23e44e88bd6c9f1984bcb37f.txt",
+      "bytes": 2257,
+      "sha256": "A07796122CD3B4F332B6A6057E17A9EAC09446E6D3DFDD7ABEC06258A42B5EE5"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/console.20261017T222624752Z.4ec7f34a68694ac4bf73a237a0d1c2db.txt",
+      "bytes": 5478,
+      "sha256": "445F136AA07D51737A76D4B6B41FA301B7C5AD7C68E753A707FF723FE4A1F25E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/console.20261017T222715867Z.63b5accb815c4968900baf6bab2357f4.txt",
+      "bytes": 2185,
+      "sha256": "DBCE60586516AFF231C49589EAA95EDA196D59ED8489A3D434AC80E612789625"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/console.20261017T222725541Z.4af1d8e5f6124c129d682628f3e60b8e.txt",
+      "bytes": 28091,
+      "sha256": "8C18CA0CF06546DBAEF1CBA94F414CE8ECF759B04C1D471C5C8D58913228AA1E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/console.20261017T224218123Z.0be7ae5d67d441a694299d77d8c51803.txt",
+      "bytes": 28091,
+      "sha256": "45EBB403C1C3245D0DC0FDB7ED592075EF260E88D8A746F12ACC9912E87DD9BA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T221502871Z.cedf0151793347a2b64b92ec686fa7d2/journal.json",
+      "bytes": 1091,
+      "sha256": "0FAB135B8754220FD349DA715DD5CBACD60E2F835B94EBA0185C803B7C980383"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T221502871Z.cedf0151793347a2b64b92ec686fa7d2/reader-not-executed.exe",
+      "bytes": 4096,
+      "sha256": "AD7FACB2586FC6E966C004D7D1D16B024F5805FF7CB47C7A85DABD8B48892CA7"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T221502871Z.cedf0151793347a2b64b92ec686fa7d2/wrong-uuid-profile.json",
+      "bytes": 191,
+      "sha256": "E9E02AEC5003292D5B7307770173205AF8CEAAF3F201086B8B947C0660E12D26"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T221512334Z.48c5026b778a46098b6b3ad446898018/journal.json",
+      "bytes": 1091,
+      "sha256": "0FAB135B8754220FD349DA715DD5CBACD60E2F835B94EBA0185C803B7C980383"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T221512334Z.48c5026b778a46098b6b3ad446898018/reader-not-executed.exe",
+      "bytes": 4096,
+      "sha256": "AD7FACB2586FC6E966C004D7D1D16B024F5805FF7CB47C7A85DABD8B48892CA7"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T221512334Z.48c5026b778a46098b6b3ad446898018/wrong-uuid-profile.json",
+      "bytes": 191,
+      "sha256": "E9E02AEC5003292D5B7307770173205AF8CEAAF3F201086B8B947C0660E12D26"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T222228220Z.366f362d23e44e88bd6c9f1984bcb37f/journal.json",
+      "bytes": 1091,
+      "sha256": "0FAB135B8754220FD349DA715DD5CBACD60E2F835B94EBA0185C803B7C980383"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T222228220Z.366f362d23e44e88bd6c9f1984bcb37f/reader-not-executed.exe",
+      "bytes": 4096,
+      "sha256": "AD7FACB2586FC6E966C004D7D1D16B024F5805FF7CB47C7A85DABD8B48892CA7"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T222228220Z.366f362d23e44e88bd6c9f1984bcb37f/wrong-uuid-profile.json",
+      "bytes": 191,
+      "sha256": "E9E02AEC5003292D5B7307770173205AF8CEAAF3F201086B8B947C0660E12D26"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T222624752Z.4ec7f34a68694ac4bf73a237a0d1c2db/journal.json",
+      "bytes": 1091,
+      "sha256": "0FAB135B8754220FD349DA715DD5CBACD60E2F835B94EBA0185C803B7C980383"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T222715867Z.63b5accb815c4968900baf6bab2357f4/journal.json",
+      "bytes": 1091,
+      "sha256": "0FAB135B8754220FD349DA715DD5CBACD60E2F835B94EBA0185C803B7C980383"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T222725541Z.4af1d8e5f6124c129d682628f3e60b8e/journal.json",
+      "bytes": 1091,
+      "sha256": "0FAB135B8754220FD349DA715DD5CBACD60E2F835B94EBA0185C803B7C980383"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T222725541Z.4af1d8e5f6124c129d682628f3e60b8e/reader-not-executed.exe",
+      "bytes": 4096,
+      "sha256": "AD7FACB2586FC6E966C004D7D1D16B024F5805FF7CB47C7A85DABD8B48892CA7"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T222725541Z.4af1d8e5f6124c129d682628f3e60b8e/wrong-uuid-profile.json",
+      "bytes": 191,
+      "sha256": "E9E02AEC5003292D5B7307770173205AF8CEAAF3F201086B8B947C0660E12D26"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T224218123Z.0be7ae5d67d441a694299d77d8c51803/journal.json",
+      "bytes": 1091,
+      "sha256": "0FAB135B8754220FD349DA715DD5CBACD60E2F835B94EBA0185C803B7C980383"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T224218123Z.0be7ae5d67d441a694299d77d8c51803/reader-not-executed.exe",
+      "bytes": 4096,
+      "sha256": "AD7FACB2586FC6E966C004D7D1D16B024F5805FF7CB47C7A85DABD8B48892CA7"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T224218123Z.0be7ae5d67d441a694299d77d8c51803/wrong-uuid-profile.json",
+      "bytes": 191,
+      "sha256": "E9E02AEC5003292D5B7307770173205AF8CEAAF3F201086B8B947C0660E12D26"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/result.20261017T221502871Z.cedf0151793347a2b64b92ec686fa7d2.json",
+      "bytes": 5460,
+      "sha256": "B95C8FC499C8F98AE6F92C37DE3CEF102423C350B6DB117C5233097BA01E6587"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/result.20261017T221512334Z.48c5026b778a46098b6b3ad446898018.json",
+      "bytes": 5460,
+      "sha256": "F66F972AC24D72DF1F66C18FC8015BB6F559CD36C1D7BC709FB8667874AFA454"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/result.20261017T222228220Z.366f362d23e44e88bd6c9f1984bcb37f.json",
+      "bytes": 5460,
+      "sha256": "E665745EE3E9D0D20C248C6EB901524EC46D2B75A5BFA665F533C624515861E1"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/result.20261017T222624752Z.4ec7f34a68694ac4bf73a237a0d1c2db.json",
+      "bytes": 12423,
+      "sha256": "AA236844F6FE62C649D6F9A409EFC399AE3ADFD2173F3EDC0BCB4133781DAB33"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/result.20261017T222715867Z.63b5accb815c4968900baf6bab2357f4.json",
+      "bytes": 5699,
+      "sha256": "3CBC978B16271A833E4D7863F3E37C92B7A10830FD11BF4D2AF5A7FB9086AEAB"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/result.20261017T222725541Z.4af1d8e5f6124c129d682628f3e60b8e.json",
+      "bytes": 82965,
+      "sha256": "8AD38B6C55635E95C22CEF7242A08DB6069542BF6E3FC738F0B287976E1D3754"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/result.20261017T224218123Z.0be7ae5d67d441a694299d77d8c51803.json",
+      "bytes": 82965,
+      "sha256": "948E7165E6CE3209D738EE28B9EAEEB72B6931536E27B784A992737C4795C65B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220359-ed984b6ca2/cleanup.json",
+      "bytes": 4317,
+      "sha256": "23A1B0600ED7B262D1416FBC323E8EB01A5ED012D2FEAF0388ECE9D1199E1024"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220359-ed984b6ca2/evidence/kernel-metadata.json",
+      "bytes": 73473,
+      "sha256": "723DB2CFE78756452800C4007E5A91B0912647A2B2AF4323D780EB88EC4104E1"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220359-ed984b6ca2/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220359-ed984b6ca2/evidence/stdout.txt",
+      "bytes": 46,
+      "sha256": "A5E2D9B0A13B25177987C100E16BA7F2BB1BB7555E3FB5323629AB8E8ECA43B0"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220359-ed984b6ca2/guest-evidence.zip",
+      "bytes": 4516,
+      "sha256": "C3BA52653BB4F1713F91BB2ED67CC9CC2BAC52573FCE0E291B542F6EF2BB39D9"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220359-ed984b6ca2/request-metadata.json",
+      "bytes": 4757,
+      "sha256": "EE694DCCE561C877C58D87C5B14426254EE1294C6DBAF7F919A11404614A55A4"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220359-ed984b6ca2/request-package.zip",
+      "bytes": 301864,
+      "sha256": "DEE76AD14E67DA4987DF80D80E0A345DDFB3D17568D6E697ADACB868E2EBCCD9"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220359-ed984b6ca2/request.json",
+      "bytes": 521,
+      "sha256": "D710A15C9BF99227F303E1A0B395380F9A0DA16743B3040DB455D82A879567DB"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220359-ed984b6ca2/response-metadata.json",
+      "bytes": 632,
+      "sha256": "07A7E0FBE6ABB3E8A848D4EA06AE8B3DE282440F73C30C2EB3760C72763E6FB8"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220359-ed984b6ca2/response.json",
+      "bytes": 543,
+      "sha256": "6D41068D1D7E1818026E2FEC190867ED210C767F6E5CCD90D9CC411766E7B17A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220359-ed984b6ca2/stage/ib-tcg-dump.exe",
+      "bytes": 172544,
+      "sha256": "39A484F72C77B576A774343238CDFF6E8D20ED637F0A6312F606DDC39DABA288"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220359-ed984b6ca2/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 456051,
+      "sha256": "C27DEF0270F286033C238969ED3B8B57F783A55940490C82715ACADDAA39F9CF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220359-ed984b6ca2/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "664B7F1ACA0BA5274986D22DC9E309BC3702BED7BDF773CBB6A4E9DF36DAABD6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220941-1ab7c2a82f/cleanup.json",
+      "bytes": 5467,
+      "sha256": "80943B13617AF619BD9E697FCEEF19A19DC9CC2EF81A95EE8FD1080A8AD1BFF6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220941-1ab7c2a82f/evidence/kernel-metadata.json",
+      "bytes": 150813,
+      "sha256": "2EF02EC6154091734857000C332C198C836CA1A6DD65310B287188F630E5E873"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220941-1ab7c2a82f/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220941-1ab7c2a82f/evidence/stdout.txt",
+      "bytes": 2178,
+      "sha256": "FEC409CBD91E135D9FF0B082D21143202FEA878B76183B4F8E6B001B9612E067"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220941-1ab7c2a82f/guest-evidence.zip",
+      "bytes": 8173,
+      "sha256": "78CE6353142335F56D2985D088A4F8BA45F00D02E39E7FBBABE2BFDB75E7947C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220941-1ab7c2a82f/request-metadata.json",
+      "bytes": 5957,
+      "sha256": "B85B80FC87C210AF8D6C37947BFA2401917D4A490F1A6B2ECAE62C5C377A4012"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220941-1ab7c2a82f/request-package.zip",
+      "bytes": 390658,
+      "sha256": "9DD981D59D367DD0D8B94D2BFE45E0BBABF07766271C341E016ACC1B1723B2D3"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220941-1ab7c2a82f/request.json",
+      "bytes": 521,
+      "sha256": "E643E8A3285B17B36050A8BE1ABC3B88CB530AFA7C24895AE1A11D4D9475F0E6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220941-1ab7c2a82f/response-metadata.json",
+      "bytes": 669,
+      "sha256": "29F60AE47B726EF67C15FE324CA3CE228F526AB7FA57CEC5651B74740BB340CA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220941-1ab7c2a82f/response.json",
+      "bytes": 591,
+      "sha256": "9CBA77ACD14AF328A9CE42DA21470DDF3263532D266D53A26B0F1C86D4A686A8"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220941-1ab7c2a82f/stage/ib-tcg-dump.exe",
+      "bytes": 172544,
+      "sha256": "39A484F72C77B576A774343238CDFF6E8D20ED637F0A6312F606DDC39DABA288"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220941-1ab7c2a82f/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 661681,
+      "sha256": "749770380198F86266E1700EC314F731F2F7C088C41F6A4793E147191872BDE9"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-220941-1ab7c2a82f/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "19AA8FBF3087F5A6C50D03CA316F9FC981D4E5A44F165CF610E3D16C5F48405B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221151-0278f7f4f3/cleanup.json",
+      "bytes": 5582,
+      "sha256": "25E46280EE6A0A82B97E9526536B63167ECB5B9275A4A104FF083B2C32113B8F"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221151-0278f7f4f3/error.json",
+      "bytes": 386,
+      "sha256": "DAA858553461901A6B6C4D6479C8BDF0D8AB46A3A69E67763F02FBF1FBE07D05"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221151-0278f7f4f3/evidence/kernel-metadata.json",
+      "bytes": 151106,
+      "sha256": "CC95284D041AF83D2CFBFB13169CEE0FE0E9C61C2C7D2329EF3E889AF524F187"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221151-0278f7f4f3/evidence/stderr.txt",
+      "bytes": 1138,
+      "sha256": "CA548F03894254B55E5E05DB3490FC7678F70A1412BA11A4DB3338E6A671435B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221151-0278f7f4f3/evidence/stdout.txt",
+      "bytes": 2003,
+      "sha256": "4E07A96C2AC6F3489F2D998EF068CEF0F3BB1ED11E0E276EC18635003B82523F"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221151-0278f7f4f3/guest-evidence.zip",
+      "bytes": 8777,
+      "sha256": "0506EC867CF97BE3A1C1136E6BF72C1F5356483CD87C4C295108FC7CE8181AB9"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221151-0278f7f4f3/request-metadata.json",
+      "bytes": 6077,
+      "sha256": "74213C73EEA8C16E34FDC2259528F6B1E9B7694AEA92EC5CA13BF0A3378D5EF4"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221151-0278f7f4f3/request-package.zip",
+      "bytes": 403954,
+      "sha256": "38987A5467A443F55BF653AEB63889BEB3BE45FC1780E9586E8EE9966ACD22EB"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221151-0278f7f4f3/request.json",
+      "bytes": 521,
+      "sha256": "8A639D97D957517F88DBB6ED973292799FF4FF005DDB7018FA9D35E62416C2BB"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221151-0278f7f4f3/response-metadata.json",
+      "bytes": 751,
+      "sha256": "0C6830B374F8350DF05ADCA253F54934CB604804B94F9E3B5BA2F89CD0BE0728"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221151-0278f7f4f3/response.json",
+      "bytes": 683,
+      "sha256": "6DD53393C681ED87864D5BF1F1D36AB14547BDE99FD5988D2C00D60F1F977B16"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221151-0278f7f4f3/stage/ib-tcg-dump.exe",
+      "bytes": 172544,
+      "sha256": "39A484F72C77B576A774343238CDFF6E8D20ED637F0A6312F606DDC39DABA288"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221151-0278f7f4f3/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 697357,
+      "sha256": "F9054154A3B517B32948535F620DFC10A888CBC906FC389976F32AF43E11DCB6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221338-45d06f4b53/cleanup.json",
+      "bytes": 5698,
+      "sha256": "2526EFEEC9B6243B6B7B21A43C2BA26F9218D7C9FBF7D986B1E6502F3E54EFBF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221338-45d06f4b53/evidence/kernel-metadata.json",
+      "bytes": 159712,
+      "sha256": "2C69CC811C9BF545C25E509801402F0202C245C2A3A25F4ED82FED3BA4B4E01A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221338-45d06f4b53/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221338-45d06f4b53/evidence/stdout.txt",
+      "bytes": 2409,
+      "sha256": "785587436135CFABD13EFBEE15A25F525DEEA778DD2E0DA7905EBCF3953D92E1"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221338-45d06f4b53/guest-evidence.zip",
+      "bytes": 9041,
+      "sha256": "78FACB1AC9FE683FA950F732F04A63931251AB31CC286FF09A6AF3AF4271D663"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221338-45d06f4b53/request-metadata.json",
+      "bytes": 6077,
+      "sha256": "4D8EDD9E9E3BC94598C0776E1BFD17AEC4A7E13A3C4BDC5829A623C4E92D7D4B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221338-45d06f4b53/request-package.zip",
+      "bytes": 403996,
+      "sha256": "BA9C7A6D80B4406F03CA8DEC06E4F57E6A46F006A6F93C6D357857DED967B7DF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221338-45d06f4b53/request.json",
+      "bytes": 521,
+      "sha256": "85E050DD8B39858FAB78730579CCFAD95D023EECABF1D62FD920B8AD2CD7D626"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221338-45d06f4b53/response-metadata.json",
+      "bytes": 669,
+      "sha256": "19E8D0FEF9A96305AE01282806BEB526FFAE033BFE6C80FA26E164458C98A8F4"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221338-45d06f4b53/response.json",
+      "bytes": 591,
+      "sha256": "EB5E1DB0CAC19B4B2E9BB170103198CB3F6F45563EFDA7C04AB62818EE2076B9"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221338-45d06f4b53/stage/ib-tcg-dump.exe",
+      "bytes": 172544,
+      "sha256": "39A484F72C77B576A774343238CDFF6E8D20ED637F0A6312F606DDC39DABA288"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221338-45d06f4b53/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 697544,
+      "sha256": "A4106489AC67EC5F0DAAB50255E483B7D6D326B927D7B61C24E17B8BE4C5D98D"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221338-45d06f4b53/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "CE51A404BC105E75C0082987B2F26E1DAB757FEA961453BC7B446772EB562C7A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221601-fe5ac0b4df/cleanup.json",
+      "bytes": 1672,
+      "sha256": "81C99F5B4372364AE78FB62DA1DA27B660E304EFF81852C0C8D4A41DF3D6F42C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221601-fe5ac0b4df/error.json",
+      "bytes": 352,
+      "sha256": "CAFF147C6C4C3772D7BAD456900AF80B8088BE767239A0074D1BFB83D8ED2493"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221601-fe5ac0b4df/evidence/kernel-metadata.json",
+      "bytes": 59592,
+      "sha256": "F9EF1CF61C226EF94070BAEC60956688CE39FC16D67DC0517FADACB01A52E87A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221601-fe5ac0b4df/evidence/stderr.txt",
+      "bytes": 131,
+      "sha256": "4B5B7D9638BFAC9ACE4A13EF2B37D3070357885A657E640E724B18A6BD380A6D"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221601-fe5ac0b4df/evidence/stdout.txt",
+      "bytes": 131,
+      "sha256": "4B5B7D9638BFAC9ACE4A13EF2B37D3070357885A657E640E724B18A6BD380A6D"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221601-fe5ac0b4df/guest-evidence.zip",
+      "bytes": 6849,
+      "sha256": "CE6CA2F82369CA3D9F024F4C6675562EBB078CADE27310F06C6A46421109B5DD"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221601-fe5ac0b4df/request-metadata.json",
+      "bytes": 1996,
+      "sha256": "050EB69ACE404370B9CCCF683A49D5F8751B13C46D48277D9D59D86E0057F8F3"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221601-fe5ac0b4df/request-package.zip",
+      "bytes": 93655,
+      "sha256": "4FFD07A811AA5136CCA27A5A333E85D95B957F26B11DB257CB1A4289185DF466"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221601-fe5ac0b4df/request.json",
+      "bytes": 520,
+      "sha256": "6E2030C97882B1D4C5C721175F5FF09341386EA3C41246403D80D70062505A2C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221601-fe5ac0b4df/response-metadata.json",
+      "bytes": 717,
+      "sha256": "4965BF7039C84124FF55A900DE203106A93D40F45D33BD967EF71633FC17DAA4"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221601-fe5ac0b4df/response.json",
+      "bytes": 655,
+      "sha256": "7B64F26339147BA06F8A8DF6CE31757209614448524DB33E6432D794DFEF6C4C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221601-fe5ac0b4df/stage/ib-tcg-dump.exe",
+      "bytes": 172544,
+      "sha256": "39A484F72C77B576A774343238CDFF6E8D20ED637F0A6312F606DDC39DABA288"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221601-fe5ac0b4df/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 3810,
+      "sha256": "BAF4F30CA25E15C40BC6358C8E174F0C125F9BC31181E7F9B1C1E6AB66C5F04E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221728-1531852914/cleanup.json",
+      "bytes": 5467,
+      "sha256": "62CC678C91CB90C0839D1EBB4AE484062051EF13DEBE0B580FC81E2DD80760BE"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221728-1531852914/evidence/kernel-metadata.json",
+      "bytes": 150037,
+      "sha256": "1AC76C77B28ED75E8FB720FE43D4EC07FD9DEAFD5689CF73A4A3E16C24D8AF3C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221728-1531852914/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221728-1531852914/evidence/stdout.txt",
+      "bytes": 1762,
+      "sha256": "5B86126639575C9AF9E75CC9F7F1AA01865070036A05ABF189A823DF4FDB5B85"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221728-1531852914/guest-evidence.zip",
+      "bytes": 8321,
+      "sha256": "10066809D8B86A7ADCB0E495B5286D6A4DDA97CBCA200A9BB3A1B9D0900232A4"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221728-1531852914/request-metadata.json",
+      "bytes": 5957,
+      "sha256": "850A85C9C79982868917AF61E2BDD44E491C318ECB33905A60E0A4F528984202"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221728-1531852914/request-package.zip",
+      "bytes": 390780,
+      "sha256": "40A40F296C5FC798D56A43312FB560FBD1EB6963F30C1DA002BA1795590F2939"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221728-1531852914/request.json",
+      "bytes": 521,
+      "sha256": "9B4E40CACFBF6509910AEA140A4F4BC87935B3B700EFE85D6EC3EC069D8127BD"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221728-1531852914/response-metadata.json",
+      "bytes": 669,
+      "sha256": "A64737E72D0044DB98DD392DAC5041A68DDFB7239FB29C652D677E8A2D0AEFCE"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221728-1531852914/response.json",
+      "bytes": 591,
+      "sha256": "5E94371ED56098DC48997CF52093F931D6D4F97EA846D6133D8449B21DB12221"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221728-1531852914/stage/ib-tcg-dump.exe",
+      "bytes": 172544,
+      "sha256": "39A484F72C77B576A774343238CDFF6E8D20ED637F0A6312F606DDC39DABA288"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221728-1531852914/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 661856,
+      "sha256": "A5CC46DF269CE165DD103F71405005FF7A5224F9D6B9AC53EA9721E3DDBC765D"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221728-1531852914/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "51E69DF173D3E643168DDDF988560BDFE0E5C35A0A3B4681BAFC1744EEC8CE75"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221925-49c5a5a63d/cleanup.json",
+      "bytes": 5583,
+      "sha256": "3923FD472B7F38D85D63BF5F757FF3009005FF18E9D8F89F01EB951EF0CA4802"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221925-49c5a5a63d/evidence/kernel-metadata.json",
+      "bytes": 157582,
+      "sha256": "F057F1DBC1DC47EECAE5307CDD9D81A4DEC288EAB5FA8F981AD80A9C3E0BDE4B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221925-49c5a5a63d/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221925-49c5a5a63d/evidence/stdout.txt",
+      "bytes": 2183,
+      "sha256": "FC3D9C29CD83C6CE6462B41998E1003F98CAA6CF0E762C787947D6768F7AC198"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221925-49c5a5a63d/guest-evidence.zip",
+      "bytes": 9226,
+      "sha256": "7D90B081E43D65C2BDCC8FE674956D4326088530F6EF4ECA215A1B756630F6D2"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221925-49c5a5a63d/request-metadata.json",
+      "bytes": 5957,
+      "sha256": "744D63549C0C82A3C3C0EB836B8417FFF3225B805FB8C516EB8830BC6A2BD16F"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221925-49c5a5a63d/request-package.zip",
+      "bytes": 390702,
+      "sha256": "EB61C2F5B7DDE498F5B08E88833E0CA6EFA732A19D089B5CD0C1312CEC15FC31"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221925-49c5a5a63d/request.json",
+      "bytes": 521,
+      "sha256": "52736F91307FC094720473F3DF28527B63C01E5D877E275B955224550E832624"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221925-49c5a5a63d/response-metadata.json",
+      "bytes": 669,
+      "sha256": "F8D863135903428CFB63945D974B1E44423BF6A974F90049AC6E5FC25CC1140C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221925-49c5a5a63d/response.json",
+      "bytes": 591,
+      "sha256": "31A303803960D843E869D180805CB69AD04B022F8A1D7BCC782B4A799A5AC150"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221925-49c5a5a63d/stage/ib-tcg-dump.exe",
+      "bytes": 172544,
+      "sha256": "39A484F72C77B576A774343238CDFF6E8D20ED637F0A6312F606DDC39DABA288"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221925-49c5a5a63d/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 661868,
+      "sha256": "1C2C59DD7015DB37843218F3ACF579FCF9B98475A9E085EB0F5B077EFE635ADA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-221925-49c5a5a63d/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "104E09082998FF4445AB69FD86063DC2B37618536B8BABD8D7B7698082AFCA85"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222146-8ed58a0414/cleanup.json",
+      "bytes": 5813,
+      "sha256": "D5C8600A06183D7CBD92E5BB2EA77DAA55CD27F7C6992851B78EA4AC5E9611B4"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222146-8ed58a0414/error.json",
+      "bytes": 347,
+      "sha256": "B7EF168C68F9274A3122A4D853BB5C379A429985662D3231DE0803512E96C783"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222146-8ed58a0414/evidence/kernel-metadata.json",
+      "bytes": 162137,
+      "sha256": "4539DF4BE291E989BBAB432F683383CE1D69C6B74238619883022FC0B28BB152"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222146-8ed58a0414/evidence/stderr.txt",
+      "bytes": 2011,
+      "sha256": "A8C68A94A0FCBECEC605F898E44E2EBC4EE4542FB70B7B129968C3D01C02157E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222146-8ed58a0414/evidence/stdout.txt",
+      "bytes": 2324,
+      "sha256": "60CB502EDA09B1466D183AB6DB645051266CC7173D5406009A80F469A0430819"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222146-8ed58a0414/guest-evidence.zip",
+      "bytes": 10195,
+      "sha256": "E5F51742400FA35EBE834C806AD414AC7AE60F185A37A5B1E023F685F043A8F5"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222146-8ed58a0414/request-metadata.json",
+      "bytes": 6197,
+      "sha256": "30B5FDEFCC6597997F841EA1BF371A7B8E18ED09195AF14A7FCA0A3EC9D1C4D6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222146-8ed58a0414/request-package.zip",
+      "bytes": 405399,
+      "sha256": "58251190B8EF3B45DA371C2FF473625204B71B0A7343D11E2D1AAAC1E6CCD2BE"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222146-8ed58a0414/request.json",
+      "bytes": 521,
+      "sha256": "CDA3D0B078DA1DF57FF7D65C91D1B5CCB406361D6985AB2327E181F980DF31C3"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222146-8ed58a0414/response-metadata.json",
+      "bytes": 713,
+      "sha256": "29B739F0B4C67EB6DAA98BD3F9AD4E50F28B2DDA2672DAE19641C9732CC79370"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222146-8ed58a0414/response.json",
+      "bytes": 640,
+      "sha256": "12948AF15C00DAE68ECF7E2F774F9FA7DAB428739F279702D983A5F8563B6C82"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222146-8ed58a0414/stage/ib-tcg-dump.exe",
+      "bytes": 172544,
+      "sha256": "39A484F72C77B576A774343238CDFF6E8D20ED637F0A6312F606DDC39DABA288"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222146-8ed58a0414/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 700241,
+      "sha256": "B239C83A22576E8020CEAFE2CE5D6CF72E58674BB294A410BA66827863127F22"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222319-1fbeae2c5e/cleanup.json",
+      "bytes": 5467,
+      "sha256": "16B6C747C51FB8B168A5F1CB7F2A221DFFB7148A27423018629F6FCBE6483B80"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222319-1fbeae2c5e/error.json",
+      "bytes": 316,
+      "sha256": "B9B88B3AFCBB1922FAEE84C45254C4BEE2BD721BD30CEB5B7D6896A998B1437C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222319-1fbeae2c5e/evidence/kernel-metadata.json",
+      "bytes": 152068,
+      "sha256": "482B1816580545B4BE5A21408B42618786F456FE5D55D58D5DDD876F5C1DB100"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222319-1fbeae2c5e/evidence/stderr.txt",
+      "bytes": 673,
+      "sha256": "C3074FEE9341A35151BEE132C048874596C1AC23BE27CE78BC1D95286F90B82C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222319-1fbeae2c5e/evidence/stdout.txt",
+      "bytes": 1230,
+      "sha256": "03317E87F212B1BB51499CF87C60C00AF023A3CDA962C84517CEBC99A6659FBE"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222319-1fbeae2c5e/guest-evidence.zip",
+      "bytes": 8791,
+      "sha256": "4485B3C3A279B75C1474A21E6A1B30ABFE2C6CF427F3A16D9D23F6DD0EEB9C15"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222319-1fbeae2c5e/request-metadata.json",
+      "bytes": 5957,
+      "sha256": "CF2FC95E8E5793C2B45AC0D5263EEA40F27CFEE552602EDB4E33827A1FE2E282"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222319-1fbeae2c5e/request-package.zip",
+      "bytes": 390956,
+      "sha256": "AEE94004435963BFF7DC7DAACB0E3806D3162F9C6494F151C40CD185BC643D86"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222319-1fbeae2c5e/request.json",
+      "bytes": 521,
+      "sha256": "9BAF2449AD42C8E39BB70B79623066839664695062187ADB0DC40EC983F0D648"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222319-1fbeae2c5e/response-metadata.json",
+      "bytes": 681,
+      "sha256": "ED3A4C2ABF333EDF3372F5983FB2A045F21B211242300C6BCD34A9359098BA4E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222319-1fbeae2c5e/response.json",
+      "bytes": 595,
+      "sha256": "18068891D0312B0C451E33B4046C1B664426F05A791200558A1C8CCE5B03A2CE"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222319-1fbeae2c5e/stage/ib-tcg-dump.exe",
+      "bytes": 172544,
+      "sha256": "39A484F72C77B576A774343238CDFF6E8D20ED637F0A6312F606DDC39DABA288"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222319-1fbeae2c5e/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 662798,
+      "sha256": "B59D04E55C66FAD0C56C34679F793F601D08CED034AFD3A06DE060A0084B2759"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222556-8caf1693c8/cleanup.json",
+      "bytes": 5813,
+      "sha256": "095D616C754656EAB25C581F9055E15142ED679F6B842A8D81CF6F1F5838039C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222556-8caf1693c8/evidence/kernel-metadata.json",
+      "bytes": 172565,
+      "sha256": "59FA2544F9005DC2ECE7657269055047E71C62EBB25CDD5725E97BBC883070DE"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222556-8caf1693c8/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222556-8caf1693c8/evidence/stdout.txt",
+      "bytes": 2409,
+      "sha256": "C1FF4029344C9965D9A0EDECE644FA611822F319B7C147C6C2CA0270130AFC25"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222556-8caf1693c8/guest-evidence.zip",
+      "bytes": 9761,
+      "sha256": "113246489406787815C4A7A9961D5EC6BCC4342679F5BC4C49D05FE1A4FCFAB8"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222556-8caf1693c8/request-metadata.json",
+      "bytes": 6197,
+      "sha256": "21E3F75068149530043DCC84B4096957CE28A03E6B8024545C6EF6FE91008D6B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222556-8caf1693c8/request-package.zip",
+      "bytes": 405684,
+      "sha256": "3F47FF27211BF66584A00BE6E95694EA0A10905D69CD47817D250D28CC5E2998"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222556-8caf1693c8/request.json",
+      "bytes": 521,
+      "sha256": "303BE1620D0EF657E9E12FC60D39F02AC5E1AFCBDF19E2708AB841EDFE8EA492"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222556-8caf1693c8/response-metadata.json",
+      "bytes": 669,
+      "sha256": "9E3E55EED4B163B8785BFB8050AA52B480C0208E6EC8EF847C43A17E1118101B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222556-8caf1693c8/response.json",
+      "bytes": 591,
+      "sha256": "A5C38A9134DB481321BB5CD82A46F8FE5AEE0FA13C745C6AE46CA8AFFD3A227E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222556-8caf1693c8/stage/ib-tcg-dump.exe",
+      "bytes": 172544,
+      "sha256": "39A484F72C77B576A774343238CDFF6E8D20ED637F0A6312F606DDC39DABA288"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222556-8caf1693c8/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 702024,
+      "sha256": "36EC1B9CEE56B5F09231CEB77F0247C14AC09FA9CFB4C5FB7F6B8D9B93C1D62A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222556-8caf1693c8/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "FA457A5C74E09A2B2DD7BF414A2D1007CF01D74265567EDB51DDA6EA00BCD9EF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/cleanup.json",
+      "bytes": 5583,
+      "sha256": "03FADE6B6D1B8674E057433BD8063773E82ACFE04D979544E77901B3A18AE46F"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/kernel-metadata.json",
+      "bytes": 194694,
+      "sha256": "3A8215F9221BF58274C77F737467884AA89340AD303DBB1220E2E566FF322888"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/evidence/stdout.txt",
+      "bytes": 1315,
+      "sha256": "5A91ABF6CB390FF28D8B5CE621CE28316637CFA60E376ADB646BA5F4714F5998"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/guest-evidence.zip",
+      "bytes": 10529,
+      "sha256": "1139FFB12CBF572D2F68C463AF9FF24D00347BEEAC572F26D985DAD8163A229D"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/request-metadata.json",
+      "bytes": 5957,
+      "sha256": "E2043F00A61C7B19BB08F95A1377B5B04A42B51E83B7016428BB3E847733DAE7"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/request-package.zip",
+      "bytes": 391466,
+      "sha256": "CA072F8D9CFE3CBEE50F2E44B5A2D35FEAF16B065C51099DD8ABCE3110A56401"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/request.json",
+      "bytes": 521,
+      "sha256": "2741FDE9B2E6FE580E0F1D3D81DA4A33C6CC6AC37D33A4F8B441F12D61E51C91"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/response-metadata.json",
+      "bytes": 670,
+      "sha256": "6B9A085355E127402A38D75DAFA735558D5604B4483CAB93C571760D9C011C53"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/response.json",
+      "bytes": 592,
+      "sha256": "017A46470AF990F6D39241E06A59ECF11E9C87495AF7CABD0BC24E99EA8B25BF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/stage/ib-tcg-dump.exe",
+      "bytes": 172544,
+      "sha256": "39A484F72C77B576A774343238CDFF6E8D20ED637F0A6312F606DDC39DABA288"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 665014,
+      "sha256": "685AB6FF0810795EFDC2B6D3C830949DA01ED67E1F8B7F4A5D07986BDCC285DF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222702-f3417d5f41/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "FEA391F3057E513C9610E65631B6C818B98E2A5047388347AE71E62E5F5E100A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222834-d92e25a7b7/cleanup.json",
+      "bytes": 5467,
+      "sha256": "12EB3BF8B4176D3C0241C52B6CC7CA7161F637AC39DADB34CB4983643B978E21"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222834-d92e25a7b7/evidence/kernel-metadata.json",
+      "bytes": 150102,
+      "sha256": "8487366814AE469223B218828CC6B681C956DB54054A2F2479E9D934918AAFD1"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222834-d92e25a7b7/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222834-d92e25a7b7/evidence/stdout.txt",
+      "bytes": 1762,
+      "sha256": "BE8E87DE0AEC1860B3F0D9B5044855FA32D653430E144725FDE1E160506F8AED"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222834-d92e25a7b7/guest-evidence.zip",
+      "bytes": 8324,
+      "sha256": "7B1204FAFE56BAB077736F510F9CC4A3E6575CFB6F7EA5FD47F390145EF3E124"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222834-d92e25a7b7/request-metadata.json",
+      "bytes": 5957,
+      "sha256": "C44A63EDC24CB9A4C818CBFB0A80B114325BDED94FBB1E126C6C26AB7E14A8C2"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222834-d92e25a7b7/request-package.zip",
+      "bytes": 391499,
+      "sha256": "0B2D74EFCDBCF6F5275FFE45B21FCFF2A160496AB31A193471521EF9650F2585"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222834-d92e25a7b7/request.json",
+      "bytes": 521,
+      "sha256": "9536A544F951FE23C0077A6EDB1D8659ACD044E08AD31A8C1F2C48BA4DE8D4CE"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222834-d92e25a7b7/response-metadata.json",
+      "bytes": 669,
+      "sha256": "387665398AD44CF37E021D32142449E64A4AB286A94AA27FE080B6849DCFDE1E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222834-d92e25a7b7/response.json",
+      "bytes": 591,
+      "sha256": "09767E72689CD8E7B2F9411196E64F86FF63027EFF26C31D07B86CB6794DE946"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222834-d92e25a7b7/stage/ib-tcg-dump.exe",
+      "bytes": 172544,
+      "sha256": "39A484F72C77B576A774343238CDFF6E8D20ED637F0A6312F606DDC39DABA288"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222834-d92e25a7b7/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 665006,
+      "sha256": "15FDDD21FDB3B629DEEFADA8C00F0B21F55A476D5EC1F1985E61E5AD744322CA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-222834-d92e25a7b7/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "B207AFA0ACD84348A77E5A3AE6B5B5A9B05A8F45FCE19FFF5E2F3F7A727F585E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223034-5d241ed822/cleanup.json",
+      "bytes": 5813,
+      "sha256": "DD6E107A9FC6CC5E2F81EB9FB6B89BDCA7E04A5DC382F12C79BA7E53D46A5CFA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223034-5d241ed822/evidence/kernel-metadata.json",
+      "bytes": 172565,
+      "sha256": "8C67F7247E76DA2C3F4C6588782753CB782423271D27A19384177CA37059FEE9"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223034-5d241ed822/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223034-5d241ed822/evidence/stdout.txt",
+      "bytes": 2409,
+      "sha256": "B9E32E578C00BC26C5AD8965507E54AFE31DE7A0AFFC395C1F5B8BCECA05FD1A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223034-5d241ed822/guest-evidence.zip",
+      "bytes": 9774,
+      "sha256": "0358827FCB4FCF7A793BE2DE0B7CEAF7E998D255B35B5548BE4EEAA3723F0E92"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223034-5d241ed822/request-metadata.json",
+      "bytes": 6197,
+      "sha256": "28623B0F84EDDCDA0F7112AFD55771019E38EEC3E5278E457C02F8529F7C8B0A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223034-5d241ed822/request-package.zip",
+      "bytes": 406736,
+      "sha256": "B811E8C3699BB6D3A291A71ADDA60C181F720BEFA22FF74BB9181B5EC24D6657"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223034-5d241ed822/request.json",
+      "bytes": 521,
+      "sha256": "3EB59F459213CC2F9BB4AF3453AD376D9DCA3E06EA3311DABBBD1527508F215C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223034-5d241ed822/response-metadata.json",
+      "bytes": 669,
+      "sha256": "07A4427F0FD4708FAC14A0D2ED58DBF9B38B1A13518B5B8D81D83CC3496BCFD5"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223034-5d241ed822/response.json",
+      "bytes": 591,
+      "sha256": "E6E2DDAED8FC437F1707A1F98F1E2D9AB1B6E4103114F28AEBF9EAE0697A3C77"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223034-5d241ed822/stage/ib-tcg-dump.exe",
+      "bytes": 172544,
+      "sha256": "39A484F72C77B576A774343238CDFF6E8D20ED637F0A6312F606DDC39DABA288"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223034-5d241ed822/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 704338,
+      "sha256": "CE72D22463D3CCD177B6383D0E6402DE529E446FDFCAE36F0CEDED0476C00A55"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223034-5d241ed822/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "AF02F01FC41C576628A53BDE73CEFFB8B24704B1F95FD4FEFBEFA1A404AC0ACC"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223253-6a04ea6788/cleanup.json",
+      "bytes": 5467,
+      "sha256": "CC0FB95C537C00799EFFBFF3611ECC5E0AAEAFF55A4400AC0C4145B4A069EAF2"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223253-6a04ea6788/error.json",
+      "bytes": 287,
+      "sha256": "BAAB430C6F4FAE0075D6CAD1343DAD063DA8CC68EBA5C0F58DC3CAAAE06CBACE"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223253-6a04ea6788/evidence/kernel-metadata.json",
+      "bytes": 152886,
+      "sha256": "D29A5F3E9463CB4B66D34D22A943629BAC19FD1F88288B4AFFE5E96519A40524"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223253-6a04ea6788/evidence/stderr.txt",
+      "bytes": 181,
+      "sha256": "14E7B0B013DFAC56230C6E73FBA17D8396DB11CC493CDF8F7649445CF563E290"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223253-6a04ea6788/evidence/stdout.txt",
+      "bytes": 1230,
+      "sha256": "7F29BB2016B1DC827022606352DB6EC878F5CAC06EB295AE2350C8B7F559654E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223253-6a04ea6788/guest-evidence.zip",
+      "bytes": 8783,
+      "sha256": "E5A9F56BCE6818E1D2EF884D9A41F420539B7A0AFB2917DB8B2EE2F99D3A95FC"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223253-6a04ea6788/request-metadata.json",
+      "bytes": 5957,
+      "sha256": "5E6C560C497D78B8944AB01CD7268171A1422EF7BE875C656AF82A6492849F46"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223253-6a04ea6788/request-package.zip",
+      "bytes": 391463,
+      "sha256": "C4E43754EC11C746E865A274FF3DF32FA983016CC5B890412531E5292130B0E1"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223253-6a04ea6788/request.json",
+      "bytes": 521,
+      "sha256": "5C14105A75E344A63BE40D604C2E75015CFD079D5D335248FFBE9BC8C5579B22"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223253-6a04ea6788/response-metadata.json",
+      "bytes": 652,
+      "sha256": "638B52B388AA08D602858AB867440F641B43BAB10D5407838740E3BABC667060"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223253-6a04ea6788/response.json",
+      "bytes": 567,
+      "sha256": "937631DE6F11F23126DD073AF329CEDF6DF0AD4C05903E021891C9E6DF512B3E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223253-6a04ea6788/stage/ib-tcg-dump.exe",
+      "bytes": 172544,
+      "sha256": "39A484F72C77B576A774343238CDFF6E8D20ED637F0A6312F606DDC39DABA288"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223253-6a04ea6788/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 665018,
+      "sha256": "3DB5335CF9F74D3FC3766EC0DF9A9AE280A3B99E339F7DEDEE5893B5CDB87051"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223449-4ff4fa3777/cleanup.json",
+      "bytes": 5583,
+      "sha256": "E64AE273FEEFD22DEBF5320DE9DE7702A5C388D921458AE9D3A199DDC7F4D6A8"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223449-4ff4fa3777/evidence/kernel-metadata.json",
+      "bytes": 164562,
+      "sha256": "ABD44B2DDEA7BC753A0ED2528B6DD5941C952C5385BA02A67E3F5174DEC827C0"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223449-4ff4fa3777/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223449-4ff4fa3777/evidence/stdout.txt",
+      "bytes": 1813,
+      "sha256": "DF0863203A22CD1E7852EFAE063DCB9213FE56AD0C1D071E0A2E6338E31F5860"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223449-4ff4fa3777/guest-evidence.zip",
+      "bytes": 9315,
+      "sha256": "4CA90236C557F1ECA76F5CD3BB89D01A7C2A6669FDB5A5CE2A4B599813722FA3"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223449-4ff4fa3777/request-metadata.json",
+      "bytes": 5957,
+      "sha256": "EF01BBD9BAEA8F9CF3A3C70B6E168C61B53E43CCB51C9A555C27B61D6EB5448A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223449-4ff4fa3777/request-package.zip",
+      "bytes": 391696,
+      "sha256": "565D0229ACAD653855BA1EE776780078EA77450B943BEEF5C8A55E137E1DDB33"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223449-4ff4fa3777/request.json",
+      "bytes": 521,
+      "sha256": "C0ABAE43904CA31DC83895A217ACA6B61B8FBF2174243519D9A29A0B617C390C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223449-4ff4fa3777/response-metadata.json",
+      "bytes": 669,
+      "sha256": "0530B6B7490045A6949C3AB31F62DB9AFD9B4716DF22DC4BAB10B5E854689651"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223449-4ff4fa3777/response.json",
+      "bytes": 591,
+      "sha256": "2610D6F16ED864A80E5434A65D3C91A3BBD81632F72C59E4CB16DB8F8E8B7A3F"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223449-4ff4fa3777/stage/ib-tcg-dump.exe",
+      "bytes": 172544,
+      "sha256": "39A484F72C77B576A774343238CDFF6E8D20ED637F0A6312F606DDC39DABA288"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223449-4ff4fa3777/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 666231,
+      "sha256": "9114E5D6EFC7A66DC5DC3492F5CC35B04BF118FD90E4E6E60BFBCF202CFB4C22"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223449-4ff4fa3777/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "3BB998CCE8547E4121B37AE9C385108765B5AE129B42CFC8A47D62E05C50594A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/cleanup.json",
+      "bytes": 5583,
+      "sha256": "1847FAC23A33096810DEE7034D5EB5C59BC0DA6FB972AB54683B0E99ED299C2F"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/error.json",
+      "bytes": 2427,
+      "sha256": "AF139DA1E6371EC9B2A6EAC0BFE3D04F5C8FACCF1EF33C54E48F638F6AB90839"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json",
+      "bytes": 200072,
+      "sha256": "4DFD8F324E59D01F345ADA46AC7487E046CD8B2DD0D522E66173446102DEFCEF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/stderr.txt",
+      "bytes": 4397,
+      "sha256": "AB23BF3B62BBC3DE1A6BF5ECC8D33FC39439DF3A14FDE7BFF32788312A9C24EA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/stdout.txt",
+      "bytes": 1230,
+      "sha256": "98B1FDB0141F95F370ED5857E319F9599466E64462DD1F88DA93AD777D8C6B21"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/guest-evidence.zip",
+      "bytes": 11618,
+      "sha256": "23ECFCE8FDA5DEFBACB69DB8DDDC54D4C786C67AEB4E82B70F98FB066FA2FB82"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/request-metadata.json",
+      "bytes": 5957,
+      "sha256": "B745051D9BD079121D87FDA33BDFCD68D02A9A22BB11D554CEF54D7927442302"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/request-package.zip",
+      "bytes": 391675,
+      "sha256": "A2D258EC222CB7DC405D47AB1BB6DA430FD07E7EFBF6254DF78F268F8884AA3A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/request.json",
+      "bytes": 521,
+      "sha256": "AD3167A773BB1931DAD2A9F02F33CA1E5D1DF1CC1CAFA4484CDE1D7E4DF5B648"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/response-metadata.json",
+      "bytes": 2793,
+      "sha256": "42D3E06A3022A9C00131067B35A162978156EA93C43613893F92E1B2244E9411"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/response.json",
+      "bytes": 3380,
+      "sha256": "8CB49336B7FBD531CAE05F870FE8CEE0E76DF0B5A83090E6AD41586C739086FC"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/stage/ib-tcg-dump.exe",
+      "bytes": 172544,
+      "sha256": "39A484F72C77B576A774343238CDFF6E8D20ED637F0A6312F606DDC39DABA288"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 666243,
+      "sha256": "69FA921F0FB19D443447DFAB829E55A30DCDBF69B2F2AA201075413468900205"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223720-c41e028351/cleanup.json",
+      "bytes": 5467,
+      "sha256": "4F3E32DD83E71099F6756662923FC1E5AAEE7FCDD691949873C79300F00053A2"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223720-c41e028351/evidence/kernel-metadata.json",
+      "bytes": 150102,
+      "sha256": "2AFC0B54C5D9754093338F241566546A611E89DEB986AEAC368B156AD792BDEF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223720-c41e028351/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223720-c41e028351/evidence/stdout.txt",
+      "bytes": 1762,
+      "sha256": "EF8ED154273364CEE1DAF9CD17F86961B5CDC98BCAC37CF553BEF0CC9FA0E02A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223720-c41e028351/guest-evidence.zip",
+      "bytes": 8341,
+      "sha256": "8B26874EF600BE50C852294A5BECAAB7686CA2CB4CB7A8E1D8D4AFEEF5668233"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223720-c41e028351/request-metadata.json",
+      "bytes": 5957,
+      "sha256": "74A8E57BCCE34E3506E7FB6096BBEA0FA47B3C69E12F7E37B9F1FEBD7FF5E0AB"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223720-c41e028351/request-package.zip",
+      "bytes": 391708,
+      "sha256": "0EC452AC25D1ABF5BB73A71A4F81656B531BDE8831910D7CAA28420B817F3764"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223720-c41e028351/request.json",
+      "bytes": 521,
+      "sha256": "4A63BC0CC5402B838F721034A252F3317BDC72811955C3B783DA9C0711968754"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223720-c41e028351/response-metadata.json",
+      "bytes": 669,
+      "sha256": "CC2BB0AA36CAED2244C27B7046FF86F2C41C3662D4C97AF24F624578DF56654D"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223720-c41e028351/response.json",
+      "bytes": 591,
+      "sha256": "351278CE8AFB6B9277D4BAAB20157BE512F321DE356F7958BB5C3E5CF2C8B9CC"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223720-c41e028351/stage/ib-tcg-dump.exe",
+      "bytes": 172544,
+      "sha256": "39A484F72C77B576A774343238CDFF6E8D20ED637F0A6312F606DDC39DABA288"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223720-c41e028351/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 666231,
+      "sha256": "7E3497ADED0FC56005C02AC094E36688E51CDEE8093AF8D49E78A1B8E75C24A4"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223720-c41e028351/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "4619C735DCFE5CDF2B495329DE6C0A59DEE037773D10BB57FF6441787E8AEE34"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223843-148ba500b7/cleanup.json",
+      "bytes": 5583,
+      "sha256": "AF461380D811B3E6507FA13D57191EEF7152B1AB8A075527E3C26DFBC197057B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223843-148ba500b7/evidence/kernel-metadata.json",
+      "bytes": 157647,
+      "sha256": "0B12AA67508719D9AF71BDA325F15DDCADC398ACCB47401E2E2086B790C33D67"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223843-148ba500b7/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223843-148ba500b7/evidence/stdout.txt",
+      "bytes": 2183,
+      "sha256": "9994C5E1B6054139F04900D795737CA31CF6CD39C8EB2295D04435FFC360D130"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223843-148ba500b7/guest-evidence.zip",
+      "bytes": 9236,
+      "sha256": "AD89F0283A09DD8B01A2464FD5C0BE224C8CE588974B8D612A4A60C6485E373E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223843-148ba500b7/request-metadata.json",
+      "bytes": 5957,
+      "sha256": "4603CD995EB00D64501D005B469AD7012B93D7949D5C1BE8ADA3BD36B7F404D2"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223843-148ba500b7/request-package.zip",
+      "bytes": 391830,
+      "sha256": "1C383704F21869CD98AC911DC621CDF1C8E4FA38EA3210A06018DBCA8B3710D0"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223843-148ba500b7/request.json",
+      "bytes": 521,
+      "sha256": "9748311DF9A268CE1ED72E8A2A0A5AC6CB02A08138B0EB04C993B53255F2E92C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223843-148ba500b7/response-metadata.json",
+      "bytes": 669,
+      "sha256": "FB7814F6DA3161FB44A51262B4F9D73C12900204AD82323DF5D3144BBCA6EC3B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223843-148ba500b7/response.json",
+      "bytes": 591,
+      "sha256": "3A1CAAE06AE4D2D9B8454276D46DAED73086B866015376450DE728B6C2B2D03F"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223843-148ba500b7/stage/ib-tcg-dump.exe",
+      "bytes": 172544,
+      "sha256": "39A484F72C77B576A774343238CDFF6E8D20ED637F0A6312F606DDC39DABA288"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223843-148ba500b7/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 666239,
+      "sha256": "AED3CCD03A9F1E7B0EB3884D1E566CAEA963550CF367CAA3E7A1ADE1499FF976"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-223843-148ba500b7/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "8CA7A79B96F5ECD1E12447AC0A088CB16DEB3E0E1ED691F009FD3AB9A53362D6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/cleanup.json",
+      "bytes": 5583,
+      "sha256": "6D5505DC86B0BDF4958822F2E4E9AE03A9FC4BCAC0D329B065E42B19057BE0AD"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json",
+      "bytes": 179487,
+      "sha256": "9D782E9971C88CF13EBDFC5691E9E98CA34A4AED98B420E4FDB067AE9662E206"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/stdout.txt",
+      "bytes": 1286,
+      "sha256": "60A3305E28E736962CEBDC3C960314DB387CC29EA8492D445AC8EC4F3842E71F"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/guest-evidence.zip",
+      "bytes": 9652,
+      "sha256": "CA7D888273A0976B91397D19386EED2F5EBEF85CB7719B10BB49085A7BBD811D"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/request-metadata.json",
+      "bytes": 5957,
+      "sha256": "05FD75D4A4AC1DC7318860782992DCD9D7E2812D48D9BC7412A46ADA4887D66D"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/request-package.zip",
+      "bytes": 392151,
+      "sha256": "BA100CE018C9366568D66037C63439A2F1CE541F0BCBE88DDBBFC69CA447A5D7"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/request.json",
+      "bytes": 521,
+      "sha256": "7E9DE32C1CE6AB760B8361FB299E2B577FD5DF690536F7048D0024590BE2744E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/response-metadata.json",
+      "bytes": 669,
+      "sha256": "6E79D9F9FD71F2B6426D63271069AA6189098E05548C2B95A909F9581A76A0BB"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/response.json",
+      "bytes": 591,
+      "sha256": "A605BD1A6424D96A96D3011989BD3A0442AED72EBBE8E6780932330AB26414AF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/stage/ib-tcg-dump.exe",
+      "bytes": 172544,
+      "sha256": "39A484F72C77B576A774343238CDFF6E8D20ED637F0A6312F606DDC39DABA288"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 667432,
+      "sha256": "99A46F8847B48E8065D9FF4EE939E5A4A7534145EB01698279D9B3C416711985"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "9B78037E37F23F16099B275FD9A2B039B359794D20B4859E6EE3D9DD55AC8B8A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vm-control.ps1",
+      "bytes": 8780,
+      "sha256": "8443C35571EBFFE8E7085C9026F71A62F2FBABACB093FBBBE1382874DFAC17CE"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vm-nic-config.json",
+      "bytes": 1324,
+      "sha256": "9AF650C34B5BBAA30AE43918C2F13D5235F24993734C3888B55D3905AF8B336D"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.checkToolsState.20261017T220126957Z.4e2bc847143242b29aa5ea6430e96daa.json",
+      "bytes": 476,
+      "sha256": "F60EC62CBE23334B029F5179EE34FEFC3946D4BDA9E16636044713BBB3565E11"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.clone.20261017T215830842Z.999a91c052e447a6b750846e4a4bbbb5.json",
+      "bytes": 775,
+      "sha256": "37615F81F3134EC2CB25590EE524C2DB52D8AF454E8DCF17C2ED0BE2C9ECD107"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.listSnapshots.20261017T215546818Z.78046c02157845b0b833ecfb15cbc6dd.json",
+      "bytes": 620,
+      "sha256": "7F7C51214E74A53A7B9761317903264139B956373A15453BEE8E144A834FC893"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.readVariable.20261017T220327656Z.f1a08daa1b04415bb170d78dccd94a2f.json",
+      "bytes": 862,
+      "sha256": "872F6F4B6C8AD2943E454ABB137B35AE4FCCFF22481488285DF4D9607521A579"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.revertToSnapshot.20261017T221308121Z.53a84f160338400c9c293518a5d2702f.json",
+      "bytes": 522,
+      "sha256": "D5FFBA123B8E7D16076F81596A22E25B98D7E70BC0716D3B8339143A40F4A8CE"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.revertToSnapshot.20261017T222046179Z.9f733f8393404996a97378a778c7cf43.json",
+      "bytes": 522,
+      "sha256": "E0811584C7774D1368D9CEE375060E8306FEE1AEAA14A7CCBAC54868DEA45A30"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.revertToSnapshot.20261017T222522013Z.ce3f4fb7d3e44d1988cb22198671f4c0.json",
+      "bytes": 522,
+      "sha256": "F1DFBEB08F46B1FA104546CA77E8E4EF5A8E9692FF99FE1746187F1C14607045"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.revertToSnapshot.20261017T222932384Z.7918d6f9c65a41a98ea6ea7bdb0f19c6.json",
+      "bytes": 522,
+      "sha256": "1AE9C333E95BCEBD9B36AED105E92B4CCA0D04273B88EB8A9012538521C480E1"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.revertToSnapshot.20261017T224309072Z.636bbabb36094d269fbebca5c0f1ae60.json",
+      "bytes": 520,
+      "sha256": "00F90A2089E2E277DB9BDEBD1E5AD4506B6F44830E279D73C280BCEB0B0120BD"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.snapshot.20261017T220832651Z.f59aeec0d36b41c2a01dd9fa26e0b57b.json",
+      "bytes": 508,
+      "sha256": "00F6428C6810DFEBF56F70E3005498E4EFC46739B1BBD4406024CD02B9DB083B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.snapshot.20261017T220852336Z.34ad60d7cf5f4d38a41acd8793b0d2b5.json",
+      "bytes": 512,
+      "sha256": "D73694595A54ADB7E8F74D5E837D4BF30B3FFE1F955BFEC2079569527CAB1047"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.snapshot.20261017T221123905Z.36ab2714197e4032bb4ed8b74275f509.json",
+      "bytes": 514,
+      "sha256": "BBE4A4CF29AEC63301602CE2734FCCC4979316F9FCE8B88842D0C718A2211CBD"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.start.20261017T220111378Z.d55d11f6febe4fcfb165c4c5dfe64a08.json",
+      "bytes": 485,
+      "sha256": "58D43AFCE8156F97923B6BC330AC6A7C6A43689FEC1FA45E938EB5CF8DBDEC6E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.start.20261017T220858613Z.08cc95ec610e4ed4b9ed11868a14c596.json",
+      "bytes": 485,
+      "sha256": "6B53BE2E3AEEA281CE292960A70AB2ADE6C27436016AFFE919F52B68E5FD7159"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.start.20261017T221129309Z.53a6266085c0477793b1308c9590fa89.json",
+      "bytes": 485,
+      "sha256": "9D49662B0FF0F26DC9CD5BDE3319FEAD39764DA256D5D95B38096D6AC2D0186B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.start.20261017T221312540Z.0f69428d5d254c79bc04d8c3f42ab060.json",
+      "bytes": 485,
+      "sha256": "1B869E70BAB55104C545C55A58368A7D3BEDAD05E0522ED1792127C28DC8B67C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.start.20261017T221512481Z.bdcb8c2b090546d3bed0a9bf4d5e2c9f.json",
+      "bytes": 485,
+      "sha256": "92447126D580B55AACE80650124F4DBE8D907EE27717BF4121C92B0C170867AA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.start.20261017T222050786Z.0e0bc2991b7b44e1b8f87aea183c012a.json",
+      "bytes": 485,
+      "sha256": "323983684D62C606183DBD69BA49CBA3255D5D3FBE6CF4D30CBC0236D1A38132"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.start.20261017T222526249Z.8819e7641c4f42b896d7203720b39269.json",
+      "bytes": 485,
+      "sha256": "D741AB340F41EE4920DE273BE8C4FA992D6ED63A69AAFC6F71CE23ED14508B15"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.start.20261017T222935939Z.4acd5bb502ea48ebad46220d90ef8a2f.json",
+      "bytes": 485,
+      "sha256": "AF6DFF349C98E50FC482573BCC3FA0E570847579EA898C2FA93327A2F0DD95D0"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.start.20261017T223216362Z.1d24a3ad8fc446dabeeecb20bc988ffa.json",
+      "bytes": 485,
+      "sha256": "1603884726AC00BBF189E0992677A6FC758CF4B6DF9342CFE434DA639A6891CF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.start.20261017T224118284Z.3d77259ac4e34c6b9369e6bc2fdef3d7.json",
+      "bytes": 485,
+      "sha256": "8A49449252C36312CBF65D7C5E5CBFA1BC930BA95D2E6FAB8BEA03E423863BBA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.stop.20261017T220846299Z.41b98daa3fb140459df3c00ea65420ec.json",
+      "bytes": 483,
+      "sha256": "81A43E0970E808561333EB0497CC6D7C6A7C4407446402E925E99E7AC9DC5344"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.stop.20261017T221113626Z.d96eb0826114482cad638cc9500a0946.json",
+      "bytes": 483,
+      "sha256": "03A5F77B8FCC88BC35EDEEF1BC448F7438921387805606A6DB386CE107E10087"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.stop.20261017T221304445Z.0a3c539bd56d4d73ad3eb81cb8cb57b1.json",
+      "bytes": 483,
+      "sha256": "1536076B6015E5DBFBF413E947A06F06E4F435E9F787A9AF5C09727B565FADEF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.stop.20261017T221502284Z.6e4ddd3398364d0f94d2a530b9bfc606.json",
+      "bytes": 483,
+      "sha256": "A31A683A79A730E2351760FABFB7E76892F59A2A0053CB62350A0D5C3509D446"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.stop.20261017T222042648Z.82cfcabf2746450b8fb0db3cff3baef8.json",
+      "bytes": 483,
+      "sha256": "92380FD89AB2A3BFFE85CC6CD7428F79D4146CDF8A3D6DBA3DCF07D8F17D9A8A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.stop.20261017T222518386Z.1cae3157f7e848949c2678161b5c2aab.json",
+      "bytes": 483,
+      "sha256": "729B38B5C7BEE8E4A12ADF2AEF9ECAEA4956F40F2D3FFB4130966716C2C10222"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.stop.20261017T222928670Z.f9920d144d1e4d298cd4f42fb8dc7372.json",
+      "bytes": 483,
+      "sha256": "41EA16526D6890423563C1C844BB85BBC8991211F6FA180577250E0755CBBC81"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.stop.20261017T223213033Z.1ede11565907408a9e6b93fc38efe088.json",
+      "bytes": 483,
+      "sha256": "1B3B51B1125BF74891D077B220E39AB50EB7B96DAB9D65582100A8EED709C3A5"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.stop.20261017T224114701Z.ecaaf01db1e64de7aa45375873acf569.json",
+      "bytes": 483,
+      "sha256": "1472A9F547CD9FC5B0CEB4FB5445625035DE561C16D741735D5ABC5800A8E5EA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.stop.20261017T224308081Z.1127d31ba46645e3b8c751b8fec90972.json",
+      "bytes": 483,
+      "sha256": "6AE3EC6D5F0B801FC05DCAF590DD44E4AB4F8285981660C15AB843CD2B503F9D"
+    }
+  ],
+  "sourceFiles": [
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/device_filter/CMakeLists.txt",
+      "bytes": 7629,
+      "sha256": "4300E5E13828C3E2249DF1B7D8366826A862AB2EC410ADB8D4812F2E3B5306F6",
+      "repositoryPath": "spoof-handoff/tools/device_filter/CMakeLists.txt"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/device_filter/nic/nic_filter.c",
+      "bytes": 20181,
+      "sha256": "0E9F315BE22EEEFA71306B5EB0DDFB7B6DC8A6D6C20AFECF70E300156EDCD1F3",
+      "repositoryPath": "spoof-handoff/tools/device_filter/nic/nic_filter.c"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/device_filter/nic/nic_policy.c",
+      "bytes": 4918,
+      "sha256": "45076A4AE3489E7CEAEDB196CBDA97C3C2F37C7EF8DC89B69FD5BD2D9D5D3D31",
+      "repositoryPath": "spoof-handoff/tools/device_filter/nic/nic_policy.c"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/device_filter/nic/test_vm_profile.c",
+      "bytes": 5412,
+      "sha256": "57153946657396F726479AFCAB8E80084C80608DC3A53AD576F3F5D6CF7DA7CB",
+      "repositoryPath": "spoof-handoff/tools/device_filter/nic/test_vm_profile.c"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/device_vm/invoke-mailbox.ps1",
+      "bytes": 43857,
+      "sha256": "2AEC3717693EC6957926A8AEC12E6A2109C209F3F1A93A1DB6F7DC8F91EF72D4",
+      "repositoryPath": "spoof-handoff/tools/device_vm/invoke-mailbox.ps1"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/docs/NIC_VM_VALIDATION.md",
+      "bytes": 6302,
+      "sha256": "62B4003CFD755A19B44FEBB512756578A87D1307808E56BBD11318E9F18ADF1E",
+      "repositoryPath": "spoof-handoff/docs/NIC_VM_VALIDATION.md"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/analyze.py",
+      "bytes": 12103,
+      "sha256": "9C3D02A4E13EC648977B8BE764BDA9D78F61AA92EA9E40B79FB080F1DE49C760",
+      "repositoryPath": "spoof-handoff/tools/nic_vm/analyze.py"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/build-nic.ps1",
+      "bytes": 28893,
+      "sha256": "5536CF19BC85EBF055AE1AC6B8655E9639DECE4AC52CDC50506A60165CBFBB1A",
+      "repositoryPath": "spoof-handoff/tools/nic_vm/build-nic.ps1"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/capture-host-state.ps1",
+      "bytes": 3784,
+      "sha256": "9BC72289EC0DFEAA0D225476CF34305AFD73FD67D0DDBE36DE98D93567991986",
+      "repositoryPath": "spoof-handoff/tools/nic_vm/capture-host-state.ps1"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/guest.ps1",
+      "bytes": 58733,
+      "sha256": "DFEA30410B4BB4B55AA41E28A2109DBE8203C2F6C9C355B1D0E1082887FFBA8C",
+      "repositoryPath": "spoof-handoff/tools/nic_vm/guest.ps1"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/invoke-phase.ps1",
+      "bytes": 2041,
+      "sha256": "6DA79E3017211AE90EE607DB9D56F7380CB6AA62E7B3CE119A0C8A3255317FEB",
+      "repositoryPath": "spoof-handoff/tools/nic_vm/invoke-phase.ps1"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/recover.ps1",
+      "bytes": 2824,
+      "sha256": "10F6D2A5138368B68F345B77F91432CC6977E7DFDED2D836BC5C4045B2689C99",
+      "repositoryPath": "spoof-handoff/tools/nic_vm/recover.ps1"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/render-guest.ps1",
+      "bytes": 11687,
+      "sha256": "24750D80581FCCAF0EF69778516B34D628A19DEC428927333D6239E6D35ABF93",
+      "repositoryPath": "spoof-handoff/tools/nic_vm/render-guest.ps1"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/tests.ps1",
+      "bytes": 21327,
+      "sha256": "DFEDE736587C405394E64D17FBE5ECF18E098E40D215A2CB1B65C8C9198AF968",
+      "repositoryPath": "spoof-handoff/tools/nic_vm/tests.ps1"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm_probe/CMakeLists.txt",
+      "bytes": 797,
+      "sha256": "B3C5885112CA21622FFE79ACC574471C8254ACFB0F7B328A64B1C606EEB9D203",
+      "repositoryPath": "spoof-handoff/tools/nic_vm_probe/CMakeLists.txt"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm_probe/native_read.cpp",
+      "bytes": 29498,
+      "sha256": "EFBC8E7ABF767F03A525187D49E6E775E432AA741A972E8A2D1BAD53133B787E",
+      "repositoryPath": "spoof-handoff/tools/nic_vm_probe/native_read.cpp"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm_probe/read-host.ps1",
+      "bytes": 21230,
+      "sha256": "DC167DBC145310EE5EF63A04D423073D9652649AC5FA2E2F47F1E5D8863FC47E",
+      "repositoryPath": "spoof-handoff/tools/nic_vm_probe/read-host.ps1"
+    }
+  ],
+  "packageAndReaderArtifacts": [
+    {
+      "path": "spoof-handoff/artifacts/nic-vm-20261017/build/20261017T220516Z.cc099596a214/package/client_nic_filter.cat",
+      "bytes": 2455,
+      "sha256": "7FAF298754574219F24D38F0278AB6525983A92D62DDDFE8E7A84AE2B8433F1E"
+    },
+    {
+      "path": "spoof-handoff/artifacts/nic-vm-20261017/build/20261017T220516Z.cc099596a214/package/client_nic_filter.inf",
+      "bytes": 1570,
+      "sha256": "05E76BFCFF07724E45EB67451BA8CB842182C273C615A9397BA28E3A9D06530D"
+    },
+    {
+      "path": "spoof-handoff/artifacts/nic-vm-20261017/build/20261017T220516Z.cc099596a214/package/client_nic_filter.sys",
+      "bytes": 15720,
+      "sha256": "CE2172C504E147A12DBA48E9B6335E04FFB6724152E8BC16E498CCAABBCC7B72"
+    },
+    {
+      "path": "spoof-handoff/artifacts/nic-vm-20261017/build/20261017T220544Z.bbb02da0f8ca/package/client_nic_filter.cat",
+      "bytes": 2455,
+      "sha256": "F7E2F4B5CBE3657595568E921928DC0265C37058AA820F9F7C4D9A66D0690627"
+    },
+    {
+      "path": "spoof-handoff/artifacts/nic-vm-20261017/build/20261017T220544Z.bbb02da0f8ca/package/client_nic_filter.inf",
+      "bytes": 1570,
+      "sha256": "05E76BFCFF07724E45EB67451BA8CB842182C273C615A9397BA28E3A9D06530D"
+    },
+    {
+      "path": "spoof-handoff/artifacts/nic-vm-20261017/build/20261017T220544Z.bbb02da0f8ca/package/client_nic_filter.sys",
+      "bytes": 16232,
+      "sha256": "EB327596761CAEFE71C234CB19AA9CF4BF90939B7227CCC5DFA0C566C727B1DD"
+    },
+    {
+      "path": "spoof-handoff/artifacts/nic-vm-20261017/build/20261017T222104Z.6e0f39d06115/package/client_nic_filter.cat",
+      "bytes": 2455,
+      "sha256": "E620895AFDF7AFEB84BC45CA6EA7A72155F5AAA4270144183079743B2E66C7E7"
+    },
+    {
+      "path": "spoof-handoff/artifacts/nic-vm-20261017/build/20261017T222104Z.6e0f39d06115/package/client_nic_filter.inf",
+      "bytes": 1570,
+      "sha256": "05E76BFCFF07724E45EB67451BA8CB842182C273C615A9397BA28E3A9D06530D"
+    },
+    {
+      "path": "spoof-handoff/artifacts/nic-vm-20261017/build/20261017T222104Z.6e0f39d06115/package/client_nic_filter.sys",
+      "bytes": 16744,
+      "sha256": "9A7DFCB911B29037A4E18328E380A46E1F668C42301F1CE88E2A6390A8907606"
+    },
+    {
+      "path": "spoof-handoff/artifacts/nic-vm-20261017/build/20261017T222450Z.401a85faede9/package/client_nic_filter.cat",
+      "bytes": 2455,
+      "sha256": "53ED9E63EE2AC38A25E6FE3E9304F1AD8A8863FBB29A9578A83F3F8375B6AB41"
+    },
+    {
+      "path": "spoof-handoff/artifacts/nic-vm-20261017/build/20261017T222450Z.401a85faede9/package/client_nic_filter.inf",
+      "bytes": 1570,
+      "sha256": "05E76BFCFF07724E45EB67451BA8CB842182C273C615A9397BA28E3A9D06530D"
+    },
+    {
+      "path": "spoof-handoff/artifacts/nic-vm-20261017/build/20261017T222450Z.401a85faede9/package/client_nic_filter.sys",
+      "bytes": 17256,
+      "sha256": "41068CAC92AB82F19B8A6C42BE4C7F53EFCC98E406FC937E976BD9834BF10755"
+    },
+    {
+      "path": "spoof-handoff/artifacts/nic-vm-20261017/build/20261017T222721Z.91c315a669dd/package/client_nic_filter.cat",
+      "bytes": 2455,
+      "sha256": "D3D242F3D96EEED83769476B63EDF90A782C96D0DBFB7BFC4969B00387310E1B"
+    },
+    {
+      "path": "spoof-handoff/artifacts/nic-vm-20261017/build/20261017T222721Z.91c315a669dd/package/client_nic_filter.inf",
+      "bytes": 1570,
+      "sha256": "05E76BFCFF07724E45EB67451BA8CB842182C273C615A9397BA28E3A9D06530D"
+    },
+    {
+      "path": "spoof-handoff/artifacts/nic-vm-20261017/build/20261017T222721Z.91c315a669dd/package/client_nic_filter.sys",
+      "bytes": 17768,
+      "sha256": "C85E26B98E152FD0753286557EADF23D747955077253D7400E832BBF6CA52B17"
+    },
+    {
+      "path": "spoof-handoff/artifacts/nic-vm-20261017/build/20261017T223024Z.b851f891c490/package/client_nic_filter.cat",
+      "bytes": 2455,
+      "sha256": "0E863D4519E05635489C9AD0E9CFD3407CD15FF250D01C711A55469172D63524"
+    },
+    {
+      "path": "spoof-handoff/artifacts/nic-vm-20261017/build/20261017T223024Z.b851f891c490/package/client_nic_filter.inf",
+      "bytes": 1570,
+      "sha256": "05E76BFCFF07724E45EB67451BA8CB842182C273C615A9397BA28E3A9D06530D"
+    },
+    {
+      "path": "spoof-handoff/artifacts/nic-vm-20261017/build/20261017T223024Z.b851f891c490/package/client_nic_filter.sys",
+      "bytes": 17768,
+      "sha256": "A089523FEB5F3F327B5565BF1D962DA65489FAAEE12E7C78B043A11E1E3844BF"
+    },
+    {
+      "path": "spoof-handoff/artifacts/nic-vm-20261017/native-build/Release/nic_native_read.exe",
+      "bytes": 339968,
+      "sha256": "F8C1E70170E419902BA958E1206A6388D915C3490011913DB7B7860E879E6C37"
+    },
+    {
+      "path": "spoof-handoff/artifacts/nic-vm-20261017/default-release-validation/cmake/Release/client_nic_filter.sys",
+      "bytes": 14336,
+      "sha256": "72DE9BD60CFC0D00C9A8FD4586672B95219DD561A0FA0A5FAE8218AAE1662146"
+    }
+  ],
+  "excluded": "VM disks, snapshots, credentials, signing private keys, compiler temporary files and generated build trees are not published."
+}

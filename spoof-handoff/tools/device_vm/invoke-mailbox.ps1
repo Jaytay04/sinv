@@ -12,6 +12,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$OutputDirectory,
 
+    [ValidateSet('Storage', 'Nic')]
+    [string]$TestProfile = 'Storage',
+
     [ValidateSet('Probe')]
     [string]$Action = 'Probe',
 
@@ -35,10 +38,11 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 $script:MainRepoRoot = 'C:\Users\jayli\OneDrive\Documents\Projects\hsinv'
+$script:EvidenceNamespace = if ($TestProfile -ceq 'Nic') { 'nic-vm-20261017' } else { 'device-vm-20261017' }
 $script:ExpectedOutputDirectory = Join-Path $script:MainRepoRoot `
-    'spoof-handoff\reports\device-vm-20261017'
+    ('spoof-handoff\reports\' + $script:EvidenceNamespace)
 $script:ExpectedVmxRoot = Join-Path $script:MainRepoRoot `
-    'spoof-handoff\artifacts\device-vm-20261017'
+    ('spoof-handoff\artifacts\' + $script:EvidenceNamespace)
 $script:ChunkBytes = 9000
 $script:ChunkChars = 12000
 $script:MaxPackageBytes = 4MB
@@ -816,7 +820,7 @@ function Assert-InputFiles {
     $OutputFull = Get-FullPath $OutputDirectory
     if (-not $OutputFull.Equals((Get-FullPath $script:ExpectedOutputDirectory),
             [StringComparison]::OrdinalIgnoreCase)) {
-        throw 'OutputDirectory must be exactly spoof-handoff/reports/device-vm-20261017 in the main checkout.'
+        throw ('OutputDirectory must be exactly the designated ' + $TestProfile + ' VM report directory in the main checkout.')
     }
     $OutputParent = Split-Path -Parent $OutputFull
     if (-not (Test-Path -LiteralPath $OutputParent -PathType Container)) {

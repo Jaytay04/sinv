@@ -1,5 +1,11 @@
 #include "nic_policy.h"
 
+#ifdef NIC_POLICY_PROFILE_HEADER
+#include NIC_POLICY_PROFILE_HEADER
+
+static const NIC_POLICY_BINDING g_bindings[NIC_POLICY_BINDING_COUNT] =
+    NIC_POLICY_PROFILE_BINDINGS;
+#else
 static const NIC_POLICY_BINDING g_bindings[NIC_POLICY_BINDING_COUNT] = {
     {
         "ROOT\\VMWARE\\0001",
@@ -22,6 +28,7 @@ static const NIC_POLICY_BINDING g_bindings[NIC_POLICY_BINDING_COUNT] = {
         {0x02, 0x90, 0x10, 0x20, 0x30, 0x43}
     }
 };
+#endif
 
 static unsigned char NicAsciiLower(unsigned char value)
 {

@@ -10,8 +10,24 @@
 #define NIC_FILTER_SPOOF_ENABLED 0
 #endif
 
+#ifndef NIC_FILTER_VM_DIAGNOSTICS
+#define NIC_FILTER_VM_DIAGNOSTICS 0
+#endif
+
+#ifndef NIC_FILTER_REGISTRATION_REVISION
+#define NIC_FILTER_REGISTRATION_REVISION 2
+#endif
+
 #if (NIC_FILTER_SPOOF_ENABLED != 0) && (NIC_FILTER_SPOOF_ENABLED != 1)
 #error NIC_FILTER_SPOOF_ENABLED must be 0 or 1.
+#endif
+
+#if (NIC_FILTER_VM_DIAGNOSTICS != 0) && (NIC_FILTER_VM_DIAGNOSTICS != 1)
+#error NIC_FILTER_VM_DIAGNOSTICS must be 0 or 1.
+#endif
+
+#if (NIC_FILTER_REGISTRATION_REVISION != 1) && (NIC_FILTER_REGISTRATION_REVISION != 2)
+#error NIC_FILTER_REGISTRATION_REVISION must be 1 or 2.
 #endif
 
 #if !defined(NDIS_SUPPORT_NDIS620) || !(NDIS_SUPPORT_NDIS620)
@@ -36,6 +52,143 @@ static const DEVPROPKEY g_device_instance_id_key = {
     {0x78C34FC8, 0x104A, 0x4ACA, {0x9E, 0xA4, 0x52, 0x4D, 0x52, 0x99, 0x6E, 0x57}},
     256
 };
+
+#if NIC_FILTER_VM_DIAGNOSTICS
+enum NIC_FILTER_VM_DIAGNOSTIC_STAGE {
+    NicFilterVmDiagnosticEntry = 1,
+    NicFilterVmDiagnosticPolicyValidationFailure = 2,
+    NicFilterVmDiagnosticRegisterFilterDriver = 3,
+    NicFilterVmDiagnosticDriverEntrySuccess = 4
+};
+
+static NTSTATUS NicFilterSetDiagnosticDword(
+    HANDLE key_handle,
+    PCWSTR value_name,
+    ULONG value)
+{
+    UNICODE_STRING name;
+
+    RtlInitUnicodeString(&name, value_name);
+    return ZwSetValueKey(key_handle,
+                         &name,
+                         0,
+                         REG_DWORD,
+                         &value,
+                         sizeof(value));
+}
+
+static NTSTATUS NicFilterRecordVmDiagnostic(
+    PUNICODE_STRING service_registry_path,
+    ULONG stage,
+    ULONG status_value)
+{
+    HANDLE service_key = NULL;
+    HANDLE parameters_key = NULL;
+    HANDLE diagnostic_key = NULL;
+    OBJECT_ATTRIBUTES object_attributes;
+    UNICODE_STRING parameters_name;
+    UNICODE_STRING diagnostic_name;
+    LARGE_INTEGER system_time;
+    NTSTATUS service_status;
+    NTSTATUS parameters_status;
+    NTSTATUS diagnostic_status;
+    NTSTATUS stage_status;
+    NTSTATUS value_status;
+    NTSTATUS revision_status;
+    NTSTATUS time_status;
+    NTSTATUS write_status;
+
+    if (service_registry_path == NULL || service_registry_path->Buffer == NULL) {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    InitializeObjectAttributes(&object_attributes,
+                               service_registry_path,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                               NULL,
+                               NULL);
+    service_status = ZwOpenKey(&service_key,
+                               KEY_CREATE_SUB_KEY,
+                               &object_attributes);
+    if (!NT_SUCCESS(service_status)) {
+        goto Exit;
+    }
+
+    RtlInitUnicodeString(&parameters_name, L"Parameters");
+    InitializeObjectAttributes(&object_attributes,
+                               &parameters_name,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                               service_key,
+                               NULL);
+    parameters_status = ZwCreateKey(&parameters_key,
+                                    KEY_CREATE_SUB_KEY,
+                                    &object_attributes,
+                                    0,
+                                    NULL,
+                                    REG_OPTION_NON_VOLATILE,
+                                    NULL);
+    if (!NT_SUCCESS(parameters_status)) {
+        service_status = parameters_status;
+        goto Exit;
+    }
+
+    RtlInitUnicodeString(&diagnostic_name, L"NicVmDiagnostic");
+    InitializeObjectAttributes(&object_attributes,
+                               &diagnostic_name,
+                               OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE,
+                               parameters_key,
+                               NULL);
+    diagnostic_status = ZwCreateKey(&diagnostic_key,
+                                    KEY_SET_VALUE,
+                                    &object_attributes,
+                                    0,
+                                    NULL,
+                                    REG_OPTION_NON_VOLATILE,
+                                    NULL);
+    if (!NT_SUCCESS(diagnostic_status)) {
+        service_status = diagnostic_status;
+        goto Exit;
+    }
+
+    stage_status = NicFilterSetDiagnosticDword(diagnostic_key, L"Stage", stage);
+    value_status = NicFilterSetDiagnosticDword(diagnostic_key, L"Status", status_value);
+    revision_status = NicFilterSetDiagnosticDword(diagnostic_key,
+                                                  L"RegistrationRevision",
+                                                  NIC_FILTER_REGISTRATION_REVISION);
+    KeQuerySystemTime(&system_time);
+    {
+        UNICODE_STRING time_name;
+
+        RtlInitUnicodeString(&time_name, L"SystemTime");
+        time_status = ZwSetValueKey(diagnostic_key,
+                                    &time_name,
+                                    0,
+                                    REG_QWORD,
+                                    &system_time.QuadPart,
+                                    sizeof(system_time.QuadPart));
+    }
+
+    write_status = !NT_SUCCESS(stage_status) ? stage_status :
+                   (!NT_SUCCESS(value_status) ? value_status :
+                   (!NT_SUCCESS(revision_status) ? revision_status : time_status));
+    (void)NicFilterSetDiagnosticDword(diagnostic_key,
+                                     L"WriteStatus",
+                                     (ULONG)write_status);
+    service_status = write_status;
+
+Exit:
+    if (diagnostic_key != NULL) {
+        ZwClose(diagnostic_key);
+    }
+    if (parameters_key != NULL) {
+        ZwClose(parameters_key);
+    }
+    if (service_key != NULL) {
+        ZwClose(service_key);
+    }
+    return service_status;
+}
+#endif
 
 DRIVER_INITIALIZE DriverEntry;
 DRIVER_UNLOAD NicFilterUnload;
@@ -346,16 +499,32 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT driver_object, PUNICODE_STRING registry_path
     NDIS_FILTER_DRIVER_CHARACTERISTICS characteristics;
     NDIS_STATUS status;
 
+#if NIC_FILTER_VM_DIAGNOSTICS
+    (void)NicFilterRecordVmDiagnostic(registry_path,
+                                      NicFilterVmDiagnosticEntry,
+                                      (ULONG)STATUS_SUCCESS);
+#else
     UNREFERENCED_PARAMETER(registry_path);
+#endif
 
     if (!NicPolicyBindingsAreValid()) {
+#if NIC_FILTER_VM_DIAGNOSTICS
+        (void)NicFilterRecordVmDiagnostic(registry_path,
+                                          NicFilterVmDiagnosticPolicyValidationFailure,
+                                          (ULONG)STATUS_INVALID_PARAMETER);
+#endif
         return STATUS_INVALID_PARAMETER;
     }
 
     NdisZeroMemory(&characteristics, sizeof(characteristics));
     characteristics.Header.Type = NDIS_OBJECT_TYPE_FILTER_DRIVER_CHARACTERISTICS;
+#if NIC_FILTER_REGISTRATION_REVISION == 1
     characteristics.Header.Revision = NDIS_FILTER_CHARACTERISTICS_REVISION_1;
     characteristics.Header.Size = NDIS_SIZEOF_FILTER_DRIVER_CHARACTERISTICS_REVISION_1;
+#elif NIC_FILTER_REGISTRATION_REVISION == 2
+    characteristics.Header.Revision = NDIS_FILTER_CHARACTERISTICS_REVISION_2;
+    characteristics.Header.Size = NDIS_SIZEOF_FILTER_DRIVER_CHARACTERISTICS_REVISION_2;
+#endif
     characteristics.MajorNdisVersion = NDIS_FILTER_MAJOR_VERSION;
     characteristics.MinorNdisVersion = NDIS_FILTER_MINOR_VERSION;
     characteristics.MajorDriverVersion = 1;
@@ -375,10 +544,20 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT driver_object, PUNICODE_STRING registry_path
                                        (NDIS_HANDLE)driver_object,
                                        &characteristics,
                                        &g_filter_driver_handle);
+#if NIC_FILTER_VM_DIAGNOSTICS
+    (void)NicFilterRecordVmDiagnostic(registry_path,
+                                      NicFilterVmDiagnosticRegisterFilterDriver,
+                                      (ULONG)status);
+#endif
     if (status != NDIS_STATUS_SUCCESS) {
         return (NTSTATUS)status;
     }
 
     driver_object->DriverUnload = NicFilterUnload;
+#if NIC_FILTER_VM_DIAGNOSTICS
+    (void)NicFilterRecordVmDiagnostic(registry_path,
+                                      NicFilterVmDiagnosticDriverEntrySuccess,
+                                      (ULONG)STATUS_SUCCESS);
+#endif
     return STATUS_SUCCESS;
 }
