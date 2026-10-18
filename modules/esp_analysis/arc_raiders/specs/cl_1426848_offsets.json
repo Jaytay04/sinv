@@ -1,0 +1,131 @@
+﻿{
+  "build": "CL-1426848",
+  "date": "2026-10-13",
+  "supersedes": "patch_2026_09_22_offsets.json",
+  "statics": {
+    "gworld": "0x10D59B18",
+    "gnames": "0x10EB1180",
+    "gobjects": "0x111794F0",
+    "keytable": "0x10D4B30C",
+    "fstring_verification": "0xD3C29A0"
+  },
+  "world": {
+    "persistent_level": "0x148",
+    "actor_array": "0x108",
+    "local_players": "0x108",
+    "game_instance": "0x478"
+  },
+  "player": {
+    "player_controller": "0x98",
+    "local_pawn": "0x418",
+    "player_state": "0x3E0",
+    "player_name_private": "0x458",
+    "root_component": "0x240",
+    "relative_location": "0x280",
+    "health_component": "0xD78",
+    "cached_health": "0x700",
+    "armor": "0x1C0",
+    "team_id": "0x7F2",
+    "view_target": "0x4C0",
+    "inventory_component": "0xC90",
+    "current_item_actors": "0x520",
+    "item_stride": "0x20",
+    "item_data": "0x10"
+  },
+  "camera": {
+    "location": "0x08",
+    "rotation": "0x28",
+    "fov": "0x48",
+    "locked_fov": "0x454",
+    "note": "FMinimalViewInfo at ViewTarget+0x10"
+  },
+  "scene_component": {
+    "rotation": "0x320",
+    "translation": "0x340",
+    "scale": "0x360",
+    "relative_location": "0x280",
+    "relative_rotation": "0x298",
+    "relative_scale": "0x2B0",
+    "velocity": "0x2C8"
+  },
+  "guobjectarray": {
+    "blob": "0x111794F0",
+    "fuobjectarray_enc": "0x4993C8DE308F8828",
+    "num_xor": "0x2A2B288D",
+    "chunks_xor": "0xAB82E5D500000000",
+    "fuobjectitem_object": "0x08",
+    "pipeline": "pure XOR"
+  },
+  "fnv_slot_select": {
+    "seed_offset": "0x10",
+    "fnv_prime": "0x01000193",
+    "fnv_add": "0xAA679BF3",
+    "slot_offset": "0x20",
+    "slot_stride": "0x20",
+    "cipher_xor": "0xE8B09504E6B96A82",
+    "cipher_rol64": 27,
+    "cipher_pshuflw": "0x4B",
+    "cipher_xor2": "0xF73AF93C1907D6F9"
+  },
+  "ffield": {
+    "name_private": "0x80",
+    "name_private_blend": "0x67B4DC19",
+    "name_private_xor": "0xFCDB9DA3F1423BAC",
+    "name_private_rol64": 32
+  },
+  "ffieldclass": {
+    "name_offset": "0x40",
+    "name_xor": "0x29941481",
+    "name_rol32": 1,
+    "name_add": "0x018A6E39"
+  },
+  "fproperty": {
+    "offset": "0xC0",
+    "xor": "0xBE0967DD",
+    "bswap32": true
+  },
+  "fname_pool": {
+    "pool_rva": "0x10EAA140",
+    "chunk_stride": "0x100",
+    "slots_offset": "0x7060",
+    "slot_stride": "0x20",
+    "slot_count": 8,
+    "clmul_k1": "0x85FCE63D13122635",
+    "clmul_k2": "0xE973108E0AED0639",
+    "fnv64_prime": "0x100000001B3",
+    "fnv64_add": "0x9EC944098CCFFE8C",
+    "wide_bit": 15,
+    "len_mask": "0x3FC",
+    "len_shift2": 13
+  },
+  "keystream": {
+    "rva": "0x10D4B30C",
+    "count": 64,
+    "narrow_seed": "(len+18)&0xFF",
+    "narrow_step": 106,
+    "narrow_pair_off": 53
+  },
+  "bone_skeleton": {
+    "mesh_offset": "0x450",
+    "mesh_c2w": "0x320",
+    "bone_tarray": "0xB68",
+    "transform_stride": "0x60",
+    "bone_seed": "0x7B0",
+    "bone_selector": "0x848",
+    "bone_seed_xor": "0xC05F21012B46E100",
+    "bone_seed_add": "0x3FA0DEFFD4B91F00",
+    "selector_extract": "(u32 >> 15) & 1",
+    "mesh_candidate_note": "0x450 adopted (most recent); 0x440 also reported"
+  },
+  "tls": {
+    "validity_offset": "0xEC0",
+    "blocks_offset": "0xED0",
+    "block_count": 8,
+    "block_stride": "0x70",
+    "xmm_offset": "0x60",
+    "group2_offset": "0x1290",
+    "group2_stride": "0x90",
+    "tls_idx_rva": "0x0EAF5D78",
+    "camera_mgr_enc": "0x4B0"
+  }
+}

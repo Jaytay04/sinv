@@ -115,6 +115,9 @@ bool ReadFString(uint32_t pid, uint64_t string_address, char* out_buffer, size_t
  * Uses the hypervisor's analysis session to scan for UWorld,
  * then traverses the global object array to locate entities
  * matching the specified criteria.
+ * 
+ * CL-1426848: GUObjectArray blob at module+0x111794F0,
+ * FUObjectItem.Object @ +0x8 (pure XOR decode).
  */
 bool TraverseGUObjectArray(uint32_t pid, uint64_t guobjectarray_base,
                           uint64_t* out_uworld, uint64_t* out_gnames) {
