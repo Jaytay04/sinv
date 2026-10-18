@@ -11,7 +11,7 @@ Set-StrictMode -Version 2.0
 $repository = [IO.Path]::GetFullPath($RepositoryRoot)
 $worktree = [IO.Path]::GetFullPath($WorktreeRoot)
 $output = [IO.Path]::GetFullPath($OutputDirectory)
-$artifactBoundary = [IO.Path]::GetFullPath((Join-Path $repository 'spoof-handoff\artifacts\chp')).TrimEnd('\') + '\'
+$artifactBoundary = [IO.Path]::GetFullPath((Join-Path $worktree 'spoof-handoff\artifacts\chp')).TrimEnd('\') + '\'
 $sourceRoot = [IO.Path]::GetFullPath((Join-Path $worktree 'spoof-handoff\tools\smbios_boot'))
 $mapPath = [IO.Path]::GetFullPath((Join-Path $repository 'spoof-handoff\reports\client-originals.tsv'))
 $builderPath = [IO.Path]::GetFullPath($PSCommandPath)
@@ -132,12 +132,82 @@ function Find-HostBuildTools {
 }
 
 function Invoke-LoggedBuildCommand([string]$Program,[string[]]$Arguments,[string]$LogPath) {
-    $outputLines = @(& $Program @Arguments 2>&1 | ForEach-Object { [string]$_ })
-    $exitCode = $LASTEXITCODE
-    $outputText = $outputLines -join [Environment]::NewLine
-    [IO.File]::WriteAllText($LogPath,$outputText + [Environment]::NewLine,[Text.UTF8Encoding]::new($false))
-    if ($exitCode -ne 0) { throw "Build command failed with exit ${exitCode}: $Program $($Arguments -join ' '); output=$outputText; log=$LogPath" }
-    return [pscustomobject]@{exitCode=$exitCode;logPath=$LogPath;logSha256=(Get-HostPayloadSha256 $LogPath);output=$outputText}
+    $logDirectory = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($LogPath))
+    if ([string]::IsNullOrWhiteSpace($logDirectory)) { throw "Build log path has no parent directory: $LogPath" }
+    [void][IO.Directory]::CreateDirectory($logDirectory)
+
+    $captureId = [Guid]::NewGuid().ToString('N')
+    $stdoutPath = Join-Path $logDirectory ('.build.' + $captureId + '.stdout.txt')
+    $stderrPath = Join-Path $logDirectory ('.build.' + $captureId + '.stderr.txt')
+    $quotedArguments = @(
+        foreach ($argument in $Arguments) {
+            $value = [string]$argument
+            $builder = [Text.StringBuilder]::new()
+            [void]$builder.Append('"')
+            $backslashes = 0
+            for ($index = 0; $index -lt $value.Length; $index++) {
+                $character = $value[$index]
+                if ($character -eq [char]'\') { $backslashes++; continue }
+                if ($character -eq [char]'"') {
+                    if ($backslashes -gt 0) { [void]$builder.Append(('\' * (2 * $backslashes + 1))) }
+                    else { [void]$builder.Append('\') }
+                    [void]$builder.Append('"')
+                    $backslashes = 0
+                    continue
+                }
+                if ($backslashes -gt 0) { [void]$builder.Append(('\' * $backslashes)); $backslashes = 0 }
+                [void]$builder.Append($character)
+            }
+            if ($backslashes -gt 0) { [void]$builder.Append(('\' * (2 * $backslashes))) }
+            [void]$builder.Append('"')
+            $builder.ToString()
+        }
+    )
+    $argumentLine = $quotedArguments -join ' '
+
+    $process = $null
+    $processId = 0
+    try {
+        $process = Start-Process -FilePath $Program -ArgumentList $argumentLine -PassThru -WindowStyle Hidden -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -ErrorAction Stop
+        $processHandle = $process.Handle
+        $processId = [int]$process.Id
+        [void]$process.WaitForExit()
+        $process.Refresh()
+        $rawExitCode = $process.ExitCode
+        if ($null -eq $rawExitCode) { throw 'Root process exit code was unavailable after it exited.' }
+        $exitCode = [int]$rawExitCode
+    } catch {
+        throw "Build command launch or root-process wait failed: $Program; stdoutCapture=$stdoutPath; stderrCapture=$stderrPath; error=$($_.Exception.Message)"
+    } finally {
+        if ($null -ne $process) { $process.Dispose() }
+    }
+
+    $readSharedText = {
+        param([string]$Path)
+        if (-not [IO.File]::Exists($Path)) { return '' }
+        $stream = [IO.File]::Open($Path,[IO.FileMode]::Open,[IO.FileAccess]::Read,([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+        $reader = $null
+        try {
+            $reader = [IO.StreamReader]::new($stream,[Text.Encoding]::UTF8,$true)
+            return $reader.ReadToEnd()
+        } finally {
+            if ($null -ne $reader) { $reader.Dispose() } else { $stream.Dispose() }
+        }
+    }
+
+    try {
+        $stdout = & $readSharedText $stdoutPath
+        $stderr = & $readSharedText $stderrPath
+        $outputText = $stdout + $stderr
+        [IO.File]::WriteAllText($LogPath,$outputText,[Text.UTF8Encoding]::new($false))
+        $logSha256 = Get-HostPayloadSha256 $LogPath
+    } catch {
+        throw "Build command output capture or log write failed for PID $processId`: $Program; stdoutCapture=$stdoutPath; stderrCapture=$stderrPath; log=$LogPath; error=$($_.Exception.Message)"
+    }
+
+    Remove-Item -LiteralPath $stdoutPath,$stderrPath -Force -ErrorAction SilentlyContinue
+    if ($exitCode -ne 0) { throw "Build command failed with exit ${exitCode}: $Program $($Arguments -join ' '); stdout=$stdout; stderr=$stderr; log=$LogPath" }
+    return [pscustomobject]@{exitCode=$exitCode;logPath=$LogPath;logSha256=$logSha256;output=$outputText}
 }
 
 function Assert-HostEfiApplication([string]$Path) {
@@ -151,7 +221,7 @@ function Assert-HostEfiApplication([string]$Path) {
     if ($machine -ne 0x8664 -or $optionalSize -lt 70 -or ($optionalOffset + $optionalSize) -gt $bytes.Length -or [BitConverter]::ToUInt16($bytes,$optionalOffset) -ne 0x20B -or [BitConverter]::ToUInt16($bytes,$optionalOffset + 68) -ne 10) { throw "Built payload is not an x64 EFI_APPLICATION image: $Path" }
 }
 
-if (-not $output.StartsWith($artifactBoundary,[StringComparison]::OrdinalIgnoreCase)) { throw "Host payload output must remain under spoof-handoff\artifacts\chp: $output" }
+if (-not $output.StartsWith($artifactBoundary,[StringComparison]::OrdinalIgnoreCase)) { throw "Host payload output must remain under the worktree spoof-handoff\artifacts\chp: $output" }
 if (Test-Path -LiteralPath $output) { throw "Host payload output directory already exists; choose a new unique directory: $output" }
 if (-not (Test-Path -LiteralPath $sourceRoot -PathType Container) -or -not (Test-Path -LiteralPath $mapPath -PathType Leaf) -or -not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { throw 'Required host source, locked map, or Path-B source manifest is missing.' }
 
@@ -161,12 +231,25 @@ $hostMap = Assert-HostPayloadMap $mapPath $valuesHeader $tableHeader
 $initialPins = @(Get-HostPayloadSourcePins -Root $sourceRoot -WorktreePath $worktree -Builder $builderPath -Map $mapPath -SourceManifest $manifestPath)
 $initialSetHash = Get-HostPayloadSourceSetHash $initialPins
 [void][IO.Directory]::CreateDirectory($output)
-$buildRoot = Join-Path $output 'b'
 $logsRoot = Join-Path $output 'l'
 [void][IO.Directory]::CreateDirectory($logsRoot)
+$spoofHandoffBoundary = [IO.Path]::GetFullPath((Join-Path $worktree 'spoof-handoff')).TrimEnd('\') + '\'
+$buildArtifactsRoot = [IO.Path]::GetFullPath((Join-Path $worktree 'spoof-handoff\artifacts\chb'))
+if (-not $buildArtifactsRoot.StartsWith($spoofHandoffBoundary,[StringComparison]::OrdinalIgnoreCase)) { throw "Short build artifact root must remain under the worktree spoof-handoff directory: $buildArtifactsRoot" }
+$buildWorkspaceId = [Guid]::NewGuid().ToString('N').Substring(0,16).ToLowerInvariant()
+if ($buildWorkspaceId -notmatch '\A[a-f0-9]{16}\z') { throw "Short build workspace ID is malformed: $buildWorkspaceId" }
+$buildWorkspace = Join-Path $buildArtifactsRoot $buildWorkspaceId
+if (Test-Path -LiteralPath $buildWorkspace) { throw "Short build workspace already exists; refusing to reuse it: $buildWorkspace" }
+$buildRoot = Join-Path $buildWorkspace 'b'
+$temporaryRoot = Join-Path $buildRoot 't'
+if (-not $buildRoot.StartsWith(($buildWorkspace.TrimEnd('\') + '\'),[StringComparison]::OrdinalIgnoreCase) -or
+    -not $temporaryRoot.StartsWith(($buildRoot.TrimEnd('\') + '\'),[StringComparison]::OrdinalIgnoreCase)) {
+    throw "Short build and temporary directories escaped their unique workspace: build=$buildRoot temp=$temporaryRoot"
+}
+[void][IO.Directory]::CreateDirectory($buildWorkspace)
+[void][IO.Directory]::CreateDirectory($buildRoot)
 $previousTemp = $env:TEMP
 $previousTmp = $env:TMP
-$temporaryRoot = Join-Path $output 't'
 [void][IO.Directory]::CreateDirectory($temporaryRoot)
 $env:TEMP = $temporaryRoot
 $env:TMP = $temporaryRoot

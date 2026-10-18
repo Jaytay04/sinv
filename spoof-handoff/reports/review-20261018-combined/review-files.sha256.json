@@ -1,0 +1,22 @@
+[
+    {
+        "path":  "spoof-handoff/reports/review-20261018-combined/combined-host-proof.json",
+        "bytes":  372602,
+        "sha256":  "EBBD89C35ED45BE9DDF398356F67D8781F71D74EF1D178AD1DE51292E8901F87"
+    },
+    {
+        "path":  "spoof-handoff/reports/review-20261018-combined/evidence-index.json",
+        "bytes":  14428,
+        "sha256":  "F7BCB84ED206B3D7DB2DA88F2ACAB5285CDDB294BE79AACAD256FC50D94EBB1C"
+    },
+    {
+        "path":  "spoof-handoff/reports/review-20261018-combined/README.md",
+        "bytes":  3660,
+        "sha256":  "A0336473DBE484600491046524EB7A2337D9E930E00698B1083276268E89BC17"
+    },
+    {
+        "path":  "spoof-handoff/reports/review-20261018-combined/source-files.sha256.json",
+        "bytes":  16909,
+        "sha256":  "BE1CCA2396307963E1C9D84D2C2357EB18BB67D34756E6EDF5A119A480A10BB5"
+    }
+]

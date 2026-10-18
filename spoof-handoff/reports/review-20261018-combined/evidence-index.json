@@ -1,0 +1,178 @@
+{
+    "schema":  "combined-host-closeout-evidence-index.v1",
+    "localArtifactsRetained":  true,
+    "rawRecoveryStatePublished":  false,
+    "files":  [
+                  {
+                      "role":  "final-summary",
+                      "file":  {
+                                   "relativePath":  "spoof-handoff/reports/cf/7f4421476de04b99bd4b7c022bd11cf6/summary.json",
+                                   "localPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\reports\\cf\\7f4421476de04b99bd4b7c022bd11cf6\\summary.json",
+                                   "sha256":  "148EE252F3F2CB22084F2523003D70E3DF297782E2AFCC826DAA5B1C7532A44D",
+                                   "bytes":  1598
+                               }
+                  },
+                  {
+                      "role":  "final-proof",
+                      "file":  {
+                                   "relativePath":  "spoof-handoff/reports/cf/7f4421476de04b99bd4b7c022bd11cf6/final-verification.json",
+                                   "localPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\reports\\cf\\7f4421476de04b99bd4b7c022bd11cf6\\final-verification.json",
+                                   "sha256":  "9906451490146A155C16F270167A11ED16673ED606D8AD2D7F15183C23A291CD",
+                                   "bytes":  47498
+                               }
+                  },
+                  {
+                      "role":  "combined-journal",
+                      "file":  {
+                                   "relativePath":  "spoof-handoff/reports/combined-host-20261018/20261018T205738834Z.bc2a10c95c164531a8a251d591d5bbbe/journal.json",
+                                   "localPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\reports\\combined-host-20261018\\20261018T205738834Z.bc2a10c95c164531a8a251d591d5bbbe\\journal.json",
+                                   "sha256":  "23B5F5F38D5A87B0BC2381F42ADF7AFD77001AD8A55E13A18D44679FB6B45390",
+                                   "bytes":  6149898
+                               }
+                  },
+                  {
+                      "role":  "original-readback",
+                      "file":  {
+                                   "relativePath":  "spoof-handoff/reports/ch/o/c.c68dee8613dc4ff582eea82cd25d976c/combined-readback.json",
+                                   "localPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\reports\\ch\\o\\c.c68dee8613dc4ff582eea82cd25d976c\\combined-readback.json",
+                                   "sha256":  "2EBC70A7E808B3D3AFC8F5F6EA6EFE174845D172D3DFA540D46FFDD7C37197FE",
+                                   "bytes":  104001
+                               }
+                  },
+                  {
+                      "role":  "active-readback",
+                      "file":  {
+                                   "relativePath":  "spoof-handoff/reports/ch/a/c.8b475891098b4989a6daee9abad5a1c7/combined-readback.json",
+                                   "localPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\reports\\ch\\a\\c.8b475891098b4989a6daee9abad5a1c7\\combined-readback.json",
+                                   "sha256":  "D355A73BCCB1B7BA5DEF61FEF87A4F9576B2A3C9A8FBA77A44D54F0A17CA4A4A",
+                                   "bytes":  103830
+                               }
+                  },
+                  {
+                      "role":  "restored-readback",
+                      "file":  {
+                                   "relativePath":  "spoof-handoff/reports/ch/r/c.f6ebe0ca85fe453a9653ae5f24ac1d55/combined-readback.json",
+                                   "localPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\reports\\ch\\r\\c.f6ebe0ca85fe453a9653ae5f24ac1d55\\combined-readback.json",
+                                   "sha256":  "94D3BD08DCCC18DBCD09262F2C025FB76D42AC88D7A8D346E1D8DB33898AF8B9",
+                                   "bytes":  104001
+                               }
+                  },
+                  {
+                      "role":  "smbios-boot-report",
+                      "file":  {
+                                   "relativePath":  "spoof-handoff/reports/combined-host-20261018/20261018T205738834Z.bc2a10c95c164531a8a251d591d5bbbe/HypersinvSmbiosPatch.txt",
+                                   "localPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\reports\\combined-host-20261018\\20261018T205738834Z.bc2a10c95c164531a8a251d591d5bbbe\\HypersinvSmbiosPatch.txt",
+                                   "sha256":  "1D52C789B9C518796949B4F48BCA4226489D40D082B2C986AEBAF8B7D4C86117",
+                                   "bytes":  1057
+                               }
+                  },
+                  {
+                      "role":  "nic-restoration-journal",
+                      "file":  {
+                                   "relativePath":  "spoof-handoff/reports/combined-host-20261018/20261018T205738834Z.bc2a10c95c164531a8a251d591d5bbbe/nic-transaction.json",
+                                   "localPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\reports\\combined-host-20261018\\20261018T205738834Z.bc2a10c95c164531a8a251d591d5bbbe\\nic-transaction.json",
+                                   "sha256":  "1399FC99E6C49E2F3E208AB61C9DC8DE8D9055F40F47A80D3B08CC471FA64360",
+                                   "bytes":  37870
+                               }
+                  },
+                  {
+                      "role":  "storage-final-report",
+                      "file":  {
+                                   "relativePath":  "spoof-handoff/reports/storage-host-runs/20261018T205811335Z.e39393a852764ea996036e25c41bc8cb/actions/finalverify.20261018T214950711Z.4ea491ecd0484e62ab835bd908114495/final-verification.json",
+                                   "localPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\reports\\storage-host-runs\\20261018T205811335Z.e39393a852764ea996036e25c41bc8cb\\actions\\finalverify.20261018T214950711Z.4ea491ecd0484e62ab835bd908114495\\final-verification.json",
+                                   "sha256":  "D76863086CDC4455BB55078B9D866EB00A146BE7524ACD7B2C25B5A85F1273D3",
+                                   "bytes":  22272
+                               }
+                  },
+                  {
+                      "role":  "storage-fresh-readback",
+                      "file":  {
+                                   "relativePath":  "spoof-handoff/reports/cf/7f4421476de04b99bd4b7c022bd11cf6/storage-current.json",
+                                   "localPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\reports\\cf\\7f4421476de04b99bd4b7c022bd11cf6\\storage-current.json",
+                                   "sha256":  "911A9CC8F383C0ECC90E16F041DC17C1C73ACC4A3B1EFE39E5DED3CCB32C3260",
+                                   "bytes":  7759
+                               }
+                  },
+                  {
+                      "role":  "firmware-fresh-readback",
+                      "file":  {
+                                   "relativePath":  "spoof-handoff/reports/cf/7f4421476de04b99bd4b7c022bd11cf6/firmware-current.json",
+                                   "localPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\reports\\cf\\7f4421476de04b99bd4b7c022bd11cf6\\firmware-current.json",
+                                   "sha256":  "70F947A38C38E25729AE0A339932C9DBB63B4DC75730DA5AA9F9678CC145A5F4",
+                                   "bytes":  61068
+                               }
+                  },
+                  {
+                      "role":  "firmware-baseline",
+                      "file":  {
+                                   "relativePath":  "spoof-handoff/reports/combined-host-20261018/20261018T205738834Z.bc2a10c95c164531a8a251d591d5bbbe/boot-snapshot/firmware/firmware-records.json",
+                                   "localPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\reports\\combined-host-20261018\\20261018T205738834Z.bc2a10c95c164531a8a251d591d5bbbe\\boot-snapshot\\firmware\\firmware-records.json",
+                                   "sha256":  "21BD93121EDEDB8FD62D5759CE3212EFCB76D52B4A50373A2717CA2481ADD25E",
+                                   "bytes":  63220
+                               }
+                  },
+                  {
+                      "role":  "esp-final-snapshot",
+                      "file":  {
+                                   "relativePath":  "spoof-handoff/reports/cf/7f4421476de04b99bd4b7c022bd11cf6/esp-snapshot.json",
+                                   "localPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\reports\\cf\\7f4421476de04b99bd4b7c022bd11cf6\\esp-snapshot.json",
+                                   "sha256":  "37F2080D70075AD9F6073B0CA7C44E1EA8C7C3FEAC4BC96F0D9D1CBCDDCAC784",
+                                   "bytes":  148776
+                               }
+                  },
+                  {
+                      "role":  "esp-baseline",
+                      "file":  {
+                                   "relativePath":  "spoof-handoff/reports/combined-host-20261018/20261018T205738834Z.bc2a10c95c164531a8a251d591d5bbbe/boot-snapshot/esp-snapshot.json",
+                                   "localPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\reports\\combined-host-20261018\\20261018T205738834Z.bc2a10c95c164531a8a251d591d5bbbe\\boot-snapshot\\esp-snapshot.json",
+                                   "sha256":  "92132A8D1AFD3AF247D8C2CFBFAE7D3E519BD7255EF9749DC18553ADED6955F0",
+                                   "bytes":  149546
+                               }
+                  },
+                  {
+                      "role":  "bcd-final-export",
+                      "file":  {
+                                   "relativePath":  "spoof-handoff/reports/cf/7f4421476de04b99bd4b7c022bd11cf6/bcd/boot-store-export.bcd",
+                                   "localPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\reports\\cf\\7f4421476de04b99bd4b7c022bd11cf6\\bcd\\boot-store-export.bcd",
+                                   "sha256":  "90CBDA207F95C719D34EDB964E4D85258BA9AEE4CE93A98BA5B5EDA1B8987450",
+                                   "bytes":  32768
+                               }
+                  },
+                  {
+                      "role":  "bcd-baseline-export",
+                      "file":  {
+                                   "relativePath":  "spoof-handoff/reports/combined-host-20261018/20261018T205738834Z.bc2a10c95c164531a8a251d591d5bbbe/boot-snapshot/bcd/boot-store-export.bcd",
+                                   "localPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\reports\\combined-host-20261018\\20261018T205738834Z.bc2a10c95c164531a8a251d591d5bbbe\\boot-snapshot\\bcd\\boot-store-export.bcd",
+                                   "sha256":  "6F099A3ED47D87186392F8A256BFE0724BB5301282BDAEDE05D28EA121254295",
+                                   "bytes":  32768
+                               }
+                  },
+                  {
+                      "role":  "vm-gate",
+                      "file":  {
+                                   "relativePath":  "spoof-handoff/reports/activation-repair-20261018/gate/combined-vm-gate.json",
+                                   "localPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\reports\\activation-repair-20261018\\gate\\combined-vm-gate.json",
+                                   "sha256":  "AF9024D7EFBF725D464825E5A7217F39CADD0538FD56C8155C24C3D9EBDBF483",
+                                   "bytes":  151545
+                               }
+                  },
+                  {
+                      "role":  "selected-test-results",
+                      "file":  {
+                                   "relativePath":  "spoof-handoff/reports/combined-closeout-20261018/tests.dc242f6f7d5348c385a8746f74d88894/summary.json",
+                                   "localPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\reports\\combined-closeout-20261018\\tests.dc242f6f7d5348c385a8746f74d88894\\summary.json",
+                                   "sha256":  "C689FEAC91C10213F96765E1566EDCEA5A826EEC2BA56BE17664531E35C21CAC",
+                                   "bytes":  16516
+                               }
+                  },
+                  {
+                      "role":  "external-recovery-manifest",
+                      "file":  {
+                                   "relativePath":  null,
+                                   "localPath":  "E:\\CodexBackup\\Recovery\\hsinv-storage-test\\storage-host-recovery-20261018T205811335Z.e39393a852764ea996036e25c41bc8cb\\recovery-copy-manifest.json",
+                                   "sha256":  "7EE25841DC225CBADEEED45349FFE9F4F56CB4BF8682CA7B23774F467C0BE52A",
+                                   "bytes":  4686
+                               }
+                  }
+              ]
+}

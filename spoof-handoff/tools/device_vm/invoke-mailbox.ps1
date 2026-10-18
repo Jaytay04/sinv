@@ -12,7 +12,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$OutputDirectory,
 
-    [ValidateSet('Storage', 'Nic')]
+    [ValidateSet('Storage', 'Nic', 'CombinedFixture')]
     [string]$TestProfile = 'Storage',
 
     [ValidateSet('Probe')]
@@ -38,11 +38,23 @@ $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 $script:MainRepoRoot = 'C:\Users\jayli\OneDrive\Documents\Projects\hsinv'
+$script:CombinedFixtureVmxPath = Join-Path $script:MainRepoRoot `
+    'spoof-handoff\artifacts\combined-vm-20261018\DeviceFilter-Win11-Combined\DeviceFilter-Win11-Combined.vmx'
+$script:CombinedFixtureUuid = 'F0114D56-CF8A-8A36-2772-AAE2FA2464D1'
 $script:EvidenceNamespace = if ($TestProfile -ceq 'Nic') { 'nic-vm-20261017' } else { 'device-vm-20261017' }
 $script:ExpectedOutputDirectory = Join-Path $script:MainRepoRoot `
     ('spoof-handoff\reports\' + $script:EvidenceNamespace)
 $script:ExpectedVmxRoot = Join-Path $script:MainRepoRoot `
     ('spoof-handoff\artifacts\' + $script:EvidenceNamespace)
+$script:WorktreeRoot = Join-Path $script:MainRepoRoot `
+    '.codex-build\worktrees\smbios-boot-serial-probe'
+if ($TestProfile -ceq 'CombinedFixture') {
+    $script:EvidenceNamespace = 'combined-vm-20261018'
+    $script:ExpectedOutputDirectory = Join-Path $script:WorktreeRoot `
+        'spoof-handoff\reports\f6\runtime\mailbox'
+    $script:ExpectedVmxRoot = Join-Path $script:MainRepoRoot `
+        'spoof-handoff\artifacts\combined-vm-20261018\DeviceFilter-Win11-Combined'
+}
 $script:ChunkBytes = 9000
 $script:ChunkChars = 12000
 $script:MaxPackageBytes = 4MB
@@ -113,6 +125,62 @@ function Assert-NoReparsePath([string]$Root, [string]$Path, [string]$Description
         if (Test-Path -LiteralPath $Current) {
             [void](Assert-NotReparsePoint $Current $Description)
         }
+    }
+}
+
+function ConvertFrom-CombinedFixtureVmxUuid([string]$Value) {
+    if ($Value -notmatch '\A[0-9A-Fa-f]{2}(?: [0-9A-Fa-f]{2}){7}-[0-9A-Fa-f]{2}(?: [0-9A-Fa-f]{2}){7}\z') {
+        throw 'Combined fixture VMX UUID is not in the expected 16-byte VMware form.'
+    }
+    $Hex = $Value.Replace(' ', '').Replace('-', '')
+    if ($Hex.Length -ne 32) { throw 'Combined fixture VMX UUID must contain exactly 16 bytes.' }
+    $Bytes = New-Object byte[] 16
+    for ($Index = 0; $Index -lt 16; $Index++) {
+        $Bytes[$Index] = [Convert]::ToByte($Hex.Substring($Index * 2, 2), 16)
+    }
+    return ([Guid]::new($Bytes)).ToString().ToUpperInvariant()
+}
+
+function Get-CombinedFixtureVmxUuid([string]$VmxText) {
+    $BiosMatches = [regex]::Matches($VmxText, '(?im)^\s*uuid\.bios\s*=\s*"([^"]+)"\s*$')
+    $LocationMatches = [regex]::Matches($VmxText, '(?im)^\s*uuid\.location\s*=\s*"([^"]+)"\s*$')
+    if ($BiosMatches.Count -ne 1 -or $LocationMatches.Count -ne 1) {
+        throw 'Combined fixture VMX must contain exactly one uuid.bios and uuid.location value.'
+    }
+    $BiosUuid = ConvertFrom-CombinedFixtureVmxUuid ([string]$BiosMatches[0].Groups[1].Value)
+    $LocationUuid = ConvertFrom-CombinedFixtureVmxUuid ([string]$LocationMatches[0].Groups[1].Value)
+    if ($BiosUuid -cne $LocationUuid) {
+        throw 'Combined fixture VMX BIOS and location UUID values differ.'
+    }
+    return $BiosUuid
+}
+
+function Assert-CombinedFixtureTarget(
+    [string]$VmxPath,
+    [string]$OutputDirectory,
+    [string]$VmxText,
+    [string]$ExpectedVmxPath,
+    [string]$ExpectedOutputDirectory,
+    [string]$ExpectedUuid
+) {
+    $VmxFull = [IO.Path]::GetFullPath($VmxPath).TrimEnd('\')
+    $OutputFull = [IO.Path]::GetFullPath($OutputDirectory).TrimEnd('\')
+    if (-not $VmxFull.Equals([IO.Path]::GetFullPath($ExpectedVmxPath).TrimEnd('\'),
+            [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'CombinedFixture requires the exact authorized disposable VMX path.'
+    }
+    if (-not $OutputFull.Equals([IO.Path]::GetFullPath($ExpectedOutputDirectory).TrimEnd('\'),
+            [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'CombinedFixture output must be exactly worktree spoof-handoff\reports\f6\runtime\mailbox.'
+    }
+    $ActualUuid = Get-CombinedFixtureVmxUuid $VmxText
+    if ($ActualUuid -cne $ExpectedUuid) {
+        throw 'CombinedFixture VMX UUID differs from the authorized disposable clone UUID.'
+    }
+    return [pscustomobject]@{
+        VmxPath = $VmxFull
+        OutputDirectory = $OutputFull
+        VmxUuid = $ActualUuid
     }
 }
 
@@ -782,18 +850,34 @@ function Assert-InputFiles {
     if (-not (Test-Path -LiteralPath $VmxFull -PathType Leaf)) {
         throw 'The explicit clone VMX does not exist.'
     }
-    $VmxDirectory = Split-Path -Parent $VmxFull
-    $ExpectedVmParent = Split-Path -Parent $VmxDirectory
-    $VmDirectoryName = Split-Path -Leaf $VmxDirectory
-    if (-not (Test-PathWithin $script:ExpectedVmxRoot $VmxFull) -or
-        -not $ExpectedVmParent.Equals((Get-FullPath $script:ExpectedVmxRoot),
-            [StringComparison]::OrdinalIgnoreCase) -or
-        $VmDirectoryName -cnotmatch '^vm-[A-Za-z0-9._-]{1,80}$' -or
-        [IO.Path]::GetExtension($VmxFull) -cne '.vmx') {
-        throw 'VMX must be a direct child of a vm-* directory under the designated clone root.'
+    if ($TestProfile -ceq 'CombinedFixture') {
+        if (-not $VmxFull.Equals((Get-FullPath $script:CombinedFixtureVmxPath),
+                [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'CombinedFixture requires the exact authorized disposable VMX path.'
+        }
+        Assert-NoReparsePath -Root $script:MainRepoRoot `
+            -Path $VmxFull -Description 'Combined fixture VMX path'
+        $VmxText = [IO.File]::ReadAllText($VmxFull)
+        [void](Assert-CombinedFixtureTarget -VmxPath $VmxFull `
+            -OutputDirectory $OutputDirectory -VmxText $VmxText `
+            -ExpectedVmxPath $script:CombinedFixtureVmxPath `
+            -ExpectedOutputDirectory $script:ExpectedOutputDirectory `
+            -ExpectedUuid $script:CombinedFixtureUuid)
     }
-    Assert-NoReparsePath -Root $script:ExpectedVmxRoot `
-        -Path $VmxFull -Description 'Clone VMX path'
+    else {
+        $VmxDirectory = Split-Path -Parent $VmxFull
+        $ExpectedVmParent = Split-Path -Parent $VmxDirectory
+        $VmDirectoryName = Split-Path -Leaf $VmxDirectory
+        if (-not (Test-PathWithin $script:ExpectedVmxRoot $VmxFull) -or
+            -not $ExpectedVmParent.Equals((Get-FullPath $script:ExpectedVmxRoot),
+                [StringComparison]::OrdinalIgnoreCase) -or
+            $VmDirectoryName -cnotmatch '^vm-[A-Za-z0-9._-]{1,80}$' -or
+            [IO.Path]::GetExtension($VmxFull) -cne '.vmx') {
+            throw 'VMX must be a direct child of a vm-* directory under the designated clone root.'
+        }
+        Assert-NoReparsePath -Root $script:ExpectedVmxRoot `
+            -Path $VmxFull -Description 'Clone VMX path'
+    }
     $script:VmxFullPath = $VmxFull
 
     $GuestFull = Get-FullPath $GuestScriptPath
@@ -820,10 +904,16 @@ function Assert-InputFiles {
     $OutputFull = Get-FullPath $OutputDirectory
     if (-not $OutputFull.Equals((Get-FullPath $script:ExpectedOutputDirectory),
             [StringComparison]::OrdinalIgnoreCase)) {
+        if ($TestProfile -ceq 'CombinedFixture') {
+            throw 'OutputDirectory must be exactly the designated worktree CombinedFixture mailbox directory.'
+        }
         throw ('OutputDirectory must be exactly the designated ' + $TestProfile + ' VM report directory in the main checkout.')
     }
     $OutputParent = Split-Path -Parent $OutputFull
     if (-not (Test-Path -LiteralPath $OutputParent -PathType Container)) {
+        if ($TestProfile -ceq 'CombinedFixture') {
+            throw 'The designated worktree CombinedFixture mailbox parent is missing.'
+        }
         throw 'The designated main-repository report parent is missing.'
     }
     Assert-NoReparsePath -Root $script:MainRepoRoot `

@@ -1,0 +1,3 @@
+*.bin -text
+report.txt -text
+*.json text eol=lf

@@ -2,29 +2,36 @@
 
 CURRENT HOST PROOF (2026-10-18)
 
-All nine confirmed field categories have original -> replacement -> restored
-proof on DESKTOP-5852FUT, across separate SMBIOS, Disk 0, and four-adapter NIC
-runs. SMBIOS was read through native RSMB and WMI; Disk 0 through storage IOCTL
-and WMI; NIC current addresses through seven native/Windows readers plus the
-Intel Wi-Fi DOT11 query. These are the recorded read paths and devices, not a
-simultaneous all-nine deployment or a claim about every possible reader.
-The NIC run restored original current addresses and typed registry values with
-Secure Boot ON, test-signing OFF, no test certificate and no project NIC filter.
-CPU/GPU serial members remain zero/disabled. See
-`docs/NIC_VM_VALIDATION.md` and
-`reports/review-20261017/nic-host-round-trip.json` for evidence and limitations.
+All nine confirmed field categories now have simultaneous original -> replacement
+-> restored proof on DESKTOP-5852FUT: seven SMBIOS fields, Disk 0, and four
+adapters, including both VMware virtual adapters (12 bindings). Each phase
+passed two polls and 90 matching reader observations. SMBIOS used native RSMB
+and fresh WMI; Disk 0 used storage IOCTL and fresh WMI; NIC current addresses
+used NDIS current-address OID, GetAdaptersAddresses, GetAdaptersInfo, GetIfTable2,
+Win32_NetworkAdapter, MSFT_NetAdapter.NetworkAddresses, and Get-NetAdapter,
+plus the Intel Wi-Fi DOT11 current-address query. A separate file I/O integrity
+probe passed. These are the recorded paths and devices; universal reader
+coverage and permanent hardware-address replacement are not asserted.
+
+Final verification passed with original values restored, the storage package
+and filter removed, NIC address overrides removed, owned certificate trust
+removed, test-signing OFF, Secure Boot ON (01), and all 21 recorded firmware
+variables unchanged. Supported BCD views and the immutable ESP entries match
+the original snapshots; BOOTSTAT.DAT and BCD logs retain their mutable rules.
+CPU/GPU serial members remain zero/disabled. The compact proof, hashes, and
+machine-local evidence paths are in
+`reports/review-20261018-combined/combined-host-proof.json`.
 
 COMBINED RUN STATUS (2026-10-18)
 
-USB disks are excluded. The combined host run is blocked by its VM gate:
-SMBIOS2 metadata declares a largest structure of 111 bytes, while the bounded
-parser finds 112 bytes. The EFI payload returns `0x8000000000000021` before
-publication; the size guard remains intact. No simultaneous physical-host
-replacement is claimed. Fresh physical-host originals passed 90 reader checks;
-the VM's restored originals passed 88 applicable checks. Read
-[the combined evidence note](reports/review-20261017/combined-nine-field-progress-20261018.md)
-and [the conditional runbook](docs/COMBINED_HOST_RUNBOOK.md). Host activation
-requires a conforming VM firmware fixture and a complete current VM gate PASS.
+Complete: FINAL_VERIFY_PASS, simultaneousRun=true, bindingCount=12.
+The combined journal is Complete. The earlier VM fixture defect was corrected
+only in the disposable fixture's SMBIOS2 advertised maximum (111 -> 112);
+the production size guard and table content were retained. The authenticated
+R16 VM gate passed before the host run. USB disks remain excluded. See
+[the combined closeout](reports/review-20261018-combined/README.md) and
+[the runbook](docs/COMBINED_HOST_RUNBOOK.md). No further activation is required
+to close this run.
 
 The field-to-member map below remains authoritative. The process-local sections
 describe the original userspace package and its own visibility limits.

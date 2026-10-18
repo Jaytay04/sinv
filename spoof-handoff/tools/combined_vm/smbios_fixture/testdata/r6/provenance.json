@@ -1,0 +1,92 @@
+{
+    "schema":  "combined-vm-smbios2-ep-test-fixture-provenance.v1",
+    "purpose":  "Portable offline parser regression fixture copied byte-for-byte from one captured disposable-VM boot.",
+    "sourceRunId":  "uefi-windows-probe-20261018-065342-f7f63d6fad",
+    "sourceRunPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\reports\\f6\\runtime\\mailbox\\uefi-windows-probe-20261018-065342-f7f63d6fad",
+    "sourceEvidencePath":  "spoof-handoff/reports/f6/runtime/mailbox/uefi-windows-probe-20261018-065342-f7f63d6fad/evidence/kernel-metadata.json",
+    "sourceEvidenceSha256":  "B6742750D2F1766CD0F98DD171C7E7D273D93701E972CE49221DB3F8C8381E54",
+    "sourceEvidenceStatus":  "FAIL",
+    "sourceNestedArchiveSha256":  "CCB02ECE85E538BA0BE35291CD64E01C7676B9844A1A939B231EFEA6B3D9DBA0",
+    "sourceNestedArchiveBytes":  25484,
+    "sourceNestedArchiveFileCount":  8,
+    "capturedInputs":  [
+                           {
+                               "name":  "report.txt",
+                               "archiveEntry":  "f.0001.txt",
+                               "bytes":  4202,
+                               "sha256":  "4B055AF6F6A8C8A1B1AC52FDA195EA464CA850915B0C2326D9E9CCA16027864C",
+                               "sourceGuestPath":  "Z:\\EFI\\HypersinvInventory\\fixture-correction\\report.txt",
+                               "sourceArchivePath":  "C:\\ProgramData\\UEFILoaderRunner\\runs\\uefi-windows-probe-20261018-065342-f7f63d6fad\\f.0001.txt",
+                               "sourcePath":  "spoof-handoff/reports/f7/parent-control/raw-r6/report.txt"
+                           },
+                           {
+                               "name":  "eps2-before.bin",
+                               "archiveEntry":  "f.0002.bin",
+                               "bytes":  31,
+                               "sha256":  "9DFFD0DBF88306081200969321ECB5EA8C1AC50CDB072EE65AEF9D368568558D",
+                               "sourceGuestPath":  "Z:\\EFI\\HypersinvInventory\\fixture-correction\\eps2-before.bin",
+                               "sourceArchivePath":  "C:\\ProgramData\\UEFILoaderRunner\\runs\\uefi-windows-probe-20261018-065342-f7f63d6fad\\f.0002.bin",
+                               "sourcePath":  "spoof-handoff/reports/f7/parent-control/raw-r6/eps2-before.bin"
+                           },
+                           {
+                               "name":  "eps2-after.bin",
+                               "archiveEntry":  "f.0003.bin",
+                               "bytes":  31,
+                               "sha256":  "47A73BF9D5B34F33A411991463A7A76FA21F9AF56103A5D23FB46924AAE40EA1",
+                               "sourceGuestPath":  "Z:\\EFI\\HypersinvInventory\\fixture-correction\\eps2-after.bin",
+                               "sourceArchivePath":  "C:\\ProgramData\\UEFILoaderRunner\\runs\\uefi-windows-probe-20261018-065342-f7f63d6fad\\f.0003.bin",
+                               "sourcePath":  "spoof-handoff/reports/f7/parent-control/raw-r6/eps2-after.bin"
+                           },
+                           {
+                               "name":  "eps3-before.bin",
+                               "archiveEntry":  "f.0004.bin",
+                               "bytes":  0,
+                               "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+                               "sourceGuestPath":  "Z:\\EFI\\HypersinvInventory\\fixture-correction\\eps3-before.bin",
+                               "sourceArchivePath":  "C:\\ProgramData\\UEFILoaderRunner\\runs\\uefi-windows-probe-20261018-065342-f7f63d6fad\\f.0004.bin",
+                               "sourcePath":  "spoof-handoff/reports/f7/parent-control/raw-r6/eps3-before.bin"
+                           },
+                           {
+                               "name":  "eps3-after.bin",
+                               "archiveEntry":  "f.0005.bin",
+                               "bytes":  0,
+                               "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+                               "sourceGuestPath":  "Z:\\EFI\\HypersinvInventory\\fixture-correction\\eps3-after.bin",
+                               "sourceArchivePath":  "C:\\ProgramData\\UEFILoaderRunner\\runs\\uefi-windows-probe-20261018-065342-f7f63d6fad\\f.0005.bin",
+                               "sourcePath":  "spoof-handoff/reports/f7/parent-control/raw-r6/eps3-after.bin"
+                           },
+                           {
+                               "name":  "table-before.bin",
+                               "archiveEntry":  "f.0006.bin",
+                               "bytes":  12842,
+                               "sha256":  "1E021344CA3E9460E4820EC8BBF1D6DF109BF400E0CA3933559C6461F50949D6",
+                               "sourceGuestPath":  "Z:\\EFI\\HypersinvInventory\\fixture-correction\\table-before.bin",
+                               "sourceArchivePath":  "C:\\ProgramData\\UEFILoaderRunner\\runs\\uefi-windows-probe-20261018-065342-f7f63d6fad\\f.0006.bin",
+                               "sourcePath":  "spoof-handoff/reports/f7/parent-control/raw-r6/table-before.bin"
+                           },
+                           {
+                               "name":  "table-after.bin",
+                               "archiveEntry":  "f.0007.bin",
+                               "bytes":  12842,
+                               "sha256":  "1E021344CA3E9460E4820EC8BBF1D6DF109BF400E0CA3933559C6461F50949D6",
+                               "sourceGuestPath":  "Z:\\EFI\\HypersinvInventory\\fixture-correction\\table-after.bin",
+                               "sourceArchivePath":  "C:\\ProgramData\\UEFILoaderRunner\\runs\\uefi-windows-probe-20261018-065342-f7f63d6fad\\f.0007.bin",
+                               "sourcePath":  "spoof-handoff/reports/f7/parent-control/raw-r6/table-after.bin"
+                           }
+                       ],
+    "excludedArtifacts":  [
+                              "smbios2-ep-prelude.efi",
+                              "firmware binaries",
+                              "VM disks",
+                              "packages",
+                              "private keys"
+                          ],
+    "acceptanceClaim":  false,
+    "acceptanceNote":  "This fixture validates offline parser behavior only. It does not claim that the VM gate or a complete spoofing lifecycle passed.",
+    "sourceRunRelativePath":  "spoof-handoff/reports/f6/runtime/mailbox/uefi-windows-probe-20261018-065342-f7f63d6fad",
+    "sourceEvidenceAbsolutePath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\reports\\f6\\runtime\\mailbox\\uefi-windows-probe-20261018-065342-f7f63d6fad\\evidence\\kernel-metadata.json",
+    "sourceGuestRunPath":  "C:\\ProgramData\\UEFILoaderRunner\\runs\\uefi-windows-probe-20261018-065342-f7f63d6fad",
+    "sourceRecoveryPath":  "spoof-handoff/reports/f7/parent-control/recovery.r6.json",
+    "sourceRecoverySha256":  "D8BBE0F21A03E13BE58E16CAE096FC66167648D17ECB0B14842378BEE1D50D03",
+    "sourceRunFailure":  "Capture child_target relative/absolute representation mismatch; actual BootCurrentFFFF"
+}

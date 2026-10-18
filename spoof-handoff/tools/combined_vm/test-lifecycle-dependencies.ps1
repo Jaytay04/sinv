@@ -1,10 +1,14 @@
 [CmdletBinding()]
 param(
-    [string]$RepoRoot = 'C:\Users\jayli\OneDrive\Documents\Projects\hsinv'
+    [string]$RepoRoot
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$repoRootWasDefaulted = [string]::IsNullOrWhiteSpace($RepoRoot)
+if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
+    $RepoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..')).TrimEnd('\')
+}
 
 function Assert-Test([bool]$Condition, [string]$Message) {
     if (-not $Condition) { throw $Message }
@@ -228,6 +232,9 @@ if (-not ('StorageHostReadNative' -as [type])) {
     $report = [ordered]@{
         schema = 'combined-vm-lifecycle-dependency-tests.v1'
         result = 'PASS'
+        repoRoot = $repo
+        repoRootWasDefaultedFromScript = $repoRootWasDefaulted
+        outputRoot = $reportRoot
         checks = @($results.ToArray())
         templatePath = $templatePath
         templateSha256 = (Get-FileHash -LiteralPath $templatePath -Algorithm SHA256).Hash.ToUpperInvariant()

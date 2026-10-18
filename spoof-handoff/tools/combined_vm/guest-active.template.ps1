@@ -46,6 +46,76 @@ function Assert-CombinedVmPhaseIdentity {
     if (-not [Guid]::TryParse([string]$Product.UUID,[ref]$actualUuid) -or -not [Guid]::TryParse([string]$ExpectedIdentity.uuid,[ref]$expectedUuid) -or $actualUuid -ne $expectedUuid) { $differences.Add('uuid expected="'+[string]$ExpectedIdentity.uuid+'" actual="'+[string]$Product.UUID+'"') }
     if ($differences.Count -gt 0) { throw ('Current SMBIOS identity differs from the hash-bound expected VM phase: '+($differences.ToArray() -join '; ')) }
 }
+
+function ConvertTo-CombinedCanonicalUtc {
+    param([string]$Value, [string]$Label)
+    $parsed = [DateTime]::MinValue
+    $culture = [Globalization.CultureInfo]::InvariantCulture
+    $styles = [Globalization.DateTimeStyles]::RoundtripKind
+    if ([string]::IsNullOrWhiteSpace($Value) -or
+        -not [DateTime]::TryParseExact($Value, 'o', $culture, $styles, [ref]$parsed) -or
+        $parsed.Kind -ne [DateTimeKind]::Utc -or
+        $parsed.ToString('o', $culture) -cne $Value) {
+        throw ("$Label must be a canonical UTC round-trip timestamp; actual='$Value'.")
+    }
+    return $parsed
+}
+
+function Get-CombinedVmBootIdentity {
+    param($ReadbackContent, [string]$OriginalUuid, [string]$ExpectedOriginalUuid, [string]$ExpectedMode)
+    if ([string]$ReadbackContent.schema -cne 'combined-host-readback.v1' -or
+        [string]$ReadbackContent.status -cne 'PASS' -or
+        [string]$ReadbackContent.expectedMode -cne $ExpectedMode -or
+        $ReadbackContent.allBindingsMatchedInEachPoll -ne $true -or
+        $ReadbackContent.stableAcrossPolls -ne $true -or
+        $ReadbackContent.simultaneousReadbackPass -ne $true) {
+        throw 'Combined readback did not pass its exact schema, mode, or simultaneous poll checks.'
+    }
+    if ($ExpectedMode -notin @('Original','Replacement')) { throw "Unsupported combined readback mode: $ExpectedMode" }
+
+    $uuid = [Guid]::Empty
+    $expectedUuid = [Guid]::Empty
+    if (-not [Guid]::TryParseExact($OriginalUuid, 'D', [ref]$uuid) -or
+        -not [Guid]::TryParseExact($ExpectedOriginalUuid, 'D', [ref]$expectedUuid) -or
+        $OriginalUuid -cne $ExpectedOriginalUuid) {
+        throw ('Profile original UUID differs from the locked SMBIOS original: expected=' + $ExpectedOriginalUuid + ' actual=' + $OriginalUuid)
+    }
+
+    $boot = $ReadbackContent.bootIdentity
+    if ($null -eq $boot -or $boot.sameBoot -ne $true -or [string]$boot.finalError -cne '') {
+        throw 'Combined reader did not establish one error-free Windows boot identity.'
+    }
+    $bootText = [string]$boot.windowsLastBootUpTimeUtc
+    $bootUtc = ConvertTo-CombinedCanonicalUtc $bootText 'Win32_OperatingSystem.LastBootUpTime'
+    $checkpoints = @($boot.checkpoints)
+    if ($checkpoints.Count -ne 5) { throw ('Combined reader must preserve exactly five boot checkpoints; actual=' + $checkpoints.Count) }
+    foreach ($checkpoint in $checkpoints) {
+        $checkpointText = [string]$checkpoint
+        $null = ConvertTo-CombinedCanonicalUtc $checkpointText 'Windows boot checkpoint'
+        if ($checkpointText -cne $bootText) { throw ('Windows boot checkpoint differs: expected=' + $bootText + ' actual=' + $checkpointText) }
+    }
+    $captureStarted = ConvertTo-CombinedCanonicalUtc ([string]$ReadbackContent.captureStartedUtc) 'Combined readback captureStartedUtc'
+    $captureEnded = ConvertTo-CombinedCanonicalUtc ([string]$ReadbackContent.captureEndedUtc) 'Combined readback captureEndedUtc'
+    if ($captureEnded -lt $captureStarted -or $bootUtc -gt $captureStarted) {
+        throw ('Combined readback time bounds are inconsistent: boot=' + $bootText + ' start=' + $ReadbackContent.captureStartedUtc + ' end=' + $ReadbackContent.captureEndedUtc)
+    }
+
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        $input = $OriginalUuid + '|' + $bootUtc.ToString('o', [Globalization.CultureInfo]::InvariantCulture)
+        $bootId = ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($input)))).Replace('-', '')
+    } finally { $sha.Dispose() }
+    if ($boot.PSObject.Properties['bootId'] -and [string]$boot.bootId -cne $bootId) {
+        throw ('Combined readback bootId differs from the profile-derived value: expected=' + $bootId + ' actual=' + [string]$boot.bootId)
+    }
+
+    $identity = [ordered]@{}
+    foreach ($property in $boot.PSObject.Properties) { $identity[$property.Name] = $property.Value }
+    $identity.bootId = $bootId
+    $identity.bootIdSource = 'SHA-256(profile.originalUuid|bootIdentity.windowsLastBootUpTimeUtc)'
+    $identity.profileOriginalUuid = $OriginalUuid
+    return $identity
+}
 function Assert-CombinedVmNicOriginalReport {
     param($Report,[object[]]$Bindings)
     if ([string]$Report.schema -cne 'nic-native-wmi-readback.v1' -or [string]$Report.expectedMode -cne 'Original' -or $Report.allLockedExpectedValuesMatchReadOnlySources -ne $true -or $Report.allLockedOriginalsMatchReadOnlySources -ne $true -or @($Report.failures).Count -ne 0 -or @($Report.lockedOriginalEvaluations).Count -ne 4 -or $Bindings.Count -ne 4) { throw 'NIC original report schema, mode or complete four-adapter coverage is invalid.' }
@@ -148,8 +218,10 @@ try {
     $readback=Invoke-CombinedReadback -RepositoryRoot $shortRoot -OutputDirectory (Join-Path $shortRoot 'spoof-handoff\reports\o') -ExpectedMode $expectedMode -SmbiosReaderPath (Join-Path $tools 'smbios_windows_readback.exe') -NicReaderPath (Join-Path $tools 'nic-read.ps1') -NicNativeExePath (Join-Path $tools 'nic_native_read.exe') -StorageReaderPath (Join-Path $tools 'storage-read.ps1') -LockedMapPath $mapPath
     $metadata.combinedReadback=$readback
     $metadata.combinedReadbackContent=Get-Content -LiteralPath $readback.reportPath -Raw | ConvertFrom-Json
-    $metadata.bootIdentity=$metadata.combinedReadbackContent.bootIdentity
     if ($readback.status -cne 'PASS') { throw 'Combined reader phase did not pass.' }
+    $uuidBindings=@($bindings.bindings | Where-Object { [string]$_.id -ceq 'SMBIOS:system_uuid' })
+    if ($uuidBindings.Count -ne 1) { throw ('Expected one locked original SMBIOS UUID binding; actual=' + $uuidBindings.Count) }
+    $metadata.bootIdentity=Get-CombinedVmBootIdentity -ReadbackContent $metadata.combinedReadbackContent -OriginalUuid ([string]$profile.originalUuid) -ExpectedOriginalUuid ([string]$uuidBindings[0].original) -ExpectedMode $expectedMode
 }
 catch { $failure=$_.Exception.ToString() }
 finally {

@@ -552,6 +552,142 @@ function Assert-JournalActionPassed {
     return $matches[0]
 }
 
+function Get-CleanupActionName {
+    $journal = Get-BaselineJournal
+    $records = @($journal.actions | Where-Object {
+        [string]$_.name -in @('CleanupSmbiosInventory', 'VerifyCorrectedCollectorCleanup')
+    })
+    if ($records.Count -ne 1 -or [string]$records[0].status -cne 'PASS') {
+        throw 'Exactly one completed PASS record for the legacy cleanup or corrected-collector cleanup bridge is required.'
+    }
+    return [string]$records[0].name
+}
+
+function Assert-CorrectedCollectorCaptureFacts {
+    param([Parameter(Mandatory = $true)]$Capture)
+
+    $cleanupProperty = $Capture.PSObject.Properties['cleanup']
+    if ($null -eq $cleanupProperty -or $null -eq $cleanupProperty.Value) {
+        throw 'Authenticated CaptureActive metadata is missing its cleanup record.'
+    }
+    $cleanup = $cleanupProperty.Value
+    foreach ($field in @('attempted', 'result', 'pathBStageRemoved', 'trackedEspBaselineRestored', 'errors')) {
+        if ($null -eq $cleanup.PSObject.Properties[$field]) {
+            throw "Authenticated CaptureActive cleanup record is missing '$field'."
+        }
+    }
+
+    if ([string]$Capture.schema -cne 'combined-vm-fixture-correction-action.v1' -or
+        [string]$Capture.internalAction -cne 'CaptureActive' -or
+        [string]$Capture.mode -cne 'corrected-collector' -or
+        [string]$Capture.status -cne 'PASS' -or
+        [string]$Capture.pathBAction -cne 'Collect' -or
+        $cleanup.attempted -ne $true -or
+        [string]$cleanup.result -cne 'OWNED_ENTRIES_STAGE_AND_TRACKED_ESP_RESTORED' -or
+        $cleanup.pathBStageRemoved -ne $true -or
+        $cleanup.trackedEspBaselineRestored -ne $true -or
+        @($cleanup.errors).Count -ne 0) {
+        throw 'Authenticated CaptureActive metadata does not show a completed corrected-collector capture and cleanup.'
+    }
+
+    $expectedUuid = [string]$script:Config.vmIdentity.patched.uuid
+    if ([string]$Capture.vm.uuid -cne $expectedUuid) { throw 'CaptureActive VM UUID differs from this lifecycle.' }
+    if ([string]$Capture.journal.state -cne 'CAPTURED_AND_CLEANED' -or
+        [string]$Capture.journal.sha256 -cnotmatch '\A[A-Fa-f0-9]{64}\z' -or
+        [string]::IsNullOrWhiteSpace([string]$Capture.journal.path)) {
+        throw 'CaptureActive metadata is missing the terminal fixture-journal identity or hash.'
+    }
+
+    $captureBoot = [string]$Capture.bootIdentity.lastBootUpTimeUtc
+    $captureBootParsed = [DateTime]::MinValue
+    if (-not [DateTime]::TryParse($captureBoot, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$captureBootParsed)) {
+        throw 'CaptureActive Windows boot identity is missing or malformed.'
+    }
+    $bootMaterial = [Text.Encoding]::UTF8.GetBytes([string]$script:Config.vmIdentity.original.uuid + '|' + $captureBootParsed.ToUniversalTime().ToString('o'))
+    $bootSha = [Security.Cryptography.SHA256]::Create()
+    try { $expectedBootIdHex = ([BitConverter]::ToString($bootSha.ComputeHash($bootMaterial))).Replace('-', '') }
+    finally { $bootSha.Dispose(); [Array]::Clear($bootMaterial, 0, $bootMaterial.Length) }
+    if ([string]$Capture.bootIdentity.bootId -cne $expectedBootIdHex) { throw 'CaptureActive boot token does not bind to its VM UUID and Windows LastBootUpTime.' }
+
+    if ($Capture.firmware.secureBoot -ne $false -or
+        $null -eq $Capture.firmware.secureBootVariable -or
+        [int]$Capture.firmware.secureBootVariable.win32Error -ne 0 -or
+        [int]$Capture.firmware.secureBootVariable.size -ne 1 -or
+        [string]$Capture.firmware.secureBootVariable.bytesHex -cne '00' -or
+        $null -eq $Capture.firmware.bootOrderBefore -or $null -eq $Capture.firmware.bootOrderAfter -or
+        [string]$Capture.firmware.bootOrderBefore.bytesBase64 -cne [string]$Capture.firmware.bootOrderAfter.bytesBase64 -or
+        $Capture.firmware.bootNextAfter.supported -ne $false -or [int]$Capture.firmware.bootNextAfter.win32Error -ne 203) {
+        throw 'CaptureActive firmware evidence does not show Secure Boot OFF, unchanged BootOrder, and absent BootNext.'
+    }
+
+    if ($null -eq $Capture.efi -or
+        [string]$Capture.efi.phase -cne 'ready_to_chainload' -or
+        [string]$Capture.efi.status -cne '0x0000000000000000' -or
+        [string]$Capture.efi.statusSource -cne 'prelude.report.child_load_status' -or
+        [string]$Capture.efi.statusPhase -cne 'LoadImage(loader.efi)' -or
+        $Capture.efi.startStatusObserved -ne $false) {
+        throw 'CaptureActive EFI evidence is missing its observed loader LoadImage status or overstates StartImage.'
+    }
+
+    $patch = $Capture.collectorReport
+    if ($null -eq $patch -or [string]$patch.status -cne 'PASS' -or
+        [string]$patch.result -cne 'applied' -or [int]$patch.mask -ne 127 -or
+        [string]$patch.buildId -cne [string]$script:Config.fixturePins.smbiosBuildIdentity -or
+        [string]$patch.efiStatus -cne '0x0000000000000000' -or
+        [string]$patch.efiStatusSource -cne 'prelude.report.child_load_status' -or
+        [string]$patch.efiStatusPhase -cne 'LoadImage(loader.efi)' -or
+        $patch.startStatusObserved -ne $false) {
+        throw 'CaptureActive collector report is not the exact pinned seven-field PASS build.'
+    }
+    foreach ($field in @('system_serial','system_vendor','system_product','board_serial','board_vendor','board_product','system_uuid')) {
+        $binding = $patch.values.PSObject.Properties['SMBIOS:' + $field]
+        if ($null -eq $binding -or [string]$binding.Value -cne [string]$script:Config.smbios.replacements.$field) {
+            throw "CaptureActive collector replacement mismatch for $field."
+        }
+        $read = $Capture.windowsReadback.fields.PSObject.Properties[$field]
+        if ($null -eq $read -or [string]$read.Value.native -cne [string]$script:Config.smbios.replacements.$field -or
+            [string]$read.Value.wmi -cne [string]$script:Config.smbios.replacements.$field -or
+            $read.Value.nativeMatchesWmi -ne $true) {
+            throw "CaptureActive fresh native/WMI readback mismatch for $field."
+        }
+    }
+    if ([string]$Capture.windowsReadback.expectedMode -cne 'replacement') { throw 'CaptureActive readback did not declare replacement mode.' }
+    return $true
+}
+
+function Assert-CorrectedFixtureJournal {
+    param(
+        [Parameter(Mandatory = $true)]$FixtureJournal,
+        [Parameter(Mandatory = $true)]$Capture,
+        [Parameter(Mandatory = $true)][string]$ExpectedLifecycleId,
+        [Parameter(Mandatory = $true)][string]$ExpectedUuid
+    )
+    if ([string]$FixtureJournal.schema -cne 'combined-vm-fixture-correction-journal.v2' -or
+        [string]$FixtureJournal.lifecycleId -cne $ExpectedLifecycleId -or
+        [string]$FixtureJournal.vmUuid -cne $ExpectedUuid -or
+        [string]$FixtureJournal.mode -cne 'corrected-collector' -or
+        [string]$FixtureJournal.state -cne 'CAPTURED_AND_CLEANED' -or
+        $null -ne $FixtureJournal.pendingMutation -or
+        [string]$FixtureJournal.pathBReceiptSha256 -cnotmatch '\A[A-Fa-f0-9]{64}\z' -or
+        @($FixtureJournal.completedMutations | Where-Object { [string]$_ -ceq 'capture_pathb_collect' }).Count -ne 1 -or
+        @($FixtureJournal.completedMutations | Where-Object { [string]$_ -ceq 'capture_remove_custom_boot_entry' }).Count -ne 1) {
+        throw 'Corrected-collector fixture journal does not show one exact completed collection and owned-entry cleanup.'
+    }
+    if ([string]$FixtureJournal.bootManagerSha256 -cne [string]$Capture.esp.afterCapture.bootManagerSha256 -or
+        [string]$FixtureJournal.bootOrderBefore -cne [string]$Capture.firmware.bootOrderBefore.bytesBase64 -or
+        [string]$FixtureJournal.bootOrderAttributes -cne [string]$Capture.firmware.bootOrderBefore.attributes) {
+        throw 'Corrected-collector journal does not match its authenticated CaptureActive receipt.'
+    }
+    $captureBoot = [DateTime]::Parse([string]$Capture.bootIdentity.lastBootUpTimeUtc, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+    $started = [DateTime]::Parse([string]$FixtureJournal.captureStartedUtc, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+    $completed = [DateTime]::Parse([string]$FixtureJournal.cleanupCompletedUtc, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+    if ($captureBoot -gt $started -or $completed -lt $started -or
+        [string]$FixtureJournal.modeFlag -cne 'corrected-collector') {
+        throw 'Corrected-collector fixture journal timestamps or one-shot mode do not match the capture.'
+    }
+    return $true
+}
+
 function Save-Journal {
     Write-JsonAtomic -Path $script:JournalPath -Value $script:Journal
 }
@@ -733,9 +869,9 @@ function Invoke-DriverPhase {
         VerifyTransparentRemoved = 'RemoveTransparent'
         InstallReplacement = 'VerifyTransparentRemoved'
         VerifyReplacement = 'InstallReplacement'
-        RemoveReplacement = 'CleanupSmbiosInventory'
         VerifyReplacementRemoved = 'RemoveReplacement'
     }[$Phase]
+    if ($Phase -ceq 'RemoveReplacement') { $requiredPrevious = Get-CleanupActionName }
     [void](Assert-JournalActionPassed $requiredPrevious)
     $rebootAfter = @{
         VerifyTransparent = 'InstallTransparent'
@@ -776,13 +912,113 @@ function Invoke-DriverPhase {
     $readback = Get-DiskReadback
     Assert-DiskMode $readback $expectedMode $filterState
     if ($Phase -ceq 'VerifyReplacementRemoved') {
-        [void](Assert-JournalActionPassed 'CleanupSmbiosInventory')
+        [void](Get-CleanupActionName)
         [void](Assert-JournalActionPassed 'RemoveReplacement')
         $smbiosPath = Join-Path $script:EvidenceRoot 'smbios-after-storage-removal.json'
         $smbios = Get-SmbiosReadback $smbiosPath
         Assert-SmbiosMode $smbios 'Original'
     }
     return [ordered]@{ identity = $identity; expectedMode = $expectedMode; filterState = $filterState; readback = $readback }
+}
+
+function Invoke-VerifyCorrectedCollectorCleanup {
+    [void](Assert-JournalActionPassed 'VerifyReplacement')
+    $fixture = $script:Config.fixtureCorrection
+    if ($null -eq $fixture -or [string]$fixture.schema -cne 'combined-vm-corrected-cleanup-input.v1' -or
+        [string]$fixture.lifecycleId -cne 'smbios2-ep-correction-f12-r2-release-20261018' -or
+        [string]$fixture.vmUuid -cne [string]$script:Config.vmIdentity.original.uuid -or
+        [string]$fixture.captureMetadataSha256 -cnotmatch '\A[A-Fa-f0-9]{64}\z' -or
+        [string]$fixture.mailbox.runId -cnotmatch '\Auefi-windows-probe-[0-9]{8}-[0-9]{6}-[a-f0-9]{10}\z' -or
+        [string]$fixture.mailbox.responseHmacSha256 -cnotmatch '\A[A-F0-9]{64}\z' -or
+        [string]$fixture.mailbox.archiveSha256 -cnotmatch '\A[A-F0-9]{64}\z') {
+        throw 'The authenticated CaptureActive receipt is not pinned to the required fixture lifecycle.'
+    }
+    $capture = $fixture.capture
+    [void](Assert-CorrectedCollectorCaptureFacts $capture)
+
+    $fixtureRoot = Join-Path (Join-Path $env:ProgramData 'CombinedVmFixture') ($fixture.vmUuid.Replace('-', '').ToLowerInvariant() + '\' + $fixture.lifecycleId)
+    $fixtureRoot = [IO.Path]::GetFullPath($fixtureRoot)
+    $fixtureJournalPath = Join-Path $fixtureRoot 'corrected-collector.journal.json'
+    $expectedJournalPath = [IO.Path]::GetFullPath([string]$capture.journal.path)
+    if (-not $expectedJournalPath.Equals($fixtureJournalPath, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'CaptureActive fixture journal path is outside the exact owned fixture state root.'
+    }
+    $null = Assert-PathUnder -Root $fixtureRoot -Path $fixtureJournalPath -Label 'fixture journal'
+    if (-not (Test-Path -LiteralPath $fixtureJournalPath -PathType Leaf)) { throw 'The exact corrected-collector journal is missing.' }
+    $fixtureJournalHash = Get-Sha256 $fixtureJournalPath
+    if ($fixtureJournalHash -cne ([string]$capture.journal.sha256).ToUpperInvariant()) {
+        throw ('Fixture journal differs from the authenticated CaptureActive receipt: expected=' + [string]$capture.journal.sha256 + ' actual=' + $fixtureJournalHash)
+    }
+    $fixtureJournal = Get-Content -LiteralPath $fixtureJournalPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+    [void](Assert-CorrectedFixtureJournal -FixtureJournal $fixtureJournal -Capture $capture -ExpectedLifecycleId ([string]$fixture.lifecycleId) -ExpectedUuid ([string]$fixture.vmUuid))
+
+    $expectedReceiptPath = Join-Path $fixtureRoot 'pathb\inventory\path-b-stage.json'
+    if (-not ([IO.Path]::GetFullPath([string]$fixtureJournal.pathBReceiptPath)).Equals([IO.Path]::GetFullPath($expectedReceiptPath), [StringComparison]::OrdinalIgnoreCase) -or
+        -not (Test-Path -LiteralPath $expectedReceiptPath -PathType Leaf)) {
+        throw 'The Path-B stage receipt is missing or outside the exact helper state root.'
+    }
+    $receiptHash = Get-Sha256 $expectedReceiptPath
+    if ($receiptHash -cne ([string]$fixtureJournal.pathBReceiptSha256).ToUpperInvariant()) { throw 'The Path-B receipt hash differs from its terminal journal.' }
+
+    $currentBoot = Get-CurrentBootIdentity
+    if ([string]$currentBoot.lastBootUpTimeUtc -cne [string]$capture.bootIdentity.lastBootUpTimeUtc) {
+        throw ('Windows boot changed after CaptureActive: captured=' + [string]$capture.bootIdentity.lastBootUpTimeUtc + ' actual=' + [string]$currentBoot.lastBootUpTimeUtc)
+    }
+    $identity = Assert-ExpectedIdentity -AllowPatchedSmbios
+    $disk = Get-DiskReadback
+    Assert-DiskMode $disk 'Replacement' 'Present'
+    $smbiosPath = Join-Path $script:EvidenceRoot 'smbios-after-corrected-collector-cleanup.json'
+    $smbios = Get-SmbiosReadback $smbiosPath
+    Assert-SmbiosMode $smbios 'Replacement'
+    $secureBoot = Get-SecureBootSnapshot
+    if (-not (Test-SecureBootOffSnapshot $secureBoot)) { throw ('Secure Boot must remain OFF for the VM replacement phase; ' + (Format-SecureBootStatus $secureBoot)) }
+    $bcd = Get-BcdSnapshot
+    if ($bcd.testSigning.exists -ne $true -or [string]$bcd.testSigning.value -cne 'yes') { throw 'testsigning is not on during corrected-collector cleanup verification.' }
+
+    $bootOrder = Get-FirmwareVariable 'BootOrder'
+    if ([int]$bootOrder.win32Error -ne 0 -or [string]$bootOrder.bytesBase64 -cne [string]$fixtureJournal.bootOrderBefore -or
+        [uint32]$bootOrder.attributes -ne [uint32]$fixtureJournal.bootOrderAttributes -or
+        [string]$bootOrder.bytesBase64 -cne [string]$script:Journal.bootOrder.bytesBase64) {
+        throw ('BootOrder is not byte-identical to the fixture and lifecycle baselines: fixture=' + [string]$fixtureJournal.bootOrderBefore + ' actual=' + [string]$bootOrder.bytesBase64)
+    }
+    $bootNext = Get-FirmwareVariable 'BootNext'
+    if ([bool]$bootNext.supported -ne [bool]$script:Journal.bootNext.supported -or
+        [int]$bootNext.win32Error -ne [int]$script:Journal.bootNext.win32Error -or
+        [string]$bootNext.bytesBase64 -cne [string]$script:Journal.bootNext.bytesBase64) {
+        throw ('BootNext differs from lifecycle baseline: expectedError=' + [string]$script:Journal.bootNext.win32Error + ' actualError=' + [string]$bootNext.win32Error)
+    }
+    foreach ($name in @([string]$fixtureJournal.customBootName, [string]$fixtureJournal.standardBootName)) {
+        if ([string]::IsNullOrWhiteSpace($name)) { throw 'Fixture journal is missing a recorded owned Boot#### name.' }
+        $entry = Get-FirmwareVariable $name
+        if ($entry.supported -ne $false -or [int]$entry.win32Error -ne 203) { throw "Owned firmware entry $name remains after CaptureActive cleanup." }
+    }
+    $esp = Get-EspTreeSnapshot
+    if ([string]$esp.bootManagerSha256 -cne [string]$script:Journal.espSnapshot.bootManagerSha256) { throw 'Windows Boot Manager hash differs from the original lifecycle snapshot.' }
+    $espDelta = @(Compare-EspSnapshot $script:Journal.espSnapshot $esp)
+    if ($espDelta.Count -gt 0) { throw ('ESP differs from the original lifecycle snapshot after corrected-collector cleanup: ' + ($espDelta -join '; ')) }
+    $leftoverStage = @($esp.files | Where-Object { [string]$_.path -match '(?i)^EFI\\HypersinvInventory(?:\\|$)' })
+    if ($leftoverStage.Count -gt 0) { throw ('Owned Path-B stage remains on the ESP after CaptureActive: ' + (($leftoverStage | ForEach-Object { [string]$_.path }) -join ', ')) }
+
+    return [ordered]@{
+        identity = $identity
+        bootIdentity = $currentBoot
+        fixtureJournalPath = $fixtureJournalPath
+        fixtureJournalSha256 = $fixtureJournalHash
+        pathBReceiptPath = $expectedReceiptPath
+        pathBReceiptSha256 = $receiptHash
+        captureMetadataSha256 = [string]$fixture.captureMetadataSha256
+        mailbox = $fixture.mailbox
+        disk = $disk
+        smbios = $smbios
+        secureBoot = $secureBoot
+        testSigning = $bcd.testSigning
+        bootOrder = $bootOrder
+        bootNext = $bootNext
+        customBootEntriesAbsent = $true
+        espDelta = @($espDelta)
+        stageAbsent = $true
+        rebootRequired = $false
+    }
 }
 
 function Invoke-StageSmbiosInventory {
@@ -869,7 +1105,7 @@ function Invoke-CleanupSmbiosInventory {
 
 function Restore-Policy {
     $journal = Get-BaselineJournal
-    [void](Assert-JournalActionPassed 'CleanupSmbiosInventory')
+    [void](Get-CleanupActionName)
     [void](Assert-JournalActionPassed 'VerifyReplacementRemoved')
     $identity = Assert-ExpectedIdentity
     $disk = Get-DiskReadback
@@ -1087,7 +1323,7 @@ try {
     if ($script:Config.schema -cne 'combined-vm-lifecycle-config.v1' -or $script:LifecycleAction -notin @(
         'CaptureOriginal','EnableTestMode','InstallTransparent','VerifyTransparent','RemoveTransparent','VerifyTransparentRemoved',
         'InstallReplacement','VerifyReplacement','RemoveReplacement','VerifyReplacementRemoved','StageSmbiosInventory','ArmSmbiosInventory',
-        'CleanupSmbiosInventory','RestorePolicy','FinalVerify')) { throw 'Lifecycle configuration schema or action is invalid.' }
+        'CleanupSmbiosInventory','VerifyCorrectedCollectorCleanup','RestorePolicy','FinalVerify')) { throw 'Lifecycle configuration schema or action is invalid.' }
     if (-not $script:RunRootFull.StartsWith('C:\ProgramData\UEFILoaderRunner\runs\', [StringComparison]::OrdinalIgnoreCase) -or
         -not (Test-Path -LiteralPath $script:RunRootFull -PathType Container)) { throw 'RunRoot must be an existing authenticated guest mailbox run directory.' }
     if ($script:Config.vmIdentity.original.manufacturer -cne 'VMware, Inc.' -or $script:Config.vmIdentity.original.model -cne 'VMware20,1' -or
@@ -1127,6 +1363,7 @@ try {
             'StageSmbiosInventory' { $resultDetails = Invoke-StageSmbiosInventory }
             'ArmSmbiosInventory' { $resultDetails = Invoke-ArmSmbiosInventory }
             'CleanupSmbiosInventory' { $resultDetails = Invoke-CleanupSmbiosInventory }
+            'VerifyCorrectedCollectorCleanup' { $resultDetails = Invoke-VerifyCorrectedCollectorCleanup }
             'RestorePolicy' { $resultDetails = Restore-Policy }
             'FinalVerify' { $resultDetails = Final-Verify }
         }

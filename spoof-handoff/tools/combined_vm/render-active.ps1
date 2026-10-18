@@ -5,31 +5,68 @@ param(
     [Parameter(Mandatory=$true)][string]$FixtureMapPath,
     [Parameter(Mandatory=$true)][string]$SmbiosReaderPath,
     [switch]$UseSharedAssets,
-    [string]$OutputDirectory='C:\Users\jayli\OneDrive\Documents\Projects\hsinv\spoof-handoff\reports\combined-9field-vm-20261018\runtime'
+    [string]$OutputDirectory
 )
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference='Stop'
 $mainRoot='C:\Users\jayli\OneDrive\Documents\Projects\hsinv'
-$reportRoot=Join-Path $mainRoot 'spoof-handoff\reports'
-$expectedOutput=Join-Path $reportRoot 'combined-9field-vm-20261018\runtime'
 $handoff=Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$worktreeRoot=Split-Path -Parent $handoff
+$mainReportRoot=Join-Path $mainRoot 'spoof-handoff\reports'
+$mainArtifactRoot=Join-Path $mainRoot 'spoof-handoff\artifacts'
+$worktreeReportRoot=Join-Path $handoff 'reports'
+$worktreeArtifactRoot=Join-Path $handoff 'artifacts'
+$expectedOutput=Join-Path $worktreeReportRoot 'f6\runtime'
+if ([string]::IsNullOrWhiteSpace($OutputDirectory)) { $OutputDirectory=$expectedOutput }
 Import-Module (Join-Path $handoff 'tools\combined_host\model.psm1') -Force
-function Assert-RenderPath([string]$Path,[string]$Boundary) {
+function Assert-RenderPath([string]$Path,[string[]]$Boundaries) {
     $full=[IO.Path]::GetFullPath($Path)
-    if (-not $full.StartsWith(([IO.Path]::GetFullPath($Boundary).TrimEnd('\')+'\'),[StringComparison]::OrdinalIgnoreCase)) { throw ('VM render input escapes its allowed root: '+$full) }
     if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { throw ('Missing VM render input: '+$full) }
+    $matchedRoot=$null
+    foreach($boundary in $Boundaries) {
+        $root=[IO.Path]::GetFullPath($boundary).TrimEnd('\')
+        if ($full.StartsWith(($root+'\'),[StringComparison]::OrdinalIgnoreCase)) { $matchedRoot=$root; break }
+    }
+    if (-not $matchedRoot) { throw ('VM render input escapes its allowed roots: '+$full) }
+    $current=$full
+    while ($current.StartsWith(($matchedRoot+'\'),[StringComparison]::OrdinalIgnoreCase) -or
+        $current.Equals($matchedRoot,[StringComparison]::OrdinalIgnoreCase)) {
+        $item=Get-Item -LiteralPath $current -Force -ErrorAction Stop
+        if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw ('VM render input contains a reparse point: '+$current) }
+        if ($current.Equals($matchedRoot,[StringComparison]::OrdinalIgnoreCase)) { break }
+        $current=Split-Path -Parent $current
+    }
     return $full
 }
-if (-not [IO.Path]::GetFullPath($OutputDirectory).Equals($expectedOutput,[StringComparison]::OrdinalIgnoreCase)) { throw 'OutputDirectory must be the combined VM runtime evidence directory.' }
-$inventoryPath=Assert-RenderPath $GuestInventoryPath $reportRoot
-$mapPath=Assert-RenderPath $FixtureMapPath $reportRoot
-$readerPath=Assert-RenderPath $SmbiosReaderPath (Join-Path $mainRoot 'spoof-handoff\artifacts')
+function Assert-ExactOutputDirectory([string]$Path,[string]$Expected) {
+    $full=[IO.Path]::GetFullPath($Path).TrimEnd('\')
+    $expectedFull=[IO.Path]::GetFullPath($Expected).TrimEnd('\')
+    if (-not $full.Equals($expectedFull,[StringComparison]::OrdinalIgnoreCase)) { throw 'OutputDirectory must be the worktree f6 runtime evidence directory.' }
+    $worktreeFull=[IO.Path]::GetFullPath($worktreeRoot).TrimEnd('\')
+    $current=$full
+    while ($current.StartsWith(($worktreeFull+'\'),[StringComparison]::OrdinalIgnoreCase) -or
+        $current.Equals($worktreeFull,[StringComparison]::OrdinalIgnoreCase)) {
+        if (Test-Path -LiteralPath $current) {
+            if (((Get-Item -LiteralPath $current -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw ('VM render output contains a reparse point: '+$current) }
+        }
+        if ($current.Equals($worktreeFull,[StringComparison]::OrdinalIgnoreCase)) { break }
+        $current=Split-Path -Parent $current
+    }
+    return $full
+}
+$OutputDirectory=Assert-ExactOutputDirectory $OutputDirectory $expectedOutput
+$reportRoots=@($mainReportRoot,$worktreeReportRoot)
+$artifactRoots=@($mainArtifactRoot,$worktreeArtifactRoot)
+$inventoryPath=Assert-RenderPath $GuestInventoryPath $reportRoots
+$mapPath=Assert-RenderPath $FixtureMapPath $reportRoots
+$readerPath=Assert-RenderPath $SmbiosReaderPath $artifactRoots
 $inventory=Get-Content -LiteralPath $inventoryPath -Raw | ConvertFrom-Json
 if ($inventory.schema -cne 'combined-vm-original-inventory.v1' -or [string]$inventory.machine.manufacturer -cne 'VMware, Inc.' -or [string]$inventory.machine.model -cne 'VMware20,1' -or [string]$inventory.machine.uuidWmi -cne [string]$inventory.machine.uuidSmbios) { throw 'Fresh agreeing VMware original inventory is required.' }
 if ([string]$inventory.disk.pnpDeviceId -notmatch '^SCSI\\DISK&VEN_NVME&PROD_VMWARE_VIRTUAL_N\\' -or [string]$inventory.disk.nativeSerial -cne [string]$inventory.disk.wmiSerial) { throw 'Inventory must identify the current VMware NVMe original through both readers.' }
 $map=New-CombinedBindingMap (Get-CombinedMapRows $mapPath)
-$canonical=New-CombinedBindingMap (Get-CombinedMapRows (Join-Path $mainRoot 'spoof-handoff\reports\client-originals.tsv'))
+$canonicalMapPath=Assert-RenderPath (Join-Path $mainReportRoot 'client-originals.tsv') @($mainReportRoot)
+$canonical=New-CombinedBindingMap (Get-CombinedMapRows $canonicalMapPath)
 foreach ($binding in @($map.bindings | Where-Object category -CNE 'NIC')) {
     $expected=@($canonical.bindings | Where-Object member -CEQ $binding.member)
     if ($expected.Count -ne 1 -or [string]$binding.replacement -cne [string]$expected[0].replacement) { throw ('VM replacement differs from canonical value: '+$binding.member) }
@@ -52,9 +89,10 @@ foreach ($binding in $nicBindings) {
     $wanted=ConvertTo-CombinedComparableValue NIC mac $binding.original
     if ($nativeRows.Count -ne 1 -or $wmiRows.Count -ne 1 -or (ConvertTo-CombinedComparableValue NIC mac $nativeRows[0].MacAddress) -cne $wanted -or (ConvertTo-CombinedComparableValue NIC mac $wmiRows[0].MACAddress) -cne $wanted) { throw ('VM NIC original lacks exact native/WMI provenance: '+$binding.pnpDeviceId) }
 }
-$bundle=Join-Path $reportRoot 'nic-vmnet-compatibility-20261018\production-address-functions.ps1'
-$parityPath=Join-Path $reportRoot 'nic-vmnet-compatibility-20261018\tested-function-parity.json'
+$bundle=Assert-RenderPath (Join-Path $mainReportRoot 'nic-vmnet-compatibility-20261018\production-address-functions.ps1') $reportRoots
+$parityPath=Assert-RenderPath (Join-Path $mainReportRoot 'nic-vmnet-compatibility-20261018\tested-function-parity.json') $reportRoots
 $hostSource=Join-Path $handoff 'tools\nic_vm\host-address-roundtrip.ps1'
+$hostSource=Assert-RenderPath $hostSource @((Join-Path $handoff 'tools'))
 $bundleHash=(Get-FileHash -LiteralPath $bundle -Algorithm SHA256).Hash
 $parity=Get-Content -LiteralPath $parityPath -Raw | ConvertFrom-Json
 if ($bundleHash -cne 'E7B1B841372B890C0D1638E6CCB11D41B5F257A64FBF491B3FEF811B29A212D8' -or $parity.status -cne 'PASS' -or [string]$parity.bundleSha256 -cne $bundleHash -or [string]$parity.currentSourceSha256 -cne (Get-FileHash -LiteralPath $hostSource -Algorithm SHA256).Hash) { throw 'Tested NIC helper bundle or production parity pin differs.' }
@@ -66,7 +104,7 @@ $inputs=[ordered]@{
     'address-functions.ps1'=$bundle
     'locked.tsv'=$mapPath
     'smbios_windows_readback.exe'=$readerPath
-    'nic_native_read.exe'=(Join-Path $mainRoot 'spoof-handoff\artifacts\nic-reader-gap-20261017\native-build-vs18\Release\nic_native_read.exe')
+    'nic_native_read.exe'=(Join-Path $mainArtifactRoot 'nic-reader-gap-20261017\native-build-vs18\Release\nic_native_read.exe')
 }
 $assets=[Collections.Generic.List[object]]::new()
 $pins=[Collections.Generic.List[object]]::new()
@@ -76,11 +114,31 @@ if ($UseSharedAssets) {
     $setText=@($inputs.Keys | ForEach-Object { $_+':'+(Get-FileHash -LiteralPath $inputs[$_] -Algorithm SHA256).Hash }) -join "`n"
     $sha=[Security.Cryptography.SHA256]::Create()
     try { $assetSetId=([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($setText)))).Replace('-','').ToLowerInvariant() } finally { $sha.Dispose() }
-    $assetSetRoot=Join-Path (Join-Path $mainRoot 'spoof-handoff\artifacts\combined-vm-20261018\shared-readonly') $assetSetId
+    $assetSetRoot=Join-Path (Join-Path $worktreeArtifactRoot 'f6\shared-readonly') $assetSetId
+    $assetRootBoundary=[IO.Path]::GetFullPath((Join-Path $worktreeArtifactRoot 'f6\shared-readonly')).TrimEnd('\')
+    $assetRootFull=[IO.Path]::GetFullPath($assetSetRoot)
+    if (-not $assetRootFull.StartsWith(($assetRootBoundary+'\'),[StringComparison]::OrdinalIgnoreCase)) { throw 'Shared VM assets must remain beneath the worktree f6 asset root.' }
+    $assetCheck=$assetRootFull
+    $assetWorktreeBoundary=[IO.Path]::GetFullPath($worktreeRoot).TrimEnd('\')
+    while ($assetCheck.StartsWith(($assetWorktreeBoundary+'\'),[StringComparison]::OrdinalIgnoreCase) -or
+        $assetCheck.Equals($assetWorktreeBoundary,[StringComparison]::OrdinalIgnoreCase)) {
+        if ((Test-Path -LiteralPath $assetCheck) -and ((Get-Item -LiteralPath $assetCheck -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw ('Shared VM asset root contains a reparse point: '+$assetCheck) }
+        if ($assetCheck.Equals($assetWorktreeBoundary,[StringComparison]::OrdinalIgnoreCase)) { break }
+        $assetCheck=Split-Path -Parent $assetCheck
+    }
     [void][IO.Directory]::CreateDirectory($assetSetRoot)
 }
 foreach ($name in $inputs.Keys) {
-    $path=Assert-RenderPath $inputs[$name] $mainRoot
+    $toolBoundaries=@((Join-Path $handoff 'tools'))
+    $allowedRoots=switch -CaseSensitive ($name) {
+        {$_ -in @('model.psm1','readback.ps1','nic-read.ps1','storage-read.ps1')} { $toolBoundaries; break }
+        'address-functions.ps1' { $reportRoots; break }
+        'locked.tsv' { $reportRoots; break }
+        'smbios_windows_readback.exe' { $artifactRoots; break }
+        'nic_native_read.exe' { $artifactRoots; break }
+        default { throw ('No allowed root is defined for VM render asset: '+$name) }
+    }
+    $path=Assert-RenderPath $inputs[$name] @($allowedRoots)
     $bytes=[IO.File]::ReadAllBytes($path)
     try {
         $hash=(Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash

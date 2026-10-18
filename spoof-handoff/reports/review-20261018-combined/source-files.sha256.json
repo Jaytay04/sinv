@@ -1,0 +1,293 @@
+{
+    "schema":  "combined-closeout-source-hashes.v1",
+    "scope":  "Changed source, commands, documentation, and disposable VM parser fixtures under spoof-handoff. Review manifests are excluded from this source manifest.",
+    "hashSemantics":  "SHA-256 of the working-tree bytes at closeout; Git text normalization may produce different blob bytes.",
+    "files":  [
+                  {
+                      "path":  "spoof-handoff/commands/combined-host-finalize.ps1",
+                      "bytes":  723,
+                      "workingTreeSha256":  "7927B8AE79323A7E08C31BE5D12240A1ADD4B1E39A03EB86069543E24C8102F5"
+                  },
+                  {
+                      "path":  "spoof-handoff/commands/combined-host-rollback.ps1",
+                      "bytes":  2438,
+                      "workingTreeSha256":  "053D0BDD1BDA388D17A2EB24BBC482AE5A5DC97C68FD302DDE215636148DB66D"
+                  },
+                  {
+                      "path":  "spoof-handoff/commands/combined-host-test.ps1",
+                      "bytes":  6093,
+                      "workingTreeSha256":  "2ECD2CD622A1A79479D5B0FB3C29F08BC39B1982BD95B30FAB3518C03DAB2629"
+                  },
+                  {
+                      "path":  "spoof-handoff/docs/COMBINED_HOST_RUNBOOK.md",
+                      "bytes":  17624,
+                      "workingTreeSha256":  "928F475EC07C0241176268AE95D4F17C7B157C318676905F771CB62EE977B4D7"
+                  },
+                  {
+                      "path":  "spoof-handoff/README.md",
+                      "bytes":  9474,
+                      "workingTreeSha256":  "7BDBDB23EE3AA980420A5B3D92EA8F629C9601CB3A0FA7AE9E14E1A30F1596B4"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_host/build-host-payload.ps1",
+                      "bytes":  24839,
+                      "workingTreeSha256":  "227933A3E5E9621591DFFFE492658448C41AE62DC7885F3F9FEE0CD86A7DA25B"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_host/finalize.ps1",
+                      "bytes":  27666,
+                      "workingTreeSha256":  "2B05EDB5CA2274C471F580B5669F753090204E716D2FB34CBCDC182322CBD964"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_host/recovery.ps1",
+                      "bytes":  23413,
+                      "workingTreeSha256":  "55F7614EB7F01C212DEBFDA6F27D79B97D12FA2BDC048653C8548362D7B2B617"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_host/run.ps1",
+                      "bytes":  224629,
+                      "workingTreeSha256":  "5E20BFE3E4BAC1AA8C95AAD5BC5A2B53DEC0D1E4301021A76A9F03D54C09666D"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_host/step-support.psm1",
+                      "bytes":  13997,
+                      "workingTreeSha256":  "ECB68A00E8D2A17AAD9C0AFA1A54094EB0990963C6D96CE48424E1A1DCE3DC06"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_host/tests-build-process.ps1",
+                      "bytes":  12583,
+                      "workingTreeSha256":  "B8B202B660705F9BB2771C2399330903A11676C62ED6B6A612D21883A2AD3C3E"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_host/tests-finalize.ps1",
+                      "bytes":  17384,
+                      "workingTreeSha256":  "0F4E21E9426512B3F08EF26362431A1C4B7DAF4EA7D4C10B586365E3B0C4F94A"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_host/tests-finalize-firmware-reader.ps1",
+                      "bytes":  5482,
+                      "workingTreeSha256":  "0C3B6E5D37F941611CD0DB1DBF9F97D7D3D50BA7A526325E10A3765E0CE01E9D"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_host/tests-host-output-paths.ps1",
+                      "bytes":  2536,
+                      "workingTreeSha256":  "373008E48BEAD0CD024C67B6D6B61F021A2FEAA99CF585237ABD1ABE206DC963"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_host/tests-orchestration.ps1",
+                      "bytes":  98487,
+                      "workingTreeSha256":  "099E045C4B639757204E7FDB464D263F9B4DBD78F3C18B39F06F5BA29E4AE1DC"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_host/tests-pathb-build.ps1",
+                      "bytes":  17092,
+                      "workingTreeSha256":  "3ACC59166CB2BBE6A63411B985E661BB2D8EE0B00CA673F966EE3153F23EE51D"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_host/tests-recovery.ps1",
+                      "bytes":  24418,
+                      "workingTreeSha256":  "77A594FD06627017900604419DB7187FD5C30D0C4413F87116C9E7E634F6B8ED"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_host/tests-step-support.ps1",
+                      "bytes":  16843,
+                      "workingTreeSha256":  "C18C603DB3BD0B04C7A2AA767865616AC6E8AE3C7C98DAD6DD3F2EEFA87717FF"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/assemble-gate.ps1",
+                      "bytes":  78612,
+                      "workingTreeSha256":  "A576F2AAC4EA7E0493B5586DB0DCF8E73DEEE17CAA439ECA4E1CC5D3F522386D"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/boot-option.psm1",
+                      "bytes":  9732,
+                      "workingTreeSha256":  "9B01E94E7087476C4CE727B4481EDEA7F6798A2B0702B712480FFE0AF45C6595"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/build-firmware-fixture.ps1",
+                      "bytes":  19572,
+                      "workingTreeSha256":  "109E4543FC2989E9A53D8ED52BC2B7F5F89E88F7FF586BCE29BF762D7346A698"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/expand-phase-evidence.ps1",
+                      "bytes":  8068,
+                      "workingTreeSha256":  "9E94EECBD58B1E2BE373CDC6ECAB9C22982019D0A172374061B05288C6B01326"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/firmware-variable.psm1",
+                      "bytes":  9419,
+                      "workingTreeSha256":  "5DAD3F9DE301B7544B75FEAB1071C985120A550FA2F34A055D45276F3D7160ED"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/guest-active.template.ps1",
+                      "bytes":  24084,
+                      "workingTreeSha256":  "BA88288A42FDD8EC797E9715CBEED6EBE54BE151B5CDD10F859C809149F086E2"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/guest-fixture-correction.template.ps1",
+                      "bytes":  112721,
+                      "workingTreeSha256":  "D61C1B65C11305A27AA4419339EF62767580003210641967E18137C96D93A299"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/guest-lifecycle.template.ps1",
+                      "bytes":  96332,
+                      "workingTreeSha256":  "546EECDD5CB0D0F371D5C1FE2967E9216FA2C49D041520677CD8DD56FEA29849"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/render-active.ps1",
+                      "bytes":  15126,
+                      "workingTreeSha256":  "8B2F963AEDC88FF96DF856D022E31BB154886FD1E953D240700E32C526623EED"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/render-fixture-correction.ps1",
+                      "bytes":  27486,
+                      "workingTreeSha256":  "6B4F8E8F9A761FFA9E957B0CB7EB9447F3ADC11DEFF358DE2BED6B9531FEAEA1"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/render-lifecycle.ps1",
+                      "bytes":  42499,
+                      "workingTreeSha256":  "E12809B7DAABC62DF25B60FEFD1A3A513329F30E01B38E3F16B97814FC2CB9B4"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/smbios_fixture/CMakeLists.txt",
+                      "bytes":  1891,
+                      "workingTreeSha256":  "D807C574A57E7EF4F5D92BF0085E0633FB0A87980A2D74142F490F8165D4FA48"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/smbios_fixture/efi_prelude.c",
+                      "bytes":  85578,
+                      "workingTreeSha256":  "1F525E6304AA329A41104ABD70CF69090CF03F4A49AC2E6FB8FBAE08E230FFF2"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/smbios_fixture/smbios2_fixture.c",
+                      "bytes":  11704,
+                      "workingTreeSha256":  "C3D0EBD37815E64B849910DB198DB7C608743D9795B5B4BA33DF3075FDE0181C"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/smbios_fixture/smbios2_fixture.h",
+                      "bytes":  2376,
+                      "workingTreeSha256":  "9902AA8DD864CC72DC8ABBE58B6E4A72AEA2E90278CFF63D009E0634DE408841"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/smbios_fixture/smbios2_fixture_tests.c",
+                      "bytes":  49647,
+                      "workingTreeSha256":  "C33C5BE1047FAE9C1E99B555E807DA461F2DE528B036DCB1130EEB00F01FBA38"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/smbios_fixture/testdata/r6/.gitattributes",
+                      "bytes":  48,
+                      "workingTreeSha256":  "5C80D584F9DCDF64CAD711DCA4BAFFF50AE40D761C458C236EBE1FE6D456D1F2"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/smbios_fixture/testdata/r6/eps2-after.bin",
+                      "bytes":  31,
+                      "workingTreeSha256":  "47A73BF9D5B34F33A411991463A7A76FA21F9AF56103A5D23FB46924AAE40EA1"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/smbios_fixture/testdata/r6/eps2-before.bin",
+                      "bytes":  31,
+                      "workingTreeSha256":  "9DFFD0DBF88306081200969321ECB5EA8C1AC50CDB072EE65AEF9D368568558D"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/smbios_fixture/testdata/r6/eps3-after.bin",
+                      "bytes":  0,
+                      "workingTreeSha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/smbios_fixture/testdata/r6/eps3-before.bin",
+                      "bytes":  0,
+                      "workingTreeSha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/smbios_fixture/testdata/r6/provenance.json",
+                      "bytes":  7401,
+                      "workingTreeSha256":  "E6EB3BDEDE7583004FD324F628EBE495837739966C303DB35B5399BDFDE95CFF"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/smbios_fixture/testdata/r6/report.txt",
+                      "bytes":  4202,
+                      "workingTreeSha256":  "4B055AF6F6A8C8A1B1AC52FDA195EA464CA850915B0C2326D9E9CCA16027864C"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/smbios_fixture/testdata/r6/table-after.bin",
+                      "bytes":  12842,
+                      "workingTreeSha256":  "1E021344CA3E9460E4820EC8BBF1D6DF109BF400E0CA3933559C6461F50949D6"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/smbios_fixture/testdata/r6/table-before.bin",
+                      "bytes":  12842,
+                      "workingTreeSha256":  "1E021344CA3E9460E4820EC8BBF1D6DF109BF400E0CA3933559C6461F50949D6"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/test-invoke-mailbox-boundaries.ps1",
+                      "bytes":  10580,
+                      "workingTreeSha256":  "1A6743A0010B1E713702727B24361EDC7B65EF66513F30391A1D457603A112D1"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/test-lifecycle-cleanup-bridge.ps1",
+                      "bytes":  27363,
+                      "workingTreeSha256":  "EE0C899A2A247AD6D926EB6AB6612C1F23FD88B16BFD97BA94FAFD85B7F4F28E"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/test-lifecycle-dependencies.ps1",
+                      "bytes":  23071,
+                      "workingTreeSha256":  "0A8D5FB54AAB6354C1346EA834426E8A4FB3BA85F3175DD8129DC11AB77A2CBE"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/test-render-lifecycle-boundaries.ps1",
+                      "bytes":  6818,
+                      "workingTreeSha256":  "23079D5833BBF17C42B7C5A9321445DD963803870A5BADC0B9833FC4A7A5CBCC"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/tests-active.ps1",
+                      "bytes":  17098,
+                      "workingTreeSha256":  "1F8430DCED11AF9F6A980728C1841F0593081F3935FE32D1E1FD5A29F24BC0B8"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/tests-assemble-gate.ps1",
+                      "bytes":  42284,
+                      "workingTreeSha256":  "7FA3A6BB02F1293D89958311ED73E392C34C5BA93D3A80EF0D7EA25587B2ACB3"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/tests-boot-option.ps1",
+                      "bytes":  6813,
+                      "workingTreeSha256":  "3607D57451E2EA5EE0C042AA086363D5F78EA8CC6BF91A28EBB6BD2758DEC69E"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/tests-firmware-variable.ps1",
+                      "bytes":  3900,
+                      "workingTreeSha256":  "07CC257A114DC1C9B64834CDBD150452C34C332CF13C9E98C0092FCA4DDA5DB3"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/tests-fixture-correction-journal.ps1",
+                      "bytes":  14498,
+                      "workingTreeSha256":  "67064CA942F499FA92E38D9A5E5E1C1A03D4ACEF4FB3B2C1E4BB7B13F0088AE4"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/tests-fixture-correction-recovery.ps1",
+                      "bytes":  65643,
+                      "workingTreeSha256":  "22E6391BA9F6A191D3CD72CDFA2B0B30D3DB97D123B762F3889E206A91C4A0DE"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/tests-fixture-correction-renderer.ps1",
+                      "bytes":  24350,
+                      "workingTreeSha256":  "E5732DF464303E90F11FF41D11C25CF45B7A1F35C3BA4D7759A0BDE3E1D8F3E0"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/tests-root-boundaries.ps1",
+                      "bytes":  15953,
+                      "workingTreeSha256":  "34359B1E15C8E0ECEA36D7A0B67A61AF4FBA7D48A763A6D587B4D65D07A65986"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/combined_vm/tests-smbios2-table-measurement.ps1",
+                      "bytes":  5469,
+                      "workingTreeSha256":  "E50A52729A009E8641064AEFFB29D884A30C14B5D8DC340B13C80B8BD452D66C"
+                  },
+                  {
+                      "path":  "spoof-handoff/tools/device_vm/invoke-mailbox.ps1",
+                      "bytes":  48328,
+                      "workingTreeSha256":  "5AF0E720DC042100BA5055FE3A2187EBD8DFA59E14F77AD240690244D783AF4D"
+                  }
+              ],
+    "sourceFileCount":  57
+}

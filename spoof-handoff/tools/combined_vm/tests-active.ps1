@@ -8,7 +8,8 @@ param(
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version 2.0
 $repo='C:\Users\jayli\OneDrive\Documents\Projects\hsinv'
-$reportRoot=Join-Path $repo 'spoof-handoff\reports\combined-9field-vm-20261018'
+$worktreeRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..'))
+$reportRoot=Join-Path $worktreeRoot 'spoof-handoff\reports\f6\runtime'
 $testRoot=Join-Path $reportRoot ('phase-tests.'+[Guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($testRoot)
 $records=[Collections.Generic.List[object]]::new()
@@ -70,7 +71,7 @@ function Assert-PurePhase([string]$Name,[scriptblock]$Body,[bool]$ShouldThrow=$f
 }
 $tokens=$null;$parseErrors=$null
 $templateAst=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'guest-active.template.ps1'),[ref]$tokens,[ref]$parseErrors)
-foreach($name in @('Assert-CombinedVmPhaseIdentity','Assert-CombinedVmNicOriginalReport','New-CombinedVmRawBundle')) {
+foreach($name in @('Assert-CombinedVmPhaseIdentity','Get-CombinedVmBootIdentity','ConvertTo-CombinedCanonicalUtc','Assert-CombinedVmNicOriginalReport','New-CombinedVmRawBundle')) {
     $definitions=@($templateAst.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name},$true))
     if ($definitions.Count -ne 1) { throw ('Expected one production phase guard: '+$name) }
     . ([scriptblock]::Create($definitions[0].Extent.Text))
@@ -78,6 +79,39 @@ foreach($name in @('Assert-CombinedVmPhaseIdentity','Assert-CombinedVmNicOrigina
 Import-Module (Join-Path $PSScriptRoot '..\combined_host\model.psm1') -Force
 $vm=Get-Content -LiteralPath $GuestInventoryPath -Raw | ConvertFrom-Json
 $identity=[pscustomobject]@{manufacturer=$vm.machine.manufacturer;model=$vm.machine.model;uuid=$vm.machine.uuidWmi}
+$fixtureRows=@(Import-Csv -LiteralPath $FixtureMapPath -Delimiter "`t")
+$uuidRows=@($fixtureRows | Where-Object { [string]$_.member -ceq 'FakeSMBIOSUUID' })
+if ($uuidRows.Count -ne 1) { throw ('Expected one exact VM fixture SMBIOS UUID row; actual=' + $uuidRows.Count) }
+$originalUuid=[string]$uuidRows[0].original
+$actualActiveMetadataPath=Join-Path $reportRoot 'mailbox\uefi-windows-probe-20261018-074123-365a97782f\evidence\kernel-metadata.json'
+if (-not (Test-Path -LiteralPath $actualActiveMetadataPath -PathType Leaf)) { throw ('Actual archived 074123 active metadata is missing: ' + $actualActiveMetadataPath) }
+$actualActiveMetadataSha=(Get-FileHash -LiteralPath $actualActiveMetadataPath -Algorithm SHA256).Hash
+if ($actualActiveMetadataSha -cne '3BE11E354CFF20BFD5EC91701FF2417CCDEB110106B40D09C2B6D8908C636CD2') { throw ('Actual 074123 metadata hash mismatch: expected=3BE11E354CFF20BFD5EC91701FF2417CCDEB110106B40D09C2B6D8908C636CD2 actual=' + $actualActiveMetadataSha) }
+$actualActiveMetadata=Get-Content -LiteralPath $actualActiveMetadataPath -Raw | ConvertFrom-Json
+$actualReadback=$actualActiveMetadata.combinedReadbackContent
+$actualBootIdentity=Get-CombinedVmBootIdentity -ReadbackContent $actualReadback -OriginalUuid $originalUuid -ExpectedOriginalUuid $originalUuid -ExpectedMode 'Replacement'
+$bootTimestamp=[string]$actualReadback.bootIdentity.windowsLastBootUpTimeUtc
+$bootHash=[Security.Cryptography.SHA256]::Create()
+try { $expectedBootDigest=$bootHash.ComputeHash([Text.Encoding]::UTF8.GetBytes($originalUuid+'|'+$bootTimestamp)); $expectedBootId=([BitConverter]::ToString($expectedBootDigest)).Replace('-','') } finally { $bootHash.Dispose() }
+$actualAppliedMetadataPath=Join-Path $reportRoot 'mailbox\uefi-windows-probe-20261018-074033-5c8c896732\evidence\kernel-metadata.json'
+$actualAppliedMetadata=Get-Content -LiteralPath $actualAppliedMetadataPath -Raw | ConvertFrom-Json
+Assert-PurePhase 'actual-074123-readback-derives-profile-boot-id' {
+    if ([string]$actualBootIdentity.bootId -cne $expectedBootId -or [string]$actualBootIdentity.bootId -cne [string]$actualAppliedMetadata.bootIdentity.bootId) { throw 'Actual readback bootId does not match the profile UUID/time formula and same-boot CaptureActive evidence.' }
+    if ($actualBootIdentity.sameBoot -ne $true -or [string]$actualBootIdentity.finalError -cne '' -or @($actualBootIdentity.checkpoints).Count -ne 5 -or @($actualBootIdentity.checkpoints | Where-Object { [string]$_ -cne $bootTimestamp }).Count -ne 0) { throw 'Actual readback checkpoints were not preserved as one validated Windows boot.' }
+}
+$wrongUuidError=$null
+try { Get-CombinedVmBootIdentity -ReadbackContent $actualReadback -OriginalUuid '00000000-0000-0000-0000-000000000000' -ExpectedOriginalUuid $originalUuid -ExpectedMode 'Replacement' | Out-Null } catch { $wrongUuidError=$_.Exception.Message }
+Assert-PurePhase 'actual-074123-rejects-wrong-original-uuid' {if($null -eq $wrongUuidError -or $wrongUuidError -notlike '*Profile original UUID differs from the locked SMBIOS original*'){throw ('Wrong profile UUID was not rejected: '+$wrongUuidError)}}
+$changedCheckpointReadback=$actualReadback | ConvertTo-Json -Depth 80 | ConvertFrom-Json
+$changedCheckpointReadback.bootIdentity.checkpoints[4]='2026-10-18T07:41:14.5000000Z'
+$changedCheckpointError=$null
+try { Get-CombinedVmBootIdentity -ReadbackContent $changedCheckpointReadback -OriginalUuid $originalUuid -ExpectedOriginalUuid $originalUuid -ExpectedMode 'Replacement' | Out-Null } catch { $changedCheckpointError=$_.Exception.Message }
+Assert-PurePhase 'actual-074123-rejects-changed-boot-checkpoint' {if($null -eq $changedCheckpointError -or $changedCheckpointError -notlike '*Windows boot checkpoint differs*'){throw ('Changed checkpoint was not rejected: '+$changedCheckpointError)}}
+$differentBootReadback=$actualReadback | ConvertTo-Json -Depth 80 | ConvertFrom-Json
+$differentBootReadback.bootIdentity.windowsLastBootUpTimeUtc='2026-10-18T07:39:14.5000000Z'
+$differentBootReadback.bootIdentity.checkpoints=@('2026-10-18T07:39:14.5000000Z','2026-10-18T07:39:14.5000000Z','2026-10-18T07:39:14.5000000Z','2026-10-18T07:39:14.5000000Z','2026-10-18T07:39:14.5000000Z')
+$differentBootIdentity=Get-CombinedVmBootIdentity -ReadbackContent $differentBootReadback -OriginalUuid $originalUuid -ExpectedOriginalUuid $originalUuid -ExpectedMode 'Replacement'
+Assert-PurePhase 'actual-074123-changed-boot-time-changes-derived-id' {if([string]$differentBootIdentity.bootId -ceq $expectedBootId){throw 'Changed Windows boot time reused the prior boot identity token.'}}
 $system=[pscustomobject]@{Manufacturer=$identity.manufacturer;Model=$identity.model}
 $product=[pscustomobject]@{UUID=$identity.uuid}
 Assert-PurePhase 'phase-identity-matches' {Assert-CombinedVmPhaseIdentity $system $product $identity}

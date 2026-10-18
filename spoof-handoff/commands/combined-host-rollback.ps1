@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([Parameter(Mandatory=$true)][string]$RunDirectory)
+param([string]$RunDirectory)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 
@@ -19,5 +19,16 @@ else {
 }
 $implementation = Join-Path $worktreeRoot 'spoof-handoff\tools\combined_host\recovery.ps1'
 if (-not (Test-Path -LiteralPath $implementation -PathType Leaf)) { throw "Combined host rollback implementation is missing: $implementation" }
-& (Join-Path $PSHOME 'powershell.exe') -NoProfile -ExecutionPolicy Bypass -File $implementation -RepositoryRoot $repositoryRoot -WorktreeRoot $worktreeRoot -RunDirectory ([IO.Path]::GetFullPath($RunDirectory))
-if ($LASTEXITCODE -ne 0) { throw 'Combined host rollback failed or is incomplete. Preserve the exact error and journal; follow COMBINED_HOST_RUNBOOK.md and the storage recovery document.' }
+Import-Module (Join-Path $worktreeRoot 'spoof-handoff\tools\combined_host\step-support.psm1') -Force -DisableNameChecking -ErrorAction Stop
+$principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Open elevated Windows PowerShell before running combined host rollback.' }
+$defaults = Get-CombinedStepDefaults -RepositoryRoot $repositoryRoot -WorktreeRoot $worktreeRoot
+$lock = Enter-CombinedStepLock -Path $defaults.LockPath
+try {
+    if (-not $RunDirectory) { $RunDirectory = (Read-CombinedStepPrepared -Path $defaults.PreparedPath -RunRoot $defaults.RunRoot).runDirectory }
+    $RunDirectory = Assert-CombinedStepRunDirectory -RunDirectory $RunDirectory -RunRoot $defaults.RunRoot
+    $arguments = @('-NoProfile','-ExecutionPolicy','Bypass','-File',$implementation,'-RepositoryRoot',$repositoryRoot,'-WorktreeRoot',$worktreeRoot,'-RunDirectory',$RunDirectory)
+    $child = Invoke-CombinedStepChild -Program (Join-Path $PSHOME 'powershell.exe') -Arguments $arguments -EvidenceRoot $defaults.EvidenceRoot -Action 'Rollback'
+    if ($child.stderr) { [Console]::Error.Write($child.stderr) }
+    Write-Output $child.stdout.TrimEnd()
+} finally { $lock.Dispose() }
