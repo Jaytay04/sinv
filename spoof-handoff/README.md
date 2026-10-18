@@ -1,5 +1,22 @@
 # HWID identifier spoof — handoff package
 
+CURRENT HOST PROOF (2026-10-18)
+
+All nine confirmed field categories have original -> replacement -> restored
+proof on DESKTOP-5852FUT, across separate SMBIOS, Disk 0, and four-adapter NIC
+runs. SMBIOS was read through native RSMB and WMI; Disk 0 through storage IOCTL
+and WMI; NIC current addresses through seven native/Windows readers plus the
+Intel Wi-Fi DOT11 query. These are the recorded read paths and devices, not a
+simultaneous all-nine deployment or a claim about every possible reader.
+The NIC run restored original current addresses and typed registry values with
+Secure Boot ON, test-signing OFF, no test certificate and no project NIC filter.
+CPU/GPU serial members remain zero/disabled. See
+`docs/NIC_VM_VALIDATION.md` and
+`reports/review-20261017/nic-host-round-trip.json` for evidence and limitations.
+
+The field-to-member map below remains authoritative. The process-local sections
+describe the original userspace package and its own visibility limits.
+
 Windows-only confirmed field -> HWID_SPOOF_CONFIG member mapping and process-local
 machine identifier spoofing for a client application. The interceptor affects only
 the package's explicit userspace read wrappers. Native Windows reads stay intact.

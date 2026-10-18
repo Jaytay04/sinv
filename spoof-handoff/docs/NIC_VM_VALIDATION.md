@@ -1,12 +1,78 @@
 # NIC reader-path validation
 
-**Same-vendor VMware VMnet VM gate: PASS (84/84). Current result: `VM_GATE_PASS_HOST_RETRY_READY`; physical-host NIC remains unproven (8/9 categories).**
+**Physical-host result: `ROUND_TRIP_PASS_AND_RESTORED` (87/87 applicable reader observations). All nine confirmed field categories now have host round-trip evidence from separate runs.**
 
-The four-target disposable-VM round trip and independent raw-input preflight
-passed. The physical-host attempt still needs an elevated operator run; VM
-virtual adapters do not establish proof for the physical Intel AX201.
+The host run `20261018T013020912Z.569ae5e9bb194eb1b48994e33f4cd4a2`
+passed after the same-vendor VMware VMnet VM gate (84/84). This closes the
+physical Intel AX201 and VMware VMnet reader gap. Earlier failed attempts and
+VM-only results below remain historical evidence.
 
 Evidence paths below are relative to the main repository root; implementation source is in the feature worktree.
+
+## Completed physical-host round trip
+
+On DESKTOP-5852FUT (MAINGEAR VYBE, MSI MS-7D37, Windows 11 build
+26200.9711), all four locked adapters returned these exact replacements and
+then their original current addresses:
+
+| Adapter | Original and restored | Replacement |
+|---|---|---|
+| VMware VMnet8 | `00:50:56:C0:00:08` | `02:90:10:20:30:40` |
+| VMware VMnet1 | `00:50:56:C0:00:01` | `02:90:10:20:30:41` |
+| Intel Wi-Fi AX201 | `C4:BD:E5:32:06:D1` | `02:90:10:20:30:42` |
+| Realtek Ethernet | `D8:BB:C1:D8:57:20` | `02:90:10:20:30:43` |
+
+The seven common readers were direct `OID_802_3_CURRENT_ADDRESS`,
+`GetAdaptersAddresses`, `GetAdaptersInfo`, `GetIfTable2`, fresh
+`Win32_NetworkAdapter.MACAddress`, fresh `MSFT_NetAdapter.NetworkAddresses`,
+and `Get-NetAdapter.MacAddress`. Four adapters times seven readers times
+original/replacement/restored gives 84 observations. Intel Wi-Fi also passed
+`OID_DOT11_CURRENT_ADDRESS` in all three states, making 87 applicable
+observations. The other three adapters returned error 87 for DOT11 in each
+state; those nine not-applicable results are not counted as successful reads.
+
+The mechanism was the per-device typed `NetworkAddress` configuration and an
+adapter restart. The read-only native executable used no replacement wrapper.
+No project NIC filter, test certificate, boot payload, reboot, or security
+setting change was required for this NIC run. Permanent-address properties
+were recorded for context and are not claimed changed.
+
+All four typed registry baselines and administrative states were restored.
+VMnet8, VMnet1 and Wi-Fi returned connected; Realtek returned disconnected.
+Realtek's immediate restore checkpoint recorded `MediaConnectState=0` versus
+baseline 2, both classified disconnected; the later final readback returned
+2 and Disconnected, matching the baseline. The transient checkpoint is retained.
+
+Before/after evidence confirms Secure Boot ON (`SecureBoot=01`), test-signing
+OFF, the pinned certificate absent from Root and TrustedPublisher, and the NIC
+filter service/bindings absent. The five captured firmware variables and all
+live/exported BCD enumerations matched. ESP inventory contained 164 files:
+159 ordinary files matched SHA-256, four live BCD hive/log files were verified
+through supported export/enumeration, and BOOTSTAT.DAT was classified mutable.
+Raw live BCD hive/log byte equality and uncaptured firmware variables are not
+claimed.
+
+The host journal SHA-256 is
+`83906F41B77A9B45B605E8DC03A6E9224641413D0EE8CD4C0F069C9508E6A481`.
+The replacement readback SHA-256 is
+`318203ECC5096020CCB8BB9D4B21059B5D62A447411F1F86FB24952B922BAB29`.
+The restored readback SHA-256 is
+`9B6645DE3D44BEEB316AEE429CC684FF6E59CB08EAD62F95DDE2A21B4383FF4E`.
+
+Consolidated actual per-reader values, source hashes, platform comparisons,
+historical SMBIOS/disk evidence, and limitations are in
+`spoof-handoff/reports/review-20261017/nic-host-round-trip.json`.
+`nic-host-round-trip-SHA256SUMS.txt` beside it pins the durable evidence files.
+Raw local captures remain under
+`spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T013020912Z.569ae5e9bb194eb1b48994e33f4cd4a2/`.
+
+The confirmed total is 9/9 categories: seven SMBIOS values via native RSMB and
+WMI, one pinned physical disk serial via storage IOCTL and WMI, and current MACs
+on four locked adapters via the seven common readers plus Wi-Fi DOT11.
+These are separate successful host round trips, not one simultaneous combined
+deployment or a claim about every possible reader. CPU/GPU serials remain
+zero/disabled. The earlier disk proof's own scope and recovery limitations
+remain unchanged.
 
 ## Host snapshot failure and retry
 
@@ -169,9 +235,9 @@ across seven readers and Wi-Fi `OID_DOT11_CURRENT_ADDRESS`:
 `spoof-handoff/reports/nic-reader-gap-20261017/host-originals-after-canceled-launch/readback.20261018T000509195Z.c0ce6e41886e441798fe4ffc22eb5d9e.json`.
 The direct Wi-Fi OID passed; the other three adapters retained N/A with error
 87. These are original-value readbacks only, not proof of physical-host spoof
-interception. No physical-host replacement was applied, and NIC remains the
-unproven ninth category. No byte-for-byte host BCD, ESP or firmware
-verification is claimed.
+interception. At that earlier stage no physical-host replacement had been
+applied, and NIC was the unproven ninth category. The completed host round trip
+above supersedes that status without broadening the older readback's evidence.
 
 ## Historical source and regression checks
 
@@ -222,13 +288,13 @@ Driver strings `NdisReadNetworkAddress` and `Using registry-specified MAC
 address.` remain investigation leads; they do not prove that configuration is
 accepted by the physical VMnet driver.
 
-## Host run readiness
+## Repeating the completed host test
 
-The same-vendor VM gate, independent 84-observation preflight, and host
-apply/capture/wiring tests have passed. The host run is ready, but NIC remains
-unproven (8/9 categories) until the physical-host run verifies the actual
-Intel AX201 alongside the other locked targets. VM virtual adapters do not
-substitute for physical-host proof.
+The same-vendor VM gate, independent 84-observation preflight, host
+apply/capture/wiring tests, and the physical-host round trip have passed.
+No further run or rollback is needed to complete the recorded proof. The
+following commands are retained for an explicit future repeat or interrupted-run
+recovery; running the test again changes adapter configuration temporarily.
 
 Open an elevated PowerShell session at the repository root. The script checks
 all seven common reader paths for each target and Wi-Fi direct OID where
