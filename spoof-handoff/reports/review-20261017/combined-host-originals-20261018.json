@@ -1,0 +1,1270 @@
+{
+    "schema":  "combined-host-readback.v1",
+    "status":  "PASS",
+    "readOnly":  true,
+    "deviceConfigurationChanged":  false,
+    "expectedMode":  "Original",
+    "captureStartedUtc":  "2026-10-18T03:28:44.3554376Z",
+    "captureEndedUtc":  "2026-10-18T03:28:50.6701897Z",
+    "lockedMap":  {
+                      "path":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\client-originals.tsv",
+                      "sha256":  "F628CB25D18F549A877C1529A82986B524BFD3D8B9801A776405F969FC4F42C3",
+                      "bindingCount":  12
+                  },
+    "scope":  "Seven SMBIOS fields, PHYSICALDRIVE0, and the four locked NICs. Other disks, including USB devices, are excluded.",
+    "excludedDiskTargets":  [
+
+                            ],
+    "bootIdentity":  {
+                         "windowsLastBootUpTimeUtc":  "2026-10-17T21:36:36.5000000Z",
+                         "checkpoints":  [
+                                             "2026-10-17T21:36:36.5000000Z",
+                                             "2026-10-17T21:36:36.5000000Z",
+                                             "2026-10-17T21:36:36.5000000Z",
+                                             "2026-10-17T21:36:36.5000000Z",
+                                             "2026-10-17T21:36:36.5000000Z"
+                                         ],
+                         "finalError":  "",
+                         "sameBoot":  true
+                     },
+    "sourcePins":  [
+                       {
+                           "name":  "combinedCollectorScript",
+                           "path":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\tools\\combined_host\\readback.ps1",
+                           "beforePollSha256":  "99D4D8F2EAC9AAD2DD2C97013137E629D47AC0A7D7FB3211EDA97EDA6ED27FF1",
+                           "betweenPollsSha256":  "99D4D8F2EAC9AAD2DD2C97013137E629D47AC0A7D7FB3211EDA97EDA6ED27FF1",
+                           "afterPollSha256":  "99D4D8F2EAC9AAD2DD2C97013137E629D47AC0A7D7FB3211EDA97EDA6ED27FF1",
+                           "errors":  [
+
+                                      ]
+                       },
+                       {
+                           "name":  "combinedModelModule",
+                           "path":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\tools\\combined_host\\model.psm1",
+                           "beforePollSha256":  "99DB5530C218B10D6085EFAE2E00666AC844BF6D059026BE9A79AB7CF11AD437",
+                           "betweenPollsSha256":  "99DB5530C218B10D6085EFAE2E00666AC844BF6D059026BE9A79AB7CF11AD437",
+                           "afterPollSha256":  "99DB5530C218B10D6085EFAE2E00666AC844BF6D059026BE9A79AB7CF11AD437",
+                           "errors":  [
+
+                                      ]
+                       },
+                       {
+                           "name":  "lockedMap",
+                           "path":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\client-originals.tsv",
+                           "beforePollSha256":  "F628CB25D18F549A877C1529A82986B524BFD3D8B9801A776405F969FC4F42C3",
+                           "betweenPollsSha256":  "F628CB25D18F549A877C1529A82986B524BFD3D8B9801A776405F969FC4F42C3",
+                           "afterPollSha256":  "F628CB25D18F549A877C1529A82986B524BFD3D8B9801A776405F969FC4F42C3",
+                           "errors":  [
+
+                                      ]
+                       },
+                       {
+                           "name":  "smbiosCaptureReader",
+                           "path":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\artifacts\\combined-vm\\capture-tool-20261018T033000Z\\build\\smbios_windows_readback.exe",
+                           "beforePollSha256":  "9F42460250B6FB537751239931DE7DA8034C1250C397BC78FA32127D0022CBCB",
+                           "betweenPollsSha256":  "9F42460250B6FB537751239931DE7DA8034C1250C397BC78FA32127D0022CBCB",
+                           "afterPollSha256":  "9F42460250B6FB537751239931DE7DA8034C1250C397BC78FA32127D0022CBCB",
+                           "errors":  [
+
+                                      ]
+                       },
+                       {
+                           "name":  "nicReaderScript",
+                           "path":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\tools\\nic_vm_probe\\read-host.ps1",
+                           "beforePollSha256":  "612DB756A9344D0ACFACCC6B0C141315669338AD16649D8915224B5E4203265B",
+                           "betweenPollsSha256":  "612DB756A9344D0ACFACCC6B0C141315669338AD16649D8915224B5E4203265B",
+                           "afterPollSha256":  "612DB756A9344D0ACFACCC6B0C141315669338AD16649D8915224B5E4203265B",
+                           "errors":  [
+
+                                      ]
+                       },
+                       {
+                           "name":  "nicNativeReader",
+                           "path":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\artifacts\\nic-reader-gap-20261017\\native-build-vs18\\Release\\nic_native_read.exe",
+                           "beforePollSha256":  "BF553F39E4E7024C75272C24215D995858627AEDD5E946A4B1289A8033DA1642",
+                           "betweenPollsSha256":  "BF553F39E4E7024C75272C24215D995858627AEDD5E946A4B1289A8033DA1642",
+                           "afterPollSha256":  "BF553F39E4E7024C75272C24215D995858627AEDD5E946A4B1289A8033DA1642",
+                           "errors":  [
+
+                                      ]
+                       },
+                       {
+                           "name":  "storageReaderScript",
+                           "path":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\tools\\storage_host\\read.ps1",
+                           "beforePollSha256":  "DFA348A36C9BCD77A9B3D8FC9D0FE489EEEF4EF1201363A88DF90E3FD5997803",
+                           "betweenPollsSha256":  "DFA348A36C9BCD77A9B3D8FC9D0FE489EEEF4EF1201363A88DF90E3FD5997803",
+                           "afterPollSha256":  "DFA348A36C9BCD77A9B3D8FC9D0FE489EEEF4EF1201363A88DF90E3FD5997803",
+                           "errors":  [
+
+                                      ]
+                       }
+                   ],
+    "fileIntegrityProbe":  {
+                               "operation":  "repo-local file write/read SHA-256 integrity probe",
+                               "path":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\combined-host-20261018\\f\\c.6c287a78d7c0469d9a4baf6a5209efa8\\i.7f93fe147cba408b858543057f0d88d2.bin",
+                               "bytes":  4096,
+                               "expectedSha256":  "F982389894FDCD7A28E0B278CA2F98503D0B518C7A4582AA3BE4BEBF44783649",
+                               "actualSha256":  "F982389894FDCD7A28E0B278CA2F98503D0B518C7A4582AA3BE4BEBF44783649",
+                               "lengthMatches":  true,
+                               "match":  true,
+                               "ownedFileCreated":  true,
+                               "pathExistedBefore":  false,
+                               "preexistingPathPreserved":  false,
+                               "removedAfterRead":  true,
+                               "writeThrough":  true,
+                               "identifierSource":  false,
+                               "error":  null
+                           },
+    "polls":  [
+                  {
+                      "index":  1,
+                      "windowsLastBootUpTimeUtcStart":  "2026-10-17T21:36:36.5000000Z",
+                      "windowsLastBootUpTimeUtcEnd":  "2026-10-17T21:36:36.5000000Z",
+                      "evidence":  {
+                                       "smbios":  {
+                                                      "path":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\combined-host-20261018\\f\\c.6c287a78d7c0469d9a4baf6a5209efa8\\p1\\s.49e6ce9e07f14e4183d87b5987471795.json",
+                                                      "exists":  true,
+                                                      "sha256":  "B92AB919D71B097282DA08D679EA506EA57E242C30B11B5127AD96681D269CE3",
+                                                      "exitCode":  0,
+                                                      "output":  [
+                                                                     "PASS: all seven native and WMI fields match capture; report written."
+                                                                 ],
+                                                      "parseError":  null
+                                                  },
+                                       "smbiosMachineIdentity":  {
+                                                                     "source":  "SMBIOS Type 1 RSMB + Win32_ComputerSystemProduct",
+                                                                     "systemVendorNative":  "MAINGEAR",
+                                                                     "systemVendorWmi":  "MAINGEAR",
+                                                                     "systemProductNative":  "VYBE",
+                                                                     "systemProductWmi":  "VYBE"
+                                                                 },
+                                       "nic":  {
+                                                   "path":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\combined-host-20261018\\f\\c.6c287a78d7c0469d9a4baf6a5209efa8\\p1\\n\\readback.20261018T032845349Z.6dfe56bde0d54c23adedbe1e05bc57d1.json",
+                                                   "exists":  true,
+                                                   "sha256":  "8EF1E4E6D31743290AF7C76E3AB5E787B271B443869647521539E96FF3DC3CF8",
+                                                   "exitCode":  0,
+                                                   "output":  [
+                                                                  "READ-ONLY NIC EVIDENCE C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\combined-host-20261018\\f\\c.6c287a78d7c0469d9a4baf6a5209efa8\\p1\\n\\readback.20261018T032845349Z.6dfe56bde0d54c23adedbe1e05bc57d1.json",
+                                                                  "Expected mode=Original; locked MAC rows=4; all required read paths agree=True"
+                                                              ],
+                                                   "parseError":  null,
+                                                   "nativeEvidence":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\combined-host-20261018\\f\\c.6c287a78d7c0469d9a4baf6a5209efa8\\p1\\n\\native.20261018T032845349Z.6dfe56bde0d54c23adedbe1e05bc57d1.json",
+                                                   "nativeSha256":  "585D4415EF349E265AC8A4E44C9E4F9D45979CB729270582FF698AF17FE57A7F"
+                                               },
+                                       "storageReadOnly":  true
+                                   },
+                      "bindings":  [
+                                       {
+                                           "id":  "SMBIOS:system_serial",
+                                           "category":  "SMBIOS",
+                                           "member":  "FakeSMBIOSSerial",
+                                           "device":  "SMBIOS Type 1",
+                                           "expected":  "3080-26",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "rsmb",
+                                                               "expected":  "3080-26",
+                                                               "actual":  "3080-26",
+                                                               "normalizedExpected":  "3080-26",
+                                                               "normalizedActual":  "3080-26",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "wmi",
+                                                               "expected":  "3080-26",
+                                                               "actual":  "3080-26",
+                                                               "normalizedExpected":  "3080-26",
+                                                               "normalizedActual":  "3080-26",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       },
+                                       {
+                                           "id":  "SMBIOS:system_vendor",
+                                           "category":  "SMBIOS",
+                                           "member":  "FakeSMBIOSManufacturer",
+                                           "device":  "SMBIOS Type 1",
+                                           "expected":  "MAINGEAR",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "rsmb",
+                                                               "expected":  "MAINGEAR",
+                                                               "actual":  "MAINGEAR",
+                                                               "normalizedExpected":  "MAINGEAR",
+                                                               "normalizedActual":  "MAINGEAR",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "wmi",
+                                                               "expected":  "MAINGEAR",
+                                                               "actual":  "MAINGEAR",
+                                                               "normalizedExpected":  "MAINGEAR",
+                                                               "normalizedActual":  "MAINGEAR",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       },
+                                       {
+                                           "id":  "SMBIOS:system_product",
+                                           "category":  "SMBIOS",
+                                           "member":  "FakeSMBIOSProduct",
+                                           "device":  "SMBIOS Type 1",
+                                           "expected":  "VYBE",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "rsmb",
+                                                               "expected":  "VYBE",
+                                                               "actual":  "VYBE",
+                                                               "normalizedExpected":  "VYBE",
+                                                               "normalizedActual":  "VYBE",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "wmi",
+                                                               "expected":  "VYBE",
+                                                               "actual":  "VYBE",
+                                                               "normalizedExpected":  "VYBE",
+                                                               "normalizedActual":  "VYBE",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       },
+                                       {
+                                           "id":  "SMBIOS:board_serial",
+                                           "category":  "SMBIOS",
+                                           "member":  "FakeMotherboardSerial",
+                                           "device":  "SMBIOS Type 2",
+                                           "expected":  "07D3710_LC1E186916",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "rsmb",
+                                                               "expected":  "07D3710_LC1E186916",
+                                                               "actual":  "07D3710_LC1E186916",
+                                                               "normalizedExpected":  "07D3710_LC1E186916",
+                                                               "normalizedActual":  "07D3710_LC1E186916",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "wmi",
+                                                               "expected":  "07D3710_LC1E186916",
+                                                               "actual":  "07D3710_LC1E186916",
+                                                               "normalizedExpected":  "07D3710_LC1E186916",
+                                                               "normalizedActual":  "07D3710_LC1E186916",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       },
+                                       {
+                                           "id":  "SMBIOS:board_vendor",
+                                           "category":  "SMBIOS",
+                                           "member":  "FakeMotherboardManufacturer",
+                                           "device":  "SMBIOS Type 2",
+                                           "expected":  "Micro-Star International Co., Ltd.",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "rsmb",
+                                                               "expected":  "Micro-Star International Co., Ltd.",
+                                                               "actual":  "Micro-Star International Co., Ltd.",
+                                                               "normalizedExpected":  "Micro-Star International Co., Ltd.",
+                                                               "normalizedActual":  "Micro-Star International Co., Ltd.",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "wmi",
+                                                               "expected":  "Micro-Star International Co., Ltd.",
+                                                               "actual":  "Micro-Star International Co., Ltd.",
+                                                               "normalizedExpected":  "Micro-Star International Co., Ltd.",
+                                                               "normalizedActual":  "Micro-Star International Co., Ltd.",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       },
+                                       {
+                                           "id":  "SMBIOS:board_product",
+                                           "category":  "SMBIOS",
+                                           "member":  "FakeMotherboardProduct",
+                                           "device":  "SMBIOS Type 2",
+                                           "expected":  "PRO B660M-A CEC WIFI DDR4 (MS-7D37)",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "rsmb",
+                                                               "expected":  "PRO B660M-A CEC WIFI DDR4 (MS-7D37)",
+                                                               "actual":  "PRO B660M-A CEC WIFI DDR4 (MS-7D37)",
+                                                               "normalizedExpected":  "PRO B660M-A CEC WIFI DDR4 (MS-7D37)",
+                                                               "normalizedActual":  "PRO B660M-A CEC WIFI DDR4 (MS-7D37)",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "wmi",
+                                                               "expected":  "PRO B660M-A CEC WIFI DDR4 (MS-7D37)",
+                                                               "actual":  "PRO B660M-A CEC WIFI DDR4 (MS-7D37)",
+                                                               "normalizedExpected":  "PRO B660M-A CEC WIFI DDR4 (MS-7D37)",
+                                                               "normalizedActual":  "PRO B660M-A CEC WIFI DDR4 (MS-7D37)",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       },
+                                       {
+                                           "id":  "SMBIOS:system_uuid",
+                                           "category":  "SMBIOS",
+                                           "member":  "FakeSMBIOSUUID",
+                                           "device":  "SMBIOS Type 1",
+                                           "expected":  "C88B4631-C88C-871B-A6D7-D8BBC1D85720",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "rsmb",
+                                                               "expected":  "C88B4631-C88C-871B-A6D7-D8BBC1D85720",
+                                                               "actual":  "C88B4631-C88C-871B-A6D7-D8BBC1D85720",
+                                                               "normalizedExpected":  "C88B4631-C88C-871B-A6D7-D8BBC1D85720",
+                                                               "normalizedActual":  "C88B4631-C88C-871B-A6D7-D8BBC1D85720",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "wmi",
+                                                               "expected":  "C88B4631-C88C-871B-A6D7-D8BBC1D85720",
+                                                               "actual":  "C88B4631-C88C-871B-A6D7-D8BBC1D85720",
+                                                               "normalizedExpected":  "C88B4631-C88C-871B-A6D7-D8BBC1D85720",
+                                                               "normalizedActual":  "C88B4631-C88C-871B-A6D7-D8BBC1D85720",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       },
+                                       {
+                                           "id":  "DISK:PHYSICALDRIVE0",
+                                           "category":  "DISK",
+                                           "member":  "FakeDiskSerial",
+                                           "device":  "disk:\\\\.\\PHYSICALDRIVE0",
+                                           "expected":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "storageIoctl",
+                                                               "expected":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+                                                               "actual":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+                                                               "normalizedExpected":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+                                                               "normalizedActual":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "freshWmi",
+                                                               "expected":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+                                                               "actual":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+                                                               "normalizedExpected":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+                                                               "normalizedActual":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       },
+                                       {
+                                           "id":  "NIC:adapter:0|ROOT\\VMWARE\\0001",
+                                           "category":  "NIC",
+                                           "member":  "FakeMacAddress",
+                                           "device":  "adapter:0|ROOT\\VMWARE\\0001",
+                                           "expected":  "00:50:56:C0:00:08",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "ndisOid8023CurrentAddress",
+                                                               "expected":  "00:50:56:C0:00:08",
+                                                               "actual":  "00:50:56:C0:00:08",
+                                                               "normalizedExpected":  "005056C00008",
+                                                               "normalizedActual":  "005056C00008",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getAdaptersAddresses",
+                                                               "expected":  "00:50:56:C0:00:08",
+                                                               "actual":  "00:50:56:C0:00:08",
+                                                               "normalizedExpected":  "005056C00008",
+                                                               "normalizedActual":  "005056C00008",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getAdaptersInfoAddress",
+                                                               "expected":  "00:50:56:C0:00:08",
+                                                               "actual":  "00:50:56:C0:00:08",
+                                                               "normalizedExpected":  "005056C00008",
+                                                               "normalizedActual":  "005056C00008",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getIfTable2",
+                                                               "expected":  "00:50:56:C0:00:08",
+                                                               "actual":  "00:50:56:C0:00:08",
+                                                               "normalizedExpected":  "005056C00008",
+                                                               "normalizedActual":  "005056C00008",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "win32NetworkAdapter",
+                                                               "expected":  "00:50:56:C0:00:08",
+                                                               "actual":  "00:50:56:C0:00:08",
+                                                               "normalizedExpected":  "005056C00008",
+                                                               "normalizedActual":  "005056C00008",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "msftNetAdapterNetworkAddresses",
+                                                               "expected":  "00:50:56:C0:00:08",
+                                                               "actual":  "005056C00008",
+                                                               "normalizedExpected":  "005056C00008",
+                                                               "normalizedActual":  "005056C00008",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getNetAdapter",
+                                                               "expected":  "00:50:56:C0:00:08",
+                                                               "actual":  "00-50-56-C0-00-08",
+                                                               "normalizedExpected":  "005056C00008",
+                                                               "normalizedActual":  "005056C00008",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       },
+                                       {
+                                           "id":  "NIC:adapter:3|ROOT\\VMWARE\\0000",
+                                           "category":  "NIC",
+                                           "member":  "FakeMacAddress",
+                                           "device":  "adapter:3|ROOT\\VMWARE\\0000",
+                                           "expected":  "00:50:56:C0:00:01",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "ndisOid8023CurrentAddress",
+                                                               "expected":  "00:50:56:C0:00:01",
+                                                               "actual":  "00:50:56:C0:00:01",
+                                                               "normalizedExpected":  "005056C00001",
+                                                               "normalizedActual":  "005056C00001",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getAdaptersAddresses",
+                                                               "expected":  "00:50:56:C0:00:01",
+                                                               "actual":  "00:50:56:C0:00:01",
+                                                               "normalizedExpected":  "005056C00001",
+                                                               "normalizedActual":  "005056C00001",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getAdaptersInfoAddress",
+                                                               "expected":  "00:50:56:C0:00:01",
+                                                               "actual":  "00:50:56:C0:00:01",
+                                                               "normalizedExpected":  "005056C00001",
+                                                               "normalizedActual":  "005056C00001",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getIfTable2",
+                                                               "expected":  "00:50:56:C0:00:01",
+                                                               "actual":  "00:50:56:C0:00:01",
+                                                               "normalizedExpected":  "005056C00001",
+                                                               "normalizedActual":  "005056C00001",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "win32NetworkAdapter",
+                                                               "expected":  "00:50:56:C0:00:01",
+                                                               "actual":  "00:50:56:C0:00:01",
+                                                               "normalizedExpected":  "005056C00001",
+                                                               "normalizedActual":  "005056C00001",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "msftNetAdapterNetworkAddresses",
+                                                               "expected":  "00:50:56:C0:00:01",
+                                                               "actual":  "005056C00001",
+                                                               "normalizedExpected":  "005056C00001",
+                                                               "normalizedActual":  "005056C00001",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getNetAdapter",
+                                                               "expected":  "00:50:56:C0:00:01",
+                                                               "actual":  "00-50-56-C0-00-01",
+                                                               "normalizedExpected":  "005056C00001",
+                                                               "normalizedActual":  "005056C00001",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       },
+                                       {
+                                           "id":  "NIC:adapter:4|PCI\\VEN_8086\u0026DEV_7AF0\u0026SUBSYS_00748086\u0026REV_11\\3\u002611583659\u00261\u0026A3",
+                                           "category":  "NIC",
+                                           "member":  "FakeMacAddress",
+                                           "device":  "adapter:4|PCI\\VEN_8086\u0026DEV_7AF0\u0026SUBSYS_00748086\u0026REV_11\\3\u002611583659\u00261\u0026A3",
+                                           "expected":  "C4:BD:E5:32:06:D1",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "ndisOid8023CurrentAddress",
+                                                               "expected":  "C4:BD:E5:32:06:D1",
+                                                               "actual":  "C4:BD:E5:32:06:D1",
+                                                               "normalizedExpected":  "C4BDE53206D1",
+                                                               "normalizedActual":  "C4BDE53206D1",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getAdaptersAddresses",
+                                                               "expected":  "C4:BD:E5:32:06:D1",
+                                                               "actual":  "C4:BD:E5:32:06:D1",
+                                                               "normalizedExpected":  "C4BDE53206D1",
+                                                               "normalizedActual":  "C4BDE53206D1",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getAdaptersInfoAddress",
+                                                               "expected":  "C4:BD:E5:32:06:D1",
+                                                               "actual":  "C4:BD:E5:32:06:D1",
+                                                               "normalizedExpected":  "C4BDE53206D1",
+                                                               "normalizedActual":  "C4BDE53206D1",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getIfTable2",
+                                                               "expected":  "C4:BD:E5:32:06:D1",
+                                                               "actual":  "C4:BD:E5:32:06:D1",
+                                                               "normalizedExpected":  "C4BDE53206D1",
+                                                               "normalizedActual":  "C4BDE53206D1",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "win32NetworkAdapter",
+                                                               "expected":  "C4:BD:E5:32:06:D1",
+                                                               "actual":  "C4:BD:E5:32:06:D1",
+                                                               "normalizedExpected":  "C4BDE53206D1",
+                                                               "normalizedActual":  "C4BDE53206D1",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "msftNetAdapterNetworkAddresses",
+                                                               "expected":  "C4:BD:E5:32:06:D1",
+                                                               "actual":  "C4BDE53206D1",
+                                                               "normalizedExpected":  "C4BDE53206D1",
+                                                               "normalizedActual":  "C4BDE53206D1",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getNetAdapter",
+                                                               "expected":  "C4:BD:E5:32:06:D1",
+                                                               "actual":  "C4-BD-E5-32-06-D1",
+                                                               "normalizedExpected":  "C4BDE53206D1",
+                                                               "normalizedActual":  "C4BDE53206D1",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "ndisOidDot11CurrentAddress",
+                                                               "expected":  "C4:BD:E5:32:06:D1",
+                                                               "actual":  "C4:BD:E5:32:06:D1",
+                                                               "normalizedExpected":  "C4BDE53206D1",
+                                                               "normalizedActual":  "C4BDE53206D1",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       },
+                                       {
+                                           "id":  "NIC:adapter:5|PCI\\VEN_10EC\u0026DEV_8125\u0026SUBSYS_7D371462\u0026REV_05\\4\u00263FA6681\u00260\u002600E2",
+                                           "category":  "NIC",
+                                           "member":  "FakeMacAddress",
+                                           "device":  "adapter:5|PCI\\VEN_10EC\u0026DEV_8125\u0026SUBSYS_7D371462\u0026REV_05\\4\u00263FA6681\u00260\u002600E2",
+                                           "expected":  "D8:BB:C1:D8:57:20",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "ndisOid8023CurrentAddress",
+                                                               "expected":  "D8:BB:C1:D8:57:20",
+                                                               "actual":  "D8:BB:C1:D8:57:20",
+                                                               "normalizedExpected":  "D8BBC1D85720",
+                                                               "normalizedActual":  "D8BBC1D85720",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getAdaptersAddresses",
+                                                               "expected":  "D8:BB:C1:D8:57:20",
+                                                               "actual":  "D8:BB:C1:D8:57:20",
+                                                               "normalizedExpected":  "D8BBC1D85720",
+                                                               "normalizedActual":  "D8BBC1D85720",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getAdaptersInfoAddress",
+                                                               "expected":  "D8:BB:C1:D8:57:20",
+                                                               "actual":  "D8:BB:C1:D8:57:20",
+                                                               "normalizedExpected":  "D8BBC1D85720",
+                                                               "normalizedActual":  "D8BBC1D85720",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getIfTable2",
+                                                               "expected":  "D8:BB:C1:D8:57:20",
+                                                               "actual":  "D8:BB:C1:D8:57:20",
+                                                               "normalizedExpected":  "D8BBC1D85720",
+                                                               "normalizedActual":  "D8BBC1D85720",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "win32NetworkAdapter",
+                                                               "expected":  "D8:BB:C1:D8:57:20",
+                                                               "actual":  "D8:BB:C1:D8:57:20",
+                                                               "normalizedExpected":  "D8BBC1D85720",
+                                                               "normalizedActual":  "D8BBC1D85720",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "msftNetAdapterNetworkAddresses",
+                                                               "expected":  "D8:BB:C1:D8:57:20",
+                                                               "actual":  "D8BBC1D85720",
+                                                               "normalizedExpected":  "D8BBC1D85720",
+                                                               "normalizedActual":  "D8BBC1D85720",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getNetAdapter",
+                                                               "expected":  "D8:BB:C1:D8:57:20",
+                                                               "actual":  "D8-BB-C1-D8-57-20",
+                                                               "normalizedExpected":  "D8BBC1D85720",
+                                                               "normalizedActual":  "D8BBC1D85720",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       }
+                                   ],
+                      "errors":  [
+
+                                 ],
+                      "pass":  true
+                  },
+                  {
+                      "index":  2,
+                      "windowsLastBootUpTimeUtcStart":  "2026-10-17T21:36:36.5000000Z",
+                      "windowsLastBootUpTimeUtcEnd":  "2026-10-17T21:36:36.5000000Z",
+                      "evidence":  {
+                                       "smbios":  {
+                                                      "path":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\combined-host-20261018\\f\\c.6c287a78d7c0469d9a4baf6a5209efa8\\p2\\s.4ae03f6862004c56bc4ee67f92843bcb.json",
+                                                      "exists":  true,
+                                                      "sha256":  "BAB72BE22D73A7D92A02652026C5D3107C9B4C4DD970AFB9DAFD8B7A7835AF4B",
+                                                      "exitCode":  0,
+                                                      "output":  [
+                                                                     "PASS: all seven native and WMI fields match capture; report written."
+                                                                 ],
+                                                      "parseError":  null
+                                                  },
+                                       "smbiosMachineIdentity":  {
+                                                                     "source":  "SMBIOS Type 1 RSMB + Win32_ComputerSystemProduct",
+                                                                     "systemVendorNative":  "MAINGEAR",
+                                                                     "systemVendorWmi":  "MAINGEAR",
+                                                                     "systemProductNative":  "VYBE",
+                                                                     "systemProductWmi":  "VYBE"
+                                                                 },
+                                       "nic":  {
+                                                   "path":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\combined-host-20261018\\f\\c.6c287a78d7c0469d9a4baf6a5209efa8\\p2\\n\\readback.20261018T032849041Z.6992e03fd3974063b7a5d24a5257eda9.json",
+                                                   "exists":  true,
+                                                   "sha256":  "AB4A21A4811F70CE96FDEB522A36158D5A5B1654468BE225A30673E484FFC4FF",
+                                                   "exitCode":  0,
+                                                   "output":  [
+                                                                  "READ-ONLY NIC EVIDENCE C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\combined-host-20261018\\f\\c.6c287a78d7c0469d9a4baf6a5209efa8\\p2\\n\\readback.20261018T032849041Z.6992e03fd3974063b7a5d24a5257eda9.json",
+                                                                  "Expected mode=Original; locked MAC rows=4; all required read paths agree=True"
+                                                              ],
+                                                   "parseError":  null,
+                                                   "nativeEvidence":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\combined-host-20261018\\f\\c.6c287a78d7c0469d9a4baf6a5209efa8\\p2\\n\\native.20261018T032849041Z.6992e03fd3974063b7a5d24a5257eda9.json",
+                                                   "nativeSha256":  "91FB64CCD12C34486F1CB14CD6D9F78C99B0F448FC414AB85C65A7A314F7427C"
+                                               },
+                                       "storageReadOnly":  true
+                                   },
+                      "bindings":  [
+                                       {
+                                           "id":  "SMBIOS:system_serial",
+                                           "category":  "SMBIOS",
+                                           "member":  "FakeSMBIOSSerial",
+                                           "device":  "SMBIOS Type 1",
+                                           "expected":  "3080-26",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "rsmb",
+                                                               "expected":  "3080-26",
+                                                               "actual":  "3080-26",
+                                                               "normalizedExpected":  "3080-26",
+                                                               "normalizedActual":  "3080-26",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "wmi",
+                                                               "expected":  "3080-26",
+                                                               "actual":  "3080-26",
+                                                               "normalizedExpected":  "3080-26",
+                                                               "normalizedActual":  "3080-26",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       },
+                                       {
+                                           "id":  "SMBIOS:system_vendor",
+                                           "category":  "SMBIOS",
+                                           "member":  "FakeSMBIOSManufacturer",
+                                           "device":  "SMBIOS Type 1",
+                                           "expected":  "MAINGEAR",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "rsmb",
+                                                               "expected":  "MAINGEAR",
+                                                               "actual":  "MAINGEAR",
+                                                               "normalizedExpected":  "MAINGEAR",
+                                                               "normalizedActual":  "MAINGEAR",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "wmi",
+                                                               "expected":  "MAINGEAR",
+                                                               "actual":  "MAINGEAR",
+                                                               "normalizedExpected":  "MAINGEAR",
+                                                               "normalizedActual":  "MAINGEAR",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       },
+                                       {
+                                           "id":  "SMBIOS:system_product",
+                                           "category":  "SMBIOS",
+                                           "member":  "FakeSMBIOSProduct",
+                                           "device":  "SMBIOS Type 1",
+                                           "expected":  "VYBE",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "rsmb",
+                                                               "expected":  "VYBE",
+                                                               "actual":  "VYBE",
+                                                               "normalizedExpected":  "VYBE",
+                                                               "normalizedActual":  "VYBE",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "wmi",
+                                                               "expected":  "VYBE",
+                                                               "actual":  "VYBE",
+                                                               "normalizedExpected":  "VYBE",
+                                                               "normalizedActual":  "VYBE",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       },
+                                       {
+                                           "id":  "SMBIOS:board_serial",
+                                           "category":  "SMBIOS",
+                                           "member":  "FakeMotherboardSerial",
+                                           "device":  "SMBIOS Type 2",
+                                           "expected":  "07D3710_LC1E186916",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "rsmb",
+                                                               "expected":  "07D3710_LC1E186916",
+                                                               "actual":  "07D3710_LC1E186916",
+                                                               "normalizedExpected":  "07D3710_LC1E186916",
+                                                               "normalizedActual":  "07D3710_LC1E186916",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "wmi",
+                                                               "expected":  "07D3710_LC1E186916",
+                                                               "actual":  "07D3710_LC1E186916",
+                                                               "normalizedExpected":  "07D3710_LC1E186916",
+                                                               "normalizedActual":  "07D3710_LC1E186916",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       },
+                                       {
+                                           "id":  "SMBIOS:board_vendor",
+                                           "category":  "SMBIOS",
+                                           "member":  "FakeMotherboardManufacturer",
+                                           "device":  "SMBIOS Type 2",
+                                           "expected":  "Micro-Star International Co., Ltd.",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "rsmb",
+                                                               "expected":  "Micro-Star International Co., Ltd.",
+                                                               "actual":  "Micro-Star International Co., Ltd.",
+                                                               "normalizedExpected":  "Micro-Star International Co., Ltd.",
+                                                               "normalizedActual":  "Micro-Star International Co., Ltd.",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "wmi",
+                                                               "expected":  "Micro-Star International Co., Ltd.",
+                                                               "actual":  "Micro-Star International Co., Ltd.",
+                                                               "normalizedExpected":  "Micro-Star International Co., Ltd.",
+                                                               "normalizedActual":  "Micro-Star International Co., Ltd.",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       },
+                                       {
+                                           "id":  "SMBIOS:board_product",
+                                           "category":  "SMBIOS",
+                                           "member":  "FakeMotherboardProduct",
+                                           "device":  "SMBIOS Type 2",
+                                           "expected":  "PRO B660M-A CEC WIFI DDR4 (MS-7D37)",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "rsmb",
+                                                               "expected":  "PRO B660M-A CEC WIFI DDR4 (MS-7D37)",
+                                                               "actual":  "PRO B660M-A CEC WIFI DDR4 (MS-7D37)",
+                                                               "normalizedExpected":  "PRO B660M-A CEC WIFI DDR4 (MS-7D37)",
+                                                               "normalizedActual":  "PRO B660M-A CEC WIFI DDR4 (MS-7D37)",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "wmi",
+                                                               "expected":  "PRO B660M-A CEC WIFI DDR4 (MS-7D37)",
+                                                               "actual":  "PRO B660M-A CEC WIFI DDR4 (MS-7D37)",
+                                                               "normalizedExpected":  "PRO B660M-A CEC WIFI DDR4 (MS-7D37)",
+                                                               "normalizedActual":  "PRO B660M-A CEC WIFI DDR4 (MS-7D37)",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       },
+                                       {
+                                           "id":  "SMBIOS:system_uuid",
+                                           "category":  "SMBIOS",
+                                           "member":  "FakeSMBIOSUUID",
+                                           "device":  "SMBIOS Type 1",
+                                           "expected":  "C88B4631-C88C-871B-A6D7-D8BBC1D85720",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "rsmb",
+                                                               "expected":  "C88B4631-C88C-871B-A6D7-D8BBC1D85720",
+                                                               "actual":  "C88B4631-C88C-871B-A6D7-D8BBC1D85720",
+                                                               "normalizedExpected":  "C88B4631-C88C-871B-A6D7-D8BBC1D85720",
+                                                               "normalizedActual":  "C88B4631-C88C-871B-A6D7-D8BBC1D85720",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "wmi",
+                                                               "expected":  "C88B4631-C88C-871B-A6D7-D8BBC1D85720",
+                                                               "actual":  "C88B4631-C88C-871B-A6D7-D8BBC1D85720",
+                                                               "normalizedExpected":  "C88B4631-C88C-871B-A6D7-D8BBC1D85720",
+                                                               "normalizedActual":  "C88B4631-C88C-871B-A6D7-D8BBC1D85720",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       },
+                                       {
+                                           "id":  "DISK:PHYSICALDRIVE0",
+                                           "category":  "DISK",
+                                           "member":  "FakeDiskSerial",
+                                           "device":  "disk:\\\\.\\PHYSICALDRIVE0",
+                                           "expected":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "storageIoctl",
+                                                               "expected":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+                                                               "actual":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+                                                               "normalizedExpected":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+                                                               "normalizedActual":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "freshWmi",
+                                                               "expected":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+                                                               "actual":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+                                                               "normalizedExpected":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+                                                               "normalizedActual":  "0000_0000_0100_0000_E4D2_5CDF_3227_5501.",
+                                                               "cardinality":  null,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       },
+                                       {
+                                           "id":  "NIC:adapter:0|ROOT\\VMWARE\\0001",
+                                           "category":  "NIC",
+                                           "member":  "FakeMacAddress",
+                                           "device":  "adapter:0|ROOT\\VMWARE\\0001",
+                                           "expected":  "00:50:56:C0:00:08",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "ndisOid8023CurrentAddress",
+                                                               "expected":  "00:50:56:C0:00:08",
+                                                               "actual":  "00:50:56:C0:00:08",
+                                                               "normalizedExpected":  "005056C00008",
+                                                               "normalizedActual":  "005056C00008",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getAdaptersAddresses",
+                                                               "expected":  "00:50:56:C0:00:08",
+                                                               "actual":  "00:50:56:C0:00:08",
+                                                               "normalizedExpected":  "005056C00008",
+                                                               "normalizedActual":  "005056C00008",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getAdaptersInfoAddress",
+                                                               "expected":  "00:50:56:C0:00:08",
+                                                               "actual":  "00:50:56:C0:00:08",
+                                                               "normalizedExpected":  "005056C00008",
+                                                               "normalizedActual":  "005056C00008",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getIfTable2",
+                                                               "expected":  "00:50:56:C0:00:08",
+                                                               "actual":  "00:50:56:C0:00:08",
+                                                               "normalizedExpected":  "005056C00008",
+                                                               "normalizedActual":  "005056C00008",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "win32NetworkAdapter",
+                                                               "expected":  "00:50:56:C0:00:08",
+                                                               "actual":  "00:50:56:C0:00:08",
+                                                               "normalizedExpected":  "005056C00008",
+                                                               "normalizedActual":  "005056C00008",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "msftNetAdapterNetworkAddresses",
+                                                               "expected":  "00:50:56:C0:00:08",
+                                                               "actual":  "005056C00008",
+                                                               "normalizedExpected":  "005056C00008",
+                                                               "normalizedActual":  "005056C00008",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getNetAdapter",
+                                                               "expected":  "00:50:56:C0:00:08",
+                                                               "actual":  "00-50-56-C0-00-08",
+                                                               "normalizedExpected":  "005056C00008",
+                                                               "normalizedActual":  "005056C00008",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       },
+                                       {
+                                           "id":  "NIC:adapter:3|ROOT\\VMWARE\\0000",
+                                           "category":  "NIC",
+                                           "member":  "FakeMacAddress",
+                                           "device":  "adapter:3|ROOT\\VMWARE\\0000",
+                                           "expected":  "00:50:56:C0:00:01",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "ndisOid8023CurrentAddress",
+                                                               "expected":  "00:50:56:C0:00:01",
+                                                               "actual":  "00:50:56:C0:00:01",
+                                                               "normalizedExpected":  "005056C00001",
+                                                               "normalizedActual":  "005056C00001",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getAdaptersAddresses",
+                                                               "expected":  "00:50:56:C0:00:01",
+                                                               "actual":  "00:50:56:C0:00:01",
+                                                               "normalizedExpected":  "005056C00001",
+                                                               "normalizedActual":  "005056C00001",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getAdaptersInfoAddress",
+                                                               "expected":  "00:50:56:C0:00:01",
+                                                               "actual":  "00:50:56:C0:00:01",
+                                                               "normalizedExpected":  "005056C00001",
+                                                               "normalizedActual":  "005056C00001",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getIfTable2",
+                                                               "expected":  "00:50:56:C0:00:01",
+                                                               "actual":  "00:50:56:C0:00:01",
+                                                               "normalizedExpected":  "005056C00001",
+                                                               "normalizedActual":  "005056C00001",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "win32NetworkAdapter",
+                                                               "expected":  "00:50:56:C0:00:01",
+                                                               "actual":  "00:50:56:C0:00:01",
+                                                               "normalizedExpected":  "005056C00001",
+                                                               "normalizedActual":  "005056C00001",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "msftNetAdapterNetworkAddresses",
+                                                               "expected":  "00:50:56:C0:00:01",
+                                                               "actual":  "005056C00001",
+                                                               "normalizedExpected":  "005056C00001",
+                                                               "normalizedActual":  "005056C00001",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getNetAdapter",
+                                                               "expected":  "00:50:56:C0:00:01",
+                                                               "actual":  "00-50-56-C0-00-01",
+                                                               "normalizedExpected":  "005056C00001",
+                                                               "normalizedActual":  "005056C00001",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       },
+                                       {
+                                           "id":  "NIC:adapter:4|PCI\\VEN_8086\u0026DEV_7AF0\u0026SUBSYS_00748086\u0026REV_11\\3\u002611583659\u00261\u0026A3",
+                                           "category":  "NIC",
+                                           "member":  "FakeMacAddress",
+                                           "device":  "adapter:4|PCI\\VEN_8086\u0026DEV_7AF0\u0026SUBSYS_00748086\u0026REV_11\\3\u002611583659\u00261\u0026A3",
+                                           "expected":  "C4:BD:E5:32:06:D1",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "ndisOid8023CurrentAddress",
+                                                               "expected":  "C4:BD:E5:32:06:D1",
+                                                               "actual":  "C4:BD:E5:32:06:D1",
+                                                               "normalizedExpected":  "C4BDE53206D1",
+                                                               "normalizedActual":  "C4BDE53206D1",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getAdaptersAddresses",
+                                                               "expected":  "C4:BD:E5:32:06:D1",
+                                                               "actual":  "C4:BD:E5:32:06:D1",
+                                                               "normalizedExpected":  "C4BDE53206D1",
+                                                               "normalizedActual":  "C4BDE53206D1",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getAdaptersInfoAddress",
+                                                               "expected":  "C4:BD:E5:32:06:D1",
+                                                               "actual":  "C4:BD:E5:32:06:D1",
+                                                               "normalizedExpected":  "C4BDE53206D1",
+                                                               "normalizedActual":  "C4BDE53206D1",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getIfTable2",
+                                                               "expected":  "C4:BD:E5:32:06:D1",
+                                                               "actual":  "C4:BD:E5:32:06:D1",
+                                                               "normalizedExpected":  "C4BDE53206D1",
+                                                               "normalizedActual":  "C4BDE53206D1",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "win32NetworkAdapter",
+                                                               "expected":  "C4:BD:E5:32:06:D1",
+                                                               "actual":  "C4:BD:E5:32:06:D1",
+                                                               "normalizedExpected":  "C4BDE53206D1",
+                                                               "normalizedActual":  "C4BDE53206D1",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "msftNetAdapterNetworkAddresses",
+                                                               "expected":  "C4:BD:E5:32:06:D1",
+                                                               "actual":  "C4BDE53206D1",
+                                                               "normalizedExpected":  "C4BDE53206D1",
+                                                               "normalizedActual":  "C4BDE53206D1",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getNetAdapter",
+                                                               "expected":  "C4:BD:E5:32:06:D1",
+                                                               "actual":  "C4-BD-E5-32-06-D1",
+                                                               "normalizedExpected":  "C4BDE53206D1",
+                                                               "normalizedActual":  "C4BDE53206D1",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "ndisOidDot11CurrentAddress",
+                                                               "expected":  "C4:BD:E5:32:06:D1",
+                                                               "actual":  "C4:BD:E5:32:06:D1",
+                                                               "normalizedExpected":  "C4BDE53206D1",
+                                                               "normalizedActual":  "C4BDE53206D1",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       },
+                                       {
+                                           "id":  "NIC:adapter:5|PCI\\VEN_10EC\u0026DEV_8125\u0026SUBSYS_7D371462\u0026REV_05\\4\u00263FA6681\u00260\u002600E2",
+                                           "category":  "NIC",
+                                           "member":  "FakeMacAddress",
+                                           "device":  "adapter:5|PCI\\VEN_10EC\u0026DEV_8125\u0026SUBSYS_7D371462\u0026REV_05\\4\u00263FA6681\u00260\u002600E2",
+                                           "expected":  "D8:BB:C1:D8:57:20",
+                                           "readers":  [
+                                                           {
+                                                               "reader":  "ndisOid8023CurrentAddress",
+                                                               "expected":  "D8:BB:C1:D8:57:20",
+                                                               "actual":  "D8:BB:C1:D8:57:20",
+                                                               "normalizedExpected":  "D8BBC1D85720",
+                                                               "normalizedActual":  "D8BBC1D85720",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getAdaptersAddresses",
+                                                               "expected":  "D8:BB:C1:D8:57:20",
+                                                               "actual":  "D8:BB:C1:D8:57:20",
+                                                               "normalizedExpected":  "D8BBC1D85720",
+                                                               "normalizedActual":  "D8BBC1D85720",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getAdaptersInfoAddress",
+                                                               "expected":  "D8:BB:C1:D8:57:20",
+                                                               "actual":  "D8:BB:C1:D8:57:20",
+                                                               "normalizedExpected":  "D8BBC1D85720",
+                                                               "normalizedActual":  "D8BBC1D85720",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getIfTable2",
+                                                               "expected":  "D8:BB:C1:D8:57:20",
+                                                               "actual":  "D8:BB:C1:D8:57:20",
+                                                               "normalizedExpected":  "D8BBC1D85720",
+                                                               "normalizedActual":  "D8BBC1D85720",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "win32NetworkAdapter",
+                                                               "expected":  "D8:BB:C1:D8:57:20",
+                                                               "actual":  "D8:BB:C1:D8:57:20",
+                                                               "normalizedExpected":  "D8BBC1D85720",
+                                                               "normalizedActual":  "D8BBC1D85720",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "msftNetAdapterNetworkAddresses",
+                                                               "expected":  "D8:BB:C1:D8:57:20",
+                                                               "actual":  "D8BBC1D85720",
+                                                               "normalizedExpected":  "D8BBC1D85720",
+                                                               "normalizedActual":  "D8BBC1D85720",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           },
+                                                           {
+                                                               "reader":  "getNetAdapter",
+                                                               "expected":  "D8:BB:C1:D8:57:20",
+                                                               "actual":  "D8-BB-C1-D8-57-20",
+                                                               "normalizedExpected":  "D8BBC1D85720",
+                                                               "normalizedActual":  "D8BBC1D85720",
+                                                               "cardinality":  1,
+                                                               "match":  true
+                                                           }
+                                                       ],
+                                           "pass":  true
+                                       }
+                                   ],
+                      "errors":  [
+
+                                 ],
+                      "pass":  true
+                  }
+              ],
+    "allBindingsMatchedInEachPoll":  true,
+    "stableAcrossPolls":  true,
+    "simultaneousReadbackPass":  true,
+    "failures":  [
+
+                 ],
+    "outputPathPreflight":  {
+                                "maximumPathLength":  206,
+                                "limit":  240,
+                                "longestPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\combined-host-20261018\\f\\c.6c287a78d7c0469d9a4baf6a5209efa8\\p1\\n\\native.0000000000000000000.00000000000000000000000000000000.stderr.txt",
+                                "withinLimit":  true
+                            }
+}

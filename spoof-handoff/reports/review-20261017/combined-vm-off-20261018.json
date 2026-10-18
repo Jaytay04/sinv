@@ -1,0 +1,10 @@
+{
+    "schema":  "combined-vm-final-power-state.v1",
+    "capturedUtc":  "2026-10-18T04:34:22.0683171Z",
+    "command":  "vmrun list",
+    "exitCode":  0,
+    "output":  [
+                   "Total running VMs: 0"
+               ],
+    "hostMutationPerformed":  false
+}

@@ -3,7 +3,11 @@
 #endif
 
 #include "smbios_table.h"
+#ifdef HYPERSINV_SMBIOS_VALUES_HEADER
+#include HYPERSINV_SMBIOS_VALUES_HEADER
+#else
 #include "smbios_values.h"
+#endif
 
 #include <Windows.h>
 #include <Wbemidl.h>
@@ -78,6 +82,7 @@ enum class ExpectMode {
     Original,
     Serial,
     Seven,
+    Capture,
     Invalid
 };
 
@@ -568,6 +573,7 @@ std::string ModeName(ExpectMode mode) {
     case ExpectMode::Original: return "original";
     case ExpectMode::Serial: return "serial";
     case ExpectMode::Seven: return "seven";
+    case ExpectMode::Capture: return "capture";
     default: return "invalid";
     }
 }
@@ -579,6 +585,8 @@ bool ParseMode(const std::wstring& text, ExpectMode& mode) {
         mode = ExpectMode::Serial;
     } else if (text == L"seven") {
         mode = ExpectMode::Seven;
+    } else if (text == L"capture") {
+        mode = ExpectMode::Capture;
     } else {
         mode = ExpectMode::Invalid;
         return false;
@@ -840,6 +848,98 @@ std::string BuildReport(Probe& probe) {
     return output.str();
 }
 
+std::string BuildCaptureReport(Probe& probe) {
+    std::array<bool, SM_FIELD_COUNT> fields_match{};
+    bool all_fields_match = true;
+    for (std::size_t field = 0; field < SM_FIELD_COUNT; ++field) {
+        fields_match[field] = probe.native.fields[field].has_value() &&
+            probe.wmi.fields[field].has_value() &&
+            *probe.native.fields[field] == *probe.wmi.fields[field];
+        all_fields_match = all_fields_match && fields_match[field];
+        if (!fields_match[field]) {
+            probe.errors.emplace_back(
+                std::string("Fresh native and WMI values differ or are missing for field ") +
+                sm_field_names[field] + ".");
+        }
+    }
+    const bool wmi_complete = probe.wmi.system_product_count_exact &&
+        probe.wmi.baseboard_count_exact &&
+        probe.wmi.system_product_instances == 1u &&
+        probe.wmi.baseboard_instances == 1u &&
+        probe.wmi.system_product_error.empty() &&
+        probe.wmi.baseboard_error.empty();
+    probe.passed = probe.valid_arguments && probe.errors.empty() &&
+        probe.native.error.empty() && wmi_complete && all_fields_match;
+
+    std::ostringstream output;
+    output << "{\n  \"schema\":\"smbios-windows-capture.v1\",\n"
+           << "  \"mode\":\"capture\",\n"
+           << "  \"result\":\"" << (probe.passed ? "PASS" : "FAIL") << "\",\n"
+           << "  \"native\":{\"source\":\"GetSystemFirmwareTable(RSMB)\",\"major\":";
+    if (probe.native.major.has_value()) output << *probe.native.major;
+    else output << "null";
+    output << ",\"minor\":";
+    if (probe.native.minor.has_value()) output << *probe.native.minor;
+    else output << "null";
+    output << ",\"tableBytes\":";
+    if (probe.native.table_bytes.has_value()) output << *probe.native.table_bytes;
+    else output << "null";
+    output << ",\"structureCount\":";
+    if (probe.native.structure_count.has_value()) output << *probe.native.structure_count;
+    else output << "null";
+    output << ",\"error\":";
+    if (probe.native.error.empty()) output << "null";
+    else AppendJsonString(output, probe.native.error);
+    output << "},\n  \"wmi\":{\"source\":\"ROOT\\\\CIMV2\","
+           << "\"systemProductClass\":\"Win32_ComputerSystemProduct\","
+           << "\"systemProductInstancesObserved\":" << probe.wmi.system_product_instances
+           << ",\"systemProductInstanceCountExact\":"
+           << (probe.wmi.system_product_count_exact ? "true" : "false")
+           << ",\"systemProductError\":";
+    if (probe.wmi.system_product_error.empty()) output << "null";
+    else AppendJsonString(output, probe.wmi.system_product_error);
+    output << ",\"baseboardClass\":\"Win32_BaseBoard\","
+           << "\"baseboardInstancesObserved\":" << probe.wmi.baseboard_instances
+           << ",\"baseboardInstanceCountExact\":"
+           << (probe.wmi.baseboard_count_exact ? "true" : "false")
+           << ",\"baseboardError\":";
+    if (probe.wmi.baseboard_error.empty()) output << "null";
+    else AppendJsonString(output, probe.wmi.baseboard_error);
+    output << "},\n  \"machineIdentity\":{"
+           << "\"source\":\"SMBIOS Type 1 RSMB + Win32_ComputerSystemProduct\","
+           << "\"systemVendorNative\":";
+    AppendJsonOptional(output, probe.native.fields[SM_FIELD_SYSTEM_VENDOR]);
+    output << ",\"systemVendorWmi\":";
+    AppendJsonOptional(output, probe.wmi.fields[SM_FIELD_SYSTEM_VENDOR]);
+    output << ",\"systemProductNative\":";
+    AppendJsonOptional(output, probe.native.fields[SM_FIELD_SYSTEM_PRODUCT]);
+    output << ",\"systemProductWmi\":";
+    AppendJsonOptional(output, probe.wmi.fields[SM_FIELD_SYSTEM_PRODUCT]);
+    output << "},\n  \"fields\":{\n";
+    for (std::size_t field = 0; field < SM_FIELD_COUNT; ++field) {
+        if (field != 0u) output << ",\n";
+        output << "    ";
+        AppendJsonString(output, sm_field_names[field]);
+        output << ":{\"observedNative\":";
+        AppendJsonOptional(output, probe.native.fields[field]);
+        output << ",\"observedWmi\":";
+        AppendJsonOptional(output, probe.wmi.fields[field]);
+        output << ",\"nativeMatchesWmi\":"
+               << (fields_match[field] ? "true" : "false") << '}';
+    }
+    output << "\n  },\n  \"bootIdentity\":{\"uptimeMilliseconds\":"
+           << probe.uptime_ms << ",\"approximateBootUtc\":";
+    if (probe.approximate_boot_utc.empty()) output << "null";
+    else AppendJsonString(output, probe.approximate_boot_utc);
+    output << "},\n  \"errors\":[";
+    for (std::size_t index = 0; index < probe.errors.size(); ++index) {
+        if (index != 0u) output << ',';
+        AppendJsonString(output, probe.errors[index]);
+    }
+    output << "]\n}\n";
+    return output.str();
+}
+
 bool WriteFileContents(HANDLE file, const std::string& contents, DWORD& error) {
     std::size_t offset = 0u;
     while (offset < contents.size()) {
@@ -969,6 +1069,13 @@ bool ParseArguments(int argc,
             }
             have_mode = true;
             mode_text = argv[++index];
+        } else if (option == L"--capture") {
+            if (have_mode) {
+                errors.emplace_back("--capture and --expect may not both be supplied.");
+                continue;
+            }
+            have_mode = true;
+            mode_text = L"capture";
         } else if (option == L"--output") {
             if (index + 1 >= argc) {
                 errors.emplace_back("--output requires a path.");
@@ -986,7 +1093,7 @@ bool ParseArguments(int argc,
         }
     }
     if (!have_mode) {
-        errors.emplace_back("--expect is required.");
+        errors.emplace_back("--expect <original|serial|seven> or --capture is required.");
     } else if (!ParseMode(mode_text, mode)) {
         errors.emplace_back("--expect must be original, serial, or seven.");
     }
@@ -1005,12 +1112,14 @@ int wmain(int argc, wchar_t** argv) {
     probe.valid_arguments = ParseArguments(
         argc, argv, mode, output_path, probe.errors);
     probe.mode = ModeName(mode);
-    try {
-        SetExpected(probe, mode);
-    } catch (const std::exception& exception) {
-        probe.valid_arguments = false;
-        probe.errors.emplace_back(exception.what());
-        probe.expected = KnownValues(sm_host_originals);
+    if (mode != ExpectMode::Capture) {
+        try {
+            SetExpected(probe, mode);
+        } catch (const std::exception& exception) {
+            probe.valid_arguments = false;
+            probe.errors.emplace_back(exception.what());
+            probe.expected = KnownValues(sm_host_originals);
+        }
     }
     CaptureBootIdentity(probe);
 
@@ -1037,7 +1146,8 @@ int wmain(int argc, wchar_t** argv) {
         probe.wmi.baseboard_error = "WMI read did not complete.";
     }
 
-    const std::string report = BuildReport(probe);
+    const std::string report = mode == ExpectMode::Capture
+        ? BuildCaptureReport(probe) : BuildReport(probe);
     if (output_path.empty()) {
         std::cerr << "FAIL: no report path is available; "
                   << "supply --output with a new path.\n";

@@ -1,0 +1,274 @@
+{
+  "schema": "combined-changed-file-hashes.v1",
+  "base": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe",
+  "hashScope": "Exact working-tree bytes; Git may normalize line endings.",
+  "selfExcluded": "spoof-handoff/reports/review-20261017/combined-changed-files-20261018.json",
+  "fileCount": 53,
+  "files": [
+    {
+      "path": "spoof-handoff/README.md",
+      "bytes": 9079,
+      "sha256": "28A26FCC7747613581C1CFF6A5311BD215692A07FF07DCC3F2D03D08BC0A73CC"
+    },
+    {
+      "path": "spoof-handoff/commands/combined-host-rollback.ps1",
+      "bytes": 1560,
+      "sha256": "95CA654597AB449957AE38299B3BB6202F929D9047A926E9F0C14EDF88E211C1"
+    },
+    {
+      "path": "spoof-handoff/commands/combined-host-test.ps1",
+      "bytes": 2747,
+      "sha256": "CD73B73A5ED1F5C830D2764D99A7D08AC9638D08017ABADEBA448BB8F3438814"
+    },
+    {
+      "path": "spoof-handoff/docs/COMBINED_HOST_RUNBOOK.md",
+      "bytes": 10028,
+      "sha256": "07E2076BFA9C15CAB212E4563D2217C042DDB672A97BC373393BCE00BC0D4BC6"
+    },
+    {
+      "path": "spoof-handoff/reports/review-20261017/combined-diff-stat-20261018.txt",
+      "bytes": 4839,
+      "sha256": "4E6D9987389350319ED7C3B33A3BA6CC8B56121FD309A7741C95E0DE5B73DB89"
+    },
+    {
+      "path": "spoof-handoff/reports/review-20261017/combined-evidence-index-20261018.json",
+      "bytes": 317724,
+      "sha256": "3DAE16856BB694B43455EDB81501ED6388D98EF2981A7112C3B577550AE48923"
+    },
+    {
+      "path": "spoof-handoff/reports/review-20261017/combined-host-originals-20261018.json",
+      "bytes": 103691,
+      "sha256": "5C16247B579FD5DE12FC84C15B56B6E4B741FF54C8FF8BB68290EABB2AF517B2"
+    },
+    {
+      "path": "spoof-handoff/reports/review-20261017/combined-host-readonly-state-20261018.json",
+      "bytes": 1039,
+      "sha256": "0E5930CF20EA11FB1891F952F2AAC5809A7E7887B35BCF79ED2D20A4B79E457D"
+    },
+    {
+      "path": "spoof-handoff/reports/review-20261017/combined-nine-field-progress-20261018.md",
+      "bytes": 11064,
+      "sha256": "4FEE58D56591D4C7F325E2EC86B56D6E16584ABF61531DB1FCFDABF4F795D0BD"
+    },
+    {
+      "path": "spoof-handoff/reports/review-20261017/combined-validation-20261018.json",
+      "bytes": 10450,
+      "sha256": "22AF40CC3FCDA56C1EE4D27CAD40C1658511180804274160C862CBD17CB1E50B"
+    },
+    {
+      "path": "spoof-handoff/reports/review-20261017/combined-vm-diagnostic-restoration-20261018.md",
+      "bytes": 10451,
+      "sha256": "F6F5BCB70002507F9C62438E766845E1E808C35722CBD79B03B08AE94C22D82C"
+    },
+    {
+      "path": "spoof-handoff/reports/review-20261017/combined-vm-efi-failure-20261018.txt",
+      "bytes": 1015,
+      "sha256": "7D18B3A827DF0F090D0EE961EEA17BDB85E9C7283676C864003422C487FACDB5"
+    },
+    {
+      "path": "spoof-handoff/reports/review-20261017/combined-vm-independent-audit-20261018.md",
+      "bytes": 4136,
+      "sha256": "1A86F103763534F529165630B2C334542DFAAFAFC7F9DF4943E47D2EEE0C0261"
+    },
+    {
+      "path": "spoof-handoff/reports/review-20261017/combined-vm-off-20261018.json",
+      "bytes": 278,
+      "sha256": "5EBDAFE1AE4581908E53332AB7E7A24363E2F11C0B0CFE9D409FA2DAFD6B8987"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_host/build-host-payload.ps1",
+      "bytes": 20274,
+      "sha256": "B73E2FFAC9DD6CE37A250E99E05E5EEE53408752F8E93F07F924AC0CB5A0CC7F"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_host/model.psm1",
+      "bytes": 28409,
+      "sha256": "99DB5530C218B10D6085EFAE2E00666AC844BF6D059026BE9A79AB7CF11AD437"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_host/nic-transaction.ps1",
+      "bytes": 6546,
+      "sha256": "948EB04B308D71D469F8ECE219A325581764E388A92A43A1D12C7588FB220831"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_host/readback.ps1",
+      "bytes": 19190,
+      "sha256": "CA40DFEAABEBAEDE0DE01DAC7A1193832FB563582DB0B5E9160A86D07AB4C89C"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_host/recovery.ps1",
+      "bytes": 9739,
+      "sha256": "8746DB18A74793173D36E8FE0E3D7D0965D67681967C7283E414D80C969A202A"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_host/run.ps1",
+      "bytes": 123762,
+      "sha256": "6AC91A25136A6CD0CA7E96515C06B0EE18858F8C63756DB818580C7B28BF2644"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_host/tests-orchestration.ps1",
+      "bytes": 38223,
+      "sha256": "2F984A0D128D79B0813F84266B07AD1E2E4FD4C09FB27ABD5D10304C093196B1"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_host/tests-readback.ps1",
+      "bytes": 21199,
+      "sha256": "63172E1308C57C35AC790DF02D8E2B33A4CF47EE17EEB5CBCF7860F6E09E56F2"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/build-smbios-fixture.ps1",
+      "bytes": 22226,
+      "sha256": "173F897DDD2B838E6F493C366F0DDA7A7DF54BC9111B5CB738027D9BB4B2C6AE"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/build-storage-fixture.ps1",
+      "bytes": 18497,
+      "sha256": "A62BA36E847BA17DBF1D63E39282084668961A7CB009C2914BEC573847ADAEE1"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/capture-smbios.ps1",
+      "bytes": 2121,
+      "sha256": "61932A76044E4A831E94395FE94956A9B72C66C1FD41FBF9685051552ED0A770"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/expand-phase-evidence.ps1",
+      "bytes": 5051,
+      "sha256": "D7B4AF0B9F10657EAFA40A0BE33574467DEE87F9142785F29C86B6F3EFE950C4"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/guest-active.template.ps1",
+      "bytes": 19609,
+      "sha256": "677202848A898188A3BDD82B58F1BA5FD4C8266D5B25FD826F082DAA07223B5F"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/guest-capture.template.ps1",
+      "bytes": 4751,
+      "sha256": "F058501DE528829774650AA6E5DAE2F040445986E7E70E21D51F305F9D118CDA"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/guest-inventory.template.ps1",
+      "bytes": 11479,
+      "sha256": "F6D7C0973F531EBE1F9E31A80171434981FE6F0424BABFF0402027F3C5FFF0DE"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/guest-lifecycle.template.ps1",
+      "bytes": 80426,
+      "sha256": "E6861F7E203BE6FC8DA601C78367CFD29065DD8E603AC7CBAE075D8A2C46CADD"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/guest-smbios-diagnostic.template.ps1",
+      "bytes": 19035,
+      "sha256": "E66DE6E27EC6C936EE7B9D16F246428E063173D025B8F232EE355B4E51A03CB4"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/guest-smbios-pathb-stage-arm.template.ps1",
+      "bytes": 23751,
+      "sha256": "71AA43B0A79D4370B0423C191C0601671EC404E5F9C1A27631D96F1BAE2F40DF"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/invoke-mailbox.ps1",
+      "bytes": 12742,
+      "sha256": "C4176A1092B7E83470335126BB8699B317E64B6E6EA029D6C9992B7A5639827E"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/project-smbios-capture.ps1",
+      "bytes": 4881,
+      "sha256": "BB6EF1EBBEB33C86E828AB99C8E2D3F426C949896AE0B2144D80D870B260BEA7"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/render-active.ps1",
+      "bytes": 11535,
+      "sha256": "C99B5D42D5D3C09315227FAA579E3AAC9B217EBE0CCF55921795BBC7C722A0C2"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/render-capture.ps1",
+      "bytes": 3385,
+      "sha256": "467736E6F929056A27A0E0EA2D144F298859DD6F29761C5B67AD60486B89671F"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/render-inventory.ps1",
+      "bytes": 4466,
+      "sha256": "9681DE03297162FB86DF5A9FEF0BAE4D9AA3764C8F4A17D02F3300358FE5586B"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/render-lifecycle.ps1",
+      "bytes": 18936,
+      "sha256": "B079C687B6766DE153238B1A6A606CE32BC67825758CA2FA4DB9D93293901CB5"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/render-smbios-diagnostic.ps1",
+      "bytes": 4495,
+      "sha256": "CD452CB307A6BEBE6765FA08891BFA18DCFB24180BC9A678A4A1923F7A1699D4"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/render-smbios-pathb-stage-arm.ps1",
+      "bytes": 5622,
+      "sha256": "2FA07D6302C95C312D7FDDB2971FC204CACB0D7D1593EF5ED575D4316DBE8CF2"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/render-vmnet-install.ps1",
+      "bytes": 7109,
+      "sha256": "07D31158E1AA0DDF714DC3BCEA13D999944161D2F064760DD80A6A230F4756C3"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/render-vmx-topology.ps1",
+      "bytes": 7609,
+      "sha256": "87B5FAD95E000D8001C4D3409051EB58F0B0127DAC2D29AB70A300670619266C"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/smbios-tests.ps1",
+      "bytes": 19460,
+      "sha256": "449B357FD2EC2D7C098EEA4411A5CFA53DA5567D00D828410269D4BAB86AC9C7"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/test-lifecycle-dependencies.ps1",
+      "bytes": 22800,
+      "sha256": "0E8ADE07681CD085288F4A1E019EAB71AC9FB261D2E32530FAAF48E53CF48C73"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/tests-active.ps1",
+      "bytes": 12391,
+      "sha256": "595135CF1207003D192A251CC7A835296B14F5B5AD1D96EBB2502271276AAC21"
+    },
+    {
+      "path": "spoof-handoff/tools/combined_vm/write-vm-fixture-map.ps1",
+      "bytes": 10904,
+      "sha256": "5F59CD6D004DFC99152B5804F633B9184ACB6BA9C8A418CCA1D62599E1E8B462"
+    },
+    {
+      "path": "spoof-handoff/tools/smbios_boot/CMakeLists.txt",
+      "bytes": 5504,
+      "sha256": "7AD48A2D2A2ADC1B8944355656556A0F96CBC7891AADB9B8EF1ECAB0FA012180"
+    },
+    {
+      "path": "spoof-handoff/tools/smbios_boot/boot_report.h",
+      "bytes": 4008,
+      "sha256": "900857D1440D8D60B6BE7A183F2DA39F5EB21096082C233023D17D407B80896C"
+    },
+    {
+      "path": "spoof-handoff/tools/smbios_boot/boot_variant.c",
+      "bytes": 19564,
+      "sha256": "5EA692A3F681AC7778398F6A04786E75BB8FA9DF314D22C6ACE269A7C7A0E010"
+    },
+    {
+      "path": "spoof-handoff/tools/smbios_boot/efi_smbios.c",
+      "bytes": 68511,
+      "sha256": "7C7493E79C781A7A27FC390987A4858AFC21DF2DE7DB53BDE5E7A255FCACA58A"
+    },
+    {
+      "path": "spoof-handoff/tools/smbios_boot/efi_smbios_diagnostic.h",
+      "bytes": 3273,
+      "sha256": "991E6F8AC14E9111401E1BD0C00DEE71F4DF552536ECF72D88A794BCB3CF68A3"
+    },
+    {
+      "path": "spoof-handoff/tools/smbios_boot/tests/efi_smbios_tests.c",
+      "bytes": 43238,
+      "sha256": "817CFAC9337395A40AB5777DD1C84666FC9FA73B6745C92A32B38DDB17EECEE9"
+    },
+    {
+      "path": "spoof-handoff/tools/smbios_boot/windows_readback.cpp",
+      "bytes": 44093,
+      "sha256": "37971E212293477EE14BABBDB9152969EE78F4E61B3D4BEB1C6C2106A4E2312C"
+    }
+  ]
+}

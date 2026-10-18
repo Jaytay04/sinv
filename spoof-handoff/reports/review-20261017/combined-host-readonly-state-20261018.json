@@ -1,0 +1,29 @@
+{
+    "schema":  "combined-readonly-host-state.v1",
+    "capturedUtc":  "2026-10-18T03:29:06.1427050Z",
+    "computer":  "DESKTOP-5852FUT",
+    "hostMutationPerformed":  false,
+    "secureBootRegistryBootFlag":  1,
+    "secureBootRegistryFlagIsNotFreshFirmwareVariableProof":  true,
+    "projectStorageDrivers":  [
+
+                              ],
+    "projectNicDrivers":  [
+
+                          ],
+    "trustStores":  {
+                        "Root":  false,
+                        "TrustedPublisher":  false
+                    },
+    "codeIntegrity":  {
+                          "ntStatus":  "0x00000000",
+                          "success":  true,
+                          "options":  49153,
+                          "returnLength":  8
+                      },
+    "effectiveTestSigningOff":  true,
+    "driverServiceRegistryPresent":  {
+                                         "storage":  false,
+                                         "nic":  false
+                                     }
+}

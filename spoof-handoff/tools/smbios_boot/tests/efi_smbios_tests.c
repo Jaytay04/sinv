@@ -1,5 +1,7 @@
 #include "efi_smbios.h"
+#include "../efi_smbios_diagnostic.h"
 #include "smbios_values.h"
+#include "../boot_report.h"
 
 #include <Windows.h>
 #include <stdint.h>
@@ -42,6 +44,7 @@ static UINTN g_fail_install_at;
 static UINTN g_fail_install_from;
 static BOOLEAN g_mutate_on_failure;
 static UINTN g_free_pages_calls;
+static BOOLEAN g_fail_free_pages_once;
 static UINTN g_map_key;
 static BOOLEAN g_reverse_map;
 static BOOLEAN g_overlap_map;
@@ -52,6 +55,49 @@ static void Require(int condition, const char *message)
         fprintf(stderr, "FAIL: %s\n", message);
         exit(1);
     }
+}
+
+static void TestBootFailureReportFormatting(void)
+{
+    static const char expected[] =
+        "failure_phase=prepare\r\n"
+        "status_scope=public_call_return\r\n"
+        "failure_status=0x800000000000001A\r\n"
+        "rollback_attempted=1\r\n"
+        "rollback_status=0x8000000000000005\r\n"
+        "free_attempted=1\r\n"
+        "free_status=0x0000000000000000\r\n"
+        "cleanup_free_status=0x8000000000000009\r\n"
+        "result=failed\r\n"
+        "END\r\n";
+    char buffer[512];
+    size_t length = 0u;
+    Require(sm_boot_format_failure_record(buffer, sizeof(buffer), &length,
+                                          "prepare",
+                                          UINT64_C(0x800000000000001A), 1,
+                                          UINT64_C(0x8000000000000005), 1,
+                                          UINT64_C(0),
+                                          UINT64_C(0x8000000000000009)),
+            "failure report formatter must accept full-width EFI status values");
+    Require(length == sizeof(expected) - 1u &&
+                memcmp(buffer, expected, sizeof(expected) - 1u) == 0,
+            "failure report must preserve the original and cleanup statuses exactly");
+    Require(!sm_boot_format_failure_record(buffer, sizeof(buffer), &length,
+                                           "Prepare", UINT64_C(1), 0,
+                                           UINT64_C(0), 0, UINT64_C(0), UINT64_C(0)),
+            "failure report formatter must reject invalid phase labels");
+    Require(!sm_boot_format_failure_record(buffer, 16u, &length,
+                                           "readback", UINT64_C(1), 0,
+                                           UINT64_C(0), 0, UINT64_C(0), UINT64_C(0)),
+            "failure report formatter must reject truncated output buffers");
+    Require(sm_boot_format_failure_record(buffer, 320u, &length,
+                                          "report_root_close", UINT64_MAX, 1,
+                                          UINT64_MAX, 1, UINT64_MAX, UINT64_MAX),
+            "longest failure phase and full-width status values must fit the EFI report buffer");
+    Require(length == 269u &&
+                strstr(buffer, "failure_status=0xFFFFFFFFFFFFFFFF\r\n") != NULL &&
+                strstr(buffer, "rollback_status=0xFFFFFFFFFFFFFFFF\r\n") != NULL,
+            "worst-case failure report must preserve the complete EFI status width");
 }
 
 static BOOLEAN GuidEqual(const EFI_GUID *left, const EFI_GUID *right)
@@ -338,6 +384,10 @@ static EFI_STATUS EFIAPI MockFreePages(
     UINTN Pages)
 {
     UINTN index;
+    if (g_fail_free_pages_once) {
+        g_fail_free_pages_once = FALSE;
+        return EFI_DEVICE_ERROR;
+    }
     for (index = 0; index < g_allocation_count; ++index) {
         if (g_allocations[index].Active && g_allocations[index].Address == Memory &&
             g_allocations[index].Pages == Pages) {
@@ -419,6 +469,7 @@ static void ResetFixture(BOOLEAN with_smbios2, BOOLEAN with_smbios3, BOOLEAN dis
     g_fail_install_from = 0u;
     g_mutate_on_failure = FALSE;
     g_free_pages_calls = 0u;
+    g_fail_free_pages_once = FALSE;
     g_map_key = 0u;
     g_reverse_map = FALSE;
     g_overlap_map = FALSE;
@@ -643,6 +694,7 @@ static void TestBothEntryPointsWithDistinctTables(void)
 static void TestBadChecksumRejected(void)
 {
     EFI_SMBIOS_CONTEXT context = {0};
+    EFI_SMBIOS_PREPARE_DIAGNOSTIC diagnostic;
     UINT8 *entry;
     ResetFixture(TRUE, FALSE, FALSE);
     entry = g_area + TEST_SMBIOS2_EP_OFFSET;
@@ -653,6 +705,39 @@ static void TestBadChecksumRejected(void)
             "bad SMBIOS 2.x checksum must fail before publication");
     Require(g_install_calls == 0u && g_allocation_count == 0u,
             "bad checksum must not publish or allocate runtime pages");
+    Require(EfiSmbiosGetLastPrepareDiagnostic(&diagnostic) == EFI_SUCCESS &&
+                diagnostic.check == EfiSmbiosPrepareCheckEntryPointParse &&
+                diagnostic.entry_index == 0u &&
+                diagnostic.cause_status == EFI_SMBIOS_ERROR_COMPROMISED &&
+                diagnostic.prepared_pages_cleanup_status == EFI_SUCCESS &&
+                diagnostic.entry_metadata_available == 1u &&
+                diagnostic.entry_kind == (UINT8)SM_EP_SMBIOS2 &&
+                diagnostic.entry_major == 3u && diagnostic.entry_minor == 5u &&
+                diagnostic.declared_table_bytes != 0u &&
+                diagnostic.declared_structure_count != 0u &&
+                diagnostic.declared_maximum_structure_size != 0u &&
+                diagnostic.table_metadata_available == 0u,
+            "entry-point parse failure must preserve its exact stage, status, index, and raw declarations");
+
+    ResetFixture(FALSE, TRUE, FALSE);
+    entry = g_area + TEST_SMBIOS3_EP_OFFSET;
+    entry[5] ^= 0x80u;
+    Require(EfiSmbiosPrepare(&g_system_table, SM_ACTIVE_BOOT_MASK,
+                             &sm_host_originals, &sm_host_replacements, &context) ==
+                EFI_SMBIOS_ERROR_COMPROMISED,
+            "bad SMBIOS 3.x checksum must fail before publication");
+    Require(EfiSmbiosGetLastPrepareDiagnostic(&diagnostic) == EFI_SUCCESS &&
+                diagnostic.check == EfiSmbiosPrepareCheckEntryPointParse &&
+                diagnostic.entry_index == 0u &&
+                diagnostic.cause_status == EFI_SMBIOS_ERROR_COMPROMISED &&
+                diagnostic.entry_metadata_available == 1u &&
+                diagnostic.entry_kind == (UINT8)SM_EP_SMBIOS3 &&
+                diagnostic.entry_major == 3u && diagnostic.entry_minor == 5u &&
+                diagnostic.declared_table_bytes != 0u &&
+                diagnostic.declared_structure_count == 0u &&
+                diagnostic.declared_maximum_structure_size == 0u &&
+                diagnostic.table_metadata_available == 0u,
+            "SMBIOS 3.x parse failure must report its version and maximum table length without inventing absent fields");
 }
 
 static void TestSmbios2MaximumStructureSizeIsUpperBound(void)
@@ -674,9 +759,53 @@ static void TestSmbios2MaximumStructureSizeIsUpperBound(void)
             "prepared upper-bound fixture allocations must be freeable");
 }
 
+static void TestSmbios2UnderreportedMaximumPreservesMetrics(void)
+{
+    EFI_SMBIOS_CONTEXT context = {0};
+    EFI_SMBIOS_PREPARE_DIAGNOSTIC diagnostic;
+    UINT8 *entry;
+    UINT16 reported_maximum;
+    ResetFixture(TRUE, FALSE, FALSE);
+    entry = g_area + TEST_SMBIOS2_EP_OFFSET;
+    reported_maximum = (UINT16)(entry[8] | ((UINT16)entry[9] << 8u));
+    Require(reported_maximum > 1u,
+            "fixture maximum structure size must permit a one-byte underreport");
+    --reported_maximum;
+    entry[8] = (UINT8)(reported_maximum & 0xFFu);
+    entry[9] = (UINT8)(reported_maximum >> 8u);
+    FixSmbios2Checksums(entry);
+    Require(EfiSmbiosPrepare(&g_system_table, SM_ACTIVE_BOOT_MASK,
+                             &sm_host_originals, &sm_host_replacements, &context) ==
+                EFI_SMBIOS_ERROR_COMPROMISED,
+            "SMBIOS 2.x must reject an entry point whose maximum structure size is one byte below the parsed maximum");
+    Require(g_install_calls == 0u && g_allocation_count == 0u,
+            "an underreported maximum must fail before allocation or publication");
+    Require(EfiSmbiosGetLastPrepareDiagnostic(&diagnostic) == EFI_SUCCESS &&
+                diagnostic.check ==
+                    EfiSmbiosPrepareCheckSmbios2MaximumStructureSize &&
+                diagnostic.entry_index == 0u &&
+                diagnostic.cause_status == EFI_SMBIOS_ERROR_COMPROMISED &&
+                diagnostic.prepared_pages_cleanup_status == EFI_SUCCESS &&
+                diagnostic.entry_metadata_available == 1u &&
+                diagnostic.entry_kind == (UINT8)SM_EP_SMBIOS2 &&
+                diagnostic.entry_major == 3u && diagnostic.entry_minor == 5u &&
+                diagnostic.table_metadata_available == 1u &&
+                diagnostic.table_parse_complete == 1u &&
+                diagnostic.declared_table_bytes == diagnostic.actual_table_bytes &&
+                diagnostic.declared_structure_count ==
+                    diagnostic.actual_structure_count &&
+                diagnostic.declared_maximum_structure_size ==
+                    diagnostic.actual_maximum_structure_size - 1u &&
+                diagnostic.actual_table_bytes != 0u &&
+                diagnostic.actual_structure_count != 0u &&
+                diagnostic.actual_maximum_structure_size != 0u,
+            "underreported maximum diagnostics must preserve the first failure and declared-versus-parsed metadata");
+}
+
 static void TestSmbios2StructureCountMustMatch(void)
 {
     EFI_SMBIOS_CONTEXT context = {0};
+    EFI_SMBIOS_PREPARE_DIAGNOSTIC diagnostic;
     UINT8 *entry;
     ResetFixture(TRUE, FALSE, FALSE);
     entry = g_area + TEST_SMBIOS2_EP_OFFSET;
@@ -688,6 +817,19 @@ static void TestSmbios2StructureCountMustMatch(void)
             "SMBIOS 2.x structure count must equal the parsed table count");
     Require(g_install_calls == 0u && g_allocation_count == 0u,
             "invalid SMBIOS 2.x structure count must fail before allocation or publication");
+    Require(EfiSmbiosGetLastPrepareDiagnostic(&diagnostic) == EFI_SUCCESS &&
+                diagnostic.check == EfiSmbiosPrepareCheckSmbios2StructureCount &&
+                diagnostic.entry_index == 0u &&
+                diagnostic.cause_status == EFI_SMBIOS_ERROR_COMPROMISED &&
+                diagnostic.entry_metadata_available == 1u &&
+                diagnostic.table_metadata_available == 1u &&
+                diagnostic.table_parse_complete == 1u &&
+                diagnostic.declared_structure_count ==
+                    diagnostic.actual_structure_count + 1u &&
+                diagnostic.declared_table_bytes == diagnostic.actual_table_bytes &&
+                diagnostic.actual_structure_count != 0u &&
+                diagnostic.actual_maximum_structure_size != 0u,
+            "SMBIOS count mismatch must retain declared and parsed table metadata separately");
 }
 
 static void TestUnsortedMemoryMapAccepted(void)
@@ -705,6 +847,7 @@ static void TestUnsortedMemoryMapAccepted(void)
 static void TestOverlappingMemoryMapRejected(void)
 {
     EFI_SMBIOS_CONTEXT context = {0};
+    EFI_SMBIOS_PREPARE_DIAGNOSTIC diagnostic;
     ResetFixture(TRUE, FALSE, FALSE);
     g_overlap_map = TRUE;
     Require(EfiSmbiosPrepare(&g_system_table, SM_ACTIVE_BOOT_MASK,
@@ -713,6 +856,42 @@ static void TestOverlappingMemoryMapRejected(void)
             "overlapping UEFI memory descriptors must be rejected as malformed");
     Require(g_install_calls == 0u && g_allocation_count == 0u,
             "an overlapping memory map must fail before allocation or publication");
+    Require(EfiSmbiosGetLastPrepareDiagnostic(&diagnostic) == EFI_SUCCESS &&
+                diagnostic.check == EfiSmbiosPrepareCheckMemoryMapOverlap &&
+                diagnostic.entry_index == EFI_SMBIOS_DIAGNOSTIC_ENTRY_NONE &&
+                diagnostic.cause_status == EFI_SMBIOS_ERROR_COMPROMISED &&
+                diagnostic.prepared_pages_cleanup_status == EFI_SUCCESS,
+            "memory-map validation failure must preserve its exact pre-entry stage and status");
+}
+
+static void TestDualEntryFailurePreservesCauseAndCleanupStatus(void)
+{
+    EFI_SMBIOS_CONTEXT context = {0};
+    EFI_SMBIOS_PREPARE_DIAGNOSTIC diagnostic;
+    UINT8 *entry2;
+    ResetFixture(TRUE, TRUE, TRUE);
+    entry2 = g_area + TEST_SMBIOS2_EP_OFFSET;
+    entry2[7] = 4u;
+    FixSmbios2Checksums(entry2);
+    g_fail_free_pages_once = TRUE;
+    Require(EfiSmbiosPrepare(&g_system_table, SM_ACTIVE_BOOT_MASK,
+                             &sm_host_originals, &sm_host_replacements, &context) ==
+                EFI_DEVICE_ERROR,
+            "prepared-page cleanup failure must remain the public call result");
+    Require(EfiSmbiosGetLastPrepareDiagnostic(&diagnostic) == EFI_SUCCESS &&
+                diagnostic.check == EfiSmbiosPrepareCheckDualEntryVersion &&
+                diagnostic.entry_index == 1u &&
+                diagnostic.cause_status == EFI_SMBIOS_ERROR_COMPROMISED &&
+                diagnostic.prepared_pages_cleanup_status == EFI_DEVICE_ERROR &&
+                diagnostic.entry_metadata_available == 1u &&
+                diagnostic.entry_kind == (UINT8)SM_EP_SMBIOS3 &&
+                diagnostic.entry_major == 3u && diagnostic.entry_minor == 5u &&
+                diagnostic.table_metadata_available == 1u &&
+                diagnostic.table_parse_complete == 1u &&
+                diagnostic.actual_table_bytes != 0u &&
+                diagnostic.actual_structure_count != 0u &&
+                diagnostic.actual_maximum_structure_size != 0u,
+            "dual-entry mismatch must retain its cause separately from cleanup failure and public status");
 }
 
 static void TestOriginalGuardMismatchRejected(void)
@@ -823,13 +1002,16 @@ static void TestActiveFieldMaskAndDisabledDevicePaths(void)
 
 int main(void)
 {
+    TestBootFailureReportFormatting();
     TestActiveFieldMaskAndDisabledDevicePaths();
     TestSmbios2PublishReadbackRollbackLifetime();
     TestSmbios3PublishReadback();
     TestBothEntryPointsWithDistinctTables();
     TestBadChecksumRejected();
     TestSmbios2MaximumStructureSizeIsUpperBound();
+    TestSmbios2UnderreportedMaximumPreservesMetrics();
     TestSmbios2StructureCountMustMatch();
+    TestDualEntryFailurePreservesCauseAndCleanupStatus();
     TestUnsortedMemoryMapAccepted();
     TestOverlappingMemoryMapRejected();
     TestOriginalGuardMismatchRejected();

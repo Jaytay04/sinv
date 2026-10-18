@@ -14,6 +14,18 @@ CPU/GPU serial members remain zero/disabled. See
 `docs/NIC_VM_VALIDATION.md` and
 `reports/review-20261017/nic-host-round-trip.json` for evidence and limitations.
 
+COMBINED RUN STATUS (2026-10-18)
+
+USB disks are excluded. The combined host run is blocked by its VM gate:
+SMBIOS2 metadata declares a largest structure of 111 bytes, while the bounded
+parser finds 112 bytes. The EFI payload returns `0x8000000000000021` before
+publication; the size guard remains intact. No simultaneous physical-host
+replacement is claimed. Fresh physical-host originals passed 90 reader checks;
+the VM's restored originals passed 88 applicable checks. Read
+[the combined evidence note](reports/review-20261017/combined-nine-field-progress-20261018.md)
+and [the conditional runbook](docs/COMBINED_HOST_RUNBOOK.md). Host activation
+requires a conforming VM firmware fixture and a complete current VM gate PASS.
+
 The field-to-member map below remains authoritative. The process-local sections
 describe the original userspace package and its own visibility limits.
 
