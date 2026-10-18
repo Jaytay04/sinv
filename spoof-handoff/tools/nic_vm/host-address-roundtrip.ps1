@@ -625,8 +625,32 @@ function Get-HostProcessCapture {
     finally { $process.Dispose() }
 }
 
+function Test-HostManagedBcdFile {
+    param([Parameter(Mandatory = $true)][string]$RelativePath, [bool]$IsSystemPartition)
+    if (-not $IsSystemPartition) { return $false }
+    return $RelativePath.Replace('\', '/') -imatch '\AEFI/Microsoft/Boot/BCD(?:\.LOG[12]?)?\z'
+}
+
+function Assert-HostBcdSnapshotUsable {
+    param([AllowNull()][object]$Snapshot)
+    if ($null -eq $Snapshot) { throw 'A supported BCD snapshot is required before classifying the live BCD hive.' }
+    foreach ($name in @('current', 'all', 'firmware', 'exportedAll')) {
+        $entry = Get-HostProperty $Snapshot $name
+        if ($null -eq $entry -or [int](Get-HostProperty $entry 'exitCode') -ne 0 -or
+            [bool](Get-HostProperty $entry 'timedOut') -or [string]::IsNullOrWhiteSpace([string](Get-HostProperty $entry 'stdout'))) {
+            throw ('BCD snapshot requires a successful complete enumeration: ' + $name)
+        }
+    }
+    $export = Get-HostProperty $Snapshot 'export'
+    if ($null -eq $export -or [int](Get-HostProperty $export 'exitCode') -ne 0 -or
+        [string]::IsNullOrWhiteSpace([string](Get-HostProperty $export 'path')) -or
+        [string](Get-HostProperty $export 'sha256') -notmatch '\A[0-9A-Fa-f]{64}\z' -or [long](Get-HostProperty $export 'bytes') -le 0) {
+        throw 'A successful hash-pinned BCD export is required for the live hive snapshot.'
+    }
+}
+
 function Get-HostEspSnapshot {
-    param([Parameter(Mandatory = $true)][string]$EvidenceDirectory)
+    param([Parameter(Mandatory = $true)][string]$EvidenceDirectory, [AllowNull()][object]$BcdSnapshot)
     $espType = '{c12a7328-f81f-11d2-ba4b-00a0c93ec93b}'
     $partitions = @(Get-Partition -ErrorAction Stop | Where-Object { [string]$_.GptType -ieq $espType })
     if ($partitions.Count -eq 0) { throw 'No EFI System Partition was found by its GPT type.' }
@@ -647,7 +671,21 @@ function Get-HostEspSnapshot {
                 if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw ('Unexpected reparse point in the ESP snapshot: ' + $item.FullName) }
                 if ($item.PSIsContainer) { $pending.Enqueue($item.FullName); continue }
                 $relative = $item.FullName.Substring($rootPath.Length).TrimStart('\') -replace '\\', '/'
-                $fileRecords.Add([ordered]@{ path = $relative; bytes = [long]$item.Length; sha256 = Get-HostSha256 $item.FullName })
+                $systemPartition = [bool](Get-HostProperty $partition 'IsSystem')
+                if (Test-HostManagedBcdFile $relative $systemPartition) {
+                    Assert-HostBcdSnapshotUsable $BcdSnapshot
+                    $export = Get-HostProperty $BcdSnapshot 'export'
+                    $fileRecords.Add([ordered]@{
+                        path = $relative; bytes = [long]$item.Length; sha256 = $null
+                        verification = 'bcdedit-system-store'; rawBytesCaptured = $false
+                        exportPath = [string](Get-HostProperty $export 'path'); exportSha256 = [string](Get-HostProperty $export 'sha256')
+                        note = 'Windows owns the live BCD hive and transaction logs. Their raw bytes are not read or claimed identical; live and exported-store enumerations are compared.'
+                    })
+                }
+                elseif ([string]::Equals($relative, 'EFI/Microsoft/Boot/BOOTSTAT.DAT', [StringComparison]::OrdinalIgnoreCase)) {
+                    $fileRecords.Add([ordered]@{ path = $relative; bytes = [long]$item.Length; sha256 = $null; verification = 'mutable-windows-boot-status'; rawBytesCaptured = $false })
+                }
+                else { $fileRecords.Add([ordered]@{ path = $relative; bytes = [long]$item.Length; sha256 = Get-HostSha256 $item.FullName; verification = 'file-sha256'; rawBytesCaptured = $true }) }
             }
         }
         $sorted = @($fileRecords.ToArray() | Sort-Object path)
@@ -658,6 +696,7 @@ function Get-HostEspSnapshot {
             offset = [long]$partition.Offset
             size = [long]$partition.Size
             isReadOnly = [bool]$partition.IsReadOnly
+            isSystem = [bool](Get-HostProperty $partition 'IsSystem')
             accessPath = $rootPath
             files = $sorted
         })
@@ -808,6 +847,16 @@ function Get-HostBcdSnapshot {
     }
     $records.export.sha256 = Get-HostSha256 $exportPath
     $records.export.bytes = [long](Get-Item -LiteralPath $exportPath).Length
+    $records.exportedAll = Get-HostProcessCapture $bcdedit @('/store', $exportPath, '/enum', 'all', '/v')
+    if ($records.exportedAll.timedOut -or $records.exportedAll.exitCode -ne 0) {
+        Write-HostJsonAtomic (Join-Path $EvidenceDirectory 'snapshot.json') $records
+        throw ('Exported BCD enumeration failed exit=' + $records.exportedAll.exitCode + ' stdout=' + $records.exportedAll.stdout + ' stderr=' + $records.exportedAll.stderr)
+    }
+    # The supported reader may update backup hive metadata; pin the final backup file.
+    $records.export.sha256 = Get-HostSha256 $exportPath
+    $records.export.bytes = [long](Get-Item -LiteralPath $exportPath).Length
+    Assert-HostBcdSnapshotUsable $records
+    Write-HostJsonAtomic (Join-Path $EvidenceDirectory 'snapshot.json') $records
     return $records
 }
 
@@ -863,7 +912,7 @@ function Get-HostPlatformSnapshot {
     if ($null -eq $secureBoot) { throw ('Confirm-SecureBootUEFI could not establish the current state: ' + $secureBootError) }
     $firmware = Get-HostFirmwareVariableSnapshot (Join-Path $Directory 'firmware')
     $bcd = Get-HostBcdSnapshot (Join-Path $Directory 'bcd')
-    $esp = Get-HostEspSnapshot (Join-Path $Directory 'esp')
+    $esp = Get-HostEspSnapshot (Join-Path $Directory 'esp') $bcd
     $codeIntegrity = Get-HostCodeIntegritySnapshot
     $trust = Get-HostTrustSnapshot $CertificateThumbprint
     $filter = Get-HostFilterSnapshot
@@ -887,18 +936,25 @@ function Get-HostStablePlatformData {
     param([Parameter(Mandatory = $true)][object]$Snapshot)
     $esp = @((Get-HostProperty $Snapshot 'esp') | ForEach-Object {
         $partition = $_
-        $allFiles = @((Get-HostProperty $partition 'files') | ForEach-Object {
-            [ordered]@{
-                path = [string](Get-HostProperty $_ 'path')
-                bytes = [long](Get-HostProperty $_ 'bytes')
-                sha256 = [string](Get-HostProperty $_ 'sha256')
+        $files = @((Get-HostProperty $partition 'files') | ForEach-Object {
+            $path = [string](Get-HostProperty $_ 'path')
+            if ([string]::Equals($path, 'EFI/Microsoft/Boot/BOOTSTAT.DAT', [StringComparison]::OrdinalIgnoreCase)) { return }
+            if (Test-HostManagedBcdFile $path ([bool](Get-HostProperty $partition 'isSystem'))) {
+                Assert-HostBcdSnapshotUsable (Get-HostProperty $Snapshot 'bcd')
+                if ((Get-HostProperty $_ 'verification') -cne 'bcdedit-system-store') { throw ('Live BCD classification is missing supported verification: ' + $path) }
+                [ordered]@{ path = $path; verification = 'bcdedit-system-store' }
+            }
+            else {
+                $hash = [string](Get-HostProperty $_ 'sha256')
+                if ($hash -notmatch '\A[0-9A-Fa-f]{64}\z') { throw ('ESP file is missing its required SHA-256: ' + $path) }
+                [ordered]@{ path = $path; bytes = [long](Get-HostProperty $_ 'bytes'); sha256 = $hash }
             }
         })
-        $files = @($allFiles | Where-Object { -not [string]::Equals([string]$_.path, 'EFI/Microsoft/Boot/BOOTSTAT.DAT', [StringComparison]::OrdinalIgnoreCase) })
         [ordered]@{
             diskNumber = [int](Get-HostProperty $partition 'diskNumber')
             partitionNumber = [int](Get-HostProperty $partition 'partitionNumber')
             partitionGuid = [string](Get-HostProperty $partition 'partitionGuid')
+            isSystem = [bool](Get-HostProperty $partition 'isSystem')
             offset = [long](Get-HostProperty $partition 'offset')
             size = [long](Get-HostProperty $partition 'size')
             files = $files
@@ -911,7 +967,7 @@ function Get-HostStablePlatformData {
     }
     $bcd = Get-HostProperty $Snapshot 'bcd'
     $bcdStable = [ordered]@{}
-    foreach ($name in @('current', 'all', 'firmware')) {
+    foreach ($name in @('current', 'all', 'firmware', 'exportedAll')) {
         $entry = Get-HostProperty $bcd $name
         $bcdStable[$name] = [ordered]@{ exitCode = [int](Get-HostProperty $entry 'exitCode'); stdout = [string](Get-HostProperty $entry 'stdout'); stderr = [string](Get-HostProperty $entry 'stderr') }
     }
@@ -925,7 +981,10 @@ function Get-HostStablePlatformData {
         firmware = $firmware
         bcd = $bcdStable
         esp = $esp
-        espMutableExclusions = @('EFI/Microsoft/Boot/BOOTSTAT.DAT is captured but excluded from equality because Windows may update boot status independently of this NIC operation.')
+        espMutableExclusions = @(
+            'EFI/Microsoft/Boot/BOOTSTAT.DAT is inventoried but excluded from byte equality because Windows owns boot status.'
+            'Only the system ESP BCD hive and BCD.LOG/LOG1/LOG2 are inventoried through supported export and live/exported-store enumeration; raw hive/log byte equality is not claimed.'
+        )
     }
 }
 
@@ -1402,6 +1461,7 @@ function Invoke-HostRun {
     $failure = $null
     try {
         $journal.preflightOriginal = Invoke-HostReadback 'Original' $nativePath $tsv (Join-Path $run 'readback-original')
+        $journal.readbacks.preflightOriginal = $journal.preflightOriginal
         $journal.platformBefore = Get-HostPlatformSnapshot (Join-Path $run 'platform-before') $thumbprint
         $journal.state = 'PLATFORM_SNAPSHOTTED'
         Write-HostJournal $journal
@@ -1465,7 +1525,7 @@ function Invoke-HostRun {
     $journal.restoreErrors = @($restoreErrors)
     $journal.failure = if ($null -ne $failure) { [ordered]@{ exceptionType = $failure.Exception.GetType().FullName; exception = $failure.Exception.ToString(); fullyQualifiedErrorId = $failure.FullyQualifiedErrorId; category = [string]$failure.CategoryInfo.Category } } else { $null }
     $journal.completedUtc = [DateTime]::UtcNow.ToString('o')
-    $journal.state = if ($restoreErrors.Count -eq 0 -and $null -eq $failure) { 'ROUND_TRIP_PASS_AND_RESTORED' } elseif ($restoreErrors.Count -eq 0) { 'FAILED_BUT_RESTORED' } else { 'RESTORE_OR_FINAL_VERIFICATION_FAILED' }
+    $journal.state = if (-not $mutationStarted -and $null -ne $failure) { 'PREFLIGHT_FAILED_NO_ADAPTER_CHANGES' } elseif ($restoreErrors.Count -eq 0 -and $null -eq $failure) { 'ROUND_TRIP_PASS_AND_RESTORED' } elseif ($restoreErrors.Count -eq 0) { 'FAILED_BUT_RESTORED' } else { 'RESTORE_OR_FINAL_VERIFICATION_FAILED' }
     Write-HostJournal $journal
     $summary = [ordered]@{ schema = 'nic-host-address-roundtrip-summary.v1'; status = [string]$journal.state; runDirectory = $run; journalPath = $journalPath; journalSha256 = Get-HostSha256 $journalPath; vmGateSha256 = [string]$gate.sha256; originalReadback = $journal.readbacks.originalAfterRestore; replacementReadback = $journal.readbacks.replacement; restoreErrors = @($restoreErrors); originalFailure = $journal.failure }
     Write-HostJsonAtomic (Join-Path $run 'summary.json') $summary

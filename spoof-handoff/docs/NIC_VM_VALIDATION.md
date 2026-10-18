@@ -8,6 +8,58 @@ NIC unproven.
 
 Evidence paths below are relative to the main repository root; implementation source is in the feature worktree.
 
+## Host snapshot failure and retry
+
+The manual run `20261018T001825865Z.94441c028a9945ffafb026e96972b9cf`
+stopped during the initial read-only ESP snapshot: `Get-FileHash` could not
+open `EFI/Microsoft/Boot/BCD` because Windows was using it. Its unchanged
+journal records `mutationStarted=false`, no adapter snapshots or apply
+operations, and all four original MACs through all seven readers both before
+and after the error. Wi-Fi DOT11 also matched its original value. Captured
+SecureBoot bytes remained `01`; BootOrder, BootCurrent and SetupMode bytes
+also match. The old `RESTORE_OR_FINAL_VERIFICATION_FAILED` status includes
+the second attempt to snapshot the same locked file; it does not establish an
+adapter-restoration failure. No adapter rollback is needed for that run.
+
+Evidence is under
+`spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/`.
+New preflight failures use `PREFLIGHT_FAILED_NO_ADAPTER_CHANGES`, retain the
+exact errors, and populate both references to the original readback.
+
+The revised snapshot uses successful live BCD enumerations and a hash-pinned
+[`bcdedit /export`](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/bcdedit)
+backup, whose contents are also enumerated with `/store <export> /enum all /v`.
+Only `EFI/Microsoft/Boot/BCD` and `BCD.LOG`, `BCD.LOG1`, `BCD.LOG2` on the
+[`IsSystem` partition](https://learn.microsoft.com/en-us/windows-hardware/drivers/storage/msft-partition)
+use this classification. Their presence is checked, but raw hive/log byte
+equality is not claimed. Both user-run exports succeeded but had different
+hashes despite no adapter mutation; those backup hashes remain evidence of
+the individual copies, not a stable representation of BCD settings.
+Other ESP files, including every EFI executable, retain strict SHA-256
+comparison. `BOOTSTAT.DAT` remains explicitly mutable. Unknown locked files,
+an unreadable EFI image or a failed BCD export/enumeration still stop the run
+before address changes.
+
+A SYSTEM/admin probe on the disposable Windows VM reproduced the lock with
+`Get-FileHash`, `File.ReadAllBytes`, and a read-only `FileStream` allowing
+`FileShare.ReadWrite | FileShare.Delete`. All three returned the sharing
+violation. The supported BCD export and enumeration both succeeded with
+exit code zero. The ESP reported `IsSystem=true`.
+This evidence is in
+`spoof-handoff/reports/nic-snapshot-fix-20261018/probe-20261018T002800Z-facb39e342/guest-evidence/kernel-metadata.json`.
+
+The revised production snapshot helpers also passed two live read-only VM
+captures: the same 148-file inventory, 143 matching ordinary file hashes,
+four explicitly classified BCD files, and one mutable BOOTSTAT file. All
+four live/exported BCD enumeration results match, and both exports are
+separately hash-pinned. Evidence is in
+`spoof-handoff/reports/nic-snapshot-fix-20261018/helper-validation-20261018T003055Z-b257cac23d/`.
+The new `host-snapshot-tests.ps1` passed 8/8 pure cases, including an
+exclusive file lock and a preflight failure with zero adapter calls. The
+existing raw-reader gate was rechecked against the revised source: 112/112
+observations and all three negative cases passed. Physical-host replacement
+remains pending; retry the same elevated command below.
+
 ## Current VM result
 
 The VM used Windows 11 Home build 26200.9445 and four disconnected virtual NICs
@@ -84,12 +136,13 @@ verification is claimed.
 
 ### Prepared physical-host round trip
 
-The VM gate is complete and passed, but no host test ran. The UAC launch was
+The VM reader gate passed. The first administrator launch was
 canceled before the elevated script started at `2026-10-18T00:02:35.0022787Z`
 with the error “This command cannot be run due to the error: The operation was
 canceled by the user.” The record is
 `spoof-handoff/reports/nic-reader-gap-20261017/host-launches/20261018T000020922Z.1ee17cb890ed4b2a8788646a07e9d376/start-error.json`;
-there is no host `start.json`, result or run directory. NIC remains unproven on
+that launch produced no host `start.json` or result. A later manual run
+reached only the read-only preflight described above. NIC remains unproven on
 the physical host (8/9 categories). Re-run only after opening PowerShell as
 administrator and changing to the repository root:
 
@@ -103,9 +156,9 @@ Root and TrustedPublisher, and the NIC test filter absent. It does not install a
 test driver or certificate, change OS security settings, or reboot. Wi-Fi and
 VMware adapters may briefly disconnect; the run requires their original link
 states to return within 30 seconds and does not change SSIDs, IP settings or
-network profiles. Firmware, BCD and ESP state are captured before and after;
-`EFI/Microsoft/Boot/BOOTSTAT.DAT` is the only ESP comparison exclusion as
-Windows may update boot status independently. The seven common readers and
+network profiles. Firmware, BCD and ESP state are captured before and after,
+using the explicit live-BCD and mutable-BOOTSTAT classifications above.
+The seven common readers and
 Wi-Fi direct `OID_DOT11_CURRENT_ADDRESS` must match in original, active and
 restored states; a reader unavailable in the original capture must retain that
 exact unavailable status.

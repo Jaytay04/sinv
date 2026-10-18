@@ -1,0 +1,2026 @@
+{
+    "schema":  "nic-host-snapshot-fix-validation.v1",
+    "createdUtc":  "2026-10-18T00:34:00.9461173Z",
+    "result":  "SNAPSHOT_FIX_VM_VALIDATED_HOST_RETRY_PENDING",
+    "physicalHost":  "DESKTOP-5852FUT",
+    "physicalHostReplacementExecuted":  false,
+    "physicalHostProvenCategories":  "8/9; NIC replacement remains pending",
+    "failedHostRun":  {
+                          "journal":  {
+                                          "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/journal.json",
+                                          "bytes":  21931,
+                                          "sha256":  "BE1BF4065AA82BB51475C70D0FB2B367C2CDE63BED0755BB4B91D608FDCB445B"
+                                      },
+                          "reportedState":  "RESTORE_OR_FINAL_VERIFICATION_FAILED",
+                          "mutationStarted":  false,
+                          "adapterSnapshotCount":  0,
+                          "adapterOperationCount":  0,
+                          "originalError":  {
+                                                "exceptionType":  "Microsoft.PowerShell.Commands.WriteErrorException",
+                                                "exception":  "Microsoft.PowerShell.Commands.WriteErrorException: The file \u0027\\\\?\\Volume{187bc913-7576-4e6e-8d54-18eeb5c38fcd}\\EFI\\Microsoft\\Boot\\BCD\u0027 cannot be read: The process cannot access the file \u0027\\\\?\\Volume{187bc913-7576-4e6e-8d54-18eeb5c38fcd}\\EFI\\Microsoft\\Boot\\BCD\u0027 because it is being used by another process.",
+                                                "fullyQualifiedErrorId":  "FileReadError,Get-FileHash",
+                                                "category":  "ReadError"
+                                            },
+                          "finalSnapshotError":  [
+                                                     {
+                                                         "stage":  "platform-restore-verification",
+                                                         "exceptionType":  "Microsoft.PowerShell.Commands.WriteErrorException",
+                                                         "exception":  "Microsoft.PowerShell.Commands.WriteErrorException: The file \u0027\\\\?\\Volume{187bc913-7576-4e6e-8d54-18eeb5c38fcd}\\EFI\\Microsoft\\Boot\\BCD\u0027 cannot be read: The process cannot access the file \u0027\\\\?\\Volume{187bc913-7576-4e6e-8d54-18eeb5c38fcd}\\EFI\\Microsoft\\Boot\\BCD\u0027 because it is being used by another process.",
+                                                         "fullyQualifiedErrorId":  "FileReadError,Get-FileHash"
+                                                     }
+                                                 ],
+                          "originalReadbacks":  [
+                                                    {
+                                                        "path":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\nic-reader-gap-20261017\\host-runs\\20261018T001825865Z.94441c028a9945ffafb026e96972b9cf\\readback-original\\readback.20261018T001826684Z.ea7176db70874adc8aab161843b04cb5.json",
+                                                        "sha256":  "61C7B27A75B0DE2D22E00A79B6FBB3B250FA2D9CEEDD1AC6FA3B877B37DD0A03",
+                                                        "expectedMode":  "Original",
+                                                        "adapters":  4,
+                                                        "allSevenReadersMatched":  true,
+                                                        "dot11ByPnp":  {
+                                                                           "ROOT\\VMWARE\\0001":  {
+                                                                                                      "applicable":  false,
+                                                                                                      "status":  "not_applicable",
+                                                                                                      "ioctlSucceeded":  false,
+                                                                                                      "actual":  "",
+                                                                                                      "normalizedActual":  null,
+                                                                                                      "expected":  "00:50:56:C0:00:08",
+                                                                                                      "matchesExpected":  null,
+                                                                                                      "win32Error":  87,
+                                                                                                      "win32ErrorText":  "The parameter is incorrect."
+                                                                                                  },
+                                                                           "ROOT\\VMWARE\\0000":  {
+                                                                                                      "applicable":  false,
+                                                                                                      "status":  "not_applicable",
+                                                                                                      "ioctlSucceeded":  false,
+                                                                                                      "actual":  "",
+                                                                                                      "normalizedActual":  null,
+                                                                                                      "expected":  "00:50:56:C0:00:01",
+                                                                                                      "matchesExpected":  null,
+                                                                                                      "win32Error":  87,
+                                                                                                      "win32ErrorText":  "The parameter is incorrect."
+                                                                                                  },
+                                                                           "PCI\\VEN_8086\u0026DEV_7AF0\u0026SUBSYS_00748086\u0026REV_11\\3\u002611583659\u00261\u0026A3":  {
+                                                                                                                                                                                "applicable":  true,
+                                                                                                                                                                                "status":  "supported",
+                                                                                                                                                                                "ioctlSucceeded":  true,
+                                                                                                                                                                                "actual":  "C4:BD:E5:32:06:D1",
+                                                                                                                                                                                "normalizedActual":  "C4BDE53206D1",
+                                                                                                                                                                                "expected":  "C4:BD:E5:32:06:D1",
+                                                                                                                                                                                "matchesExpected":  true,
+                                                                                                                                                                                "win32Error":  0,
+                                                                                                                                                                                "win32ErrorText":  null
+                                                                                                                                                                            },
+                                                                           "PCI\\VEN_10EC\u0026DEV_8125\u0026SUBSYS_7D371462\u0026REV_05\\4\u00263FA6681\u00260\u002600E2":  {
+                                                                                                                                                                                 "applicable":  false,
+                                                                                                                                                                                 "status":  "not_applicable",
+                                                                                                                                                                                 "ioctlSucceeded":  false,
+                                                                                                                                                                                 "actual":  "",
+                                                                                                                                                                                 "normalizedActual":  null,
+                                                                                                                                                                                 "expected":  "D8:BB:C1:D8:57:20",
+                                                                                                                                                                                 "matchesExpected":  null,
+                                                                                                                                                                                 "win32Error":  87,
+                                                                                                                                                                                 "win32ErrorText":  "The parameter is incorrect."
+                                                                                                                                                                             }
+                                                                       }
+                                                    },
+                                                    {
+                                                        "path":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\nic-reader-gap-20261017\\host-runs\\20261018T001825865Z.94441c028a9945ffafb026e96972b9cf\\readback-original-restored\\readback.20261018T001830557Z.6b23713433e84bfd83a4c40c8268e259.json",
+                                                        "sha256":  "6C5C92C468C7183A1C227A55A2D7E65064F66219964D4BEC7E5BBAB17892B41C",
+                                                        "expectedMode":  "Original",
+                                                        "adapters":  4,
+                                                        "allSevenReadersMatched":  true,
+                                                        "dot11ByPnp":  {
+                                                                           "ROOT\\VMWARE\\0001":  {
+                                                                                                      "applicable":  false,
+                                                                                                      "status":  "not_applicable",
+                                                                                                      "ioctlSucceeded":  false,
+                                                                                                      "actual":  "",
+                                                                                                      "normalizedActual":  null,
+                                                                                                      "expected":  "00:50:56:C0:00:08",
+                                                                                                      "matchesExpected":  null,
+                                                                                                      "win32Error":  87,
+                                                                                                      "win32ErrorText":  "The parameter is incorrect."
+                                                                                                  },
+                                                                           "ROOT\\VMWARE\\0000":  {
+                                                                                                      "applicable":  false,
+                                                                                                      "status":  "not_applicable",
+                                                                                                      "ioctlSucceeded":  false,
+                                                                                                      "actual":  "",
+                                                                                                      "normalizedActual":  null,
+                                                                                                      "expected":  "00:50:56:C0:00:01",
+                                                                                                      "matchesExpected":  null,
+                                                                                                      "win32Error":  87,
+                                                                                                      "win32ErrorText":  "The parameter is incorrect."
+                                                                                                  },
+                                                                           "PCI\\VEN_8086\u0026DEV_7AF0\u0026SUBSYS_00748086\u0026REV_11\\3\u002611583659\u00261\u0026A3":  {
+                                                                                                                                                                                "applicable":  true,
+                                                                                                                                                                                "status":  "supported",
+                                                                                                                                                                                "ioctlSucceeded":  true,
+                                                                                                                                                                                "actual":  "C4:BD:E5:32:06:D1",
+                                                                                                                                                                                "normalizedActual":  "C4BDE53206D1",
+                                                                                                                                                                                "expected":  "C4:BD:E5:32:06:D1",
+                                                                                                                                                                                "matchesExpected":  true,
+                                                                                                                                                                                "win32Error":  0,
+                                                                                                                                                                                "win32ErrorText":  null
+                                                                                                                                                                            },
+                                                                           "PCI\\VEN_10EC\u0026DEV_8125\u0026SUBSYS_7D371462\u0026REV_05\\4\u00263FA6681\u00260\u002600E2":  {
+                                                                                                                                                                                 "applicable":  false,
+                                                                                                                                                                                 "status":  "not_applicable",
+                                                                                                                                                                                 "ioctlSucceeded":  false,
+                                                                                                                                                                                 "actual":  "",
+                                                                                                                                                                                 "normalizedActual":  null,
+                                                                                                                                                                                 "expected":  "D8:BB:C1:D8:57:20",
+                                                                                                                                                                                 "matchesExpected":  null,
+                                                                                                                                                                                 "win32Error":  87,
+                                                                                                                                                                                 "win32ErrorText":  "The parameter is incorrect."
+                                                                                                                                                                             }
+                                                                       }
+                                                    }
+                                                ],
+                          "originalValues":  [
+                                                 {
+                                                     "pnpDeviceId":  "ROOT\\VMWARE\\0001",
+                                                     "original":  "00:50:56:C0:00:08",
+                                                     "allSevenReadersMatch":  true,
+                                                     "dot11":  {
+                                                                   "api":  "OID_DOT11_CURRENT_ADDRESS",
+                                                                   "applicable":  false,
+                                                                   "status":  "not_applicable",
+                                                                   "ioctlSucceeded":  false,
+                                                                   "win32Error":  87,
+                                                                   "win32ErrorText":  "The parameter is incorrect.",
+                                                                   "bytesReturned":  0,
+                                                                   "outputBytesHex":  "",
+                                                                   "actual":  null,
+                                                                   "normalizedActual":  null,
+                                                                   "expectedMac":  "00:50:56:C0:00:08",
+                                                                   "matchesExpected":  null,
+                                                                   "matchesLockedOriginal":  null
+                                                               }
+                                                 },
+                                                 {
+                                                     "pnpDeviceId":  "ROOT\\VMWARE\\0000",
+                                                     "original":  "00:50:56:C0:00:01",
+                                                     "allSevenReadersMatch":  true,
+                                                     "dot11":  {
+                                                                   "api":  "OID_DOT11_CURRENT_ADDRESS",
+                                                                   "applicable":  false,
+                                                                   "status":  "not_applicable",
+                                                                   "ioctlSucceeded":  false,
+                                                                   "win32Error":  87,
+                                                                   "win32ErrorText":  "The parameter is incorrect.",
+                                                                   "bytesReturned":  0,
+                                                                   "outputBytesHex":  "",
+                                                                   "actual":  null,
+                                                                   "normalizedActual":  null,
+                                                                   "expectedMac":  "00:50:56:C0:00:01",
+                                                                   "matchesExpected":  null,
+                                                                   "matchesLockedOriginal":  null
+                                                               }
+                                                 },
+                                                 {
+                                                     "pnpDeviceId":  "PCI\\VEN_8086\u0026DEV_7AF0\u0026SUBSYS_00748086\u0026REV_11\\3\u002611583659\u00261\u0026A3",
+                                                     "original":  "C4:BD:E5:32:06:D1",
+                                                     "allSevenReadersMatch":  true,
+                                                     "dot11":  {
+                                                                   "api":  "OID_DOT11_CURRENT_ADDRESS",
+                                                                   "applicable":  true,
+                                                                   "status":  "supported",
+                                                                   "ioctlSucceeded":  true,
+                                                                   "win32Error":  0,
+                                                                   "win32ErrorText":  null,
+                                                                   "bytesReturned":  6,
+                                                                   "outputBytesHex":  "C4:BD:E5:32:06:D1",
+                                                                   "actual":  "C4:BD:E5:32:06:D1",
+                                                                   "normalizedActual":  "C4BDE53206D1",
+                                                                   "expectedMac":  "C4:BD:E5:32:06:D1",
+                                                                   "matchesExpected":  true,
+                                                                   "matchesLockedOriginal":  true
+                                                               }
+                                                 },
+                                                 {
+                                                     "pnpDeviceId":  "PCI\\VEN_10EC\u0026DEV_8125\u0026SUBSYS_7D371462\u0026REV_05\\4\u00263FA6681\u00260\u002600E2",
+                                                     "original":  "D8:BB:C1:D8:57:20",
+                                                     "allSevenReadersMatch":  true,
+                                                     "dot11":  {
+                                                                   "api":  "OID_DOT11_CURRENT_ADDRESS",
+                                                                   "applicable":  false,
+                                                                   "status":  "not_applicable",
+                                                                   "ioctlSucceeded":  false,
+                                                                   "win32Error":  87,
+                                                                   "win32ErrorText":  "The parameter is incorrect.",
+                                                                   "bytesReturned":  0,
+                                                                   "outputBytesHex":  "",
+                                                                   "actual":  null,
+                                                                   "normalizedActual":  null,
+                                                                   "expectedMac":  "D8:BB:C1:D8:57:20",
+                                                                   "matchesExpected":  null,
+                                                                   "matchesLockedOriginal":  null
+                                                               }
+                                                 }
+                                             ],
+                          "firmwareBytes":  [
+                                                {
+                                                    "name":  "SecureBoot",
+                                                    "before":  {
+                                                                   "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/platform-before/firmware/firmware-variables/SecureBoot.bin",
+                                                                   "bytes":  1,
+                                                                   "sha256":  "4BF5122F344554C53BDE2EBB8CD2B7E3D1600AD631C385A5D7CCE23C7785459A"
+                                                               },
+                                                    "after":  {
+                                                                  "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/platform-after/firmware/firmware-variables/SecureBoot.bin",
+                                                                  "bytes":  1,
+                                                                  "sha256":  "4BF5122F344554C53BDE2EBB8CD2B7E3D1600AD631C385A5D7CCE23C7785459A"
+                                                              },
+                                                    "beforeHex":  "01",
+                                                    "afterHex":  "01",
+                                                    "equal":  true
+                                                },
+                                                {
+                                                    "name":  "SetupMode",
+                                                    "before":  {
+                                                                   "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/platform-before/firmware/firmware-variables/SetupMode.bin",
+                                                                   "bytes":  1,
+                                                                   "sha256":  "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+                                                               },
+                                                    "after":  {
+                                                                  "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/platform-after/firmware/firmware-variables/SetupMode.bin",
+                                                                  "bytes":  1,
+                                                                  "sha256":  "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+                                                              },
+                                                    "beforeHex":  "00",
+                                                    "afterHex":  "00",
+                                                    "equal":  true
+                                                },
+                                                {
+                                                    "name":  "BootOrder",
+                                                    "before":  {
+                                                                   "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/platform-before/firmware/firmware-variables/BootOrder.bin",
+                                                                   "bytes":  6,
+                                                                   "sha256":  "90C2698921CA9FD02950BE353F721888760E33AB5095A21E50F1E4360B6DE1A0"
+                                                               },
+                                                    "after":  {
+                                                                  "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/platform-after/firmware/firmware-variables/BootOrder.bin",
+                                                                  "bytes":  6,
+                                                                  "sha256":  "90C2698921CA9FD02950BE353F721888760E33AB5095A21E50F1E4360B6DE1A0"
+                                                              },
+                                                    "beforeHex":  "00-00-01-00-02-00",
+                                                    "afterHex":  "00-00-01-00-02-00",
+                                                    "equal":  true
+                                                },
+                                                {
+                                                    "name":  "BootCurrent",
+                                                    "before":  {
+                                                                   "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/platform-before/firmware/firmware-variables/BootCurrent.bin",
+                                                                   "bytes":  2,
+                                                                   "sha256":  "96A296D224F285C67BEE93C30F8A309157F0DAA35DC5B87E410B78630A09CFC7"
+                                                               },
+                                                    "after":  {
+                                                                  "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/platform-after/firmware/firmware-variables/BootCurrent.bin",
+                                                                  "bytes":  2,
+                                                                  "sha256":  "96A296D224F285C67BEE93C30F8A309157F0DAA35DC5B87E410B78630A09CFC7"
+                                                              },
+                                                    "beforeHex":  "00-00",
+                                                    "afterHex":  "00-00",
+                                                    "equal":  true
+                                                }
+                                            ],
+                          "rollbackRequiredForAdapterChanges":  false,
+                          "scope":  "No adapter mutation occurred. The old run did not complete a full platform snapshot; raw BCD/whole-ESP equality is not inferred."
+                      },
+    "changes":  [
+                    "Verify the system ESP BCD hive and BCD.LOG/LOG1/LOG2 through successful live/exported-store enumerations and a separately hash-pinned supported export. Raw live hive/log byte equality is not claimed.",
+                    "Continue strict SHA-256 and inventory comparison for ordinary ESP files and EFI executables; explicitly classify BOOTSTAT as mutable.",
+                    "Report pre-mutation failures as PREFLIGHT_FAILED_NO_ADAPTER_CHANGES and persist the nested original-readback reference."
+                ],
+    "tests":  {
+                  "pureSnapshotCases":  {
+                                            "evidence":  {
+                                                             "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/host-snapshot-tests.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc.json",
+                                                             "bytes":  4635,
+                                                             "sha256":  "DA5BA7BE3EBBEA90E1F07AC4D6A8383357F59B99BD06C96C123D608B43EB11FA"
+                                                         },
+                                            "result":  {
+                                                           "schema":  "nic-host-snapshot-tests.v1",
+                                                           "status":  "PASS",
+                                                           "createdUtc":  "2026-10-18T00:28:52.1887685Z",
+                                                           "testRunId":  "20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc",
+                                                           "productionSource":  {
+                                                                                    "path":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\tools\\nic_vm\\host-address-roundtrip.ps1",
+                                                                                    "sha256Before":  "E3BADB210E7ACE09B965A1B34A7A67900692A0E636F37BE3E4C7B9D9285DB231",
+                                                                                    "sha256After":  "E3BADB210E7ACE09B965A1B34A7A67900692A0E636F37BE3E4C7B9D9285DB231"
+                                                                                },
+                                                           "testSource":  {
+                                                                              "path":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\tools\\nic_vm\\host-snapshot-tests.ps1",
+                                                                              "sha256Before":  "64A7BBFAC8B3A4C9D6726601FDCCAC9099EF9CC8F08FCBBC89C1133606D9E2E2",
+                                                                              "sha256After":  "64A7BBFAC8B3A4C9D6726601FDCCAC9099EF9CC8F08FCBBC89C1133606D9E2E2"
+                                                                          },
+                                                           "cases":  [
+                                                                         {
+                                                                             "name":  "system-bcd-whitelist-is-exact-and-system-only",
+                                                                             "status":  "PASS",
+                                                                             "detail":  "4 approved paths; 5 non-approved/system-scope cases rejected."
+                                                                         },
+                                                                         {
+                                                                             "name":  "supported-bcd-snapshot-requires-all-live-and-exported-enumerations",
+                                                                             "status":  "PASS",
+                                                                             "detail":  "accepted one valid snapshot; rejected 12 incomplete/failed snapshot variants."
+                                                                         },
+                                                                         {
+                                                                             "name":  "bcd-snapshot-builder-fails-closed-on-export-and-enumeration-errors",
+                                                                             "status":  "PASS",
+                                                                             "detail":  "six injected failure modes stopped; a successful export/enumeration produced hash and size evidence."
+                                                                         },
+                                                                         {
+                                                                             "name":  "system-esp-snapshot-classifies-locked-bcd-without-reading-its-bytes",
+                                                                             "status":  "PASS",
+                                                                             "detail":  "FileShare.None blocked direct BCD hashing; system ESP inventory succeeded via exported-store evidence and left other files strict."
+                                                                         },
+                                                                         {
+                                                                             "name":  "non-system-bcd-backup-and-arbitrary-locked-efi-files-remain-strict",
+                                                                             "status":  "PASS",
+                                                                             "detail":  "Non-system BCD, BCD.bak, arbitrary EFI files, and absent/failed BCD evidence all failed closed."
+                                                                         },
+                                                                         {
+                                                                             "name":  "stable-platform-comparison-ignores-only-approved-mutable-boot-bytes",
+                                                                             "status":  "PASS",
+                                                                             "detail":  "Different export/live BCD byte metadata and BOOTSTAT bytes passed because BCD enumerations and immutable EFI files were stable."
+                                                                         },
+                                                                         {
+                                                                             "name":  "stable-platform-comparison-rejects-bcd-value-efi-content-and-file-presence-drift",
+                                                                             "status":  "PASS",
+                                                                             "detail":  "Changed live BCD enumeration, exported-store enumeration, ordinary EFI hash, ordinary EFI path presence, and unsupported BCD provenance were rejected."
+                                                                         },
+                                                                         {
+                                                                             "name":  "preflight-platform-failure-records-original-reads-and-never-mutates-adapters",
+                                                                             "status":  "PASS",
+                                                                             "detail":  "No adapter actions were called; two Original reads recorded; state=PREFLIGHT_FAILED_NO_ADAPTER_CHANGES; journal=C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\nic-snapshot-fix-20261018\\fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc\\run-workspace\\spoof-handoff\\reports\\nic-reader-gap-20261017\\host-runs\\20261018T002852129Z.d02746571cc243329e4d196b6d5c7b93\\journal.json"
+                                                                         }
+                                                                     ],
+                                                           "passed":  8,
+                                                           "failed":  0,
+                                                           "failureDetails":  [
+
+                                                                              ],
+                                                           "fixtureRoot":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\nic-snapshot-fix-20261018\\fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc",
+                                                           "hostActionsPerformed":  false,
+                                                           "environment":  "Function-only AST extraction and synthetic ESP/BCD/report fixtures; no real device, registry, BCD, ESP, network, VM, or administrator API calls."
+                                                       }
+                                        },
+                  "rawReaderGate":  {
+                                        "evidence":  {
+                                                         "path":  "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/20261018T002824Z.73166a12cac14371849fd43898eb3545/raw-input-gate-tests.json",
+                                                         "bytes":  80910,
+                                                         "sha256":  "E0BEE9C82160FD73D09DF48A8713CC7AFFC7D2E37F531751E5AFD1E1AA2FAEDB"
+                                                     },
+                                        "status":  "PASS",
+                                        "summary":  {
+                                                        "rawInputComparisons":  112,
+                                                        "negativeCases":  3,
+                                                        "passed":  4,
+                                                        "failed":  0,
+                                                        "deviceOrHostActions":  0
+                                                    },
+                                        "sourceSha256":  "E3BADB210E7ACE09B965A1B34A7A67900692A0E636F37BE3E4C7B9D9285DB231"
+                                    },
+                  "liveVmBcdReadProbe":  {
+                                             "evidence":  {
+                                                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/probe-20261018T002800Z-facb39e342/guest-evidence/kernel-metadata.json",
+                                                              "bytes":  14272,
+                                                              "sha256":  "5EC298B44035F6A8A342D2677C4FE5D1FA8C272626F4127941FBC199BFB8A351"
+                                                          },
+                                             "status":  "PROBE_COMPLETE",
+                                             "probes":  [
+                                                            {
+                                                                "diskNumber":  0,
+                                                                "partitionNumber":  1,
+                                                                "isSystem":  true,
+                                                                "path":  "\\\\?\\Volume{23374794-afa5-4795-a1a1-a03c6e4ef276}\\EFI\\Microsoft\\Boot\\BCD",
+                                                                "status":  "RAW_READ_FAILED",
+                                                                "methods":  [
+                                                                                {
+                                                                                    "method":  "Get-FileHash",
+                                                                                    "status":  "FAILED",
+                                                                                    "length":  null,
+                                                                                    "sha256":  null,
+                                                                                    "error":  "Microsoft.PowerShell.Commands.WriteErrorException: The file \u0027\\\\?\\Volume{23374794-afa5-4795-a1a1-a03c6e4ef276}\\EFI\\Microsoft\\Boot\\BCD\u0027 cannot be read: The process cannot access the file \u0027\\\\?\\Volume{23374794-afa5-4795-a1a1-a03c6e4ef276}\\EFI\\Microsoft\\Boot\\BCD\u0027 because it is being used by another process."
+                                                                                },
+                                                                                {
+                                                                                    "method":  "File.ReadAllBytes",
+                                                                                    "status":  "FAILED",
+                                                                                    "length":  null,
+                                                                                    "sha256":  null,
+                                                                                    "error":  "System.Management.Automation.MethodInvocationException: Exception calling \"ReadAllBytes\" with \"1\" argument(s): \"The process cannot access the file \u0027\\\\?\\Volume{23374794-afa5-4795-a1a1-a03c6e4ef276}\\EFI\\Microsoft\\Boot\\BCD\u0027 because it is being used by another process.\" ---\u003e System.IO.IOException: The process cannot access the file \u0027\\\\?\\Volume{23374794-afa5-4795-a1a1-a03c6e4ef276}\\EFI\\Microsoft\\Boot\\BCD\u0027 because it is being used by another process.\r\n   at System.IO.__Error.WinIOError(Int32 errorCode, String maybeFullPath)\r\n   at System.IO.FileStream.Init(String path, FileMode mode, FileAccess access, Int32 rights, Boolean useRights, FileShare share, Int32 bufferSize, FileOptions options, SECURITY_ATTRIBUTES secAttrs, String msgPath, Boolean bFromProxy, Boolean useLongPath, Boolean checkHost)\r\n   at System.IO.FileStream..ctor(String path, FileMode mode, FileAccess access, FileShare share, Int32 bufferSize, FileOptions options, String msgPath, Boolean bFromProxy, Boolean useLongPath, Boolean checkHost)\r\n   at System.IO.File.InternalReadAllBytes(String path, Boolean checkHost)\r\n   at CallSite.Target(Closure , CallSite , Type , Object )\r\n   --- End of inner exception stack trace ---\r\n   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)\r\n   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)\r\n   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)\r\n   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)"
+                                                                                },
+                                                                                {
+                                                                                    "method":  "FileStream.ReadWriteDelete",
+                                                                                    "status":  "FAILED",
+                                                                                    "length":  null,
+                                                                                    "sha256":  null,
+                                                                                    "error":  "System.Management.Automation.MethodInvocationException: Exception calling \".ctor\" with \"4\" argument(s): \"The process cannot access the file \u0027\\\\?\\Volume{23374794-afa5-4795-a1a1-a03c6e4ef276}\\EFI\\Microsoft\\Boot\\BCD\u0027 because it is being used by another process.\" ---\u003e System.IO.IOException: The process cannot access the file \u0027\\\\?\\Volume{23374794-afa5-4795-a1a1-a03c6e4ef276}\\EFI\\Microsoft\\Boot\\BCD\u0027 because it is being used by another process.\r\n   at System.IO.__Error.WinIOError(Int32 errorCode, String maybeFullPath)\r\n   at System.IO.FileStream.Init(String path, FileMode mode, FileAccess access, Int32 rights, Boolean useRights, FileShare share, Int32 bufferSize, FileOptions options, SECURITY_ATTRIBUTES secAttrs, String msgPath, Boolean bFromProxy, Boolean useLongPath, Boolean checkHost)\r\n   at System.IO.FileStream..ctor(String path, FileMode mode, FileAccess access, FileShare share)\r\n   at CallSite.Target(Closure , CallSite , Type , Object , FileMode , FileAccess , Object )\r\n   --- End of inner exception stack trace ---\r\n   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)\r\n   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)\r\n   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)\r\n   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)"
+                                                                                }
+                                                                            ]
+                                                            }
+                                                        ],
+                                             "exportExitCode":  0,
+                                             "exportedEnumerationExitCode":  0
+                                         },
+                  "liveVmSnapshotHelpers":  {
+                                                "evidence":  {
+                                                                 "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-validation-20261018T003055Z-b257cac23d/final-validation-summary.json",
+                                                                 "bytes":  22008,
+                                                                 "sha256":  "35B1684F5C376A1993C06143138B6AAC6EB439968B63A0A5E304ADCC28F3406D"
+                                                             },
+                                                "result":  {
+                                                               "status":  "PASS",
+                                                               "sourceSha256":  "E3BADB210E7ACE09B965A1B34A7A67900692A0E636F37BE3E4C7B9D9285DB231",
+                                                               "atomic":  {
+                                                                              "passed":  true,
+                                                                              "observedVersion":  2,
+                                                                              "observedValue":  "replacement"
+                                                                          },
+                                                               "bcdEnumerations":  {
+                                                                                       "passed":  true,
+                                                                                       "results":  [
+                                                                                                       {
+                                                                                                           "name":  "current",
+                                                                                                           "equal":  true,
+                                                                                                           "firstExitCode":  0,
+                                                                                                           "secondExitCode":  0,
+                                                                                                           "firstTimedOut":  false,
+                                                                                                           "secondTimedOut":  false,
+                                                                                                           "firstStdoutLength":  725,
+                                                                                                           "secondStdoutLength":  725
+                                                                                                       },
+                                                                                                       {
+                                                                                                           "name":  "all",
+                                                                                                           "equal":  true,
+                                                                                                           "firstExitCode":  0,
+                                                                                                           "secondExitCode":  0,
+                                                                                                           "firstTimedOut":  false,
+                                                                                                           "secondTimedOut":  false,
+                                                                                                           "firstStdoutLength":  6164,
+                                                                                                           "secondStdoutLength":  6164
+                                                                                                       },
+                                                                                                       {
+                                                                                                           "name":  "firmware",
+                                                                                                           "equal":  true,
+                                                                                                           "firstExitCode":  0,
+                                                                                                           "secondExitCode":  0,
+                                                                                                           "firstTimedOut":  false,
+                                                                                                           "secondTimedOut":  false,
+                                                                                                           "firstStdoutLength":  2081,
+                                                                                                           "secondStdoutLength":  2081
+                                                                                                       },
+                                                                                                       {
+                                                                                                           "name":  "exportedAll",
+                                                                                                           "equal":  true,
+                                                                                                           "firstExitCode":  0,
+                                                                                                           "secondExitCode":  0,
+                                                                                                           "firstTimedOut":  false,
+                                                                                                           "secondTimedOut":  false,
+                                                                                                           "firstStdoutLength":  6164,
+                                                                                                           "secondStdoutLength":  6164
+                                                                                                       }
+                                                                                                   ]
+                                                                                   },
+                                                               "bcdExports":  {
+                                                                                  "bothHashPinned":  true,
+                                                                                  "firstBytes":  28672,
+                                                                                  "firstSha256":  "3FAABEA322A71712F02C97AFF434217A2877A73351974E543412897F0EB3331F",
+                                                                                  "secondBytes":  28672,
+                                                                                  "secondSha256":  "3CE30F20CD77AC50C6D8EE65CAFC7EBC4FB6E5B283E3254DE3599123C062AA3B",
+                                                                                  "hashEqualityRequired":  false,
+                                                                                  "hashesEqual":  false
+                                                                              },
+                                                               "esp":  {
+                                                                           "passed":  true,
+                                                                           "partitionInventoryEqual":  true,
+                                                                           "exactFileInventoryEqual":  true,
+                                                                           "ordinaryFileHashesEqual":  true,
+                                                                           "managedBcdClassificationValid":  true,
+                                                                           "mutableBootstatClassificationValid":  true,
+                                                                           "systemEspCount":  1,
+                                                                           "managedBcdAndLogCount":  4,
+                                                                           "ordinaryFileCount":  143,
+                                                                           "mutableBootstatCount":  1,
+                                                                           "bcdPathPresent":  true
+                                                                       },
+                                                               "partitions":  [
+                                                                                  {
+                                                                                      "disk":  0,
+                                                                                      "partition":  1,
+                                                                                      "guid":  "{23374794-afa5-4795-a1a1-a03c6e4ef276}",
+                                                                                      "isSystem":  true,
+                                                                                      "accessPath":  "\\\\?\\Volume{23374794-afa5-4795-a1a1-a03c6e4ef276}\\",
+                                                                                      "files":  148
+                                                                                  },
+                                                                                  {
+                                                                                      "disk":  0,
+                                                                                      "partition":  1,
+                                                                                      "guid":  "{23374794-afa5-4795-a1a1-a03c6e4ef276}",
+                                                                                      "isSystem":  true,
+                                                                                      "accessPath":  "\\\\?\\Volume{23374794-afa5-4795-a1a1-a03c6e4ef276}\\",
+                                                                                      "files":  148
+                                                                                  }
+                                                                              ],
+                                                               "managedPaths":  [
+                                                                                    "EFI/Microsoft/Boot/BCD",
+                                                                                    "EFI/Microsoft/Boot/BCD.LOG",
+                                                                                    "EFI/Microsoft/Boot/BCD.LOG1",
+                                                                                    "EFI/Microsoft/Boot/BCD.LOG2"
+                                                                                ],
+                                                               "bootstatPaths":  [
+                                                                                     "EFI/Microsoft/Boot/BOOTSTAT.DAT"
+                                                                                 ],
+                                                               "bcdCommands":  [
+                                                                                   {
+                                                                                       "program":  "C:\\WINDOWS\\System32\\bcdedit.exe",
+                                                                                       "arguments":  [
+                                                                                                         "/enum",
+                                                                                                         "{current}",
+                                                                                                         "/v"
+                                                                                                     ],
+                                                                                       "exitCode":  0,
+                                                                                       "timedOut":  false,
+                                                                                       "stdoutLength":  725,
+                                                                                       "stderr":  "",
+                                                                                       "exportBytes":  null,
+                                                                                       "exportSha256":  null
+                                                                                   },
+                                                                                   {
+                                                                                       "program":  "C:\\WINDOWS\\System32\\bcdedit.exe",
+                                                                                       "arguments":  [
+                                                                                                         "/enum",
+                                                                                                         "all",
+                                                                                                         "/v"
+                                                                                                     ],
+                                                                                       "exitCode":  0,
+                                                                                       "timedOut":  false,
+                                                                                       "stdoutLength":  6164,
+                                                                                       "stderr":  "",
+                                                                                       "exportBytes":  null,
+                                                                                       "exportSha256":  null
+                                                                                   },
+                                                                                   {
+                                                                                       "program":  "C:\\WINDOWS\\System32\\bcdedit.exe",
+                                                                                       "arguments":  [
+                                                                                                         "/enum",
+                                                                                                         "firmware",
+                                                                                                         "/v"
+                                                                                                     ],
+                                                                                       "exitCode":  0,
+                                                                                       "timedOut":  false,
+                                                                                       "stdoutLength":  2081,
+                                                                                       "stderr":  "",
+                                                                                       "exportBytes":  null,
+                                                                                       "exportSha256":  null
+                                                                                   },
+                                                                                   {
+                                                                                       "program":  null,
+                                                                                       "arguments":  null,
+                                                                                       "exitCode":  0,
+                                                                                       "timedOut":  null,
+                                                                                       "stdoutLength":  39,
+                                                                                       "stderr":  "",
+                                                                                       "exportBytes":  28672,
+                                                                                       "exportSha256":  "3FAABEA322A71712F02C97AFF434217A2877A73351974E543412897F0EB3331F"
+                                                                                   },
+                                                                                   {
+                                                                                       "program":  "C:\\WINDOWS\\System32\\bcdedit.exe",
+                                                                                       "arguments":  [
+                                                                                                         "/store",
+                                                                                                         "C:\\ProgramData\\UEFILoaderRunner\\runs\\uefi-windows-probe-20261018-003055-b257cac23d\\bcd-first\\boot-store-export.bcd",
+                                                                                                         "/enum",
+                                                                                                         "all",
+                                                                                                         "/v"
+                                                                                                     ],
+                                                                                       "exitCode":  0,
+                                                                                       "timedOut":  false,
+                                                                                       "stdoutLength":  6164,
+                                                                                       "stderr":  "",
+                                                                                       "exportBytes":  null,
+                                                                                       "exportSha256":  null
+                                                                                   },
+                                                                                   {
+                                                                                       "program":  "C:\\WINDOWS\\System32\\bcdedit.exe",
+                                                                                       "arguments":  [
+                                                                                                         "/enum",
+                                                                                                         "{current}",
+                                                                                                         "/v"
+                                                                                                     ],
+                                                                                       "exitCode":  0,
+                                                                                       "timedOut":  false,
+                                                                                       "stdoutLength":  725,
+                                                                                       "stderr":  "",
+                                                                                       "exportBytes":  null,
+                                                                                       "exportSha256":  null
+                                                                                   },
+                                                                                   {
+                                                                                       "program":  "C:\\WINDOWS\\System32\\bcdedit.exe",
+                                                                                       "arguments":  [
+                                                                                                         "/enum",
+                                                                                                         "all",
+                                                                                                         "/v"
+                                                                                                     ],
+                                                                                       "exitCode":  0,
+                                                                                       "timedOut":  false,
+                                                                                       "stdoutLength":  6164,
+                                                                                       "stderr":  "",
+                                                                                       "exportBytes":  null,
+                                                                                       "exportSha256":  null
+                                                                                   },
+                                                                                   {
+                                                                                       "program":  "C:\\WINDOWS\\System32\\bcdedit.exe",
+                                                                                       "arguments":  [
+                                                                                                         "/enum",
+                                                                                                         "firmware",
+                                                                                                         "/v"
+                                                                                                     ],
+                                                                                       "exitCode":  0,
+                                                                                       "timedOut":  false,
+                                                                                       "stdoutLength":  2081,
+                                                                                       "stderr":  "",
+                                                                                       "exportBytes":  null,
+                                                                                       "exportSha256":  null
+                                                                                   },
+                                                                                   {
+                                                                                       "program":  null,
+                                                                                       "arguments":  null,
+                                                                                       "exitCode":  0,
+                                                                                       "timedOut":  null,
+                                                                                       "stdoutLength":  39,
+                                                                                       "stderr":  "",
+                                                                                       "exportBytes":  28672,
+                                                                                       "exportSha256":  "3CE30F20CD77AC50C6D8EE65CAFC7EBC4FB6E5B283E3254DE3599123C062AA3B"
+                                                                                   },
+                                                                                   {
+                                                                                       "program":  "C:\\WINDOWS\\System32\\bcdedit.exe",
+                                                                                       "arguments":  [
+                                                                                                         "/store",
+                                                                                                         "C:\\ProgramData\\UEFILoaderRunner\\runs\\uefi-windows-probe-20261018-003055-b257cac23d\\bcd-second\\boot-store-export.bcd",
+                                                                                                         "/enum",
+                                                                                                         "all",
+                                                                                                         "/v"
+                                                                                                     ],
+                                                                                       "exitCode":  0,
+                                                                                       "timedOut":  false,
+                                                                                       "stdoutLength":  6164,
+                                                                                       "stderr":  "",
+                                                                                       "exportBytes":  null,
+                                                                                       "exportSha256":  null
+                                                                                   }
+                                                                               ],
+                                                               "rawBcdFailures":  [
+                                                                                      {
+                                                                                          "method":  "Get-FileHash",
+                                                                                          "status":  "FAILED",
+                                                                                          "error":  "Microsoft.PowerShell.Commands.WriteErrorException: The file \u0027\\\\?\\Volume{23374794-afa5-4795-a1a1-a03c6e4ef276}\\EFI\\Microsoft\\Boot\\BCD\u0027 cannot be read: The process cannot access the file \u0027\\\\?\\Volume{23374794-afa5-4795-a1a1-a03c6e4ef276}\\EFI\\Microsoft\\Boot\\BCD\u0027 because it is being used by another process."
+                                                                                      },
+                                                                                      {
+                                                                                          "method":  "File.ReadAllBytes",
+                                                                                          "status":  "FAILED",
+                                                                                          "error":  "System.Management.Automation.MethodInvocationException: Exception calling \"ReadAllBytes\" with \"1\" argument(s): \"The process cannot access the file \u0027\\\\?\\Volume{23374794-afa5-4795-a1a1-a03c6e4ef276}\\EFI\\Microsoft\\Boot\\BCD\u0027 because it is being used by another process.\" ---\u003e System.IO.IOException: The process cannot access the file \u0027\\\\?\\Volume{23374794-afa5-4795-a1a1-a03c6e4ef276}\\EFI\\Microsoft\\Boot\\BCD\u0027 because it is being used by another process.\r\n   at System.IO.__Error.WinIOError(Int32 errorCode, String maybeFullPath)\r\n   at System.IO.FileStream.Init(String path, FileMode mode, FileAccess access, Int32 rights, Boolean useRights, FileShare share, Int32 bufferSize, FileOptions options, SECURITY_ATTRIBUTES secAttrs, String msgPath, Boolean bFromProxy, Boolean useLongPath, Boolean checkHost)\r\n   at System.IO.FileStream..ctor(String path, FileMode mode, FileAccess access, FileShare share, Int32 bufferSize, FileOptions options, String msgPath, Boolean bFromProxy, Boolean useLongPath, Boolean checkHost)\r\n   at System.IO.File.InternalReadAllBytes(String path, Boolean checkHost)\r\n   at CallSite.Target(Closure , CallSite , Type , Object )\r\n   --- End of inner exception stack trace ---\r\n   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)\r\n   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)\r\n   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)\r\n   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)"
+                                                                                      },
+                                                                                      {
+                                                                                          "method":  "FileStream.ReadWriteDelete",
+                                                                                          "status":  "FAILED",
+                                                                                          "error":  "System.Management.Automation.MethodInvocationException: Exception calling \".ctor\" with \"4\" argument(s): \"The process cannot access the file \u0027\\\\?\\Volume{23374794-afa5-4795-a1a1-a03c6e4ef276}\\EFI\\Microsoft\\Boot\\BCD\u0027 because it is being used by another process.\" ---\u003e System.IO.IOException: The process cannot access the file \u0027\\\\?\\Volume{23374794-afa5-4795-a1a1-a03c6e4ef276}\\EFI\\Microsoft\\Boot\\BCD\u0027 because it is being used by another process.\r\n   at System.IO.__Error.WinIOError(Int32 errorCode, String maybeFullPath)\r\n   at System.IO.FileStream.Init(String path, FileMode mode, FileAccess access, Int32 rights, Boolean useRights, FileShare share, Int32 bufferSize, FileOptions options, SECURITY_ATTRIBUTES secAttrs, String msgPath, Boolean bFromProxy, Boolean useLongPath, Boolean checkHost)\r\n   at System.IO.FileStream..ctor(String path, FileMode mode, FileAccess access, FileShare share)\r\n   at CallSite.Target(Closure , CallSite , Type , Object , FileMode , FileAccess , Object )\r\n   --- End of inner exception stack trace ---\r\n   at System.Management.Automation.ExceptionHandlingOps.CheckActionPreference(FunctionContext funcContext, Exception exception)\r\n   at System.Management.Automation.Interpreter.ActionCallInstruction`2.Run(InterpretedFrame frame)\r\n   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)\r\n   at System.Management.Automation.Interpreter.EnterTryCatchFinallyInstruction.Run(InterpretedFrame frame)"
+                                                                                      }
+                                                                                  ],
+                                                               "fileHashes":  [
+                                                                                  {
+                                                                                      "path":  "file-manifest.json",
+                                                                                      "length":  3108,
+                                                                                      "sha256":  "7DB81642D0CAA2090C24DBEE4AD51E69FA7CB04DD3ED7A0D7F2C271ACC8AD94B"
+                                                                                  },
+                                                                                  {
+                                                                                      "path":  "summary.json",
+                                                                                      "length":  109358,
+                                                                                      "sha256":  "2C0408D64AFAD6775D8915532153710B7D6B3B884780B2982CBF387FC7E79AAE"
+                                                                                  },
+                                                                                  {
+                                                                                      "path":  "guest-evidence\\kernel-metadata.json",
+                                                                                      "length":  313964,
+                                                                                      "sha256":  "BDD8A808BADC757260B7CB694F3FB5940353B2657C1A3599DADAE5DE0AAA8A4D"
+                                                                                  },
+                                                                                  {
+                                                                                      "path":  "guest-evidence\\stderr.txt",
+                                                                                      "length":  2,
+                                                                                      "sha256":  "7EB70257593DA06F682A3DDDA54A9D260D4FC514F645237F5CA74B08F8DA61A6"
+                                                                                  },
+                                                                                  {
+                                                                                      "path":  "guest-evidence\\stdout.txt",
+                                                                                      "length":  170,
+                                                                                      "sha256":  "934FA219425819CE8878F25AEFB95940F90DD454728572D07D0F0A042098B362"
+                                                                                  },
+                                                                                  {
+                                                                                      "path":  "mailbox-run\\cleanup.json",
+                                                                                      "length":  2020,
+                                                                                      "sha256":  "6B04E83376FFFD0761FC1DC03052A38BA4815031AB3B51A3962F00274888ED1E"
+                                                                                  },
+                                                                                  {
+                                                                                      "path":  "mailbox-run\\guest-evidence.zip",
+                                                                                      "length":  28515,
+                                                                                      "sha256":  "194161CBE00A309653414F88DF2B5004E2380A97F16E9E4B6E21D4B3DF25C3C4"
+                                                                                  },
+                                                                                  {
+                                                                                      "path":  "mailbox-run\\request-metadata.json",
+                                                                                      "length":  1996,
+                                                                                      "sha256":  "1F9FE0F71841691006839BCCDC3A09E90C14ECEA922C716AAABEFD1E09E416AB"
+                                                                                  },
+                                                                                  {
+                                                                                      "path":  "mailbox-run\\request-package.zip",
+                                                                                      "length":  97990,
+                                                                                      "sha256":  "0CE1047195C7AE8B95C18FA47CC72A72E81C10D13C3C57140DD9BA3BBC039884"
+                                                                                  },
+                                                                                  {
+                                                                                      "path":  "mailbox-run\\request.json",
+                                                                                      "length":  520,
+                                                                                      "sha256":  "5362D024D5240B9FEE619AD276A048181CC9155F6BAA88DAF313336356299577"
+                                                                                  },
+                                                                                  {
+                                                                                      "path":  "mailbox-run\\response-metadata.json",
+                                                                                      "length":  676,
+                                                                                      "sha256":  "BBA3882A20091DB83605081E7AB31FC44327185C8835B87E1B06BF9BCF69C158"
+                                                                                  },
+                                                                                  {
+                                                                                      "path":  "mailbox-run\\response.json",
+                                                                                      "length":  600,
+                                                                                      "sha256":  "807048BA0156D752F9668422C22730CEED41BCB2DD60D1F69520D0916051ECF0"
+                                                                                  },
+                                                                                  {
+                                                                                      "path":  "mailbox-run\\transport-metadata.json",
+                                                                                      "length":  903,
+                                                                                      "sha256":  "7174380AD2D4F451BF145ADC94A87AD91BB15F7B1303AEC1E5AC94AA68F05E99"
+                                                                                  },
+                                                                                  {
+                                                                                      "path":  "mailbox-run\\evidence\\kernel-metadata.json",
+                                                                                      "length":  313964,
+                                                                                      "sha256":  "BDD8A808BADC757260B7CB694F3FB5940353B2657C1A3599DADAE5DE0AAA8A4D"
+                                                                                  },
+                                                                                  {
+                                                                                      "path":  "mailbox-run\\evidence\\stderr.txt",
+                                                                                      "length":  2,
+                                                                                      "sha256":  "7EB70257593DA06F682A3DDDA54A9D260D4FC514F645237F5CA74B08F8DA61A6"
+                                                                                  },
+                                                                                  {
+                                                                                      "path":  "mailbox-run\\evidence\\stdout.txt",
+                                                                                      "length":  170,
+                                                                                      "sha256":  "934FA219425819CE8878F25AEFB95940F90DD454728572D07D0F0A042098B362"
+                                                                                  },
+                                                                                  {
+                                                                                      "path":  "mailbox-run\\stage\\ib-tcg-dump.exe",
+                                                                                      "length":  172544,
+                                                                                      "sha256":  "39A484F72C77B576A774343238CDFF6E8D20ED637F0A6312F606DDC39DABA288"
+                                                                                  },
+                                                                                  {
+                                                                                      "path":  "mailbox-run\\stage\\Invoke-WindowsGuestTest.ps1",
+                                                                                      "length":  22889,
+                                                                                      "sha256":  "AE333729DA4A6C90EBBD337A7EA496769365180FBD12CFC92412CF311AD4679E"
+                                                                                  },
+                                                                                  {
+                                                                                      "path":  "mailbox-run\\stage\\SHA256SUMS.txt",
+                                                                                      "length":  176,
+                                                                                      "sha256":  "EBA6A74D55CE1B7C56BA41228E7330581C39188EFE30220C6B323A200ABC2E9A"
+                                                                                  }
+                                                                              ]
+                                                           }
+                                            }
+              },
+    "recovery":  {
+                     "evidence":  {
+                                      "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/final-vm-recovery.json",
+                                      "bytes":  2684,
+                                      "sha256":  "ACACD77A977D11AF8C384D4D2D339E4F56C329F40EB07C7D505B45FF8415D73D"
+                                  },
+                     "result":  {
+                                    "recoveryActions":  [
+                                                            {
+                                                                "action":  "StopHard",
+                                                                "exitCode":  0,
+                                                                "stdout":  "{\r\n    \"startedUtc\":  \"2026-10-18T00:32:11.2541348Z\",\r\n    \"operation\":  [\r\n                      \"stop\",\r\n                      \"C:\\\\Users\\\\jayli\\\\OneDrive\\\\Documents\\\\Projects\\\\hsinv\\\\spoof-handoff\\\\artifacts\\\\nic-vm-20261017\\\\vm-plain\\\\DeviceFilter-Win11.vmx\",\r\n                      \"hard\"\r\n                  ],\r\n    \"executable\":  \"C:\\\\Program Files\\\\VMware\\\\VMware Workstation\\\\vmrun.exe\",\r\n    \"exitCode\":  0,\r\n    \"timedOut\":  false,\r\n    \"stdout\":  \"\",\r\n    \"stderr\":  \"\"\r\n}\r\n",
+                                                                "stderr":  ""
+                                                            },
+                                                            {
+                                                                "action":  "Revert",
+                                                                "exitCode":  0,
+                                                                "stdout":  "{\r\n    \"startedUtc\":  \"2026-10-18T00:32:13.2519220Z\",\r\n    \"operation\":  [\r\n                      \"revertToSnapshot\",\r\n                      \"C:\\\\Users\\\\jayli\\\\OneDrive\\\\Documents\\\\Projects\\\\hsinv\\\\spoof-handoff\\\\artifacts\\\\nic-vm-20261017\\\\vm-plain\\\\DeviceFilter-Win11.vmx\",\r\n                      \"DeviceFilter-Nic-ColdOriginal\"\r\n                  ],\r\n    \"executable\":  \"C:\\\\Program Files\\\\VMware\\\\VMware Workstation\\\\vmrun.exe\",\r\n    \"exitCode\":  0,\r\n    \"timedOut\":  false,\r\n    \"stdout\":  \"\",\r\n    \"stderr\":  \"\"\r\n}\r\n",
+                                                                "stderr":  ""
+                                                            }
+                                                        ],
+                                    "vmrunListExit":  0,
+                                    "vmrunList":  "Total running VMs: 0",
+                                    "poweredOff":  true,
+                                    "cloneVmxSha256":  "0F7FDF1E34C64EF926E1CBB5AF69522797EF70F9A8B9EEDCBD603F409117A314",
+                                    "cloneDiskParent":  "Windows 11 x64-cl1-000003.vmdk",
+                                    "snapshotCurrentUid":  "2",
+                                    "coldSnapshotDisplayName":  "DeviceFilter-Nic-ColdOriginal",
+                                    "originalSourceVmx":  "C:\\Users\\jayli\\OneDrive\\Documents\\Virtual Machines\\UEFILoader-Win11-ExactBuild-Gate\\UEFILoader-Win11-ExactBuild-Gate.vmx",
+                                    "sourceVmxSha256":  "537BBE6D91DFA716D698A5E8301F5C2C59FC98CC65308BC905A9938A3129F0C9",
+                                    "mainHead":  "9b82c1dc5409b36829842bae6ac841ef60481c72",
+                                    "mainIndexSha256":  "C15E40DC497E9C24BE73197E96ACCC5B43D3C62F14AB0199C3286BE65198D2F9",
+                                    "failedMailboxEvidenceCopy":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\nic-snapshot-fix-20261018\\mailbox-failure-before-result"
+                                }
+                 },
+    "sourceFiles":  [
+                        {
+                            "path":  ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/host-address-roundtrip.ps1",
+                            "bytes":  111404,
+                            "sha256":  "E3BADB210E7ACE09B965A1B34A7A67900692A0E636F37BE3E4C7B9D9285DB231",
+                            "repositoryPath":  "spoof-handoff/tools/nic_vm/host-address-roundtrip.ps1"
+                        },
+                        {
+                            "path":  ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/host-snapshot-tests.ps1",
+                            "bytes":  35384,
+                            "sha256":  "64A7BBFAC8B3A4C9D6726601FDCCAC9099EF9CC8F08FCBBC89C1133606D9E2E2",
+                            "repositoryPath":  "spoof-handoff/tools/nic_vm/host-snapshot-tests.ps1"
+                        },
+                        {
+                            "path":  ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/docs/NIC_VM_VALIDATION.md",
+                            "bytes":  11879,
+                            "sha256":  "A7A9AFC3610472A9BD03BAA465E273F58FF36AFCAC2602DEB499323E3CBF0E15",
+                            "repositoryPath":  "spoof-handoff/docs/NIC_VM_VALIDATION.md"
+                        }
+                    ],
+    "evidenceFiles":  [
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/bcd-live-read-probe.ps1",
+                              "bytes":  8763,
+                              "sha256":  "6E3D4F44A1826A5C198CD8B8E0D881CBB31E6B28E5583FD7CEF27183FF97903D"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/evidence-manifest.json",
+                              "bytes":  64568,
+                              "sha256":  "BC89EEC4E74B3A02945D38200B650B5E0E0F79F123FACCC1369837E28D413C05"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/final-vm-recovery.json",
+                              "bytes":  2684,
+                              "sha256":  "ACACD77A977D11AF8C384D4D2D339E4F56C329F40EB07C7D505B45FF8415D73D"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-extraction-manifest.json",
+                              "bytes":  3246,
+                              "sha256":  "7C52D822CB6BE94DE1A1075433F3FEC65600AFCE6D8BE388C9371D497A601AE8"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-mailbox-result.json",
+                              "bytes":  484,
+                              "sha256":  "D259003005D99F28018AA1BC627CC99F985918E50322E9219F64AB568499463F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-mailbox.stderr.txt",
+                              "bytes":  0,
+                              "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-mailbox.stdout.txt",
+                              "bytes":  261,
+                              "sha256":  "6CA1542DF6528D5F7FCD9E998B6640CD5B22E47E4CEF066C83509CAC88CC1095"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/host-bcd-snapshot-readonly.ps1",
+                              "bytes":  22889,
+                              "sha256":  "AE333729DA4A6C90EBBD337A7EA496769365180FBD12CFC92412CF311AD4679E"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/host-snapshot-tests.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218.json",
+                              "bytes":  7762,
+                              "sha256":  "36A8AAEF4352DD967A8953AAB0A491EF8531488315BE1E3D46D67FC19DBBAFAD"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/host-snapshot-tests.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f.json",
+                              "bytes":  4608,
+                              "sha256":  "50BF8B903C98CE03CFACC7631AD83F1DB5D256B8B17F6CA082DAD4B33ABFE093"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/host-snapshot-tests.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc.json",
+                              "bytes":  4635,
+                              "sha256":  "DA5BA7BE3EBBEA90E1F07AC4D6A8383357F59B99BD06C96C123D608B43EB11FA"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/mailbox-inputs.json",
+                              "bytes":  417,
+                              "sha256":  "A2B4FD4F50A2115AED5DDC3538E5D6744A0429AC0222D57885D880AD56CC1691"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/mailbox-result.json",
+                              "bytes":  653,
+                              "sha256":  "B470D5BBC8D974E2EA56D4C521B12F97C6148A4D23A9CA549C18B303B2731DC6"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/mailbox-retry.json",
+                              "bytes":  508,
+                              "sha256":  "3F41CF75C11E84A845925F0E5A1BC29D729A130CECD06B1D13C68AB10BD3646E"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/mailbox-retry.stderr.txt",
+                              "bytes":  0,
+                              "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/mailbox-retry.stdout.txt",
+                              "bytes":  261,
+                              "sha256":  "3E4A8BDC6518DCD36D9C0CA7F0DBF987E5D08D66100A7B9A31E7092316C36347"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/mailbox.stderr.txt",
+                              "bytes":  494,
+                              "sha256":  "64C862EB3FE052E5CA5AD0EEB5156FA12A4FA2DF3511AFA98E880374DA65206C"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/mailbox.stdout.txt",
+                              "bytes":  0,
+                              "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/ps51-credential-import.stderr.txt",
+                              "bytes":  1610,
+                              "sha256":  "6D2F7C0E9DD1A8A9BDFABE51EC28C48F5A6E707DF0B08F95C58D6CD0EFF5E00A"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/ps51-credential-import.stdout.txt",
+                              "bytes":  0,
+                              "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/recovery-revert.stderr.txt",
+                              "bytes":  0,
+                              "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/recovery-revert.stdout.txt",
+                              "bytes":  522,
+                              "sha256":  "B3887A0598C0297DB0ACAF6DD089FE372432166F67B74A3717322ED88B76A725"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/recovery-stophard.stderr.txt",
+                              "bytes":  0,
+                              "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/recovery-stophard.stdout.txt",
+                              "bytes":  485,
+                              "sha256":  "2411386D86942CFD3ADE444C4859D110153615BE8D18FE2084EDA0F190675FBB"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/selected-helper-source.txt",
+                              "bytes":  16597,
+                              "sha256":  "FE31CB9040A7CD41C961A551E52F065719B0D14DACF0A3793EE8F5C84293F128"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/SHA256SUMS.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218.txt",
+                              "bytes":  673,
+                              "sha256":  "35FDBBC69E745E5F162F9B7196139161580A4DEA2C35BF3D5AA2636B2D0A3507"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/SHA256SUMS.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f.txt",
+                              "bytes":  673,
+                              "sha256":  "BB96F2722DA9A780A77E456A22409A49560A7901E678FAA56DD14C97BE358B2A"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/SHA256SUMS.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc.txt",
+                              "bytes":  673,
+                              "sha256":  "86835D946508761D210262EE95D70E370B18767C39907C679F6AC4A6F5782585"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/vm-cold-revert.json",
+                              "bytes":  1463,
+                              "sha256":  "1013876AE9BF0B0FC2D8E8635D9B6778BDA794E4749BEE730E0E04249C8040FC"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/vm-cold-revert.stderr.txt",
+                              "bytes":  0,
+                              "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/vm-cold-revert.stdout.txt",
+                              "bytes":  522,
+                              "sha256":  "E46C414F8E6123E83CC18B2C5BB294054F4087596263845C267AE355DF3CCBDA"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/vm-revert.json",
+                              "bytes":  965,
+                              "sha256":  "F32C78882EAAD99AC46ED37414D2F7E42E326B528D7EFA22DC0981E46B19BC8C"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/vm-revert.stderr.txt",
+                              "bytes":  557,
+                              "sha256":  "2BC924DDCAD3ABA92DAF9D7958914931F4C5093C1D7A44C4B7745475B6CCEA22"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/vm-revert.stdout.txt",
+                              "bytes":  0,
+                              "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/vm-snapshot-list.json",
+                              "bytes":  435,
+                              "sha256":  "A3FBA9B387AE736E5E1EE764F38A93666ED9C1A3DB61EBC91BE439CCF7D7B2AA"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/vm-start.json",
+                              "bytes":  775,
+                              "sha256":  "B902E23363C042D025C035B0FB7EBAFD19CA495A1BE9BFD630D58D1D537B17C8"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/vm-start.stderr.txt",
+                              "bytes":  0,
+                              "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/vm-start.stdout.txt",
+                              "bytes":  487,
+                              "sha256":  "061B3808527EE1EB670ADB76F0BEB8D9F9ABD9CD9828F3E1DDA3986381773872"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/vm-tools.stderr.txt",
+                              "bytes":  0,
+                              "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/vm-tools.stdout.txt",
+                              "bytes":  478,
+                              "sha256":  "202016ED0E8D05C890DB41A996C3817F9C33A525F3C805265A0D047BB8A91CAD"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/locked-system-esp/EFI/Microsoft/Boot/BCD",
+                              "bytes":  30,
+                              "sha256":  "5F9EBA0089A7426E54B25F2AAF6FAB4FAF63C457131B3D7C9D6A424373D40722"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/locked-system-esp/EFI/Microsoft/Boot/BCD.LOG",
+                              "bytes":  34,
+                              "sha256":  "9105C14DFCBAE95FA4FB93FB52E9A5CE8195E78B912DE227E2E27CC5D082FC8F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/locked-system-esp/EFI/Microsoft/Boot/BCD.LOG1",
+                              "bytes":  35,
+                              "sha256":  "7E75216639F273EDF12543DB5A75858BC72F1E3A3BDD79F590723C4221B31391"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/locked-system-esp/EFI/Microsoft/Boot/BCD.LOG2",
+                              "bytes":  35,
+                              "sha256":  "89A5ACA1C198A4A62559221F88105183CBE1C0B2D783482FCB1DE6BEC2C2006B"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/locked-system-esp/EFI/Microsoft/Boot/bootmgfw.efi",
+                              "bytes":  39,
+                              "sha256":  "1731C8B06065C8C6AC19491BC093D9E96E4C5A20F035A78DDA93C885F6FB9988"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/locked-system-esp/EFI/Microsoft/Boot/BOOTSTAT.DAT",
+                              "bytes":  39,
+                              "sha256":  "D98F63694AD08D84C89EB1C514B05A58854F8B241DE5A71C426F9E6979523829"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/non-system-bcd/EFI/Microsoft/Boot/BCD",
+                              "bytes":  30,
+                              "sha256":  "5F9EBA0089A7426E54B25F2AAF6FAB4FAF63C457131B3D7C9D6A424373D40722"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/non-system-bcd/EFI/Microsoft/Boot/BCD.LOG",
+                              "bytes":  34,
+                              "sha256":  "9105C14DFCBAE95FA4FB93FB52E9A5CE8195E78B912DE227E2E27CC5D082FC8F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/non-system-bcd/EFI/Microsoft/Boot/BCD.LOG1",
+                              "bytes":  35,
+                              "sha256":  "7E75216639F273EDF12543DB5A75858BC72F1E3A3BDD79F590723C4221B31391"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/non-system-bcd/EFI/Microsoft/Boot/BCD.LOG2",
+                              "bytes":  35,
+                              "sha256":  "89A5ACA1C198A4A62559221F88105183CBE1C0B2D783482FCB1DE6BEC2C2006B"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/non-system-bcd/EFI/Microsoft/Boot/bootmgfw.efi",
+                              "bytes":  39,
+                              "sha256":  "1731C8B06065C8C6AC19491BC093D9E96E4C5A20F035A78DDA93C885F6FB9988"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/non-system-bcd/EFI/Microsoft/Boot/BOOTSTAT.DAT",
+                              "bytes":  39,
+                              "sha256":  "D98F63694AD08D84C89EB1C514B05A58854F8B241DE5A71C426F9E6979523829"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/run-workspace/reader.exe",
+                              "bytes":  19,
+                              "sha256":  "CC82DDC75186280B995074D355E575C1B763D4AFD89FCF949FF7213820A1515A"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/run-workspace/spoof-handoff/reports/client-originals.tsv",
+                              "bytes":  8,
+                              "sha256":  "E80B71CD14D3CBD65F4173ABCBFCF01A545DBCA32A72D575108B553A648CC96F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/system-arbitrary-file/EFI/Microsoft/Boot/BCD",
+                              "bytes":  30,
+                              "sha256":  "5F9EBA0089A7426E54B25F2AAF6FAB4FAF63C457131B3D7C9D6A424373D40722"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/system-arbitrary-file/EFI/Microsoft/Boot/BCD.LOG",
+                              "bytes":  34,
+                              "sha256":  "9105C14DFCBAE95FA4FB93FB52E9A5CE8195E78B912DE227E2E27CC5D082FC8F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/system-arbitrary-file/EFI/Microsoft/Boot/BCD.LOG1",
+                              "bytes":  35,
+                              "sha256":  "7E75216639F273EDF12543DB5A75858BC72F1E3A3BDD79F590723C4221B31391"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/system-arbitrary-file/EFI/Microsoft/Boot/BCD.LOG2",
+                              "bytes":  35,
+                              "sha256":  "89A5ACA1C198A4A62559221F88105183CBE1C0B2D783482FCB1DE6BEC2C2006B"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/system-arbitrary-file/EFI/Microsoft/Boot/bootmgfw.efi",
+                              "bytes":  39,
+                              "sha256":  "1731C8B06065C8C6AC19491BC093D9E96E4C5A20F035A78DDA93C885F6FB9988"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/system-arbitrary-file/EFI/Microsoft/Boot/BOOTSTAT.DAT",
+                              "bytes":  39,
+                              "sha256":  "D98F63694AD08D84C89EB1C514B05A58854F8B241DE5A71C426F9E6979523829"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/system-arbitrary-file/EFI/Vendor/locked.bin",
+                              "bytes":  29,
+                              "sha256":  "7BD80EB9FD8B81C23D0710D5B99FDF1B5D035A3BA9B5263CDAA7DB9BD0682EAF"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/system-bcd-backup/EFI/Microsoft/Boot/BCD",
+                              "bytes":  30,
+                              "sha256":  "5F9EBA0089A7426E54B25F2AAF6FAB4FAF63C457131B3D7C9D6A424373D40722"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/system-bcd-backup/EFI/Microsoft/Boot/BCD.bak",
+                              "bytes":  34,
+                              "sha256":  "53194EA97E678D9C1C632534BA37A30B8DABFE49064001A1B47E1860522A3826"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/system-bcd-backup/EFI/Microsoft/Boot/BCD.LOG",
+                              "bytes":  34,
+                              "sha256":  "9105C14DFCBAE95FA4FB93FB52E9A5CE8195E78B912DE227E2E27CC5D082FC8F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/system-bcd-backup/EFI/Microsoft/Boot/BCD.LOG1",
+                              "bytes":  35,
+                              "sha256":  "7E75216639F273EDF12543DB5A75858BC72F1E3A3BDD79F590723C4221B31391"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/system-bcd-backup/EFI/Microsoft/Boot/BCD.LOG2",
+                              "bytes":  35,
+                              "sha256":  "89A5ACA1C198A4A62559221F88105183CBE1C0B2D783482FCB1DE6BEC2C2006B"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/system-bcd-backup/EFI/Microsoft/Boot/bootmgfw.efi",
+                              "bytes":  39,
+                              "sha256":  "1731C8B06065C8C6AC19491BC093D9E96E4C5A20F035A78DDA93C885F6FB9988"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/system-bcd-backup/EFI/Microsoft/Boot/BOOTSTAT.DAT",
+                              "bytes":  39,
+                              "sha256":  "D98F63694AD08D84C89EB1C514B05A58854F8B241DE5A71C426F9E6979523829"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/system-bcd-without-supported-evidence/EFI/Microsoft/Boot/BCD",
+                              "bytes":  30,
+                              "sha256":  "5F9EBA0089A7426E54B25F2AAF6FAB4FAF63C457131B3D7C9D6A424373D40722"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/system-bcd-without-supported-evidence/EFI/Microsoft/Boot/BCD.LOG",
+                              "bytes":  34,
+                              "sha256":  "9105C14DFCBAE95FA4FB93FB52E9A5CE8195E78B912DE227E2E27CC5D082FC8F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/system-bcd-without-supported-evidence/EFI/Microsoft/Boot/BCD.LOG1",
+                              "bytes":  35,
+                              "sha256":  "7E75216639F273EDF12543DB5A75858BC72F1E3A3BDD79F590723C4221B31391"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/system-bcd-without-supported-evidence/EFI/Microsoft/Boot/BCD.LOG2",
+                              "bytes":  35,
+                              "sha256":  "89A5ACA1C198A4A62559221F88105183CBE1C0B2D783482FCB1DE6BEC2C2006B"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/system-bcd-without-supported-evidence/EFI/Microsoft/Boot/bootmgfw.efi",
+                              "bytes":  39,
+                              "sha256":  "1731C8B06065C8C6AC19491BC093D9E96E4C5A20F035A78DDA93C885F6FB9988"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002813974Z.8137f5539a0e49eb8bc5a8d42924e218/system-bcd-without-supported-evidence/EFI/Microsoft/Boot/BOOTSTAT.DAT",
+                              "bytes":  39,
+                              "sha256":  "D98F63694AD08D84C89EB1C514B05A58854F8B241DE5A71C426F9E6979523829"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/bcd-builder-export-enumeration-fails/boot-store-export.bcd",
+                              "bytes":  18,
+                              "sha256":  "F98AA44977D0857313520E86935EC7DD0206FEAFBD66128F89CE22B0821BA3D2"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/bcd-builder-export-enumeration-fails/snapshot.json",
+                              "bytes":  1609,
+                              "sha256":  "1D9EF6E521FDC32B488594DC875268B415C2BA0EF1F833AB8113E8275EB8D47C"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/bcd-builder-firmware-empty/boot-store-export.bcd",
+                              "bytes":  18,
+                              "sha256":  "F98AA44977D0857313520E86935EC7DD0206FEAFBD66128F89CE22B0821BA3D2"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/bcd-builder-success/boot-store-export.bcd",
+                              "bytes":  18,
+                              "sha256":  "F98AA44977D0857313520E86935EC7DD0206FEAFBD66128F89CE22B0821BA3D2"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/bcd-builder-success/snapshot.json",
+                              "bytes":  1578,
+                              "sha256":  "6F4DE4526376ABBBBE0EA094A4C5DC5985685BEB88E2957C07E9A3289392D61C"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/locked-system-esp/EFI/Microsoft/Boot/BCD",
+                              "bytes":  30,
+                              "sha256":  "5F9EBA0089A7426E54B25F2AAF6FAB4FAF63C457131B3D7C9D6A424373D40722"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/locked-system-esp/EFI/Microsoft/Boot/BCD.LOG",
+                              "bytes":  34,
+                              "sha256":  "9105C14DFCBAE95FA4FB93FB52E9A5CE8195E78B912DE227E2E27CC5D082FC8F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/locked-system-esp/EFI/Microsoft/Boot/BCD.LOG1",
+                              "bytes":  35,
+                              "sha256":  "7E75216639F273EDF12543DB5A75858BC72F1E3A3BDD79F590723C4221B31391"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/locked-system-esp/EFI/Microsoft/Boot/BCD.LOG2",
+                              "bytes":  35,
+                              "sha256":  "89A5ACA1C198A4A62559221F88105183CBE1C0B2D783482FCB1DE6BEC2C2006B"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/locked-system-esp/EFI/Microsoft/Boot/bootmgfw.efi",
+                              "bytes":  39,
+                              "sha256":  "1731C8B06065C8C6AC19491BC093D9E96E4C5A20F035A78DDA93C885F6FB9988"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/locked-system-esp/EFI/Microsoft/Boot/BOOTSTAT.DAT",
+                              "bytes":  39,
+                              "sha256":  "D98F63694AD08D84C89EB1C514B05A58854F8B241DE5A71C426F9E6979523829"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/non-system-bcd/EFI/Microsoft/Boot/BCD",
+                              "bytes":  30,
+                              "sha256":  "5F9EBA0089A7426E54B25F2AAF6FAB4FAF63C457131B3D7C9D6A424373D40722"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/non-system-bcd/EFI/Microsoft/Boot/BCD.LOG",
+                              "bytes":  34,
+                              "sha256":  "9105C14DFCBAE95FA4FB93FB52E9A5CE8195E78B912DE227E2E27CC5D082FC8F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/non-system-bcd/EFI/Microsoft/Boot/BCD.LOG1",
+                              "bytes":  35,
+                              "sha256":  "7E75216639F273EDF12543DB5A75858BC72F1E3A3BDD79F590723C4221B31391"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/non-system-bcd/EFI/Microsoft/Boot/BCD.LOG2",
+                              "bytes":  35,
+                              "sha256":  "89A5ACA1C198A4A62559221F88105183CBE1C0B2D783482FCB1DE6BEC2C2006B"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/non-system-bcd/EFI/Microsoft/Boot/bootmgfw.efi",
+                              "bytes":  39,
+                              "sha256":  "1731C8B06065C8C6AC19491BC093D9E96E4C5A20F035A78DDA93C885F6FB9988"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/non-system-bcd/EFI/Microsoft/Boot/BOOTSTAT.DAT",
+                              "bytes":  39,
+                              "sha256":  "D98F63694AD08D84C89EB1C514B05A58854F8B241DE5A71C426F9E6979523829"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/run-workspace/reader.exe",
+                              "bytes":  19,
+                              "sha256":  "CC82DDC75186280B995074D355E575C1B763D4AFD89FCF949FF7213820A1515A"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/run-workspace/spoof-handoff/reports/client-originals.tsv",
+                              "bytes":  8,
+                              "sha256":  "E80B71CD14D3CBD65F4173ABCBFCF01A545DBCA32A72D575108B553A648CC96F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/run-workspace/spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T002839721Z.6b75776a1d61429387480b2e02b0e83e/journal.json",
+                              "bytes":  4592,
+                              "sha256":  "70867928058D3576CCABB49C43CE9BDC5AD950EA932721191EA2FB1234BBD77F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/run-workspace/spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T002839721Z.6b75776a1d61429387480b2e02b0e83e/summary.json",
+                              "bytes":  1818,
+                              "sha256":  "DBFDB85459707C6210527E0130A3211F9893B676FCC837ECAC22083DA279E18B"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/system-arbitrary-file/EFI/Microsoft/Boot/BCD",
+                              "bytes":  30,
+                              "sha256":  "5F9EBA0089A7426E54B25F2AAF6FAB4FAF63C457131B3D7C9D6A424373D40722"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/system-arbitrary-file/EFI/Microsoft/Boot/BCD.LOG",
+                              "bytes":  34,
+                              "sha256":  "9105C14DFCBAE95FA4FB93FB52E9A5CE8195E78B912DE227E2E27CC5D082FC8F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/system-arbitrary-file/EFI/Microsoft/Boot/BCD.LOG1",
+                              "bytes":  35,
+                              "sha256":  "7E75216639F273EDF12543DB5A75858BC72F1E3A3BDD79F590723C4221B31391"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/system-arbitrary-file/EFI/Microsoft/Boot/BCD.LOG2",
+                              "bytes":  35,
+                              "sha256":  "89A5ACA1C198A4A62559221F88105183CBE1C0B2D783482FCB1DE6BEC2C2006B"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/system-arbitrary-file/EFI/Microsoft/Boot/bootmgfw.efi",
+                              "bytes":  39,
+                              "sha256":  "1731C8B06065C8C6AC19491BC093D9E96E4C5A20F035A78DDA93C885F6FB9988"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/system-arbitrary-file/EFI/Microsoft/Boot/BOOTSTAT.DAT",
+                              "bytes":  39,
+                              "sha256":  "D98F63694AD08D84C89EB1C514B05A58854F8B241DE5A71C426F9E6979523829"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/system-arbitrary-file/EFI/Vendor/locked.bin",
+                              "bytes":  29,
+                              "sha256":  "7BD80EB9FD8B81C23D0710D5B99FDF1B5D035A3BA9B5263CDAA7DB9BD0682EAF"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/system-bcd-backup/EFI/Microsoft/Boot/BCD",
+                              "bytes":  30,
+                              "sha256":  "5F9EBA0089A7426E54B25F2AAF6FAB4FAF63C457131B3D7C9D6A424373D40722"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/system-bcd-backup/EFI/Microsoft/Boot/BCD.bak",
+                              "bytes":  34,
+                              "sha256":  "53194EA97E678D9C1C632534BA37A30B8DABFE49064001A1B47E1860522A3826"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/system-bcd-backup/EFI/Microsoft/Boot/BCD.LOG",
+                              "bytes":  34,
+                              "sha256":  "9105C14DFCBAE95FA4FB93FB52E9A5CE8195E78B912DE227E2E27CC5D082FC8F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/system-bcd-backup/EFI/Microsoft/Boot/BCD.LOG1",
+                              "bytes":  35,
+                              "sha256":  "7E75216639F273EDF12543DB5A75858BC72F1E3A3BDD79F590723C4221B31391"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/system-bcd-backup/EFI/Microsoft/Boot/BCD.LOG2",
+                              "bytes":  35,
+                              "sha256":  "89A5ACA1C198A4A62559221F88105183CBE1C0B2D783482FCB1DE6BEC2C2006B"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/system-bcd-backup/EFI/Microsoft/Boot/bootmgfw.efi",
+                              "bytes":  39,
+                              "sha256":  "1731C8B06065C8C6AC19491BC093D9E96E4C5A20F035A78DDA93C885F6FB9988"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/system-bcd-backup/EFI/Microsoft/Boot/BOOTSTAT.DAT",
+                              "bytes":  39,
+                              "sha256":  "D98F63694AD08D84C89EB1C514B05A58854F8B241DE5A71C426F9E6979523829"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/system-bcd-without-supported-evidence/EFI/Microsoft/Boot/BCD",
+                              "bytes":  30,
+                              "sha256":  "5F9EBA0089A7426E54B25F2AAF6FAB4FAF63C457131B3D7C9D6A424373D40722"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/system-bcd-without-supported-evidence/EFI/Microsoft/Boot/BCD.LOG",
+                              "bytes":  34,
+                              "sha256":  "9105C14DFCBAE95FA4FB93FB52E9A5CE8195E78B912DE227E2E27CC5D082FC8F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/system-bcd-without-supported-evidence/EFI/Microsoft/Boot/BCD.LOG1",
+                              "bytes":  35,
+                              "sha256":  "7E75216639F273EDF12543DB5A75858BC72F1E3A3BDD79F590723C4221B31391"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/system-bcd-without-supported-evidence/EFI/Microsoft/Boot/BCD.LOG2",
+                              "bytes":  35,
+                              "sha256":  "89A5ACA1C198A4A62559221F88105183CBE1C0B2D783482FCB1DE6BEC2C2006B"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/system-bcd-without-supported-evidence/EFI/Microsoft/Boot/bootmgfw.efi",
+                              "bytes":  39,
+                              "sha256":  "1731C8B06065C8C6AC19491BC093D9E96E4C5A20F035A78DDA93C885F6FB9988"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002839066Z.3be3e0baf9b442bd86fd23ff8c6c044f/system-bcd-without-supported-evidence/EFI/Microsoft/Boot/BOOTSTAT.DAT",
+                              "bytes":  39,
+                              "sha256":  "D98F63694AD08D84C89EB1C514B05A58854F8B241DE5A71C426F9E6979523829"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/bcd-builder-export-enumeration-fails/boot-store-export.bcd",
+                              "bytes":  18,
+                              "sha256":  "F98AA44977D0857313520E86935EC7DD0206FEAFBD66128F89CE22B0821BA3D2"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/bcd-builder-export-enumeration-fails/snapshot.json",
+                              "bytes":  1609,
+                              "sha256":  "2D91546B28B54E93EEF659815DEA5DCFDF8CBE3830E29EBFA6117725DEF80F6B"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/bcd-builder-firmware-empty/boot-store-export.bcd",
+                              "bytes":  18,
+                              "sha256":  "F98AA44977D0857313520E86935EC7DD0206FEAFBD66128F89CE22B0821BA3D2"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/bcd-builder-success/boot-store-export.bcd",
+                              "bytes":  18,
+                              "sha256":  "F98AA44977D0857313520E86935EC7DD0206FEAFBD66128F89CE22B0821BA3D2"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/bcd-builder-success/snapshot.json",
+                              "bytes":  1578,
+                              "sha256":  "F878D2046A417FDD77052449D3D1A234D220AB3DE88FF7859A60F950218258F2"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/locked-system-esp/EFI/Microsoft/Boot/BCD",
+                              "bytes":  30,
+                              "sha256":  "5F9EBA0089A7426E54B25F2AAF6FAB4FAF63C457131B3D7C9D6A424373D40722"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/locked-system-esp/EFI/Microsoft/Boot/BCD.LOG",
+                              "bytes":  34,
+                              "sha256":  "9105C14DFCBAE95FA4FB93FB52E9A5CE8195E78B912DE227E2E27CC5D082FC8F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/locked-system-esp/EFI/Microsoft/Boot/BCD.LOG1",
+                              "bytes":  35,
+                              "sha256":  "7E75216639F273EDF12543DB5A75858BC72F1E3A3BDD79F590723C4221B31391"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/locked-system-esp/EFI/Microsoft/Boot/BCD.LOG2",
+                              "bytes":  35,
+                              "sha256":  "89A5ACA1C198A4A62559221F88105183CBE1C0B2D783482FCB1DE6BEC2C2006B"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/locked-system-esp/EFI/Microsoft/Boot/bootmgfw.efi",
+                              "bytes":  39,
+                              "sha256":  "1731C8B06065C8C6AC19491BC093D9E96E4C5A20F035A78DDA93C885F6FB9988"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/locked-system-esp/EFI/Microsoft/Boot/BOOTSTAT.DAT",
+                              "bytes":  39,
+                              "sha256":  "D98F63694AD08D84C89EB1C514B05A58854F8B241DE5A71C426F9E6979523829"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/non-system-bcd/EFI/Microsoft/Boot/BCD",
+                              "bytes":  30,
+                              "sha256":  "5F9EBA0089A7426E54B25F2AAF6FAB4FAF63C457131B3D7C9D6A424373D40722"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/non-system-bcd/EFI/Microsoft/Boot/BCD.LOG",
+                              "bytes":  34,
+                              "sha256":  "9105C14DFCBAE95FA4FB93FB52E9A5CE8195E78B912DE227E2E27CC5D082FC8F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/non-system-bcd/EFI/Microsoft/Boot/BCD.LOG1",
+                              "bytes":  35,
+                              "sha256":  "7E75216639F273EDF12543DB5A75858BC72F1E3A3BDD79F590723C4221B31391"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/non-system-bcd/EFI/Microsoft/Boot/BCD.LOG2",
+                              "bytes":  35,
+                              "sha256":  "89A5ACA1C198A4A62559221F88105183CBE1C0B2D783482FCB1DE6BEC2C2006B"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/non-system-bcd/EFI/Microsoft/Boot/bootmgfw.efi",
+                              "bytes":  39,
+                              "sha256":  "1731C8B06065C8C6AC19491BC093D9E96E4C5A20F035A78DDA93C885F6FB9988"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/non-system-bcd/EFI/Microsoft/Boot/BOOTSTAT.DAT",
+                              "bytes":  39,
+                              "sha256":  "D98F63694AD08D84C89EB1C514B05A58854F8B241DE5A71C426F9E6979523829"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/run-workspace/reader.exe",
+                              "bytes":  19,
+                              "sha256":  "CC82DDC75186280B995074D355E575C1B763D4AFD89FCF949FF7213820A1515A"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/run-workspace/spoof-handoff/reports/client-originals.tsv",
+                              "bytes":  8,
+                              "sha256":  "E80B71CD14D3CBD65F4173ABCBFCF01A545DBCA32A72D575108B553A648CC96F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/run-workspace/spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T002852129Z.d02746571cc243329e4d196b6d5c7b93/journal.json",
+                              "bytes":  4592,
+                              "sha256":  "E1E4BC5F44BB9C5B39618B59AFF6AC496F829B423D6A362FCABD3AE6D3E0B158"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/run-workspace/spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T002852129Z.d02746571cc243329e4d196b6d5c7b93/summary.json",
+                              "bytes":  1818,
+                              "sha256":  "466754BF4A34B00A5E42197882DAB07A490E739BD6FEC5659582C9E4A0D58E78"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/system-arbitrary-file/EFI/Microsoft/Boot/BCD",
+                              "bytes":  30,
+                              "sha256":  "5F9EBA0089A7426E54B25F2AAF6FAB4FAF63C457131B3D7C9D6A424373D40722"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/system-arbitrary-file/EFI/Microsoft/Boot/BCD.LOG",
+                              "bytes":  34,
+                              "sha256":  "9105C14DFCBAE95FA4FB93FB52E9A5CE8195E78B912DE227E2E27CC5D082FC8F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/system-arbitrary-file/EFI/Microsoft/Boot/BCD.LOG1",
+                              "bytes":  35,
+                              "sha256":  "7E75216639F273EDF12543DB5A75858BC72F1E3A3BDD79F590723C4221B31391"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/system-arbitrary-file/EFI/Microsoft/Boot/BCD.LOG2",
+                              "bytes":  35,
+                              "sha256":  "89A5ACA1C198A4A62559221F88105183CBE1C0B2D783482FCB1DE6BEC2C2006B"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/system-arbitrary-file/EFI/Microsoft/Boot/bootmgfw.efi",
+                              "bytes":  39,
+                              "sha256":  "1731C8B06065C8C6AC19491BC093D9E96E4C5A20F035A78DDA93C885F6FB9988"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/system-arbitrary-file/EFI/Microsoft/Boot/BOOTSTAT.DAT",
+                              "bytes":  39,
+                              "sha256":  "D98F63694AD08D84C89EB1C514B05A58854F8B241DE5A71C426F9E6979523829"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/system-arbitrary-file/EFI/Vendor/locked.bin",
+                              "bytes":  29,
+                              "sha256":  "7BD80EB9FD8B81C23D0710D5B99FDF1B5D035A3BA9B5263CDAA7DB9BD0682EAF"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/system-bcd-backup/EFI/Microsoft/Boot/BCD",
+                              "bytes":  30,
+                              "sha256":  "5F9EBA0089A7426E54B25F2AAF6FAB4FAF63C457131B3D7C9D6A424373D40722"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/system-bcd-backup/EFI/Microsoft/Boot/BCD.bak",
+                              "bytes":  34,
+                              "sha256":  "53194EA97E678D9C1C632534BA37A30B8DABFE49064001A1B47E1860522A3826"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/system-bcd-backup/EFI/Microsoft/Boot/BCD.LOG",
+                              "bytes":  34,
+                              "sha256":  "9105C14DFCBAE95FA4FB93FB52E9A5CE8195E78B912DE227E2E27CC5D082FC8F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/system-bcd-backup/EFI/Microsoft/Boot/BCD.LOG1",
+                              "bytes":  35,
+                              "sha256":  "7E75216639F273EDF12543DB5A75858BC72F1E3A3BDD79F590723C4221B31391"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/system-bcd-backup/EFI/Microsoft/Boot/BCD.LOG2",
+                              "bytes":  35,
+                              "sha256":  "89A5ACA1C198A4A62559221F88105183CBE1C0B2D783482FCB1DE6BEC2C2006B"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/system-bcd-backup/EFI/Microsoft/Boot/bootmgfw.efi",
+                              "bytes":  39,
+                              "sha256":  "1731C8B06065C8C6AC19491BC093D9E96E4C5A20F035A78DDA93C885F6FB9988"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/system-bcd-backup/EFI/Microsoft/Boot/BOOTSTAT.DAT",
+                              "bytes":  39,
+                              "sha256":  "D98F63694AD08D84C89EB1C514B05A58854F8B241DE5A71C426F9E6979523829"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/system-bcd-without-supported-evidence/EFI/Microsoft/Boot/BCD",
+                              "bytes":  30,
+                              "sha256":  "5F9EBA0089A7426E54B25F2AAF6FAB4FAF63C457131B3D7C9D6A424373D40722"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/system-bcd-without-supported-evidence/EFI/Microsoft/Boot/BCD.LOG",
+                              "bytes":  34,
+                              "sha256":  "9105C14DFCBAE95FA4FB93FB52E9A5CE8195E78B912DE227E2E27CC5D082FC8F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/system-bcd-without-supported-evidence/EFI/Microsoft/Boot/BCD.LOG1",
+                              "bytes":  35,
+                              "sha256":  "7E75216639F273EDF12543DB5A75858BC72F1E3A3BDD79F590723C4221B31391"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/system-bcd-without-supported-evidence/EFI/Microsoft/Boot/BCD.LOG2",
+                              "bytes":  35,
+                              "sha256":  "89A5ACA1C198A4A62559221F88105183CBE1C0B2D783482FCB1DE6BEC2C2006B"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/system-bcd-without-supported-evidence/EFI/Microsoft/Boot/bootmgfw.efi",
+                              "bytes":  39,
+                              "sha256":  "1731C8B06065C8C6AC19491BC093D9E96E4C5A20F035A78DDA93C885F6FB9988"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/fixtures.20261018T002851457Z.60d20836377e4a75bb996b0a5094adbc/system-bcd-without-supported-evidence/EFI/Microsoft/Boot/BOOTSTAT.DAT",
+                              "bytes":  39,
+                              "sha256":  "D98F63694AD08D84C89EB1C514B05A58854F8B241DE5A71C426F9E6979523829"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-validation-20261018T003055Z-b257cac23d/file-manifest.json",
+                              "bytes":  3108,
+                              "sha256":  "7DB81642D0CAA2090C24DBEE4AD51E69FA7CB04DD3ED7A0D7F2C271ACC8AD94B"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-validation-20261018T003055Z-b257cac23d/final-validation-summary.json",
+                              "bytes":  22008,
+                              "sha256":  "35B1684F5C376A1993C06143138B6AAC6EB439968B63A0A5E304ADCC28F3406D"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-validation-20261018T003055Z-b257cac23d/summary.json",
+                              "bytes":  109358,
+                              "sha256":  "2C0408D64AFAD6775D8915532153710B7D6B3B884780B2982CBF387FC7E79AAE"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-validation-20261018T003055Z-b257cac23d/guest-evidence/kernel-metadata.json",
+                              "bytes":  313964,
+                              "sha256":  "BDD8A808BADC757260B7CB694F3FB5940353B2657C1A3599DADAE5DE0AAA8A4D"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-validation-20261018T003055Z-b257cac23d/guest-evidence/stderr.txt",
+                              "bytes":  2,
+                              "sha256":  "7EB70257593DA06F682A3DDDA54A9D260D4FC514F645237F5CA74B08F8DA61A6"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-validation-20261018T003055Z-b257cac23d/guest-evidence/stdout.txt",
+                              "bytes":  170,
+                              "sha256":  "934FA219425819CE8878F25AEFB95940F90DD454728572D07D0F0A042098B362"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-validation-20261018T003055Z-b257cac23d/mailbox-run/cleanup.json",
+                              "bytes":  2020,
+                              "sha256":  "6B04E83376FFFD0761FC1DC03052A38BA4815031AB3B51A3962F00274888ED1E"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-validation-20261018T003055Z-b257cac23d/mailbox-run/guest-evidence.zip",
+                              "bytes":  28515,
+                              "sha256":  "194161CBE00A309653414F88DF2B5004E2380A97F16E9E4B6E21D4B3DF25C3C4"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-validation-20261018T003055Z-b257cac23d/mailbox-run/request-metadata.json",
+                              "bytes":  1996,
+                              "sha256":  "1F9FE0F71841691006839BCCDC3A09E90C14ECEA922C716AAABEFD1E09E416AB"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-validation-20261018T003055Z-b257cac23d/mailbox-run/request-package.zip",
+                              "bytes":  97990,
+                              "sha256":  "0CE1047195C7AE8B95C18FA47CC72A72E81C10D13C3C57140DD9BA3BBC039884"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-validation-20261018T003055Z-b257cac23d/mailbox-run/request.json",
+                              "bytes":  520,
+                              "sha256":  "5362D024D5240B9FEE619AD276A048181CC9155F6BAA88DAF313336356299577"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-validation-20261018T003055Z-b257cac23d/mailbox-run/response-metadata.json",
+                              "bytes":  676,
+                              "sha256":  "BBA3882A20091DB83605081E7AB31FC44327185C8835B87E1B06BF9BCF69C158"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-validation-20261018T003055Z-b257cac23d/mailbox-run/response.json",
+                              "bytes":  600,
+                              "sha256":  "807048BA0156D752F9668422C22730CEED41BCB2DD60D1F69520D0916051ECF0"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-validation-20261018T003055Z-b257cac23d/mailbox-run/transport-metadata.json",
+                              "bytes":  903,
+                              "sha256":  "7174380AD2D4F451BF145ADC94A87AD91BB15F7B1303AEC1E5AC94AA68F05E99"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-validation-20261018T003055Z-b257cac23d/mailbox-run/evidence/kernel-metadata.json",
+                              "bytes":  313964,
+                              "sha256":  "BDD8A808BADC757260B7CB694F3FB5940353B2657C1A3599DADAE5DE0AAA8A4D"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-validation-20261018T003055Z-b257cac23d/mailbox-run/evidence/stderr.txt",
+                              "bytes":  2,
+                              "sha256":  "7EB70257593DA06F682A3DDDA54A9D260D4FC514F645237F5CA74B08F8DA61A6"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-validation-20261018T003055Z-b257cac23d/mailbox-run/evidence/stdout.txt",
+                              "bytes":  170,
+                              "sha256":  "934FA219425819CE8878F25AEFB95940F90DD454728572D07D0F0A042098B362"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-validation-20261018T003055Z-b257cac23d/mailbox-run/stage/ib-tcg-dump.exe",
+                              "bytes":  172544,
+                              "sha256":  "39A484F72C77B576A774343238CDFF6E8D20ED637F0A6312F606DDC39DABA288"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-validation-20261018T003055Z-b257cac23d/mailbox-run/stage/Invoke-WindowsGuestTest.ps1",
+                              "bytes":  22889,
+                              "sha256":  "AE333729DA4A6C90EBBD337A7EA496769365180FBD12CFC92412CF311AD4679E"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/helper-validation-20261018T003055Z-b257cac23d/mailbox-run/stage/SHA256SUMS.txt",
+                              "bytes":  176,
+                              "sha256":  "EBA6A74D55CE1B7C56BA41228E7330581C39188EFE30220C6B323A200ABC2E9A"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/mailbox-failure-before-result/cleanup.json",
+                              "bytes":  1556,
+                              "sha256":  "3EDE0F9E39CE7F01704D817AFA52B70E90496B254A725FDE2D62AB86D7B8D73A"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/mailbox-failure-before-result/error.json",
+                              "bytes":  289,
+                              "sha256":  "DB49A654F739477A6881B12E009165E2D62D4BB02D604132E4DCF84724F31659"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/mailbox-failure-before-result/request-metadata.json",
+                              "bytes":  1996,
+                              "sha256":  "169CC4200C025F066D96583481D988C65B23D41BCD8579040CC5CEBC2B66E6EB"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/mailbox-failure-before-result/request-package.zip",
+                              "bytes":  94855,
+                              "sha256":  "A1AC8FACFC277C845864DF9D0A618D6F1E7F5A198E7ACD9F93285FEBEF06EF7F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/mailbox-failure-before-result/request.json",
+                              "bytes":  520,
+                              "sha256":  "70A530175F48C9AA4A783117132747DED86C7A0CA54C0AC984D9EF3ED656D1DF"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/mailbox-failure-before-result/response.json",
+                              "bytes":  552,
+                              "sha256":  "3091FAFC313A82D4E0DE0E9C6F628A346F23E6BDA49A45FDA1A898AFBB63DE74"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/mailbox-failure-before-result/stage/ib-tcg-dump.exe",
+                              "bytes":  172544,
+                              "sha256":  "39A484F72C77B576A774343238CDFF6E8D20ED637F0A6312F606DDC39DABA288"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/mailbox-failure-before-result/stage/Invoke-WindowsGuestTest.ps1",
+                              "bytes":  8330,
+                              "sha256":  "FC56FE8139044BD24EB8E18F3621A9970749C53257C0BCF036B813C0E3EC96CC"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/mailbox-failure-before-result/stage/SHA256SUMS.txt",
+                              "bytes":  176,
+                              "sha256":  "828204809DABCD9CBAFF73AD2DA35E7D5FD88D5F59CB1C6E2EFB5E6C684F412F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/probe-20261018T002800Z-facb39e342/file-manifest.json",
+                              "bytes":  3104,
+                              "sha256":  "88B1499356F88785F695138EF6C70008A82811D76E395C479A5FBB6AA3C4C8DD"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/probe-20261018T002800Z-facb39e342/guest-evidence/kernel-metadata.json",
+                              "bytes":  14272,
+                              "sha256":  "5EC298B44035F6A8A342D2677C4FE5D1FA8C272626F4127941FBC199BFB8A351"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/probe-20261018T002800Z-facb39e342/guest-evidence/stderr.txt",
+                              "bytes":  2,
+                              "sha256":  "7EB70257593DA06F682A3DDDA54A9D260D4FC514F645237F5CA74B08F8DA61A6"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/probe-20261018T002800Z-facb39e342/guest-evidence/stdout.txt",
+                              "bytes":  140,
+                              "sha256":  "F3C2F102E967E054B9887C239FF212193CFB1B2E2076487EE2AE5F1552A795CC"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/probe-20261018T002800Z-facb39e342/mailbox-run/cleanup.json",
+                              "bytes":  1672,
+                              "sha256":  "37B742476FAC21161A63C418068A61AF6301BF09690747B1D07110F310EE87BF"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/probe-20261018T002800Z-facb39e342/mailbox-run/guest-evidence.zip",
+                              "bytes":  3290,
+                              "sha256":  "7511BD72CA2A0A2D2170FA29EB90E934902A3CF25EE30AE2FD9F09510895801A"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/probe-20261018T002800Z-facb39e342/mailbox-run/request-metadata.json",
+                              "bytes":  1996,
+                              "sha256":  "ACA709B7EFAD02182CB7AB28B388D1C13A58A315600B77EADA1D729E8A879140"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/probe-20261018T002800Z-facb39e342/mailbox-run/request-package.zip",
+                              "bytes":  94973,
+                              "sha256":  "FA7350010E94F571FE523A62AE4300324968EF8A0D3B88F1FABE88AB9B2E634F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/probe-20261018T002800Z-facb39e342/mailbox-run/request.json",
+                              "bytes":  520,
+                              "sha256":  "EA368D7CDBF7C8704806A9E0B5823FE9017A00170541E61A5D0B576E512B1D49"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/probe-20261018T002800Z-facb39e342/mailbox-run/response-metadata.json",
+                              "bytes":  651,
+                              "sha256":  "FF5E70F934368865F92743A48BC3253EFED1ED3E3F867EF49CB11A8ED151B6DB"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/probe-20261018T002800Z-facb39e342/mailbox-run/response.json",
+                              "bytes":  567,
+                              "sha256":  "B938342DD372710F0DB575787B21487E3761AA32EEB24D5AAEEBA0FA7B1B456D"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/probe-20261018T002800Z-facb39e342/mailbox-run/transport-metadata.json",
+                              "bytes":  903,
+                              "sha256":  "8EE967F8BF8E51D8B189C773B74296E10F05725BE3619F106C9A61BC735A234A"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/probe-20261018T002800Z-facb39e342/mailbox-run/evidence/kernel-metadata.json",
+                              "bytes":  14272,
+                              "sha256":  "5EC298B44035F6A8A342D2677C4FE5D1FA8C272626F4127941FBC199BFB8A351"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/probe-20261018T002800Z-facb39e342/mailbox-run/evidence/stderr.txt",
+                              "bytes":  2,
+                              "sha256":  "7EB70257593DA06F682A3DDDA54A9D260D4FC514F645237F5CA74B08F8DA61A6"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/probe-20261018T002800Z-facb39e342/mailbox-run/evidence/stdout.txt",
+                              "bytes":  140,
+                              "sha256":  "F3C2F102E967E054B9887C239FF212193CFB1B2E2076487EE2AE5F1552A795CC"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/probe-20261018T002800Z-facb39e342/mailbox-run/stage/ib-tcg-dump.exe",
+                              "bytes":  172544,
+                              "sha256":  "39A484F72C77B576A774343238CDFF6E8D20ED637F0A6312F606DDC39DABA288"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/probe-20261018T002800Z-facb39e342/mailbox-run/stage/Invoke-WindowsGuestTest.ps1",
+                              "bytes":  8763,
+                              "sha256":  "6E3D4F44A1826A5C198CD8B8E0D881CBB31E6B28E5583FD7CEF27183FF97903D"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/probe-20261018T002800Z-facb39e342/mailbox-run/stage/SHA256SUMS.txt",
+                              "bytes":  176,
+                              "sha256":  "E01014D48A1E503120B327D84E69D22541FBD5D8B07E69404B0808A66412253D"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/raw-gate-recheck.b050e3e8fe9a4a6c9d2ef662ed835179/result.json",
+                              "bytes":  535,
+                              "sha256":  "5DE39241C77E38FFCF58332C53B48A260D4EC930046E488484131996DAE93E5C"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/raw-gate-recheck.b050e3e8fe9a4a6c9d2ef662ed835179/stderr.txt",
+                              "bytes":  0,
+                              "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/raw-gate-recheck.b050e3e8fe9a4a6c9d2ef662ed835179/stdout.txt",
+                              "bytes":  161826,
+                              "sha256":  "0AC3D5E836D1171682D9FAB7A38748DACBF94A1DAEE8196D483D6D3BD8ACA851"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/journal.json",
+                              "bytes":  21931,
+                              "sha256":  "BE1BF4065AA82BB51475C70D0FB2B367C2CDE63BED0755BB4B91D608FDCB445B"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/summary.json",
+                              "bytes":  8855,
+                              "sha256":  "C0092933820264D0C8246FE21F9038A2CAD0F03BF12447AA4D978CBAA6AFF67F"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/platform-after/bcd/boot-store-export.bcd",
+                              "bytes":  32768,
+                              "sha256":  "6139FA5F08F8C35169D7B6B6CAF797C2106963030223BB2C087A1A099312B2DB"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/platform-after/firmware/firmware-variables/BootCurrent.bin",
+                              "bytes":  2,
+                              "sha256":  "96A296D224F285C67BEE93C30F8A309157F0DAA35DC5B87E410B78630A09CFC7"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/platform-after/firmware/firmware-variables/BootOrder.bin",
+                              "bytes":  6,
+                              "sha256":  "90C2698921CA9FD02950BE353F721888760E33AB5095A21E50F1E4360B6DE1A0"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/platform-after/firmware/firmware-variables/SecureBoot.bin",
+                              "bytes":  1,
+                              "sha256":  "4BF5122F344554C53BDE2EBB8CD2B7E3D1600AD631C385A5D7CCE23C7785459A"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/platform-after/firmware/firmware-variables/SetupMode.bin",
+                              "bytes":  1,
+                              "sha256":  "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/platform-before/bcd/boot-store-export.bcd",
+                              "bytes":  32768,
+                              "sha256":  "A57FE9E4ADAE2F1F0CBBC336A3E0CA749C0F981F171F5379E55CCEC7A065D0E4"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/platform-before/firmware/firmware-variables/BootCurrent.bin",
+                              "bytes":  2,
+                              "sha256":  "96A296D224F285C67BEE93C30F8A309157F0DAA35DC5B87E410B78630A09CFC7"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/platform-before/firmware/firmware-variables/BootOrder.bin",
+                              "bytes":  6,
+                              "sha256":  "90C2698921CA9FD02950BE353F721888760E33AB5095A21E50F1E4360B6DE1A0"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/platform-before/firmware/firmware-variables/SecureBoot.bin",
+                              "bytes":  1,
+                              "sha256":  "4BF5122F344554C53BDE2EBB8CD2B7E3D1600AD631C385A5D7CCE23C7785459A"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/platform-before/firmware/firmware-variables/SetupMode.bin",
+                              "bytes":  1,
+                              "sha256":  "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/readback-original/native.20261018T001826684Z.ea7176db70874adc8aab161843b04cb5.json",
+                              "bytes":  60489,
+                              "sha256":  "F3A2DCF5C41A7566D6D3BB8199D25C95DDDF0B088239ACDD23E776B035ABAF03"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/readback-original/native.20261018T001826684Z.ea7176db70874adc8aab161843b04cb5.stderr.txt",
+                              "bytes":  0,
+                              "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/readback-original/native.20261018T001826684Z.ea7176db70874adc8aab161843b04cb5.stdout.txt",
+                              "bytes":  662,
+                              "sha256":  "54248A465B443947C67605588F612599351E2F26BF891431ECE730FFBCFDA749"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/readback-original/read-host.stderr.txt",
+                              "bytes":  0,
+                              "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/readback-original/read-host.stdout.txt",
+                              "bytes":  346,
+                              "sha256":  "DD2251FF0B7A0E90DDCADEABB704A1661E60675A2CAA7904ED63BF688B53469B"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/readback-original/readback.20261018T001826684Z.ea7176db70874adc8aab161843b04cb5.json",
+                              "bytes":  95133,
+                              "sha256":  "61C7B27A75B0DE2D22E00A79B6FBB3B250FA2D9CEEDD1AC6FA3B877B37DD0A03"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/readback-original-restored/native.20261018T001830557Z.6b23713433e84bfd83a4c40c8268e259.json",
+                              "bytes":  60489,
+                              "sha256":  "3E3852719267827FEEC7CF8353CEB03ACD0EF3FE5D9BD38B7B90641684CCE23C"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/readback-original-restored/native.20261018T001830557Z.6b23713433e84bfd83a4c40c8268e259.stderr.txt",
+                              "bytes":  0,
+                              "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/readback-original-restored/native.20261018T001830557Z.6b23713433e84bfd83a4c40c8268e259.stdout.txt",
+                              "bytes":  680,
+                              "sha256":  "ADEF9F50EBE697E9C09B7A6FECC997844C4314B200C0CE6839A8C5394EBE4B8D"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/readback-original-restored/read-host.stderr.txt",
+                              "bytes":  0,
+                              "sha256":  "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/readback-original-restored/read-host.stdout.txt",
+                              "bytes":  355,
+                              "sha256":  "AC2370178A39E88363363C19FFBC8A09C551DDE777A3DA9DF48DA5E771839F07"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T001825865Z.94441c028a9945ffafb026e96972b9cf/readback-original-restored/readback.20261018T001830557Z.6b23713433e84bfd83a4c40c8268e259.json",
+                              "bytes":  95169,
+                              "sha256":  "6C5C92C468C7183A1C227A55A2D7E65064F66219964D4BEC7E5BBAB17892B41C"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/20261018T002824Z.73166a12cac14371849fd43898eb3545/raw-input-gate-tests.json",
+                              "bytes":  80910,
+                              "sha256":  "E0BEE9C82160FD73D09DF48A8713CC7AFFC7D2E37F531751E5AFD1E1AA2FAEDB"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/20261018T002824Z.73166a12cac14371849fd43898eb3545/fixtures/duplicate-GetIfTable2-row.json",
+                              "bytes":  204128,
+                              "sha256":  "5160C9542F66D36195BD310278FEE951B6CA83511D413A547438DD044614AFCF"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/20261018T002824Z.73166a12cac14371849fd43898eb3545/fixtures/missing-GetAdaptersInfo-row.json",
+                              "bytes":  201806,
+                              "sha256":  "8C8DC3BE1C5AC0045C9A2F523B8A4E1FDDC4CAFEAA45176F98C6B0AC94D07CA5"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/20261018T002824Z.73166a12cac14371849fd43898eb3545/fixtures/tampered-GetAdaptersAddresses.json",
+                              "bytes":  202801,
+                              "sha256":  "EF4D54A4FC853F4EF9F707452B74DC5BDB35528772F3707B0ACE14AEB56198F6"
+                          },
+                          {
+                              "path":  "spoof-handoff/reports/nic-reader-gap-20261017/bcd-sharing-probe.20261018T002030366Z.json",
+                              "bytes":  1075,
+                              "sha256":  "562CABF3000E68CD3B54C062D1DC7BB4ADD5C471DF99FF65DB808EA0CD428BA4"
+                          }
+                      ],
+    "retryCommand":  "powershell -NoProfile -ExecutionPolicy Bypass -File .\\spoof-handoff\\commands\\nic-host-test.ps1 Run",
+    "retryRequirements":  "Elevated PowerShell, Secure Boot ON, test-signing OFF, test trust and NIC filter absent. No PC reboot is requested by the script.",
+    "publishedScope":  "Curated report and source only. Raw VM data, protocol archives, BCD backups, credentials, compiler state and VM disks are not committed."
+}
