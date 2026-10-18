@@ -189,7 +189,7 @@ try {
     if ($capture.phase -cne 'Readback' -or $null -eq $capture.nativeCapture.data -or $null -eq $capture.windowsReads) { throw 'Captured evaluator input does not contain the expected Readback native and Windows data.' }
     if ($profileEvidence.bindings.Count -ne 4) { throw ('Captured VM profile does not contain four adapter bindings; actual=' + $profileEvidence.bindings.Count) }
 
-    $originalEvaluations = @(Get-Evaluations $capture.nativeCapture.data $capture.windowsReads $profileEvidence.bindings 'Original')
+    $originalEvaluations = @(Get-Evaluations $capture.nativeCapture.data $capture.windowsReads $profileEvidence.bindings 'Original' 'LegacySix')
     Assert-Equal '4' ([string]$originalEvaluations.Count) 'captured original replay covers all four adapters'
     $replaySummaries = [Collections.Generic.List[object]]::new()
     foreach ($evaluation in $originalEvaluations) {
@@ -215,7 +215,7 @@ try {
         $replaySummaries.Add([ordered]@{ pnpDeviceId = $pnp; expectedOriginal = $evaluation.expected; originalAllRequiredSourcesMatch = $evaluation.allRequiredSourcesMatch; originalSources = @($sourceSummaries.ToArray()) })
     }
 
-    $replacementEvaluations = @(Get-Evaluations $capture.nativeCapture.data $capture.windowsReads $profileEvidence.bindings 'Replacement')
+    $replacementEvaluations = @(Get-Evaluations $capture.nativeCapture.data $capture.windowsReads $profileEvidence.bindings 'Replacement' 'LegacySix')
     Assert-Equal '4' ([string]$replacementEvaluations.Count) 'captured replacement replay covers all four adapters'
     for ($index = 0; $index -lt $replacementEvaluations.Count; $index++) {
         $evaluation = $replacementEvaluations[$index]
@@ -236,16 +236,42 @@ try {
     $syntheticMsftRows = @($syntheticWindows.msftNetAdapter.rows | Where-Object { [string]::Equals([string]$_.PNPDeviceID, [string]$syntheticBinding.pnpDeviceId, [StringComparison]::OrdinalIgnoreCase) })
     Assert-Equal '1' ([string]$syntheticMsftRows.Count) 'synthetic array case uses one captured adapter identity'
     $syntheticMsftRows[0].NetworkAddresses = [string[]]@([string]$syntheticBinding.original, [string]$syntheticBinding.original)
-    $syntheticOriginal = @(Get-Evaluations $capture.nativeCapture.data $syntheticWindows @($syntheticBinding) 'Original')
+    $syntheticOriginal = @(Get-Evaluations $capture.nativeCapture.data $syntheticWindows @($syntheticBinding) 'Original' 'LegacySix')
     Assert-Equal '1' ([string]$syntheticOriginal.Count) 'synthetic MSFT array case produces one evaluator row'
     $syntheticMsftCheck = @($syntheticOriginal[0].checks | Where-Object { $_['source'] -ceq 'MSFT_NetAdapter.NetworkAddresses' })[0]
     Assert-True ($syntheticMsftCheck['actual'] -is [array]) 'synthetic MSFT NetworkAddresses reaches evaluator as array' ('actualType=' + $syntheticMsftCheck['actual'].GetType().FullName)
     Assert-Equal '2' ([string]$syntheticMsftCheck['matchCount']) 'synthetic MSFT array preserves both values in match count'
     Assert-True ([bool]$syntheticMsftCheck['matchesExpected']) 'synthetic MSFT array matches captured original value' 'pure evaluator input only; no live read asserted'
-    $syntheticReplacement = @(Get-Evaluations $capture.nativeCapture.data $syntheticWindows @($syntheticBinding) 'Replacement')
+    $syntheticReplacement = @(Get-Evaluations $capture.nativeCapture.data $syntheticWindows @($syntheticBinding) 'Replacement' 'LegacySix')
     $syntheticMsftReplacementCheck = @($syntheticReplacement[0].checks | Where-Object { $_['source'] -ceq 'MSFT_NetAdapter.NetworkAddresses' })[0]
     Assert-True (-not [bool]$syntheticMsftReplacementCheck['matchesExpected']) 'synthetic MSFT array does not match replacement' 'replacement is distinct from every synthetic original entry'
     Assert-Equal '2' ([string]$syntheticMsftReplacementCheck['matchCount']) 'synthetic replacement retains observed array count'
+    $syntheticMsftRows[0].NetworkAddresses = [string[]]@([string]$syntheticBinding.original, [string]$syntheticBinding.replacement)
+    $mixedAddresses = @(Get-Evaluations $capture.nativeCapture.data $syntheticWindows @($syntheticBinding) 'Replacement' 'LegacySix')
+    $mixedCheck = @($mixedAddresses[0].checks | Where-Object { $_['source'] -ceq 'MSFT_NetAdapter.NetworkAddresses' })[0]
+    Assert-True (-not [bool]$mixedCheck['matchesExpected']) 'mixed original and replacement array fails closed' 'Returning the replacement alongside an original is not full replacement coverage.'
+    $syntheticMsftRows[0].NetworkAddresses = [string[]]@([string]$syntheticBinding.original)
+
+    # Historical captures contain six readers. Only this offline replay opts into
+    # that historical set; live VM phases always require the current seven.
+    $missingNewReader = @(Get-Evaluations $capture.nativeCapture.data $capture.windowsReads $profileEvidence.bindings 'Original')
+    foreach ($evaluation in $missingNewReader) {
+        Assert-True (-not $evaluation.allRequiredSourcesMatch) ('new reader missing fails closed ' + $evaluation.pnpDeviceId) 'Historical data cannot establish a GetAdaptersInfo observation.'
+        Assert-Equal '7' ([string]@($evaluation.checks).Count) ('current reader count ' + $evaluation.pnpDeviceId)
+    }
+    $syntheticNative = ($capture.nativeCapture.data | ConvertTo-Json -Depth 30 | ConvertFrom-Json)
+    $syntheticGai = [ordered]@{ status = 0; complete = $true; entries = @($profileEvidence.bindings | ForEach-Object {
+        [ordered]@{ adapterName = $_.interfaceGuid; address = $_.original }
+    }) }
+    $syntheticGai = ($syntheticGai | ConvertTo-Json -Depth 8 | ConvertFrom-Json)
+    $syntheticNative | Add-Member -NotePropertyName 'getAdaptersInfo' -NotePropertyValue $syntheticGai
+    $sevenReaderUnits = @(Get-Evaluations $syntheticNative $capture.windowsReads $profileEvidence.bindings 'Original')
+    foreach ($evaluation in $sevenReaderUnits) {
+        Assert-True ([bool]$evaluation.allRequiredSourcesMatch) ('synthetic seventh reader accepted ' + $evaluation.pnpDeviceId) 'Synthetic evaluator input only; this is not live evidence.'
+    }
+    $syntheticGai.entries[0].address = $profileEvidence.bindings[0].replacement
+    $wrongNewReader = @(Get-Evaluations $syntheticNative $capture.windowsReads $profileEvidence.bindings 'Original')
+    Assert-True (-not $wrongNewReader[0].allRequiredSourcesMatch) 'seventh reader mismatch fails closed' 'Six matching readers cannot hide one mismatched independent reader.'
 
     $captureHash = (Get-FileHash -LiteralPath $capturePath -Algorithm SHA256).Hash
     $profileHash = (Get-FileHash -LiteralPath $profileEvidencePath -Algorithm SHA256).Hash

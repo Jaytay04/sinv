@@ -1,9 +1,10 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)][ValidateSet('Inventory','PreparePolicy','Install','Start','Readback','Remove','RestorePolicy','Reboot','Shutdown')][string]$Phase,
+    [Parameter(Mandatory)][ValidateSet('Inventory','PreparePolicy','Install','Start','AddressSnapshot','AddressApply','AddressRestore','RemoveForAddressReadback','Readback','Remove','RestorePolicy','Reboot','Shutdown')][string]$Phase,
     [string]$PackageDirectory,
+    [string]$NativeExePath,
     [ValidateSet('Original','Replacement')][string]$ExpectedMode='Original',
-    [ValidateSet('Any','Present','Absent')][string]$FilterState='Any'
+    [ValidateSet('Any','Present','Absent','AbsentConfigured')][string]$FilterState='Any'
 )
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
@@ -12,7 +13,7 @@ $evidence=Join-Path $repo 'spoof-handoff\reports\nic-vm-20261017'
 $profile=Join-Path $evidence 'guest-profile.json'
 $data=[IO.File]::ReadAllText($profile)|ConvertFrom-Json
 $vmx=Join-Path $repo 'spoof-handoff\artifacts\nic-vm-20261017\vm-plain\DeviceFilter-Win11.vmx'
-$native=Join-Path $repo 'spoof-handoff\artifacts\nic-vm-20261017\native-build\Release\nic_native_read.exe'
+$native=if($NativeExePath){[IO.Path]::GetFullPath($NativeExePath)}else{Join-Path $repo 'spoof-handoff\artifacts\nic-vm-20261017\native-build\Release\nic_native_read.exe'}
 $action=Join-Path $evidence ('guest-actions\'+$Phase+'.'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ')+'.'+[Guid]::NewGuid().ToString('N')+'.ps1')
 $render=@('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot 'render-guest.ps1'),'-Phase',$Phase,'-ProfileJson',$profile,'-NativeExePath',$native,'-ExpectedVmUuid',[string]$data.machine.uuid,'-ExpectedMode',$ExpectedMode,'-FilterState',$FilterState,'-OutputPath',$action)
 if($PackageDirectory){$render+=@('-PackageDirectory',$PackageDirectory)}

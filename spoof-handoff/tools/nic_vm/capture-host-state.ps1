@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param()
+param([string]$OutputPath)
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 $repo=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..\..\..\..'))
@@ -48,7 +48,9 @@ $record=[ordered]@{
     virtualMachinesRunning=@($running|Where-Object {$_ -match '\.vmx$'}).Count;vmrunList=$running
     hostBcdEspFirmwareScope='No host deployment or changes; no fresh byte-for-byte BCD/ESP/firmware restore claim is made.'
 }
-$path=Join-Path $evidence 'final-state.json'
+$path=if($OutputPath){[IO.Path]::GetFullPath($OutputPath)}else{Join-Path $evidence 'final-state.json'}
+$allowedReports=([IO.Path]::GetFullPath((Join-Path $repo 'spoof-handoff\reports'))).TrimEnd('\')+'\'
+if(-not $path.StartsWith($allowedReports,[StringComparison]::OrdinalIgnoreCase)){throw 'Host state evidence must remain under spoof-handoff/reports.'}
 if(Test-Path -LiteralPath $path){throw 'Final-state evidence exists; refusing overwrite.'}
 [IO.File]::WriteAllText($path,($record|ConvertTo-Json -Depth 6),[Text.UTF8Encoding]::new($false))
 $record|ConvertTo-Json -Depth 6

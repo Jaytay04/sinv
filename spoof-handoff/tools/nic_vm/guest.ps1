@@ -308,10 +308,12 @@ function Get-FreshWindowsReads {
     return $reads
 }
 
-function Get-Evaluations([object]$NativeData, [object]$WindowsReads, [object[]]$ProfileBindings, [string]$ExpectedMode) {
+function Get-Evaluations([object]$NativeData, [object]$WindowsReads, [object[]]$ProfileBindings, [string]$ExpectedMode, [ValidateSet('CurrentSeven','LegacySix')][string]$ReaderSet = 'CurrentSeven') {
     if ($ExpectedMode -notin @('Original', 'Replacement')) { throw 'Readback ExpectedMode must be Original or Replacement.' }
     $ndis = @($NativeData.setupDiNdisLanClass.interfaces)
     $gaa = @($NativeData.getAdaptersAddresses.entries)
+    $gaiData = Get-PropertyValue $NativeData 'getAdaptersInfo'
+    $gai = @(Get-PropertyValue $gaiData 'entries')
     $ifTable = @($NativeData.getIfTable2.entries)
     $win32 = @($WindowsReads.win32NetworkAdapter.rows)
     $msft = @($WindowsReads.msftNetAdapter.rows)
@@ -325,6 +327,7 @@ function Get-Evaluations([object]$NativeData, [object]$WindowsReads, [object[]]$
         $winMatches = @($win32 | Where-Object { [string]::Equals([string]$_.PNPDeviceID, $pnp, [StringComparison]::OrdinalIgnoreCase) })
         $targetGuid = $profileGuid
         $gaaMatches = @($gaa | Where-Object { (Get-NormalizedGuid $_.adapterName) -ceq $targetGuid })
+        $gaiMatches = @($gai | Where-Object { $null -ne $_ -and (Get-NormalizedGuid $_.adapterName) -ceq $targetGuid })
         $ifMatches = @($ifTable | Where-Object { (Get-NormalizedGuid $_.interfaceGuid) -ceq $targetGuid })
         $msftMatches = @($msft | Where-Object { (Get-NormalizedGuid $_.InterfaceGuid) -ceq $targetGuid -or [string]::Equals([string]$_.PNPDeviceID, $pnp, [StringComparison]::OrdinalIgnoreCase) })
         $plainMatches = @($plain | Where-Object { (Get-NormalizedGuid $_.InterfaceGuid) -ceq $targetGuid })
@@ -341,6 +344,7 @@ function Get-Evaluations([object]$NativeData, [object]$WindowsReads, [object[]]$
             oidDot11Win32Error = Get-PropertyValue $dot11 'win32Error'
             oidDot11IoctlSucceeded = Get-PropertyValue $dot11 'ioctlSucceeded'
             getAdaptersAddresses = if ($gaaMatches.Count -eq 1) { [string]$gaaMatches[0].physicalAddress } else { $null }
+            getAdaptersInfo = if ($gaiMatches.Count -eq 1) { [string]$gaiMatches[0].address } else { $null }
             getIfTable2 = if ($ifMatches.Count -eq 1) { [string]$ifMatches[0].physicalAddress } else { $null }
             win32Wmi = if ($winMatches.Count -eq 1) { [string]$winMatches[0].MACAddress } else { $null }
             msftNetworkAddresses = if ($msftMatches.Count -eq 1) { @($msftMatches[0].NetworkAddresses) } else { @() }
@@ -350,11 +354,14 @@ function Get-Evaluations([object]$NativeData, [object]$WindowsReads, [object[]]$
         $checks = [Collections.Generic.List[object]]::new()
         function Add-MacCheck([string]$Source, [object]$Actual, [string]$Needle) {
             $actualText = @(if ($null -eq $Actual) { } elseif ($Actual -is [array]) { $Actual | ForEach-Object { [string]$_ } } else { [string]$Actual })
-            $valid = @($actualText | Where-Object { (ConvertTo-MacKey $_) -ceq $expectedKey }).Count -gt 0
+            $valid = $actualText.Count -gt 0 -and @($actualText | Where-Object { (ConvertTo-MacKey $_) -cne $expectedKey }).Count -eq 0
             $checks.Add([ordered]@{ source = $Source; expected = $expectedText; actual = $Actual; matchCount = $actualText.Count; matchesExpected = $valid; detail = $Needle })
         }
         Add-MacCheck 'OID_802_3_CURRENT_ADDRESS' $observed.oid8023Current ('ioctlSucceeded=' + $observed.oid8023IoctlSucceeded + '; win32Error=' + $observed.oid8023Win32Error + '; bytes=' + $observed.oid8023BytesHex)
         Add-MacCheck 'GetAdaptersAddresses' $observed.getAdaptersAddresses ('matchCount=' + $gaaMatches.Count + '; adapterNameGuid=' + $targetGuid)
+        if ($ReaderSet -ceq 'CurrentSeven') {
+            Add-MacCheck 'GetAdaptersInfo' $observed.getAdaptersInfo ('matchCount=' + $gaiMatches.Count + '; adapterNameGuid=' + $targetGuid + '; independent IP Helper API')
+        }
         Add-MacCheck 'GetIfTable2' $observed.getIfTable2 ('matchCount=' + $ifMatches.Count + '; interfaceGuid=' + $targetGuid)
         Add-MacCheck 'Win32_NetworkAdapter.MACAddress' $observed.win32Wmi ('matchCount=' + $winMatches.Count)
         Add-MacCheck 'MSFT_NetAdapter.NetworkAddresses' $observed.msftNetworkAddresses ('matchCount=' + $msftMatches.Count + '; PermanentAddress is informational only.')
@@ -555,8 +562,11 @@ function Invoke-Start {
 }
 
 function Invoke-Remove {
+    param([switch]$PreserveConfiguredAddress)
     Assert-MutationPreconditions
     $journal = Read-Journal
+    if ($PreserveConfiguredAddress -and (-not $journal.Contains('addressState') -or $journal.addressState -cne 'applied')) { throw 'Unfiltered comparison requires an applied four-adapter address journal.' }
+    if (-not $PreserveConfiguredAddress -and $journal.Contains('addressState') -and $journal.addressState -notin @('captured', 'restored')) { throw ('Restore the saved adapter-address settings before filter removal; state=' + $journal.addressState) }
     if ([string]$journal.installState -notin @('install-pending', 'installed', 'installed-published-inf-unresolved', 'remove-pending', 'removal-incomplete')) { throw ('No owned NIC install to remove; state=' + [string]$journal.installState) }
     $priorInstallState = [string]$journal.installState
     $journal.installState = 'remove-pending'
@@ -614,6 +624,7 @@ function Invoke-Remove {
 function Restore-Policy {
     Assert-MutationPreconditions
     $journal = Read-Journal
+    if ($journal.Contains('addressState') -and $journal.addressState -notin @('captured', 'restored')) { throw ('Restore adapter-address state before policy cleanup; state=' + $journal.addressState) }
     if ($journal.installState -notin @('removed', 'not-started', 'policy-prepared', 'install-failed')) { throw ('Remove the owned NIC package before restoring policy; state=' + [string]$journal.installState) }
     $script:Record.hostOrGuestSettingsChanged = $true
     $thumb = [string]$journal.certificateThumbprint
@@ -678,17 +689,82 @@ function Restore-Policy {
     }
 }
 
+__NIC_ADAPTER_ADDRESS_FUNCTIONS__
+
+function Invoke-AddressSnapshot {
+    Assert-MutationPreconditions
+    $journal = Read-Journal
+    if ($journal.Contains('addressSnapshot')) { throw 'An adapter-address snapshot already exists; restore it before another trial.' }
+    $snapshot = Get-NicAddressSnapshot -ProfileBindings @($script:Config.profile.bindings) -ExpectedVmUuid ([string]$script:Config.expectedVmUuid)
+    if (@($snapshot.adapters).Count -ne 4) { throw 'Adapter-address snapshot did not cover all four profile devices.' }
+    $journal.addressSnapshot = $snapshot
+    $journal.addressState = 'captured'
+    $journal.addressSnapshotUtc = [DateTime]::UtcNow.ToString('o')
+    Write-Journal $journal
+    $script:Record.addressSnapshot = $snapshot
+}
+
+function Invoke-AddressRestore {
+    Assert-MutationPreconditions
+    $journal = Read-Journal
+    if (-not $journal.Contains('addressSnapshot') -or @($journal.addressSnapshot.adapters).Count -ne 4) { throw 'Four saved adapter-address snapshots are required for restoration.' }
+    $journal.addressState = 'restore-pending'
+    Write-Journal $journal
+    $operations = [Collections.Generic.List[object]]::new()
+    $errors = [Collections.Generic.List[string]]::new()
+    foreach ($adapter in @($journal.addressSnapshot.adapters)) {
+        try {
+            $persist = { param($intent) $journal.addressIntent = $intent; Write-Journal $journal }
+            $result = Restore-NicAddressSnapshot -Snapshot $adapter -ExpectedVmUuid ([string]$script:Config.expectedVmUuid) -PersistIntent $persist
+            $operations.Add($result)
+        } catch { $errors.Add($_.Exception.ToString()) }
+    }
+    $journal.addressState = if ($errors.Count -eq 0) { 'restored' } else { 'restore-incomplete' }
+    $journal.addressRestoreResults = @($operations.ToArray())
+    Write-Journal $journal
+    $script:Record.addressRestore = [ordered]@{ results = @($operations.ToArray()); errors = @($errors.ToArray()); state = $journal.addressState }
+    $script:Record.hostOrGuestSettingsChanged = $true
+    if ($errors.Count -gt 0) { throw ('Adapter-address restoration incomplete: ' + ($errors -join '; ')) }
+}
+
+function Invoke-AddressApply {
+    Assert-MutationPreconditions
+    $journal = Read-Journal
+    if ($journal.installState -cne 'installed' -or -not $journal.Contains('addressSnapshot') -or $journal.addressState -cne 'captured') { throw 'An installed filter and fresh four-adapter snapshot are required before address configuration.' }
+    $journal.addressState = 'apply-pending'
+    Write-Journal $journal
+    $operations = [Collections.Generic.List[object]]::new()
+    try {
+        foreach ($adapter in @($journal.addressSnapshot.adapters)) {
+            $persist = { param($intent) $journal.addressIntent = $intent; Write-Journal $journal }
+            $result = Invoke-NicAddressApply -Snapshot $adapter -ExpectedVmUuid ([string]$script:Config.expectedVmUuid) -PersistIntent $persist
+            $operations.Add($result)
+            $journal.addressApplyResults = @($operations.ToArray())
+            Write-Journal $journal
+        }
+        $journal.addressState = 'applied'
+        Write-Journal $journal
+        $script:Record.addressApply = @($operations.ToArray())
+        $script:Record.hostOrGuestSettingsChanged = $true
+    } catch {
+        $originalError = $_
+        $script:Record.addressApplyFailure = [ordered]@{ exception = $_.Exception.ToString(); position = $_.InvocationInfo.PositionMessage; completedOperations = @($operations.ToArray()) }
+        try { Invoke-AddressRestore } catch { $script:Record.addressApplyRecoveryError = $_.Exception.ToString() }
+        throw $originalError
+    }
+}
+
 function Invoke-Phase {
     $phase = [string]$script:Config.phase
     $script:Record.phase = $phase
     $script:Record.expectedProbeVerdict = $ExpectedProbeVerdict
     $script:Record.expectedMode = [string]$script:Config.expectedMode
     $script:Record.readOnly = $phase -ceq 'Inventory' -or $phase -ceq 'Readback'
-    if ($phase -notin @('Inventory', 'PreparePolicy', 'Install', 'Start', 'Readback', 'Remove', 'RestorePolicy', 'Reboot', 'Shutdown')) { throw ('Unsupported phase: ' + $phase) }
+    if ($phase -notin @('Inventory', 'PreparePolicy', 'Install', 'Start', 'AddressSnapshot', 'AddressApply', 'AddressRestore', 'RemoveForAddressReadback', 'Readback', 'Remove', 'RestorePolicy', 'Reboot', 'Shutdown')) { throw ('Unsupported phase: ' + $phase) }
     $profileBindings = Assert-Profile
     $identity = Assert-VmIdentity ($phase -ne 'Inventory')
     $script:Record.host = $identity
-    if ($phase -in @('PreparePolicy', 'Install', 'Start', 'Remove', 'RestorePolicy', 'Reboot', 'Shutdown')) {
+    if ($phase -in @('PreparePolicy', 'Install', 'Start', 'AddressSnapshot', 'AddressApply', 'AddressRestore', 'RemoveForAddressReadback', 'Remove', 'RestorePolicy', 'Reboot', 'Shutdown')) {
         Assert-MutationPreconditions
         $script:Record.host = $identity
     }
@@ -697,6 +773,10 @@ function Invoke-Phase {
         'PreparePolicy' { Invoke-PreparePolicy; $script:Record.hostOrGuestSettingsChanged = $true }
         'Install' { Invoke-Install; $script:Record.hostOrGuestSettingsChanged = $true }
         'Start' { Invoke-Start }
+        'AddressSnapshot' { Invoke-AddressSnapshot }
+        'AddressApply' { Invoke-AddressApply }
+        'AddressRestore' { Invoke-AddressRestore }
+        'RemoveForAddressReadback' { Invoke-Remove -PreserveConfiguredAddress; $script:Record.hostOrGuestSettingsChanged = $true }
         'Remove' { Invoke-Remove; $script:Record.hostOrGuestSettingsChanged = $true }
         'RestorePolicy' { Restore-Policy; $script:Record.hostOrGuestSettingsChanged = $true }
         'Reboot' {
@@ -711,7 +791,7 @@ function Invoke-Phase {
     }
     $script:Record.secureBoot = Get-SecureBootSnapshot
     $script:Record.bcd = Get-BcdSnapshot
-    if ($phase -eq 'Readback' -and $script:Config.filterState -ceq 'Absent') { $script:Record.codeIntegrity = Get-CodeIntegritySnapshot }
+    if ($phase -eq 'Readback' -and $script:Config.filterState -in @('Absent', 'AbsentConfigured')) { $script:Record.codeIntegrity = Get-CodeIntegritySnapshot }
     $script:Record.trustMembership = Get-TrustMembership ([string]$script:Config.publicCertificate.thumbprint)
     $script:Record.nativeCapture = Get-NativeCapture
     $script:Record.windowsReads = Get-FreshWindowsReads
@@ -753,11 +833,17 @@ function Invoke-Phase {
                 $enabled = @($componentBindings | Where-Object { $_.Name -ceq $adapter[0].Name -and $_.Enabled })
                 if ($enabled.Count -ne 1) { throw ('Expected one enabled filter binding for ' + $binding.pnpDeviceId + '; actual=' + $enabled.Count) }
             }
-        } elseif ($script:Config.filterState -ceq 'Absent') {
+        } elseif ($script:Config.filterState -in @('Absent', 'AbsentConfigured')) {
             if ($script:Record.adapterServices.Count -ne 0 -or $componentBindings.Count -ne 0) { throw 'The NIC filter service and bindings must be absent for removal proof.' }
-            if ($script:Record.codeIntegrity.ntStatus -cne '0x00000000' -or $script:Record.codeIntegrity.testSigning -ne $false) { throw 'A normal boot with kernel test-signing OFF is required for final removal proof.' }
+            if ($script:Config.filterState -ceq 'Absent' -and ($script:Record.codeIntegrity.ntStatus -cne '0x00000000' -or $script:Record.codeIntegrity.testSigning -ne $false)) { throw 'A normal boot with kernel test-signing OFF is required for final removal proof.' }
+        }
+        if ($script:Config.filterState -ceq 'AbsentConfigured') {
+            $addressJournal = Read-Journal
+            if ($addressJournal.installState -cne 'removed' -or $addressJournal.addressState -cne 'applied' -or $script:Config.expectedMode -cne 'Replacement') { throw 'Unfiltered address proof requires the filter removed and all saved address overrides still applied.' }
+            $script:Record.addressJournalState = $addressJournal.addressState
         }
         $script:Record.evaluations = @(Get-Evaluations $script:Record.nativeCapture.data $script:Record.windowsReads $profileBindings ([string]$script:Config.expectedMode))
+        $script:Record.requiredReaderSet = 'CurrentSeven'
         $script:Record.allTargetsMatch = $script:Record.evaluations.Count -eq 4 -and @($script:Record.evaluations | Where-Object { $_.allRequiredSourcesMatch -ne $true }).Count -eq 0
         if (-not $script:Record.allTargetsMatch) {
             $mismatches = @($script:Record.evaluations | ForEach-Object { $_.checks | Where-Object { -not $_.matchesExpected } } | ForEach-Object { $_.source + ': expected=' + $_.expected + ' actual=' + (ConvertTo-Json -InputObject $_.actual -Compress) + ' detail=' + $_.detail })

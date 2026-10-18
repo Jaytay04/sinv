@@ -7,6 +7,7 @@
 #include <windows.h>
 #include <winioctl.h>
 #include <iphlpapi.h>
+#include <iptypes.h>
 #include <objbase.h>
 #include <combaseapi.h>
 #include <setupapi.h>
@@ -21,6 +22,7 @@
 #include <cstdio>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -73,6 +75,19 @@ std::string Utf8(const wchar_t* value) {
     std::vector<char> bytes(static_cast<std::size_t>(required));
     if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, value, -1, bytes.data(), required, nullptr, nullptr) != required) return {};
     return std::string(bytes.data());
+}
+
+std::string AnsiToUtf8(const char* value, std::size_t capacity) {
+    if (value == nullptr || capacity == 0) return {};
+    const auto* terminator = std::find(value, value + capacity, '\0');
+    if (terminator == value + capacity) return {};
+    const auto length = static_cast<int>(terminator - value);
+    if (length == 0) return {};
+    const int wideLength = MultiByteToWideChar(CP_ACP, 0, value, length, nullptr, 0);
+    if (wideLength <= 0) return {};
+    std::wstring wide(static_cast<std::size_t>(wideLength), L'\0');
+    if (MultiByteToWideChar(CP_ACP, 0, value, length, wide.data(), wideLength) != wideLength) return {};
+    return Utf8(wide.c_str());
 }
 
 std::string Win32Text(DWORD code) {
@@ -186,6 +201,73 @@ AddressCapture ReadAdaptersAddresses() {
         entry.operationalStatus = static_cast<ULONG>(item->OperStatus);
         entry.physicalAddress.assign(item->PhysicalAddress,
             item->PhysicalAddress + item->PhysicalAddressLength);
+        capture.entries.push_back(std::move(entry));
+        item = item->Next;
+    }
+    return capture;
+}
+
+struct AdaptersInfoEntry {
+    std::string adapterName;
+    std::string description;
+    DWORD index = 0;
+    UINT type = 0;
+    std::vector<BYTE> address;
+};
+
+struct AdaptersInfoCapture {
+    ULONG status = NO_ERROR;
+    std::string errorText;
+    ULONG requiredOrReturnedBytes = 0;
+    std::size_t attempts = 0;
+    std::vector<AdaptersInfoEntry> entries;
+};
+
+AdaptersInfoCapture ReadAdaptersInfo() {
+    AdaptersInfoCapture capture;
+    ULONG bytes = static_cast<ULONG>(sizeof(IP_ADAPTER_INFO));
+    std::vector<BYTE> buffer(bytes);
+    for (std::size_t attempt = 0; attempt < 4; ++attempt) {
+        capture.attempts = attempt + 1;
+        capture.status = GetAdaptersInfo(reinterpret_cast<PIP_ADAPTER_INFO>(buffer.data()), &bytes);
+        capture.requiredOrReturnedBytes = bytes;
+        if (capture.status != ERROR_BUFFER_OVERFLOW) break;
+        if (bytes <= buffer.size() || bytes > kMaxAddressTableBytes) {
+            capture.status = ERROR_INVALID_DATA;
+            capture.errorText = "GetAdaptersInfo returned an invalid or over-limit buffer size.";
+            return capture;
+        }
+        buffer.assign(bytes, 0);
+    }
+    if (capture.status != NO_ERROR) {
+        capture.errorText = Win32Text(capture.status);
+        return capture;
+    }
+
+    const auto* item = reinterpret_cast<const IP_ADAPTER_INFO*>(buffer.data());
+    std::size_t count = 0;
+    while (item != nullptr) {
+        const bool adapterNameTerminated = std::find(std::begin(item->AdapterName), std::end(item->AdapterName), '\0') != std::end(item->AdapterName);
+        const bool descriptionTerminated = std::find(std::begin(item->Description), std::end(item->Description), '\0') != std::end(item->Description);
+        if (++count > kMaxAdapters || !adapterNameTerminated || !descriptionTerminated ||
+            item->AddressLength > sizeof(item->Address)) {
+            capture.status = ERROR_INVALID_DATA;
+            capture.errorText = "GetAdaptersInfo returned an invalid count, unterminated text field, or address length.";
+            capture.entries.clear();
+            return capture;
+        }
+        AdaptersInfoEntry entry;
+        entry.adapterName = AnsiToUtf8(item->AdapterName, sizeof(item->AdapterName));
+        entry.description = AnsiToUtf8(item->Description, sizeof(item->Description));
+        if (entry.adapterName.empty()) {
+            capture.status = ERROR_INVALID_DATA;
+            capture.errorText = "GetAdaptersInfo returned an empty adapter name.";
+            capture.entries.clear();
+            return capture;
+        }
+        entry.index = item->Index;
+        entry.type = item->Type;
+        entry.address.assign(item->Address, item->Address + item->AddressLength);
         capture.entries.push_back(std::move(entry));
         item = item->Next;
     }
@@ -550,6 +632,18 @@ std::string IfTableEntryJson(const IfTableEntry& entry) {
     return out.str();
 }
 
+std::string AdaptersInfoEntryJson(const AdaptersInfoEntry& entry) {
+    std::ostringstream out;
+    out << "{\"adapterName\":" << Quote(entry.adapterName)
+        << ",\"description\":" << Quote(entry.description)
+        << ",\"index\":" << entry.index
+        << ",\"type\":" << entry.type
+        << ",\"addressLength\":" << entry.address.size()
+        << ",\"addressBytesHex\":" << Quote(HexBytes(entry.address.data(), entry.address.size()))
+        << ",\"address\":" << MacIfSixBytes(entry.address.data(), entry.address.size()) << '}';
+    return out.str();
+}
+
 std::string OidJson(const OidRead& result) {
     std::ostringstream out;
     out << "{\"name\":" << Quote(result.name)
@@ -589,13 +683,15 @@ std::string NdisInterfaceJson(const NdisInterface& item, std::size_t index) {
     return out.str();
 }
 
-std::string CaptureJson(const AddressCapture& addresses, const IfTableCapture& ifTable, const NdisCapture& ndis) {
+std::string CaptureJson(const AddressCapture& addresses, const IfTableCapture& ifTable,
+    const AdaptersInfoCapture& adaptersInfo, const NdisCapture& ndis) {
     SYSTEMTIME now{};
     GetSystemTime(&now);
     char timestamp[40]{};
     std::snprintf(timestamp, sizeof(timestamp), "%04u-%02u-%02uT%02u:%02u:%02u.%03uZ",
         now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond, now.wMilliseconds);
-    const bool apiEnumerationComplete = addresses.status == NO_ERROR && ifTable.status == NO_ERROR && ndis.complete;
+    const bool apiEnumerationComplete = addresses.status == NO_ERROR && ifTable.status == NO_ERROR &&
+        adaptersInfo.status == NO_ERROR && ndis.complete;
 
     std::ostringstream out;
     out << "{\"schema\":\"nic-native-read.v1\",\"capturedUtc\":" << Quote(timestamp)
@@ -617,6 +713,17 @@ std::string CaptureJson(const AddressCapture& addresses, const IfTableCapture& i
     for (std::size_t i = 0; i < ifTable.entries.size(); ++i) {
         if (i != 0) out << ',';
         out << IfTableEntryJson(ifTable.entries[i]);
+    }
+    out << "]},\"getAdaptersInfo\":{\"api\":\"GetAdaptersInfo(IP_ADAPTER_INFO)\""
+        << ",\"scope\":\"IPv4 adapter information API\",\"addressSemantics\":\"IP_ADAPTER_INFO.Address is captured as returned; it is not assumed to be a current or permanent MAC.\""
+        << ",\"status\":" << adaptersInfo.status << ",\"statusHex\":" << Quote(HexCode(adaptersInfo.status))
+        << ",\"statusText\":" << (adaptersInfo.errorText.empty() ? "null" : Quote(adaptersInfo.errorText))
+        << ",\"requiredOrReturnedBytes\":" << adaptersInfo.requiredOrReturnedBytes
+        << ",\"attempts\":" << adaptersInfo.attempts << ",\"complete\":" << (adaptersInfo.status == NO_ERROR ? "true" : "false")
+        << ",\"entries\":[";
+    for (std::size_t i = 0; i < adaptersInfo.entries.size(); ++i) {
+        if (i != 0) out << ',';
+        out << AdaptersInfoEntryJson(adaptersInfo.entries[i]);
     }
     out << "]},\"setupDiNdisLanClass\":{\"api\":\"SetupDiEnumDeviceInterfaces(GUID_NDIS_LAN_CLASS)\""
         << ",\"enumerationError\":" << ndis.enumerationError
@@ -663,8 +770,9 @@ bool WriteNewFile(const wchar_t* path, std::string_view bytes, DWORD* error) {
 int Capture(const wchar_t* outputPath) {
     const AddressCapture addresses = ReadAdaptersAddresses();
     const IfTableCapture ifTable = ReadIfTable2();
+    const AdaptersInfoCapture adaptersInfo = ReadAdaptersInfo();
     const NdisCapture ndis = ReadNdisInterfaces();
-    std::string report = CaptureJson(addresses, ifTable, ndis);
+    std::string report = CaptureJson(addresses, ifTable, adaptersInfo, ndis);
     if (report.size() > kMaxReportBytes) {
         report = "{\"schema\":\"nic-native-read.v1\",\"readOnly\":true,\"replacementEnabled\":false,\"captureComplete\":false,\"reportLimitExceeded\":true,\"maximumReportBytes\":" + std::to_string(kMaxReportBytes) + "}\n";
     }
@@ -673,9 +781,11 @@ int Capture(const wchar_t* outputPath) {
         std::cerr << "report_write win32Error=" << writeError << " text=" << Win32Text(writeError) << '\n';
         return 2;
     }
-    const bool complete = addresses.status == NO_ERROR && ifTable.status == NO_ERROR && ndis.complete;
+    const bool complete = addresses.status == NO_ERROR && ifTable.status == NO_ERROR &&
+        adaptersInfo.status == NO_ERROR && ndis.complete;
     std::cout << "Read-only NIC capture complete=" << (complete ? "true" : "false")
-        << " GAA=" << addresses.entries.size() << " IfTable2=" << ifTable.entries.size()
+        << " GAA=" << addresses.entries.size() << " GetAdaptersInfo=" << adaptersInfo.entries.size()
+        << " IfTable2=" << ifTable.entries.size()
         << " NDIS=" << ndis.interfaces.size() << " report=" << Utf8(outputPath) << '\n';
     if (!complete) {
         std::cerr << "One or more native enumeration APIs failed or reached a configured bound; exact statuses are in the JSON report.\n";

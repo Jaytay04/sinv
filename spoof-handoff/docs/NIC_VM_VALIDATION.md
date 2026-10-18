@@ -1,120 +1,136 @@
-﻿# NIC device fingerprint validation
+# NIC reader-path validation
 
-This note records host-baseline capture and disposable-VM validation for the
-kernel NIC reader path. It does not establish physical-host spoof readiness.
-The VM gate requires every reader path to match, not only OID and WMI.
+**Current result (2026-10-17): `VM_SEVEN_READER_PASS_HOST_PENDING`.** The follow-up passed
+all seven MAC readers on four disposable-VM adapters through original,
+replacement and restored values: 28/28 adapter-reader checks in each state. No
+physical-host replacement was executed; host proof remains 8/9 categories, with
+NIC unproven.
 
-## Host baseline and VM boundary
+Evidence paths below are relative to the main repository root; implementation source is in the feature worktree.
 
-Four approved host adapter MAC mappings were captured with original values
-agreeing across native OID reads, `GetAdaptersAddresses`, `GetIfTable2`, WMI
-(`Win32_NetworkAdapter`) and `Get-NetAdapter`. The captured baseline is
-`../reports/nic-vm-20261017/host-originals-retry/readback.20261017T220316561Z.534ca308733c42848cbc25e34f05a9fd.json`.
+## Current VM result
 
-Validation used a disposable Windows 11 Home VM (build 26200.9445) with 4096 MiB,
-two CPUs and four disconnected virtual NICs: two e1000e and two vmxnet3. The VM
-NICs used the exact approved original MAC pairs. Their guest PnP IDs differ from
-the physical host's, so these results are guest-path evidence, not proof about
-physical host adapters. The source VM was unchanged; the clone hash is recorded
-in `../reports/nic-vm-20261017/clone.json`.
+The VM used Windows 11 Home build 26200.9445 and four disconnected virtual NICs
+(two e1000e, two vmxnet3) configured with the approved original MAC pairs. Guest
+PnP IDs differ from the physical host's. The seven-reader gate records:
 
-The recovery point was the cold snapshot `DeviceFilter-Nic-ColdOriginal`; the
-policy-prepared state was `DeviceFilter-Nic-PolicyPrepared`. A live snapshot
-attempt timed out after 180 seconds and was preserved. The tested offline
-recovery completed with status `RECOVERED_AND_POWERED_OFF`, recorded in
-`../reports/nic-vm-20261017/recovery.20261017T224309329Z.d9c95081e85b474aadb823c1a90a7103.json`.
-From the repository root, the recovery command was:
+| Reader | Original | Replacement | Restored |
+|---|---:|---:|---:|
+| `OID_802_3_CURRENT_ADDRESS` | 4/4 | 4/4 | 4/4 |
+| `GetAdaptersAddresses` | 4/4 | 4/4 | 4/4 |
+| `GetAdaptersInfo` | 4/4 | 4/4 | 4/4 |
+| `GetIfTable2` | 4/4 | 4/4 | 4/4 |
+| `Win32_NetworkAdapter.MACAddress` | 4/4 | 4/4 | 4/4 |
+| `MSFT_NetAdapter.NetworkAddresses` | 4/4 | 4/4 | 4/4 |
+| `Get-NetAdapter.MacAddress` | 4/4 | 4/4 | 4/4 |
+
+| VM phase | Evidence run | Result |
+|---|---|---|
+| Filter active, service `Running`, four bindings enabled | `uefi-windows-probe-20261017-233834-8d4a1017ed` | 28/28 |
+| Filter service and bindings absent; `requestedFilterState=AbsentConfigured` | `uefi-windows-probe-20261017-234025-36406a146b` | 28/28 |
+| Normal boot with original filter absent | `uefi-windows-probe-20261017-234313-876dc991d3` | 28/28 |
+
+The validated round trip sets each per-adapter `NetworkAddress` value through
+`Set-NetAdapter -MacAddress` and restarts the adapter. Microsoft documents MAC address
+setting with [`Set-NetAdapter`](https://learn.microsoft.com/en-us/powershell/module/netadapter/set-netadapter?view=windowsserver2025-ps),
+notes that changes can disrupt networking, and documents adapter restart for
+properties that need it with [`Restart-NetAdapter`](https://learn.microsoft.com/en-us/powershell/module/netadapter/restart-netadapter?view=windowsserver2025-ps).
+Support depends on the adapter and driver; these results cover the tested VM
+profile. The NDIS documentation for
+[`OID_802_3_CURRENT_ADDRESS`](https://learn.microsoft.com/en-us/windows-hardware/drivers/network/oid-802-3-current-address)
+says network-management software cannot set the current station address through
+the NDIS interface library and must set it as a configuration parameter. The
+successful per-adapter configuration supplies that setter; the lightweight
+filter alone did not provide general reader coverage. The evidence does not
+establish a specific cache mechanism.
+
+The final normal-boot readback reported the original filter absent and all
+seven readers matching. Guest code-integrity `testSigning` was false and the
+BCD test-signing element was absent; the test certificate was absent from the
+LocalMachine Root and TrustedPublisher stores. The address-restore run
+`uefi-windows-probe-20261017-234103-82ec2f8e99` confirmed the `NetworkAddress`
+registry value absent and all four adapters administratively Up.
+
+## Earlier failed gate
+
+The earlier filter-only gate, run `uefi-windows-probe-20261017-223543-a3fed99a59`,
+failed: OID and WMI returned replacements for 4/4 adapters, while
+`GetAdaptersAddresses`, `GetIfTable2`, `MSFT_NetAdapterNetworkAddresses` and
+`Get-NetAdapter.MacAddress` returned originals for all four adapters (16
+mismatches). This historical result remains valid for that configuration. The
+later seven-reader pass followed per-adapter address configuration and restart;
+it does not erase or reinterpret the earlier failure. The pre-write PowerShell
+run `uefi-windows-probe-20261017-233408-b76a7226b5` was preserved and recovered.
+It failed with `MethodException: Cannot find overload for Add count 1` because
+PowerShell's automatic `$Matches` variable collided with the intended matcher;
+the code was corrected to use local `classEntries`.
+
+## Host boundary and recovery
+
+The disposable VM was returned to the cold original snapshot and powered off;
+`spoof-handoff/reports/nic-vm-20261017/recovery.20261017T234420706Z.678838734c0744759b2bfa4b84a8e99f.json`
+records recovery, and `spoof-handoff/reports/nic-reader-gap-20261017/vm-final-host-state.json`
+records zero running VMs. A fresh after-VM host readback matched all four
+original MACs across the seven read-only readers in
+`spoof-handoff/reports/nic-reader-gap-20261017/host-originals-after-vm/readback.20261017T234420942Z.0f576271d26f464898a87062c9b9c64c.json`.
+A later readback after the canceled host launch again matched all four adapters
+across seven readers and Wi-Fi `OID_DOT11_CURRENT_ADDRESS`:
+`spoof-handoff/reports/nic-reader-gap-20261017/host-originals-after-canceled-launch/readback.20261018T000509195Z.c0ce6e41886e441798fe4ffc22eb5d9e.json`.
+The direct Wi-Fi OID passed; the other three adapters retained N/A with error
+87. These are original-value readbacks only, not proof of physical-host spoof
+interception. Physical-host replacement remains unexecuted, and NIC remains
+the unproven ninth category. No byte-for-byte host BCD, ESP or firmware
+verification is claimed.
+
+### Prepared physical-host round trip
+
+The VM gate is complete and passed, but no host test ran. The UAC launch was
+canceled before the elevated script started at `2026-10-18T00:02:35.0022787Z`
+with the error “This command cannot be run due to the error: The operation was
+canceled by the user.” The record is
+`spoof-handoff/reports/nic-reader-gap-20261017/host-launches/20261018T000020922Z.1ee17cb890ed4b2a8788646a07e9d376/start-error.json`;
+there is no host `start.json`, result or run directory. NIC remains unproven on
+the physical host (8/9 categories). Re-run only after opening PowerShell as
+administrator and changing to the repository root:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\smbios-boot-serial-probe\spoof-handoff\tools\nic_vm\recover.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\spoof-handoff\commands\nic-host-test.ps1 Run
 ```
 
-This command manages the disposable VM only.
+The command uses the built-in per-adapter MAC configuration. It requires Secure
+Boot ON, Windows test-signing OFF, the test certificate absent from LocalMachine
+Root and TrustedPublisher, and the NIC test filter absent. It does not install a
+test driver or certificate, change OS security settings, or reboot. Wi-Fi and
+VMware adapters may briefly disconnect; the run requires their original link
+states to return within 30 seconds and does not change SSIDs, IP settings or
+network profiles. Firmware, BCD and ESP state are captured before and after;
+`EFI/Microsoft/Boot/BOOTSTAT.DAT` is the only ESP comparison exclusion as
+Windows may update boot status independently. The seven common readers and
+Wi-Fi direct `OID_DOT11_CURRENT_ADDRESS` must match in original, active and
+restored states; a reader unavailable in the original capture must retain that
+exact unavailable status.
 
-## Driver and reader results
+`Run` returns a unique `runDirectory` beneath
+`spoof-handoff/reports/nic-reader-gap-20261017/host-runs`. Preserve that exact
+directory for journal-based recovery if needed:
 
-The first driver registration attempt used the actual NDIS status
-`0xC0010005` (`NDIS_STATUS_BAD_CHARACTERISTICS`), which SCM reported as error 5
-(`Access is denied`). This was not a certificate-policy failure. Updating the
-driver characteristics revision and structure size to revision 2 allowed the
-`DriverEntry` call to succeed and the service to reach `Running`.
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\spoof-handoff\commands\nic-host-rollback.ps1 -RunDirectory '<exact runDirectory returned by Run>'
+```
 
-With the corrected default profile, diagnostics are off. Revision 1 is retained
-only as an explicit regression profile; no other fields or default MAC mappings
-changed. The driver was signed with the existing test certificate
-`59DBD6780CFE60C020B3F4511211FEC22C397B85` and trusted only inside the guest for
-test signing. No host trust or policy, network, ESP, BCD or firmware settings
-were changed.
+Rollback restores the original typed `NetworkAddress` value and adapter
+administrative state from the durable pre-mutation journal. The final host gate
+independently recomputes 112 observations from the captured native and Windows
+reader inputs. Its pure test passed the real four-state comparison and three
+synthetic negative cases (altered, missing and duplicate inputs), without
+executing host or VM actions. Results are recorded in
+`spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/20261018T001149Z.fe8b13147fb34fbfb572e8409ff11ea0/raw-input-gate-tests.json`.
+Independent suites passed: NIC journal 191, adapter helper 53, SMBIOS workflow
+and snapshot 46, storage model 126, and 40 related CTest cases. The earlier
+15 AST/mock checks retain their original source hash. C# helper compiles
+passed 2/2; the native reader build used `/W4 /WX`.
 
-Transparent mode passed all six reader paths while the driver was running and
-all four bindings were enabled; each returned the four original values. Service,
-bindings and the driver's own INF were then removed successfully. In enabled
-mode, fresh OID and `Win32_NetworkAdapter.MACAddress` reads returned all four
-locked replacements.
-
-After reboot, the first demand-start attempt found the service stopped and the
-runner refused before collecting a count or readback. An explicit service start
-succeeded with status 0 and the driver reached `Running`; its kernel binary hash
-was `A089523FEB5F3F327B5565BF1D962DA65489FAAEE12E7C78B043A11E1E3844BF`. The
-pinned VM profile matched and all four bindings were enabled.
-
-The decisive fresh readback is in
-`../reports/nic-vm-20261017/uefi-windows-probe-20261017-223543-a3fed99a59/evidence/kernel-metadata.json`;
-`allTargetsMatch` is false. The six-path results were:
-
-| Reader path | Replacement values |
-|---|---:|
-| OID `OID_802_3_CURRENT_ADDRESS` | 4/4 |
-| `Win32_NetworkAdapter.MACAddress` | 4/4 |
-| `GetAdaptersAddresses` | 0/4 |
-| `GetIfTable2` | 0/4 |
-| `MSFT_NetAdapterNetworkAddresses` | 0/4 |
-| `Get-NetAdapter.MacAddress` | 0/4 |
-
-The four ordinary adapter API paths returned originals in all four cases. The
-evidence records 16 exact mismatches; for example, the first
-`GetAdaptersAddresses` value was expected to be `02:90:10:20:30:40` but was
-`00:50:56:C0:00:08`.
-
-The VM deployment gate failed. OID rewrite provides partial reader coverage,
-while ordinary adapter API reads remain original. The evidence does not prove
-an exact cache or other cause. A mechanism that covers those reader values and
-a fresh passing VM gate are required before host deployment. No host activation
-runbook is supported by the current evidence.
-
-## Cleanup and host boundary
-
-After enabled-mode removal, the VM record reported `phase=Readback`,
-`expectedMode=Original`, `requestedFilterState=Absent` and `allTargetsMatch=true`:
-four adapters matched across all six reader paths,
-with the service and bindings absent. Guest kernel code-integrity status was 0
-with options `0x5`; test signing was false, the BCD test-signing element was
-absent, and guest Secure Boot was false, matching the original snapshot baseline.
-This readback is recorded in
-`../reports/nic-vm-20261017/uefi-windows-probe-20261017-224208-c896c3345f/evidence/kernel-metadata.json`.
-The recovery record confirms the disposable VM was powered off at its cold
-original snapshot.
-
-No physical-host NIC activation was performed. After VM cleanup, all four host
-original MACs matched across native OID, `GetAdaptersAddresses`, `GetIfTable2`,
-`Win32_NetworkAdapter` and `Get-NetAdapter` in
-`../reports/nic-vm-20261017/host-originals-after/readback.20261017T224236496Z.8c62b1ef3df143ad99cd6069adf81a66.json`.
-This confirms original-value readback after the VM test; it does not prove host
-spoof interception. Host evidence covers eight of nine validation categories,
-so all nine categories and host readiness are not claimed. No byte-for-byte host
-BCD, ESP or firmware verification is claimed.
-
-The recorded final state is `../reports/nic-vm-20261017/final-state.json`: the
-source VM hash was unchanged, no VMs were running, and NIC and storage test
-services were absent.
-
-## Related verification and evidence
-
-The recorded host-side suites passed: 49 aggregate tests, storage 126,
-identifier 8, SMBIOS 46 and loader 27; the new PowerShell profile has 177 pure
-assertions. The new profile's CTest run passed 2/2 in both modes. These software
-checks do not replace the failed all-reader VM gate.
-
-The curated validation record is
-`../reports/review-20261017/nic-vm-validation.json`; raw evidence checksums are
-in `../reports/nic-vm-20261017/SHA256SUMS.txt`.
+The curated result is `spoof-handoff/reports/review-20261017/nic-reader-gap-validation.json`
+(`VM_SEVEN_READER_PASS_HOST_PENDING`); immutable gate data is
+`spoof-handoff/reports/nic-reader-gap-20261017/vm-seven-reader-gate.json`. Raw evidence
+checksums are in `spoof-handoff/reports/review-20261017/nic-reader-gap-SHA256SUMS.txt`.

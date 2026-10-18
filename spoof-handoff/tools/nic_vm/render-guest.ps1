@@ -1,11 +1,11 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)][ValidateSet('Inventory', 'PreparePolicy', 'Install', 'Start', 'Readback', 'Remove', 'RestorePolicy', 'Reboot', 'Shutdown')][string]$Phase,
+    [Parameter(Mandatory = $true)][ValidateSet('Inventory', 'PreparePolicy', 'Install', 'Start', 'AddressSnapshot', 'AddressApply', 'AddressRestore', 'RemoveForAddressReadback', 'Readback', 'Remove', 'RestorePolicy', 'Reboot', 'Shutdown')][string]$Phase,
     [Parameter(Mandatory = $true)][string]$ProfileJson,
     [Parameter(Mandatory = $true)][string]$NativeExePath,
     [string]$ExpectedVmUuid,
     [ValidateSet('Original', 'Replacement')][string]$ExpectedMode = 'Original',
-    [ValidateSet('Any', 'Present', 'Absent')][string]$FilterState = 'Any',
+    [ValidateSet('Any', 'Present', 'Absent', 'AbsentConfigured')][string]$FilterState = 'Any',
     [string]$PackageDirectory,
     [string]$OutputPath
 )
@@ -20,6 +20,7 @@ $outputRoot = Join-Path $reportRoot 'guest-actions'
 $artifactRoot = Join-Path $repositoryRoot 'spoof-handoff\artifacts\nic-vm-20261017'
 $lockedMapPath = Join-Path $repositoryRoot 'spoof-handoff\reports\client-originals.tsv'
 $guestTemplatePath = Join-Path $scriptRoot 'guest.ps1'
+$addressHelperPath = Join-Path $scriptRoot 'adapter-address.ps1'
 $certificatePath = Join-Path $worktreeRoot 'components\hypervisor\hypersinv.cer'
 $pinnedThumbprint = '59DBD6780CFE60C020B3F4511211FEC22C397B85'
 $pinnedCertificateSha256 = 'B3C4D8955151A56F2F2D1B4F50BA358C7FC95C75ADCAD49EED0C669FC034F3BE'
@@ -158,7 +159,9 @@ if ($configBytes.Length -gt 3MB) { throw 'Embedded guest request exceeds the mai
 $configBase64 = [Convert]::ToBase64String($configBytes)
 $template = [IO.File]::ReadAllText($guestTemplatePath)
 if (-not $template.Contains('__NIC_CONFIG_BASE64__')) { throw 'Guest script configuration marker is missing.' }
-$rendered = $template.Replace('__NIC_CONFIG_BASE64__', $configBase64)
+if (-not $template.Contains('__NIC_ADAPTER_ADDRESS_FUNCTIONS__')) { throw 'Guest adapter-address helper marker is missing.' }
+$addressFunctions = [IO.File]::ReadAllText($addressHelperPath)
+$rendered = $template.Replace('__NIC_CONFIG_BASE64__', $configBase64).Replace('__NIC_ADAPTER_ADDRESS_FUNCTIONS__', $addressFunctions)
 
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
     $stamp = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ')
