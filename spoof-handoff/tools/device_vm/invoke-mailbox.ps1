@@ -475,7 +475,7 @@ function Get-ResponseEvidence($Response, [DateTime]$Deadline) {
         if ([string]$Response.EvidenceSha256 -cne ('0' * 64)) {
             throw 'Empty guest evidence has an unexpected SHA256.'
         }
-        return [byte[]]@()
+        return ,([byte[]]@())
     }
     $Output = [IO.MemoryStream]::new()
     try {

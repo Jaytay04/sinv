@@ -1,0 +1,823 @@
+{
+    "schema":  "nic-vmnet-compatibility-review.v1",
+    "createdUtc":  "2026-10-18T01:25:12.2157796Z",
+    "status":  "VM_GATE_PASS_HOST_RETRY_READY",
+    "host":  "DESKTOP-5852FUT",
+    "branch":  "feat/smbios-boot-serial-probe",
+    "hostConfirmedCategories":  8,
+    "confirmedCategoriesTotal":  9,
+    "hostNicReplacementProven":  false,
+    "rootCause":  "The VMnet8 miniport rejected Set-NetAdapter -MacAddress with Windows System Error 87. The earlier e1000e/vmxnet3 VM gate did not exercise that miniport.",
+    "fix":  "The host run now uses the VM-tested per-device REG_SZ NetworkAddress setting plus exact adapter restart. It requires a separately pinned VMnet-inclusive 84-observation capture and the tested VMware driver hash before mutation. Existing typed journal rollback remains independent of the new capture.",
+    "priorHostFailure":  {
+                             "runDirectory":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T003613346Z.6dba8117ecf8445e8f61e3ecef3406f3",
+                             "status":  "FAILED_BUT_RESTORED",
+                             "error":  {
+                                           "exceptionType":  "Microsoft.Management.Infrastructure.CimException",
+                                           "exception":  "Microsoft.Management.Infrastructure.CimException: Requested operation not supported on adapter \u0027VMware Network Adapter VMnet8\u0027\r\n   at Microsoft.Management.Infrastructure.Internal.Operations.CimAsyncObserverProxyBase`1.ProcessNativeCallback(OperationCallbackProcessingContext callbackProcessingContext, T currentItem, Boolean moreResults, MiResult operationResult, String errorMessage, InstanceHandle errorDetailsHandle)",
+                                           "fullyQualifiedErrorId":  "Windows System Error 87,Set-NetAdapter",
+                                           "category":  "InvalidArgument"
+                                       },
+                             "replacementReadbackPresent":  false,
+                             "restoredAdapterCount":  4,
+                             "restoreErrors":  [
+
+                                               ],
+                             "independentPlatformComparisonPassed":  true
+                         },
+    "vm":  {
+               "status":  "PASS",
+               "adapters":  4,
+               "readers":  7,
+               "states":  3,
+               "observations":  84,
+               "independentRawObservations":  84,
+               "negativeCases":  3,
+               "memoryMiB":  4096,
+               "vcpus":  2,
+               "network":  "Isolated/disconnected external adapters",
+               "scope":  "Two VMnet 25.0.0.1 miniports plus two vmxnet3 adapters carrying the physical-host locked value pairs. The physical Intel AX201 and Realtek hardware have not been tested by this VM gate.",
+               "readersTested":  [
+                                     "GetAdaptersAddresses",
+                                     "GetAdaptersInfo",
+                                     "GetIfTable2",
+                                     "Get-NetAdapter.MacAddress",
+                                     "MSFT_NetAdapter.NetworkAddresses",
+                                     "OID_802_3_CURRENT_ADDRESS",
+                                     "Win32_NetworkAdapter.MACAddress"
+                                 ],
+               "roundTrips":  [
+                                  {
+                                      "label":  "VMnet8",
+                                      "pnpDeviceId":  "ROOT\\NET\\0001",
+                                      "interfaceGuid":  "3B5C2E97-0C80-4694-9DE0-ABDD97CFDE44",
+                                      "original":  "00:50:56:C0:00:08",
+                                      "replacement":  "02:90:10:20:30:40",
+                                      "readerStates":  {
+                                                           "original":  [
+                                                                            {
+                                                                                "reader":  "OID_802_3_CURRENT_ADDRESS",
+                                                                                "expected":  "00:50:56:C0:00:08",
+                                                                                "observed":  "00:50:56:C0:00:08",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetAdaptersAddresses",
+                                                                                "expected":  "00:50:56:C0:00:08",
+                                                                                "observed":  "00:50:56:C0:00:08",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetAdaptersInfo",
+                                                                                "expected":  "00:50:56:C0:00:08",
+                                                                                "observed":  "00:50:56:C0:00:08",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetIfTable2",
+                                                                                "expected":  "00:50:56:C0:00:08",
+                                                                                "observed":  "00:50:56:C0:00:08",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "Win32_NetworkAdapter.MACAddress",
+                                                                                "expected":  "00:50:56:C0:00:08",
+                                                                                "observed":  "00:50:56:C0:00:08",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "MSFT_NetAdapter.NetworkAddresses",
+                                                                                "expected":  "00:50:56:C0:00:08",
+                                                                                "observed":  "005056C00008",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "Get-NetAdapter.MacAddress",
+                                                                                "expected":  "00:50:56:C0:00:08",
+                                                                                "observed":  "00-50-56-C0-00-08",
+                                                                                "pass":  true
+                                                                            }
+                                                                        ],
+                                                           "filteredActive":  [
+                                                                                  {
+                                                                                      "reader":  "OID_802_3_CURRENT_ADDRESS",
+                                                                                      "expected":  "02:90:10:20:30:40",
+                                                                                      "observed":  "02:90:10:20:30:40",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "GetAdaptersAddresses",
+                                                                                      "expected":  "02:90:10:20:30:40",
+                                                                                      "observed":  "02:90:10:20:30:40",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "GetAdaptersInfo",
+                                                                                      "expected":  "02:90:10:20:30:40",
+                                                                                      "observed":  "02:90:10:20:30:40",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "GetIfTable2",
+                                                                                      "expected":  "02:90:10:20:30:40",
+                                                                                      "observed":  "02:90:10:20:30:40",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "Win32_NetworkAdapter.MACAddress",
+                                                                                      "expected":  "02:90:10:20:30:40",
+                                                                                      "observed":  "02:90:10:20:30:40",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "MSFT_NetAdapter.NetworkAddresses",
+                                                                                      "expected":  "02:90:10:20:30:40",
+                                                                                      "observed":  "029010203040",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "Get-NetAdapter.MacAddress",
+                                                                                      "expected":  "02:90:10:20:30:40",
+                                                                                      "observed":  "02-90-10-20-30-40",
+                                                                                      "pass":  true
+                                                                                  }
+                                                                              ],
+                                                           "restored":  [
+                                                                            {
+                                                                                "reader":  "OID_802_3_CURRENT_ADDRESS",
+                                                                                "expected":  "00:50:56:C0:00:08",
+                                                                                "observed":  "00:50:56:C0:00:08",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetAdaptersAddresses",
+                                                                                "expected":  "00:50:56:C0:00:08",
+                                                                                "observed":  "00:50:56:C0:00:08",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetAdaptersInfo",
+                                                                                "expected":  "00:50:56:C0:00:08",
+                                                                                "observed":  "00:50:56:C0:00:08",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetIfTable2",
+                                                                                "expected":  "00:50:56:C0:00:08",
+                                                                                "observed":  "00:50:56:C0:00:08",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "Win32_NetworkAdapter.MACAddress",
+                                                                                "expected":  "00:50:56:C0:00:08",
+                                                                                "observed":  "00:50:56:C0:00:08",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "MSFT_NetAdapter.NetworkAddresses",
+                                                                                "expected":  "00:50:56:C0:00:08",
+                                                                                "observed":  "005056C00008",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "Get-NetAdapter.MacAddress",
+                                                                                "expected":  "00:50:56:C0:00:08",
+                                                                                "observed":  "00-50-56-C0-00-08",
+                                                                                "pass":  true
+                                                                            }
+                                                                        ]
+                                                       }
+                                  },
+                                  {
+                                      "label":  "VMnet1",
+                                      "pnpDeviceId":  "ROOT\\NET\\0000",
+                                      "interfaceGuid":  "1E30911A-3C57-4E14-8413-07244EFE66AE",
+                                      "original":  "00:50:56:C0:00:01",
+                                      "replacement":  "02:90:10:20:30:41",
+                                      "readerStates":  {
+                                                           "original":  [
+                                                                            {
+                                                                                "reader":  "OID_802_3_CURRENT_ADDRESS",
+                                                                                "expected":  "00:50:56:C0:00:01",
+                                                                                "observed":  "00:50:56:C0:00:01",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetAdaptersAddresses",
+                                                                                "expected":  "00:50:56:C0:00:01",
+                                                                                "observed":  "00:50:56:C0:00:01",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetAdaptersInfo",
+                                                                                "expected":  "00:50:56:C0:00:01",
+                                                                                "observed":  "00:50:56:C0:00:01",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetIfTable2",
+                                                                                "expected":  "00:50:56:C0:00:01",
+                                                                                "observed":  "00:50:56:C0:00:01",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "Win32_NetworkAdapter.MACAddress",
+                                                                                "expected":  "00:50:56:C0:00:01",
+                                                                                "observed":  "00:50:56:C0:00:01",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "MSFT_NetAdapter.NetworkAddresses",
+                                                                                "expected":  "00:50:56:C0:00:01",
+                                                                                "observed":  "005056C00001",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "Get-NetAdapter.MacAddress",
+                                                                                "expected":  "00:50:56:C0:00:01",
+                                                                                "observed":  "00-50-56-C0-00-01",
+                                                                                "pass":  true
+                                                                            }
+                                                                        ],
+                                                           "filteredActive":  [
+                                                                                  {
+                                                                                      "reader":  "OID_802_3_CURRENT_ADDRESS",
+                                                                                      "expected":  "02:90:10:20:30:41",
+                                                                                      "observed":  "02:90:10:20:30:41",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "GetAdaptersAddresses",
+                                                                                      "expected":  "02:90:10:20:30:41",
+                                                                                      "observed":  "02:90:10:20:30:41",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "GetAdaptersInfo",
+                                                                                      "expected":  "02:90:10:20:30:41",
+                                                                                      "observed":  "02:90:10:20:30:41",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "GetIfTable2",
+                                                                                      "expected":  "02:90:10:20:30:41",
+                                                                                      "observed":  "02:90:10:20:30:41",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "Win32_NetworkAdapter.MACAddress",
+                                                                                      "expected":  "02:90:10:20:30:41",
+                                                                                      "observed":  "02:90:10:20:30:41",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "MSFT_NetAdapter.NetworkAddresses",
+                                                                                      "expected":  "02:90:10:20:30:41",
+                                                                                      "observed":  "029010203041",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "Get-NetAdapter.MacAddress",
+                                                                                      "expected":  "02:90:10:20:30:41",
+                                                                                      "observed":  "02-90-10-20-30-41",
+                                                                                      "pass":  true
+                                                                                  }
+                                                                              ],
+                                                           "restored":  [
+                                                                            {
+                                                                                "reader":  "OID_802_3_CURRENT_ADDRESS",
+                                                                                "expected":  "00:50:56:C0:00:01",
+                                                                                "observed":  "00:50:56:C0:00:01",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetAdaptersAddresses",
+                                                                                "expected":  "00:50:56:C0:00:01",
+                                                                                "observed":  "00:50:56:C0:00:01",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetAdaptersInfo",
+                                                                                "expected":  "00:50:56:C0:00:01",
+                                                                                "observed":  "00:50:56:C0:00:01",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetIfTable2",
+                                                                                "expected":  "00:50:56:C0:00:01",
+                                                                                "observed":  "00:50:56:C0:00:01",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "Win32_NetworkAdapter.MACAddress",
+                                                                                "expected":  "00:50:56:C0:00:01",
+                                                                                "observed":  "00:50:56:C0:00:01",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "MSFT_NetAdapter.NetworkAddresses",
+                                                                                "expected":  "00:50:56:C0:00:01",
+                                                                                "observed":  "005056C00001",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "Get-NetAdapter.MacAddress",
+                                                                                "expected":  "00:50:56:C0:00:01",
+                                                                                "observed":  "00-50-56-C0-00-01",
+                                                                                "pass":  true
+                                                                            }
+                                                                        ]
+                                                       }
+                                  },
+                                  {
+                                      "label":  "vmxnet3-locked-target-42",
+                                      "pnpDeviceId":  "PCI\\VEN_15AD\u0026DEV_07B0\u0026SUBSYS_07B015AD\u0026REV_01\\C4BDE5FFFF3206D100",
+                                      "interfaceGuid":  "04229F48-C136-4CE7-B937-FDA284D2E7E6",
+                                      "original":  "C4:BD:E5:32:06:D1",
+                                      "replacement":  "02:90:10:20:30:42",
+                                      "readerStates":  {
+                                                           "original":  [
+                                                                            {
+                                                                                "reader":  "OID_802_3_CURRENT_ADDRESS",
+                                                                                "expected":  "C4:BD:E5:32:06:D1",
+                                                                                "observed":  "C4:BD:E5:32:06:D1",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetAdaptersAddresses",
+                                                                                "expected":  "C4:BD:E5:32:06:D1",
+                                                                                "observed":  "C4:BD:E5:32:06:D1",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetAdaptersInfo",
+                                                                                "expected":  "C4:BD:E5:32:06:D1",
+                                                                                "observed":  "C4:BD:E5:32:06:D1",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetIfTable2",
+                                                                                "expected":  "C4:BD:E5:32:06:D1",
+                                                                                "observed":  "C4:BD:E5:32:06:D1",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "Win32_NetworkAdapter.MACAddress",
+                                                                                "expected":  "C4:BD:E5:32:06:D1",
+                                                                                "observed":  "C4:BD:E5:32:06:D1",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "MSFT_NetAdapter.NetworkAddresses",
+                                                                                "expected":  "C4:BD:E5:32:06:D1",
+                                                                                "observed":  "C4BDE53206D1",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "Get-NetAdapter.MacAddress",
+                                                                                "expected":  "C4:BD:E5:32:06:D1",
+                                                                                "observed":  "C4-BD-E5-32-06-D1",
+                                                                                "pass":  true
+                                                                            }
+                                                                        ],
+                                                           "filteredActive":  [
+                                                                                  {
+                                                                                      "reader":  "OID_802_3_CURRENT_ADDRESS",
+                                                                                      "expected":  "02:90:10:20:30:42",
+                                                                                      "observed":  "02:90:10:20:30:42",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "GetAdaptersAddresses",
+                                                                                      "expected":  "02:90:10:20:30:42",
+                                                                                      "observed":  "02:90:10:20:30:42",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "GetAdaptersInfo",
+                                                                                      "expected":  "02:90:10:20:30:42",
+                                                                                      "observed":  "02:90:10:20:30:42",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "GetIfTable2",
+                                                                                      "expected":  "02:90:10:20:30:42",
+                                                                                      "observed":  "02:90:10:20:30:42",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "Win32_NetworkAdapter.MACAddress",
+                                                                                      "expected":  "02:90:10:20:30:42",
+                                                                                      "observed":  "02:90:10:20:30:42",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "MSFT_NetAdapter.NetworkAddresses",
+                                                                                      "expected":  "02:90:10:20:30:42",
+                                                                                      "observed":  "029010203042",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "Get-NetAdapter.MacAddress",
+                                                                                      "expected":  "02:90:10:20:30:42",
+                                                                                      "observed":  "02-90-10-20-30-42",
+                                                                                      "pass":  true
+                                                                                  }
+                                                                              ],
+                                                           "restored":  [
+                                                                            {
+                                                                                "reader":  "OID_802_3_CURRENT_ADDRESS",
+                                                                                "expected":  "C4:BD:E5:32:06:D1",
+                                                                                "observed":  "C4:BD:E5:32:06:D1",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetAdaptersAddresses",
+                                                                                "expected":  "C4:BD:E5:32:06:D1",
+                                                                                "observed":  "C4:BD:E5:32:06:D1",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetAdaptersInfo",
+                                                                                "expected":  "C4:BD:E5:32:06:D1",
+                                                                                "observed":  "C4:BD:E5:32:06:D1",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetIfTable2",
+                                                                                "expected":  "C4:BD:E5:32:06:D1",
+                                                                                "observed":  "C4:BD:E5:32:06:D1",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "Win32_NetworkAdapter.MACAddress",
+                                                                                "expected":  "C4:BD:E5:32:06:D1",
+                                                                                "observed":  "C4:BD:E5:32:06:D1",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "MSFT_NetAdapter.NetworkAddresses",
+                                                                                "expected":  "C4:BD:E5:32:06:D1",
+                                                                                "observed":  "C4BDE53206D1",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "Get-NetAdapter.MacAddress",
+                                                                                "expected":  "C4:BD:E5:32:06:D1",
+                                                                                "observed":  "C4-BD-E5-32-06-D1",
+                                                                                "pass":  true
+                                                                            }
+                                                                        ]
+                                                       }
+                                  },
+                                  {
+                                      "label":  "vmxnet3-locked-target-43",
+                                      "pnpDeviceId":  "PCI\\VEN_15AD\u0026DEV_07B0\u0026SUBSYS_07B015AD\u0026REV_01\\D8BBC1FFFFD8572000",
+                                      "interfaceGuid":  "0A4AFD00-8E1D-4AA4-A45C-65E1EC9013AE",
+                                      "original":  "D8:BB:C1:D8:57:20",
+                                      "replacement":  "02:90:10:20:30:43",
+                                      "readerStates":  {
+                                                           "original":  [
+                                                                            {
+                                                                                "reader":  "OID_802_3_CURRENT_ADDRESS",
+                                                                                "expected":  "D8:BB:C1:D8:57:20",
+                                                                                "observed":  "D8:BB:C1:D8:57:20",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetAdaptersAddresses",
+                                                                                "expected":  "D8:BB:C1:D8:57:20",
+                                                                                "observed":  "D8:BB:C1:D8:57:20",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetAdaptersInfo",
+                                                                                "expected":  "D8:BB:C1:D8:57:20",
+                                                                                "observed":  "D8:BB:C1:D8:57:20",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetIfTable2",
+                                                                                "expected":  "D8:BB:C1:D8:57:20",
+                                                                                "observed":  "D8:BB:C1:D8:57:20",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "Win32_NetworkAdapter.MACAddress",
+                                                                                "expected":  "D8:BB:C1:D8:57:20",
+                                                                                "observed":  "D8:BB:C1:D8:57:20",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "MSFT_NetAdapter.NetworkAddresses",
+                                                                                "expected":  "D8:BB:C1:D8:57:20",
+                                                                                "observed":  "D8BBC1D85720",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "Get-NetAdapter.MacAddress",
+                                                                                "expected":  "D8:BB:C1:D8:57:20",
+                                                                                "observed":  "D8-BB-C1-D8-57-20",
+                                                                                "pass":  true
+                                                                            }
+                                                                        ],
+                                                           "filteredActive":  [
+                                                                                  {
+                                                                                      "reader":  "OID_802_3_CURRENT_ADDRESS",
+                                                                                      "expected":  "02:90:10:20:30:43",
+                                                                                      "observed":  "02:90:10:20:30:43",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "GetAdaptersAddresses",
+                                                                                      "expected":  "02:90:10:20:30:43",
+                                                                                      "observed":  "02:90:10:20:30:43",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "GetAdaptersInfo",
+                                                                                      "expected":  "02:90:10:20:30:43",
+                                                                                      "observed":  "02:90:10:20:30:43",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "GetIfTable2",
+                                                                                      "expected":  "02:90:10:20:30:43",
+                                                                                      "observed":  "02:90:10:20:30:43",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "Win32_NetworkAdapter.MACAddress",
+                                                                                      "expected":  "02:90:10:20:30:43",
+                                                                                      "observed":  "02:90:10:20:30:43",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "MSFT_NetAdapter.NetworkAddresses",
+                                                                                      "expected":  "02:90:10:20:30:43",
+                                                                                      "observed":  "029010203043",
+                                                                                      "pass":  true
+                                                                                  },
+                                                                                  {
+                                                                                      "reader":  "Get-NetAdapter.MacAddress",
+                                                                                      "expected":  "02:90:10:20:30:43",
+                                                                                      "observed":  "02-90-10-20-30-43",
+                                                                                      "pass":  true
+                                                                                  }
+                                                                              ],
+                                                           "restored":  [
+                                                                            {
+                                                                                "reader":  "OID_802_3_CURRENT_ADDRESS",
+                                                                                "expected":  "D8:BB:C1:D8:57:20",
+                                                                                "observed":  "D8:BB:C1:D8:57:20",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetAdaptersAddresses",
+                                                                                "expected":  "D8:BB:C1:D8:57:20",
+                                                                                "observed":  "D8:BB:C1:D8:57:20",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetAdaptersInfo",
+                                                                                "expected":  "D8:BB:C1:D8:57:20",
+                                                                                "observed":  "D8:BB:C1:D8:57:20",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "GetIfTable2",
+                                                                                "expected":  "D8:BB:C1:D8:57:20",
+                                                                                "observed":  "D8:BB:C1:D8:57:20",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "Win32_NetworkAdapter.MACAddress",
+                                                                                "expected":  "D8:BB:C1:D8:57:20",
+                                                                                "observed":  "D8:BB:C1:D8:57:20",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "MSFT_NetAdapter.NetworkAddresses",
+                                                                                "expected":  "D8:BB:C1:D8:57:20",
+                                                                                "observed":  "D8BBC1D85720",
+                                                                                "pass":  true
+                                                                            },
+                                                                            {
+                                                                                "reader":  "Get-NetAdapter.MacAddress",
+                                                                                "expected":  "D8:BB:C1:D8:57:20",
+                                                                                "observed":  "D8-BB-C1-D8-57-20",
+                                                                                "pass":  true
+                                                                            }
+                                                                        ]
+                                                       }
+                                  }
+                              ],
+               "capture":  {
+                               "path":  "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261018-011305-e1ffeb9e48/evidence/kernel-metadata.json",
+                               "bytes":  576385,
+                               "sha256":  "067674BBA247E1AD31FCA99826D4F3A0A67655DF989E1D129B8493117C518695"
+                           },
+               "recoveryStatus":  "RECOVERED_AND_POWERED_OFF",
+               "cloneVmxSha256":  "BD68D9110A26EC274E0D9AD7FAADFF94F93DEAD53DEE31F4B732F76D660B31F3",
+               "protectedSourceVmxSha256":  "537BBE6D91DFA716D698A5E8301F5C2C59FC98CC65308BC905A9938A3129F0C9",
+               "runningVms":  0
+           },
+    "tests":  [
+                  {
+                      "suite":  "NIC journal",
+                      "passed":  191,
+                      "path":  "spoof-handoff/reports/nic-vmnet-compatibility-20261018/nic-journal-tests.txt"
+                  },
+                  {
+                      "suite":  "Adapter helpers",
+                      "passed":  53,
+                      "path":  "spoof-handoff/reports/nic-vmnet-compatibility-20261018/nic-helper-tests.txt"
+                  },
+                  {
+                      "suite":  "SMBIOS workflow and snapshot",
+                      "passed":  46,
+                      "paths":  [
+                                    "spoof-handoff/reports/nic-vmnet-compatibility-20261018/smbios-workflow-tests.txt",
+                                    "spoof-handoff/reports/nic-vmnet-compatibility-20261018/smbios-snapshot-tests.txt"
+                                ]
+                  },
+                  {
+                      "suite":  "Storage model",
+                      "passed":  126,
+                      "path":  "spoof-handoff/reports/nic-vmnet-compatibility-20261018/storage-model-tests.txt"
+                  },
+                  {
+                      "suite":  "Mailbox authentication/evidence",
+                      "passed":  3,
+                      "path":  "spoof-handoff/reports/nic-vmnet-compatibility-20261018/mailbox-response-tests.txt"
+                  },
+                  {
+                      "suite":  "Registry apply, capture and wiring",
+                      "passed":  32,
+                      "path":  "spoof-handoff/reports/nic-vmnet-compatibility-20261018/host-registry-apply-tests.20261018T012014858Z.fcdf558564ee4e1e8fccbb70503a4a2c.json"
+                  },
+                  {
+                      "suite":  "Host platform snapshots",
+                      "passed":  8,
+                      "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/host-snapshot-tests.20261018T012009397Z.62cc9300958b4eea89cab19dde6a255f.json"
+                  },
+                  {
+                      "suite":  "Previous raw gate on final source",
+                      "passedObservations":  112,
+                      "negativeCases":  3,
+                      "path":  "spoof-handoff/reports/nic-vmnet-compatibility-20261018/final-raw-gate-9b66-tests.txt"
+                  },
+                  {
+                      "suite":  "Prebuilt CTest host cases",
+                      "passed":  40,
+                      "groups":  {
+                                     "filter":  2,
+                                     "smbios":  2,
+                                     "nativeIo":  1,
+                                     "identifier":  8,
+                                     "loaderPure":  27
+                                 },
+                      "pathPrefix":  "spoof-handoff/reports/nic-vmnet-compatibility-20261018/ctest-"
+                  }
+              ],
+    "preservedFailures":  [
+                              {
+                                  "description":  "Initial full loader selection had one Not Run registration: ib-nested-e2e-service.exe was not built. All 27 built loader tests passed; the separate scoped run excludes that registration.",
+                                  "path":  "spoof-handoff/reports/nic-vmnet-compatibility-20261018/ctest-loader.txt"
+                              },
+                              {
+                                  "description":  "One old snapshot fixture initially lacked the new preflight dependencies; seven cases passed and one failed. The fixture was updated, retaining the original platform failure and zero-mutation assertions; final 8/8 passes.",
+                                  "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/host-snapshot-tests.20261018T011822703Z.4dca958178134e31a21b31d20c436456.json"
+                              },
+                              {
+                                  "description":  "VM-only harness failures before address mutation were retained. They included missing Action, array/automatic-variable handling and a plain-reader identity join. Actual hardware verdicts use the sealed successful captures, not these harness failures.",
+                                  "path":  "spoof-handoff/reports/nic-vmnet-miniport-20261018/vmnet-miniport-20261018T004517Z.3b91e91f"
+                              }
+                          ],
+    "nextCommand":  "powershell -NoProfile -ExecutionPolicy Bypass -File .\\spoof-handoff\\commands\\nic-host-test.ps1 Run",
+    "prerequisites":  [
+                          "Elevated Windows PowerShell at repository root",
+                          "Secure Boot ON",
+                          "Test-signing OFF",
+                          "Test certificate absent from LocalMachine Root and TrustedPublisher",
+                          "Project NIC filter absent"
+                      ],
+    "expectedHostActions":  "Temporary NetworkAddress settings and adapter restarts; automatic restoration. No PC reboot, driver install, certificate import, BCD, ESP or firmware mutation.",
+    "hostMutationExecutedByThisFix":  false,
+    "sourceFiles":  [
+                        {
+                            "path":  ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/docs/NIC_VM_VALIDATION.md",
+                            "bytes":  16141,
+                            "sha256":  "12E775A45BDF6D0845C3384A693EBD87AD6683D73B5FB5881B09B7C70394E476",
+                            "repositoryPath":  "spoof-handoff/docs/NIC_VM_VALIDATION.md"
+                        },
+                        {
+                            "path":  ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/device_vm/invoke-mailbox.ps1",
+                            "bytes":  43860,
+                            "sha256":  "EF0B85CD03D93CA4F1293BF8F8580DE5F6D66DCED93D24E969BA57C845130CD2",
+                            "repositoryPath":  "spoof-handoff/tools/device_vm/invoke-mailbox.ps1"
+                        },
+                        {
+                            "path":  ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/device_vm/tests-mailbox-response.ps1",
+                            "bytes":  11458,
+                            "sha256":  "56FF65F54DCCCE6FD9A2679B57DD21470AAE615B634D0E0256090A7695804912",
+                            "repositoryPath":  "spoof-handoff/tools/device_vm/tests-mailbox-response.ps1"
+                        },
+                        {
+                            "path":  ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/host-address-roundtrip.ps1",
+                            "bytes":  146887,
+                            "sha256":  "9B66BB8E0AC09C24C9DA03CF49E3BDA2E31647B9FF87D587CC29BE6C48575285",
+                            "repositoryPath":  "spoof-handoff/tools/nic_vm/host-address-roundtrip.ps1"
+                        },
+                        {
+                            "path":  ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/host-registry-apply-tests.ps1",
+                            "bytes":  30881,
+                            "sha256":  "B6E056EBC4944A7D95A10483B019710CB405F7C57504426E77927529CFFE4A1F",
+                            "repositoryPath":  "spoof-handoff/tools/nic_vm/host-registry-apply-tests.ps1"
+                        },
+                        {
+                            "path":  ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/host-snapshot-tests.ps1",
+                            "bytes":  37721,
+                            "sha256":  "6DA317D081A0CEA0ADBF70451F8DA6F5295EA8BA1E1A35B93E658BF8827CC92A",
+                            "repositoryPath":  "spoof-handoff/tools/nic_vm/host-snapshot-tests.ps1"
+                        },
+                        {
+                            "path":  ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/vmnet/README.md",
+                            "bytes":  3501,
+                            "sha256":  "992916AD1FBCC7AC1B139CEDFA581AEC9D346CBCAD3CDAC3FC6B4C8D597D32EE",
+                            "repositoryPath":  "spoof-handoff/tools/nic_vm/vmnet/README.md"
+                        },
+                        {
+                            "path":  ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/vmnet/vmnet-initialize-probe.template.ps1",
+                            "bytes":  21636,
+                            "sha256":  "F1C07550A5D9ED02846EA002F96CC9197E11285F913D203145953EAA3C561E4C",
+                            "repositoryPath":  "spoof-handoff/tools/nic_vm/vmnet/vmnet-initialize-probe.template.ps1"
+                        },
+                        {
+                            "path":  ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/vmnet/vmnet-four-target-roundtrip.template.ps1",
+                            "bytes":  26129,
+                            "sha256":  "6BCA2AAE29AEF3EC31B7EE6C1C6BCDB3DCD7652E9541D88CD95577741DF63F84",
+                            "repositoryPath":  "spoof-handoff/tools/nic_vm/vmnet/vmnet-four-target-roundtrip.template.ps1"
+                        },
+                        {
+                            "path":  ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/vmnet/validate-four-target-roundtrip.ps1",
+                            "bytes":  12376,
+                            "sha256":  "A77D106129D871294017B4205BF4F6BB14A59C9D404392CB62E33312C1A04E4C",
+                            "repositoryPath":  "spoof-handoff/tools/nic_vm/vmnet/validate-four-target-roundtrip.ps1"
+                        }
+                    ],
+    "keyEvidence":  [
+                        {
+                            "path":  "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261018-011305-e1ffeb9e48/evidence/kernel-metadata.json",
+                            "bytes":  576385,
+                            "sha256":  "067674BBA247E1AD31FCA99826D4F3A0A67655DF989E1D129B8493117C518695"
+                        },
+                        {
+                            "path":  "spoof-handoff/reports/nic-snapshot-fix-20261018/host-snapshot-tests.20261018T012009397Z.62cc9300958b4eea89cab19dde6a255f.json",
+                            "bytes":  4635,
+                            "sha256":  "B16028D363736C9B5EE2664F83D1846DE5E36436F76015E5AAF3AA29AE4890EA"
+                        },
+                        {
+                            "path":  "spoof-handoff/reports/nic-vmnet-compatibility-20261018/host-registry-apply-tests.20261018T012014858Z.fcdf558564ee4e1e8fccbb70503a4a2c.json",
+                            "bytes":  13924,
+                            "sha256":  "00EF99897EE83AF965D7E2D455A11A627005EABC286511ECCE5138164E64FB51"
+                        },
+                        {
+                            "path":  "spoof-handoff/reports/nic-vmnet-miniport-20261018/vmnet-miniport-20261018T004517Z.3b91e91f/vm-recovery.20261018T0115Z.json",
+                            "bytes":  4322,
+                            "sha256":  "A2C5E205096A6D239CB1EB5CAB142208F0480009EB193D82ED1361275715E62E"
+                        },
+                        {
+                            "path":  "spoof-handoff/reports/nic-vmnet-miniport-20261018/vmnet-miniport-20261018T004517Z.3b91e91f/independent-validation/20261018T011552924Z.a02b0f0b/roundtrip-validation.json",
+                            "bytes":  57717,
+                            "sha256":  "89BD0DF8E306A74A254D6019F820D050B78E38FDC52E220139BE1E6060EBC14E"
+                        },
+                        {
+                            "path":  "spoof-handoff/reports/nic-vmnet-miniport-20261018/vmnet-miniport-20261018T004517Z.3b91e91f/preflight-vmx-path-correction.json",
+                            "bytes":  1341,
+                            "sha256":  "A331C423ED7F940025E4B827640ECF7975A92525EA9FFF03B11040FA33811919"
+                        },
+                        {
+                            "path":  "spoof-handoff/reports/nic-vmnet-compatibility-20261018/host-restored-verification.json",
+                            "bytes":  17674,
+                            "sha256":  "7A597EEA884BE1CEFFF2BE35F9C03377689F3B7D51F93F29EA47C546F4DB8B42"
+                        },
+                        {
+                            "path":  "spoof-handoff/reports/nic-vmnet-compatibility-20261018/host-driver-capabilities.json",
+                            "bytes":  10273,
+                            "sha256":  "E9D777CB1FBCBA4E4203152AFA916947730AFDF4AC92B3E01C7AC6D058BA88A8"
+                        },
+                        {
+                            "path":  "spoof-handoff/reports/nic-vmnet-compatibility-20261018/intel-networkaddress-lead.json",
+                            "bytes":  5521,
+                            "sha256":  "AEB51FB4B3BFC663A80584B64AB77419B354712F140BFE25998D880B6B4C2BE1"
+                        },
+                        {
+                            "path":  "spoof-handoff/reports/nic-vmnet-compatibility-20261018/tested-function-parity.json",
+                            "bytes":  989,
+                            "sha256":  "A08837917553545A5446FBF4F3EF4C4FFB5CB72282B812B89E0D2AE565306C74"
+                        }
+                    ],
+    "hashManifest":  "spoof-handoff/reports/review-20261017/nic-vmnet-compatibility-SHA256SUMS.txt",
+    "hashScope":  "Reviewed local file bytes. Manifest lists source and durable local evidence, excluding runtime temporary directories. Generated payloads, VM disks, keys and credentials are not committed."
+}

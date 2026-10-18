@@ -22,6 +22,9 @@ $script:ExpectedHostUuid = 'C88B4631-C88C-871B-A6D7-D8BBC1D85720'
 $script:ExpectedBaseboardManufacturer = 'Micro-Star International Co., Ltd.'
 $script:ExpectedSecureBootVariableGuid = '8be4df61-93ca-11d2-aa0d-00e098032b8c'
 $script:ExpectedNativeExeSha256 = 'BF553F39E4E7024C75272C24215D995858627AEDD5E946A4B1289A8033DA1642'
+$script:ExpectedRegistryVmCaptureRelativePath = 'spoof-handoff\reports\nic-vm-20261017\uefi-windows-probe-20261018-011305-e1ffeb9e48\evidence\kernel-metadata.json'
+$script:ExpectedRegistryVmCaptureSha256 = '067674BBA247E1AD31FCA99826D4F3A0A67655DF989E1D129B8493117C518695'
+$script:ExpectedVmnetAdapterDriverSha256 = '900DAB67810607208D37C7EF441D607D11D294650183475AF50158FAECEC7CCE'
 $script:ExpectedLockedTsvSha256 = 'F628CB25D18F549A877C1529A82986B524BFD3D8B9801A776405F969FC4F42C3'
 $script:ExpectedCertificateThumbprint = '59DBD6780CFE60C020B3F4511211FEC22C397B85'
 $script:ExpectedVmGateSha256 = '118E71B245CF1FF163E1E0F6DB1AB5C11575CE6B59A08FA67975135FD15CDE83'
@@ -457,6 +460,343 @@ function Get-HostVmRawCaptureValues {
     }
     if ($seenEvaluations.Count -ne $rawValues.Count) { throw ('VM raw and evaluation identities differ: phase=' + $PhaseName + ' raw=' + $rawValues.Count + ' evaluations=' + $seenEvaluations.Count) }
     return [ordered]@{ phase = $PhaseName; path = $path; values = $rawValues }
+}
+
+function Assert-HostRegistryVmCapture {
+    param(
+        [Parameter(Mandatory = $true)][string]$CapturePath,
+        [Parameter(Mandatory = $true)][string]$ExpectedCaptureSha256,
+        [Parameter(Mandatory = $true)][object[]]$LockedBindings,
+        [Parameter(Mandatory = $true)][string]$RepositoryRoot
+    )
+
+    if ($ExpectedCaptureSha256 -notmatch '\A[0-9A-Fa-f]{64}\z') { throw 'Expected VM capture SHA-256 is malformed.' }
+    $reportsRoot = Join-Path ([IO.Path]::GetFullPath($RepositoryRoot)) 'spoof-handoff\reports'
+    $resolvedCapturePath = Assert-PathWithinRoot $CapturePath $reportsRoot 'VM registry capture'
+    if (-not (Test-Path -LiteralPath $resolvedCapturePath -PathType Leaf)) { throw ('VM registry capture is missing: ' + $resolvedCapturePath) }
+    $captureHash = Get-HostSha256 $resolvedCapturePath
+    if ($captureHash -cne $ExpectedCaptureSha256.ToUpperInvariant()) {
+        throw ('VM registry capture SHA-256 mismatch: expected=' + $ExpectedCaptureSha256.ToUpperInvariant() + ' actual=' + $captureHash)
+    }
+    $capture = Get-Content -LiteralPath $resolvedCapturePath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+    if ((Get-HostProperty $capture 'schema') -cne 'vmnet-four-target-address-roundtrip.v1') { throw ('VM registry capture schema is invalid: actual=' + [string](Get-HostProperty $capture 'schema')) }
+    $vmIdentity = Get-HostProperty $capture 'vmIdentity'
+    $manufacturer = [string](Get-HostProperty $vmIdentity 'manufacturer')
+    if ($manufacturer -cne 'VMware, Inc.') { throw ('VM registry capture manufacturer mismatch: expected=VMware, Inc. actual=' + $manufacturer) }
+    $identityUuid = ConvertTo-HostVmGuidKey (Get-HostProperty $vmIdentity 'uuid') 'VM registry capture VM identity UUID'
+    if ($identityUuid -cne 'D7C14D56-24D1-9894-8906-C0CE95A07790') { throw ('VM registry capture identity UUID mismatch: expected=D7C14D56-24D1-9894-8906-C0CE95A07790 actual=' + $identityUuid) }
+    $journal = Get-HostProperty $capture 'stateJournal'
+    $vmUuid = ConvertTo-HostVmGuidKey (Get-HostProperty $journal 'vmUuid') 'VM registry capture state journal UUID'
+    if ($vmUuid -cne 'D7C14D56-24D1-9894-8906-C0CE95A07790') { throw ('VM registry capture UUID mismatch: expected=D7C14D56-24D1-9894-8906-C0CE95A07790 actual=' + $vmUuid) }
+    if ($identityUuid -cne $vmUuid) { throw ('VM registry capture identity and state journal UUID values differ: identity=' + $identityUuid + ' journal=' + $vmUuid) }
+    $topLevelUuid = Get-HostProperty $capture 'vmUuid'
+    if ($null -ne $topLevelUuid -and -not [string]::IsNullOrWhiteSpace([string]$topLevelUuid) -and
+        (ConvertTo-HostVmGuidKey $topLevelUuid 'VM registry capture top-level UUID') -cne $vmUuid) {
+        throw ('VM registry capture top-level and journal UUID values differ: journal=' + $vmUuid + ' topLevel=' + [string]$topLevelUuid)
+    }
+    if (-not [bool](Get-HostProperty $capture 'restored')) { throw 'VM registry capture does not record a completed restore.' }
+    $failures = @(Get-HostProperty $capture 'failures')
+    if ($failures.Count -ne 0) { throw ('VM registry capture contains failure records: count=' + $failures.Count) }
+
+    if ($LockedBindings.Count -ne 4) { throw ('Exactly four locked NIC bindings are required; actual=' + $LockedBindings.Count) }
+    $lockedPairs = @{}
+    foreach ($binding in $LockedBindings) {
+        $original = ConvertTo-HostMacKey (Get-HostProperty $binding 'original')
+        $replacement = ConvertTo-HostMacKey (Get-HostProperty $binding 'replacement')
+        $pair = $original + '|' + $replacement
+        if ($null -eq $original -or $null -eq $replacement -or $lockedPairs.ContainsKey($pair)) { throw 'Locked NIC map has malformed or duplicate original/replacement pairs.' }
+        $lockedPairs[$pair] = $true
+    }
+    if ($lockedPairs.Count -ne 4) { throw ('Locked NIC map does not contain four distinct value pairs; actual=' + $lockedPairs.Count) }
+
+    $targets = @(Get-HostProperty $capture 'targets')
+    if ($targets.Count -ne 4) { throw ('VM registry capture must contain exactly four targets; actual=' + $targets.Count) }
+    $targetByPnp = @{}
+    $targetByGuid = @{}
+    $targetPairs = @{}
+    foreach ($target in $targets) {
+        $pnp = [string](Get-HostProperty $target 'pnpDeviceId')
+        if ([string]::IsNullOrWhiteSpace($pnp) -or $pnp.Length -gt 260 -or $pnp -notmatch '\A[\x20-\x7e]+\z' -or $pnp.Contains('"') -or $pnp.Contains('%')) {
+            throw ('VM registry capture target has an invalid PnP identity: ' + $pnp)
+        }
+        $pnpKey = $pnp.ToUpperInvariant()
+        $guid = ConvertTo-HostVmGuidKey (Get-HostProperty $target 'interfaceGuid') ('VM target InterfaceGuid for ' + $pnp)
+        $original = ConvertTo-HostMacKey (Get-HostProperty $target 'original')
+        $replacement = ConvertTo-HostMacKey (Get-HostProperty $target 'replacement')
+        $pair = $original + '|' + $replacement
+        if ($null -eq $original -or $null -eq $replacement -or -not $lockedPairs.ContainsKey($pair)) {
+            throw ('VM registry capture target does not use an exact locked original/replacement pair: pnp=' + $pnp + ' original=' + [string](Get-HostProperty $target 'original') + ' replacement=' + [string](Get-HostProperty $target 'replacement'))
+        }
+        if ($targetByPnp.ContainsKey($pnpKey) -or $targetByGuid.ContainsKey($guid) -or $targetPairs.ContainsKey($pair)) {
+            throw ('VM registry capture target identity or locked value pair is duplicated: pnp=' + $pnp + ' guid=' + $guid + ' pair=' + $pair)
+        }
+        $targetByPnp[$pnpKey] = [ordered]@{ pnpDeviceId = $pnp; interfaceGuid = $guid; original = $original; replacement = $replacement; label = [string](Get-HostProperty $target 'label'); hardwareId = [string](Get-HostProperty $target 'hardwareId') }
+        $targetByGuid[$guid] = $pnpKey
+        $targetPairs[$pair] = $true
+    }
+    if ($targetPairs.Count -ne 4 -or $lockedPairs.Count -ne $targetPairs.Count) { throw 'VM target set does not cover each of the four locked value pairs exactly once.' }
+
+    $journalDevices = @(Get-HostProperty $journal 'devices')
+    if ($journalDevices.Count -ne 2) { throw ('VM state journal must contain exactly two owned VMnet devices; actual=' + $journalDevices.Count) }
+    $requiredVmnetDevices = [ordered]@{ '*VMnetAdapter1' = $true; '*VMnetAdapter8' = $true }
+    $seenVmnetDevices = @{}
+    $seenVmnetPnp = @{}
+    foreach ($device in $journalDevices) {
+        $hardwareId = [string](Get-HostProperty $device 'hardwareId')
+        $instanceId = [string](Get-HostProperty $device 'instanceId')
+        if (-not $requiredVmnetDevices.Contains($hardwareId) -or $seenVmnetDevices.ContainsKey($hardwareId)) {
+            throw ('VM state journal contains an unexpected or duplicate owned virtual adapter: hardwareId=' + $hardwareId)
+        }
+        $instanceKey = $instanceId.ToUpperInvariant()
+        if ([string]::IsNullOrWhiteSpace($instanceId) -or $seenVmnetPnp.ContainsKey($instanceKey) -or -not $targetByPnp.ContainsKey($instanceKey)) {
+            throw ('VM state journal virtual adapter instance ID is missing, duplicated, or absent from the exact target set: hardwareId=' + $hardwareId + ' instanceId=' + $instanceId)
+        }
+        if ($targetByPnp[$instanceKey].hardwareId -cne $hardwareId) {
+            throw ('VM state journal hardware ID differs from the exact target profile: instanceId=' + $instanceId + ' expected=' + $targetByPnp[$instanceKey].hardwareId + ' actual=' + $hardwareId)
+        }
+        $seenVmnetDevices[$hardwareId] = $true
+        $seenVmnetPnp[$instanceKey] = $true
+    }
+    if ($seenVmnetDevices.Count -ne 2 -or -not $seenVmnetDevices.ContainsKey('*VMnetAdapter1') -or -not $seenVmnetDevices.ContainsKey('*VMnetAdapter8')) {
+        throw 'VM state journal does not contain exactly VMnet1 and VMnet8 owned adapter records.'
+    }
+
+    $expectedHelperBundleSha256 = 'E7B1B841372B890C0D1638E6CCB11D41B5F257A64FBF491B3FEF811B29A212D8'
+    $helperBundleHash = [string](Get-HostProperty $capture 'productionHelperBundleSha256')
+    if ($helperBundleHash.ToUpperInvariant() -cne $expectedHelperBundleSha256) {
+        throw ('VM production helper bundle SHA-256 mismatch: expected=' + $expectedHelperBundleSha256 + ' actual=' + $helperBundleHash)
+    }
+    $nativeExeHash = [string](Get-HostProperty $capture 'nativeExeSha256')
+    if ($nativeExeHash.ToUpperInvariant() -cne $script:ExpectedNativeExeSha256) {
+        throw ('VM native reader SHA-256 mismatch: expected=' + $script:ExpectedNativeExeSha256 + ' actual=' + $nativeExeHash)
+    }
+
+    $phaseModes = [ordered]@{ original = 'Original'; filteredActive = 'Replacement'; restored = 'Original' }
+    $rawByPhase = [ordered]@{}
+    foreach ($phaseName in @('original', 'filteredActive', 'restored')) {
+        $phase = Get-HostProperty (Get-HostProperty $capture 'phases') $phaseName
+        if ($null -eq $phase) { throw ('VM registry capture is missing required phase: ' + $phaseName) }
+        if ([string](Get-HostProperty $phase 'mode') -cne $phaseModes[$phaseName]) {
+            throw ('VM registry capture phase mode mismatch: phase=' + $phaseName + ' expected=' + $phaseModes[$phaseName] + ' actual=' + [string](Get-HostProperty $phase 'mode'))
+        }
+        $nativeCapture = Get-HostProperty $phase 'nativeCapture'
+        if ($null -eq $nativeCapture -or [int](Get-HostProperty $nativeCapture 'exitCode') -ne 0) { throw ('VM registry native capture failed: phase=' + $phaseName + ' exitCode=' + [string](Get-HostProperty $nativeCapture 'exitCode')) }
+        $nativeData = Get-HostProperty $nativeCapture 'data'
+        $setup = Get-HostProperty $nativeData 'setupDiNdisLanClass'
+        if ($null -eq $setup -or -not [bool](Get-HostProperty $setup 'complete') -or [string](Get-HostProperty $setup 'enumerationErrorHex') -cne '0x00000000') {
+            throw ('VM registry SetupDi capture is incomplete or failed: phase=' + $phaseName + ' error=' + [string](Get-HostProperty $setup 'enumerationErrorHex'))
+        }
+        $allInterfaces = Get-HostVmRows $setup 'interfaces' ('VM SetupDi ' + $phaseName)
+        $interfacesByPnp = @{}
+        foreach ($interface in $allInterfaces) {
+            $interfacePnp = [string](Get-HostProperty $interface 'pnpDeviceId')
+            $interfaceKey = $interfacePnp.ToUpperInvariant()
+            if ($targetByPnp.ContainsKey($interfaceKey)) {
+                if ($interfacesByPnp.ContainsKey($interfaceKey)) { throw ('VM SetupDi target PnP identity is duplicated: phase=' + $phaseName + ' pnp=' + $interfacePnp) }
+                $interfacesByPnp[$interfaceKey] = $interface
+            }
+        }
+        if ($interfacesByPnp.Count -ne 4) { throw ('VM SetupDi capture does not contain every exact target once: phase=' + $phaseName + ' targets=' + $interfacesByPnp.Count) }
+        foreach ($pnpKey in $targetByPnp.Keys) {
+            $interface = $interfacesByPnp[$pnpKey]
+            $interfaceGuid = ConvertTo-HostVmGuidKey (Get-HostProperty $interface 'netCfgInstanceId') ('SetupDi NetCfgInstanceId for ' + [string]$targetByPnp[$pnpKey].pnpDeviceId)
+            if ($interfaceGuid -cne [string]$targetByPnp[$pnpKey].interfaceGuid) {
+                throw ('VM SetupDi GUID differs from target profile: phase=' + $phaseName + ' pnp=' + [string]$targetByPnp[$pnpKey].pnpDeviceId + ' expected=' + [string]$targetByPnp[$pnpKey].interfaceGuid + ' actual=' + $interfaceGuid)
+            }
+        }
+
+        $windowsSource = Get-HostProperty $phase 'windowsReads'
+        if ($null -eq $windowsSource) { throw ('VM registry Windows reads are missing: phase=' + $phaseName) }
+        $windowsRows = [ordered]@{}
+        foreach ($entryName in @('win32NetworkAdapter', 'msftNetAdapter', 'getNetAdapter')) {
+            $entries = Get-HostProperty $windowsSource $entryName
+            if ($null -eq $entries) { throw ('VM registry Windows reader array is missing: phase=' + $phaseName + ' reader=' + $entryName) }
+            $windowsRows[$entryName] = [ordered]@{ rows = @($entries); error = $null }
+        }
+        $mapperData = [ordered]@{
+            nativeCapture = [ordered]@{ exitCode = [int](Get-HostProperty $nativeCapture 'exitCode'); data = $nativeData }
+            windowsReads = $windowsRows
+        }
+        $rawByPhase[$phaseName] = ConvertFrom-HostVmRawCaptureData $mapperData $phaseName $phaseModes[$phaseName] $LockedBindings $script:RequiredReaders
+        if ($rawByPhase[$phaseName].Count -ne 4) { throw ('VM raw mapper did not derive exactly four target rows: phase=' + $phaseName + ' count=' + $rawByPhase[$phaseName].Count) }
+    }
+
+    $actualValues = [Collections.Generic.List[object]]::new()
+    foreach ($phaseName in @('original', 'filteredActive', 'restored')) {
+        $phase = Get-HostProperty (Get-HostProperty $capture 'phases') $phaseName
+        $observations = @(Get-HostProperty $phase 'targetObservations')
+        if ($observations.Count -ne 4) { throw ('VM phase does not contain four target observations: phase=' + $phaseName + ' count=' + $observations.Count) }
+        $seenPhasePnp = @{}
+        foreach ($observation in $observations) {
+            $target = Get-HostProperty $observation 'target'
+            $pnp = [string](Get-HostProperty $target 'pnpDeviceId')
+            $pnpKey = $pnp.ToUpperInvariant()
+            if (-not $targetByPnp.ContainsKey($pnpKey) -or $seenPhasePnp.ContainsKey($pnpKey)) { throw ('VM phase target identity is unknown or duplicated: phase=' + $phaseName + ' pnp=' + $pnp) }
+            $seenPhasePnp[$pnpKey] = $true
+            $profile = $targetByPnp[$pnpKey]
+            $guid = ConvertTo-HostVmGuidKey (Get-HostProperty $target 'interfaceGuid') ('VM phase target GUID for ' + $pnp)
+            $original = ConvertTo-HostMacKey (Get-HostProperty $target 'original')
+            $replacement = ConvertTo-HostMacKey (Get-HostProperty $target 'replacement')
+            if ($guid -cne $profile.interfaceGuid -or $original -cne $profile.original -or $replacement -cne $profile.replacement) {
+                throw ('VM phase target mapping drifted from the stable target set: phase=' + $phaseName + ' pnp=' + $pnp + ' expectedGuid=' + $profile.interfaceGuid + ' actualGuid=' + $guid + ' expectedPair=' + $profile.original + '|' + $profile.replacement + ' actualPair=' + $original + '|' + $replacement)
+            }
+            $raw = $rawByPhase[$phaseName][$pnpKey]
+            if ($null -eq $raw -or $raw.interfaceGuid -cne $profile.interfaceGuid) { throw ('VM raw mapping is missing the exact phase target: phase=' + $phaseName + ' pnp=' + $pnp) }
+            $observedValues = Get-HostProperty $observation 'observations'
+            foreach ($reader in $script:RequiredReaders) {
+                $observed = ConvertTo-HostMacKey (Get-HostProperty $observedValues $reader)
+                $derived = ConvertTo-HostMacKey $raw.readers[$reader]
+                if ($observed -cne $derived) { throw ('VM target observation differs from independent native/Windows raw reads: phase=' + $phaseName + ' pnp=' + $pnp + ' reader=' + $reader + ' derived=' + $derived + ' recorded=' + [string](Get-HostProperty $observedValues $reader)) }
+                $expected = if ($phaseModes[$phaseName] -ceq 'Original') { $profile.original } else { $profile.replacement }
+                $actualValues.Add([ordered]@{ phase = $phaseName; pnpDeviceId = $pnp; interfaceGuid = $profile.interfaceGuid; original = $profile.original; replacement = $profile.replacement; reader = $reader; expected = $expected; actual = $derived })
+            }
+        }
+        if ($seenPhasePnp.Count -ne 4) { throw ('VM phase target identities do not cover four unique targets: phase=' + $phaseName) }
+    }
+    if ($actualValues.Count -ne 84) { throw ('VM raw observation count must be 84; actual=' + $actualValues.Count) }
+
+    $checks = @(Get-HostProperty $capture 'checks')
+    if ($checks.Count -ne 84) { throw ('VM capture must record exactly 84 reader checks; actual=' + $checks.Count) }
+    $expectedValuesByCell = @{}
+    foreach ($value in $actualValues) { $expectedValuesByCell[$value.phase + '|' + $value.pnpDeviceId.ToUpperInvariant() + '|' + $value.reader] = $value }
+    $seenChecks = @{}
+    foreach ($check in $checks) {
+        $phaseName = [string](Get-HostProperty $check 'phase')
+        $pnp = [string](Get-HostProperty $check 'pnpDeviceId')
+        $reader = [string](Get-HostProperty $check 'reader')
+        $cell = $phaseName + '|' + $pnp.ToUpperInvariant() + '|' + $reader
+        if (-not $expectedValuesByCell.ContainsKey($cell) -or $seenChecks.ContainsKey($cell)) { throw ('VM recorded check is unknown or duplicated: ' + $cell) }
+        $seenChecks[$cell] = $true
+        $expected = $expectedValuesByCell[$cell]
+        $checkGuid = ConvertTo-HostVmGuidKey (Get-HostProperty $check 'interfaceGuid') ('Recorded check GUID for ' + $pnp)
+        $checkExpected = ConvertTo-HostMacKey (Get-HostProperty $check 'expected')
+        $checkActual = ConvertTo-HostMacKey (Get-HostProperty $check 'actual')
+        if ($checkGuid -cne $expected.interfaceGuid -or $checkExpected -cne (ConvertTo-HostMacKey $expected.expected) -or
+            $checkActual -cne (ConvertTo-HostMacKey $expected.actual) -or [int](Get-HostProperty $check 'readerMatchCount') -ne 1 -or
+            [int](Get-HostProperty $check 'readerSourceRowCount') -ne 1 -or -not [bool](Get-HostProperty $check 'pass')) {
+            throw ('VM recorded check differs from independently derived observation: phase=' + $phaseName + ' pnp=' + $pnp + ' reader=' + $reader + ' expected=' + $expected.expected + ' actual=' + $expected.actual + ' recordedExpected=' + [string](Get-HostProperty $check 'expected') + ' recordedActual=' + [string](Get-HostProperty $check 'actual') + ' pass=' + [string](Get-HostProperty $check 'pass'))
+        }
+    }
+    if ($seenChecks.Count -ne 84) { throw ('VM capture check matrix is incomplete: expected=84 actual=' + $seenChecks.Count) }
+
+    $hostJournal = Get-HostProperty $capture 'hostAdapterJournal'
+    if ($null -eq $hostJournal -or -not [bool](Get-HostProperty $hostJournal 'mutationStarted')) { throw 'VM production adapter journal does not record the address mutation cycle.' }
+    $journalSnapshots = @(Get-HostProperty $hostJournal 'adapterSnapshots')
+    $progressRows = @(Get-HostProperty $hostJournal 'adapterProgress')
+    $restoredSnapshots = @(Get-HostProperty $capture 'restoredAdapterSnapshots')
+    $linkChecks = @(Get-HostProperty $hostJournal 'linkRestoreChecks')
+    foreach ($collection in @(@{ name = 'adapterSnapshots'; rows = $journalSnapshots }, @{ name = 'adapterProgress'; rows = $progressRows }, @{ name = 'restoredAdapterSnapshots'; rows = $restoredSnapshots }, @{ name = 'linkRestoreChecks'; rows = $linkChecks })) {
+        if (@($collection.rows).Count -ne 4) { throw ('VM restore evidence requires four rows: collection=' + $collection.name + ' actual=' + @($collection.rows).Count) }
+    }
+    $snapshotByPnp = @{}
+    foreach ($snapshot in $journalSnapshots) {
+        $pnpKey = ([string](Get-HostProperty $snapshot 'pnpDeviceId')).ToUpperInvariant()
+        if (-not $targetByPnp.ContainsKey($pnpKey) -or $snapshotByPnp.ContainsKey($pnpKey)) { throw ('VM journal snapshot identity is unknown or duplicated: pnp=' + $pnpKey) }
+        $target = $targetByPnp[$pnpKey]
+        $guid = ConvertTo-HostVmGuidKey (Get-HostProperty $snapshot 'interfaceGuid') ('VM journal snapshot GUID for ' + $pnpKey)
+        if ($guid -cne $target.interfaceGuid -or (ConvertTo-HostMacKey (Get-HostProperty $snapshot 'original')) -cne $target.original -or
+            (ConvertTo-HostMacKey (Get-HostProperty $snapshot 'replacement')) -cne $target.replacement) {
+            throw ('VM adapter journal snapshot differs from the target map: pnp=' + $pnpKey)
+        }
+        $snapshotByPnp[$pnpKey] = $snapshot
+    }
+    $progressByPnp = @{}
+    foreach ($progress in $progressRows) {
+        $pnpKey = ([string](Get-HostProperty $progress 'pnpDeviceId')).ToUpperInvariant()
+        if (-not $snapshotByPnp.ContainsKey($pnpKey) -or $progressByPnp.ContainsKey($pnpKey) -or
+            [string](Get-HostProperty $progress 'restoreState') -cne 'verified') {
+            throw ('VM adapter journal restore progress is missing, duplicated, or not verified: pnp=' + $pnpKey + ' state=' + [string](Get-HostProperty $progress 'restoreState'))
+        }
+        $snapshot = $snapshotByPnp[$pnpKey]
+        $expectedRegistry = Get-HostProperty $snapshot 'networkAddress'
+        $actualRegistry = Get-HostProperty $progress 'restoreRegistry'
+        if (-not (Test-NicAddressRegistryValueSnapshotEqual $expectedRegistry $actualRegistry)) {
+            throw ('VM typed NetworkAddress restore mismatch: pnp=' + $pnpKey + ' expected=' + (ConvertTo-Json -InputObject $expectedRegistry -Compress -Depth 8) + ' actual=' + (ConvertTo-Json -InputObject $actualRegistry -Compress -Depth 8))
+        }
+        $target = $targetByPnp[$pnpKey]
+        if ((ConvertTo-HostMacKey (Get-HostProperty $progress 'restoreActualMac')) -cne $target.original) {
+            throw ('VM restore journal MAC mismatch: pnp=' + $pnpKey + ' expected=' + $target.original + ' actual=' + [string](Get-HostProperty $progress 'restoreActualMac'))
+        }
+        $snapshotAdminStatus = [string](Get-HostProperty (Get-HostProperty $snapshot 'adminState') 'value')
+        $restoreAdminStatus = [string](Get-HostProperty $progress 'restoreAdminStatus')
+        if ([string]::IsNullOrWhiteSpace($restoreAdminStatus) -or $restoreAdminStatus -cne $snapshotAdminStatus) {
+            throw ('VM restore journal admin status mismatch: pnp=' + $pnpKey + ' expected=' + $snapshotAdminStatus + ' actual=' + $restoreAdminStatus)
+        }
+        $progressByPnp[$pnpKey] = $progress
+    }
+    $restoredByPnp = @{}
+    foreach ($snapshot in $restoredSnapshots) {
+        $pnpKey = ([string](Get-HostProperty $snapshot 'pnpDeviceId')).ToUpperInvariant()
+        if (-not $snapshotByPnp.ContainsKey($pnpKey) -or $restoredByPnp.ContainsKey($pnpKey)) { throw ('VM restored adapter snapshot identity is unknown or duplicated: pnp=' + $pnpKey) }
+        $baseline = $snapshotByPnp[$pnpKey]
+        $guid = ConvertTo-HostVmGuidKey (Get-HostProperty $snapshot 'interfaceGuid') ('VM restored snapshot GUID for ' + $pnpKey)
+        if ($guid -cne [string]$baseline.interfaceGuid -or
+            -not (Test-NicAddressRegistryValueSnapshotEqual (Get-HostProperty $baseline 'networkAddress') (Get-HostProperty $snapshot 'networkAddress'))) {
+            throw ('VM restored adapter snapshot differs from its typed baseline: pnp=' + $pnpKey)
+        }
+        $target = $targetByPnp[$pnpKey]
+        $observedOriginal = ConvertTo-HostMacKey (Get-HostProperty $snapshot 'observedOriginalMac')
+        $baselineObservedOriginal = ConvertTo-HostMacKey (Get-HostProperty $baseline 'observedOriginalMac')
+        $snapshotEnabled = Get-HostProperty (Get-HostProperty $snapshot 'adminState') 'enabled'
+        $baselineEnabled = Get-HostProperty (Get-HostProperty $baseline 'adminState') 'enabled'
+        $snapshotClassKey = [string](Get-HostProperty $snapshot 'registrySubKey')
+        $baselineClassKey = [string](Get-HostProperty $baseline 'registrySubKey')
+        if ($observedOriginal -cne $target.original -or $baselineObservedOriginal -cne $target.original -or
+            $snapshotEnabled -ne $baselineEnabled -or $snapshotClassKey -cne $baselineClassKey) {
+            throw ('VM restored adapter identity/state differs from target baseline: pnp=' + $pnpKey + ' expectedMac=' + $target.original + ' snapshotMac=' + [string](Get-HostProperty $snapshot 'observedOriginalMac') + ' baselineMac=' + [string](Get-HostProperty $baseline 'observedOriginalMac') + ' expectedAdminEnabled=' + [string]$baselineEnabled + ' actualAdminEnabled=' + [string]$snapshotEnabled + ' expectedRegistrySubKey=' + $baselineClassKey + ' actualRegistrySubKey=' + $snapshotClassKey)
+        }
+        $restoredByPnp[$pnpKey] = $snapshot
+    }
+    $linksByPnp = @{}
+    foreach ($link in $linkChecks) {
+        $pnpKey = ([string](Get-HostProperty $link 'pnpDeviceId')).ToUpperInvariant()
+        if (-not $snapshotByPnp.ContainsKey($pnpKey) -or $linksByPnp.ContainsKey($pnpKey) -or
+            -not [bool](Get-HostProperty $link 'matchesBaseline') -or [bool](Get-HostProperty $link 'timedOut') -or
+            $null -ne (Get-HostProperty $link 'error')) {
+            throw ('VM adapter link restore check failed: pnp=' + $pnpKey + ' matchesBaseline=' + [string](Get-HostProperty $link 'matchesBaseline') + ' timedOut=' + [string](Get-HostProperty $link 'timedOut') + ' error=' + [string](Get-HostProperty $link 'error'))
+        }
+        $baseline = $snapshotByPnp[$pnpKey]
+        $guid = ConvertTo-HostVmGuidKey (Get-HostProperty $link 'interfaceGuid') ('VM link restore GUID for ' + $pnpKey)
+        if ($guid -cne [string]$baseline.interfaceGuid -or [bool](Get-HostProperty $link 'expectedConnected') -ne [bool](Get-HostProperty $baseline 'linkConnected') -or
+            [bool](Get-HostProperty $link 'actualConnected') -ne [bool](Get-HostProperty $baseline 'linkConnected')) {
+            throw ('VM adapter link state differs from baseline: pnp=' + $pnpKey + ' expectedConnected=' + [string](Get-HostProperty $baseline 'linkConnected') + ' actualConnected=' + [string](Get-HostProperty $link 'actualConnected'))
+        }
+        $linksByPnp[$pnpKey] = $link
+    }
+    if ($snapshotByPnp.Count -ne 4 -or $progressByPnp.Count -ne 4 -or $restoredByPnp.Count -ne 4 -or $linksByPnp.Count -ne 4) {
+        throw 'VM typed-registry, adapter restore, or link-state evidence is incomplete.'
+    }
+
+    return [ordered]@{
+        schema = 'nic-vm-registry-preflight.v1'
+        status = 'VM_FOUR_TARGET_REGISTRY_CAPTURE_PASS'
+        capturePath = $resolvedCapturePath
+        captureSha256 = $captureHash
+        vmUuid = $vmUuid
+        targetCount = $targetByPnp.Count
+        phaseCount = $phaseModes.Count
+        readerCount = $script:RequiredReaders.Count
+        actualValueCount = $actualValues.Count
+        actualValues = $actualValues.ToArray()
+        recordedChecksMatched = $seenChecks.Count
+        typedRegistryRestoreCount = $progressByPnp.Count
+        restoredAdapterSnapshotCount = $restoredByPnp.Count
+        restoredLinkCheckCount = $linksByPnp.Count
+        productionHelperBundleSha256 = $helperBundleHash.ToUpperInvariant()
+        nativeExeSha256 = $nativeExeHash.ToUpperInvariant()
+    }
+}
+
+function Assert-HostVmnetAdapterDriverPin {
+    $systemRoot = [string]$env:SystemRoot
+    if ([string]::IsNullOrWhiteSpace($systemRoot)) { throw 'SystemRoot is unavailable; cannot verify the pinned VMware adapter driver.' }
+    $driverPath = Join-Path $systemRoot 'System32\drivers\vmnetadapter.sys'
+    if (-not (Test-Path -LiteralPath $driverPath -PathType Leaf)) { throw ('Pinned VMware adapter driver is missing: ' + $driverPath) }
+    $driverHash = Get-HostSha256 $driverPath
+    if ($driverHash -cne $script:ExpectedVmnetAdapterDriverSha256) {
+        throw ('VMware adapter driver SHA-256 mismatch: expected=' + $script:ExpectedVmnetAdapterDriverSha256 + ' actual=' + $driverHash + ' path=' + $driverPath)
+    }
+    return [ordered]@{ path = $driverPath; sha256 = $driverHash; expectedSha256 = $script:ExpectedVmnetAdapterDriverSha256; verified = $true }
 }
 
 function Assert-HostVmGate {
@@ -1089,6 +1429,7 @@ function Get-HostAdapterSnapshots {
             linkStateSource = [string]$link.source
             registrySubKey = [string]$classEntry.registrySubKey
             registryKeyName = [string]$classEntry.registryKeyName
+            registryPnpValueName = [string]$classEntry.registryPnpValueName
             registryPnpDeviceId = [string]$classEntry.registryPnpDeviceId
             networkAddress = $classEntry.networkAddress
         })
@@ -1126,6 +1467,136 @@ function Get-HostExactAdapter {
     $plain = @(Get-NetAdapter -IncludeHidden -ErrorAction Stop | Where-Object { ([Guid]::Parse([string](Get-HostProperty $_ 'InterfaceGuid'))).ToString('D').ToUpperInvariant() -ceq $guid })
     if ($msft.Count -ne 1 -or $plain.Count -ne 1) { throw ('Exact adapter disappeared or became ambiguous: pnp=' + $pnp + ' guid=' + $guid + ' MSFT=' + $msft.Count + ' plain=' + $plain.Count) }
     return [ordered]@{ adapter = $plain[0]; msft = $msft[0] }
+}
+
+function Invoke-HostAdapterRegistryApply {
+    param(
+        [Parameter(Mandatory = $true)][object]$Snapshot,
+        [Parameter(Mandatory = $true)][object]$Journal,
+        [Parameter(Mandatory = $true)][object]$Progress,
+        [Parameter(Mandatory = $true)][ref]$MutationStarted
+    )
+
+    $pnp = [string](Get-HostProperty $Snapshot 'pnpDeviceId')
+    $guid = ConvertTo-NicAddressGuid (Get-HostProperty $Snapshot 'interfaceGuid')
+    if ([string]::IsNullOrWhiteSpace($pnp) -or $pnp.Length -gt 260 -or $pnp -notmatch '\A[\x20-\x7e]+\z' -or $pnp.Contains('"') -or $pnp.Contains('%') -or $null -eq $guid) {
+        throw ('NIC registry apply snapshot has an invalid exact identity: pnp=' + $pnp + ' guid=' + [string](Get-HostProperty $Snapshot 'interfaceGuid'))
+    }
+
+    $registryKeyName = [string](Get-HostProperty $Snapshot 'registryKeyName')
+    $registrySubKey = [string](Get-HostProperty $Snapshot 'registrySubKey')
+    $classPrefix = 'SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}\'
+    if ($registryKeyName -notmatch '\A[0-9]{4}\z' -or
+        -not [string]::Equals($registrySubKey, ($classPrefix + $registryKeyName), [StringComparison]::OrdinalIgnoreCase)) {
+        throw ('NIC registry apply snapshot has an invalid class-key identity: pnp=' + $pnp + ' guid=' + $guid + ' keyName=' + $registryKeyName + ' subKey=' + $registrySubKey)
+    }
+
+    $originalMac = ConvertTo-HostCanonicalMac (Get-HostProperty $Snapshot 'original') ('Captured original MAC for ' + $pnp)
+    $replacementMac = ConvertTo-HostCanonicalMac (Get-HostProperty $Snapshot 'replacement') ('Locked replacement MAC for ' + $pnp)
+    if (-not (Test-NicAddressUnicastMac $originalMac) -or -not (Test-NicAddressUnicastMac $replacementMac) -or
+        (ConvertTo-NicAddressMacKey $originalMac) -ceq (ConvertTo-NicAddressMacKey $replacementMac)) {
+        throw ('NIC registry apply snapshot has an invalid or non-distinct original/replacement pair: pnp=' + $pnp + ' original=' + $originalMac + ' replacement=' + $replacementMac)
+    }
+
+    $live = Get-HostExactAdapter $Snapshot
+    $livePnp = [string](Get-HostProperty $live.msft 'PnPDeviceID')
+    $liveGuid = ConvertTo-NicAddressGuid (Get-HostProperty $live.msft 'InterfaceGuid')
+    $adapterGuid = ConvertTo-NicAddressGuid (Get-HostProperty $live.adapter 'InterfaceGuid')
+    if (-not [string]::Equals($livePnp, $pnp, [StringComparison]::OrdinalIgnoreCase) -or
+        $liveGuid -cne $guid -or $adapterGuid -cne $guid) {
+        throw ('Exact NIC identity changed before registry apply: expectedPnp=' + $pnp + ' actualPnp=' + $livePnp + ' expectedGuid=' + $guid + ' actualMsftGuid=' + [string](Get-HostProperty $live.msft 'InterfaceGuid') + ' actualAdapterGuid=' + [string](Get-HostProperty $live.adapter 'InterfaceGuid'))
+    }
+    $liveMac = ConvertTo-HostCanonicalMac (Get-HostProperty $live.adapter 'MacAddress') ('Fresh Get-NetAdapter MAC for ' + $pnp)
+    if ((ConvertTo-NicAddressMacKey $liveMac) -cne (ConvertTo-NicAddressMacKey $originalMac)) {
+        throw ('NIC original MAC changed before registry apply: pnp=' + $pnp + ' expected=' + $originalMac + ' actual=' + $liveMac)
+    }
+
+    $classEntry = Get-NicAddressRegistryClassEntry $guid $pnp
+    $classSubKey = [string](Get-NicAddressPropertyValue $classEntry 'registrySubKey')
+    $className = [string](Get-NicAddressPropertyValue $classEntry 'registryKeyName')
+    $snapshotPnp = [string](Get-HostProperty $Snapshot 'registryPnpDeviceId')
+    $classPnp = [string](Get-NicAddressPropertyValue $classEntry 'registryPnpDeviceId')
+    $snapshotPnpValueName = [string](Get-HostProperty $Snapshot 'registryPnpValueName')
+    $classPnpValueName = [string](Get-NicAddressPropertyValue $classEntry 'registryPnpValueName')
+    if (-not [string]::Equals($classSubKey, $registrySubKey, [StringComparison]::OrdinalIgnoreCase) -or
+        -not [string]::Equals($className, $registryKeyName, [StringComparison]::OrdinalIgnoreCase) -or
+        -not [string]::Equals($classPnp, $snapshotPnp, [StringComparison]::OrdinalIgnoreCase) -or
+        -not [string]::Equals($classPnpValueName, $snapshotPnpValueName, [StringComparison]::OrdinalIgnoreCase)) {
+        throw ('NIC network-class identity changed before registry apply: pnp=' + $pnp + ' guid=' + $guid + ' expectedSubKey=' + $registrySubKey + ' actualSubKey=' + $classSubKey + ' expectedKeyName=' + $registryKeyName + ' actualKeyName=' + $className + ' expectedRegistryPnp=' + $snapshotPnp + ' actualRegistryPnp=' + $classPnp + ' expectedPnpValueName=' + $snapshotPnpValueName + ' actualPnpValueName=' + $classPnpValueName)
+    }
+
+    $baselineRegistry = Get-HostProperty $Snapshot 'networkAddress'
+    $currentRegistry = Get-NicAddressRegistryValueSnapshot $registrySubKey
+    if (-not (Test-NicAddressRegistryValueSnapshotEqual $baselineRegistry $currentRegistry)) {
+        throw ('NetworkAddress registry value changed before apply: pnp=' + $pnp + ' expected=' + (ConvertTo-Json -InputObject $baselineRegistry -Compress -Depth 8) + ' actual=' + (ConvertTo-Json -InputObject $currentRegistry -Compress -Depth 8))
+    }
+    $restartCommand = Get-Command Restart-NetAdapter -ErrorAction Stop
+    if (-not $restartCommand.Parameters.ContainsKey('InputObject')) { throw 'Restart-NetAdapter lost the exact InputObject parameter required for NIC address apply.' }
+
+    $replacementHex = ConvertTo-NicAddressMacKey $replacementMac
+    $intent = New-NicAddressIntent 'apply' $Snapshot $replacementMac
+    $Progress.applyIntentUtc = [DateTime]::UtcNow.ToString('o')
+    $Progress.targetMac = $replacementMac
+    $Progress.state = 'apply-intent-recorded'
+    $Progress.registryIntent = [ordered]@{
+        keyName = $registryKeyName
+        subKey = $registrySubKey
+        valueName = 'NetworkAddress'
+        valueKind = 'String'
+        value = $replacementHex
+        baseline = $baselineRegistry
+    }
+    $Progress.addressIntent = $intent
+    Write-HostJournal $Journal
+
+    $Journal.mutationStarted = $true
+    $MutationStarted.Value = $true
+    Write-HostJournal $Journal
+
+    $replacementRegistry = New-NicAddressRegistryValueSnapshot $true 'String' $replacementHex
+    Set-NicAddressRegistryValueSnapshot $registrySubKey $replacementRegistry
+    $registryAfterWrite = Get-NicAddressRegistryValueSnapshot $registrySubKey
+    if (-not (Test-NicAddressRegistryValueSnapshotEqual $replacementRegistry $registryAfterWrite)) {
+        throw ('NetworkAddress registry apply readback mismatch: pnp=' + $pnp + ' expected=' + (ConvertTo-Json -InputObject $replacementRegistry -Compress -Depth 8) + ' actual=' + (ConvertTo-Json -InputObject $registryAfterWrite -Compress -Depth 8))
+    }
+
+    Restart-NetAdapter -InputObject $live.adapter -Confirm:$false -ErrorAction Stop | Out-Null
+
+    $afterRestart = Get-NicAddressRegistryValueSnapshot $registrySubKey
+    if (-not (Test-NicAddressRegistryValueSnapshotEqual $replacementRegistry $afterRestart)) {
+        throw ('NetworkAddress registry changed during adapter restart: pnp=' + $pnp + ' expected=' + (ConvertTo-Json -InputObject $replacementRegistry -Compress -Depth 8) + ' actual=' + (ConvertTo-Json -InputObject $afterRestart -Compress -Depth 8))
+    }
+    $fresh = Get-HostExactAdapter $Snapshot
+    $freshPnp = [string](Get-HostProperty $fresh.msft 'PnPDeviceID')
+    $freshGuid = ConvertTo-NicAddressGuid (Get-HostProperty $fresh.msft 'InterfaceGuid')
+    $freshAdapterGuid = ConvertTo-NicAddressGuid (Get-HostProperty $fresh.adapter 'InterfaceGuid')
+    if (-not [string]::Equals($freshPnp, $pnp, [StringComparison]::OrdinalIgnoreCase) -or
+        $freshGuid -cne $guid -or $freshAdapterGuid -cne $guid) {
+        throw ('Exact NIC identity changed after registry apply/restart: expectedPnp=' + $pnp + ' actualPnp=' + $freshPnp + ' expectedGuid=' + $guid + ' actualMsftGuid=' + [string](Get-HostProperty $fresh.msft 'InterfaceGuid') + ' actualAdapterGuid=' + [string](Get-HostProperty $fresh.adapter 'InterfaceGuid'))
+    }
+    $actualMac = ConvertTo-HostCanonicalMac (Get-HostProperty $fresh.adapter 'MacAddress') ('Post-restart Get-NetAdapter MAC for ' + $pnp)
+    if ((ConvertTo-NicAddressMacKey $actualMac) -cne $replacementHex) {
+        throw ('NetworkAddress apply readback mismatch: pnp=' + $pnp + ' expected=' + $replacementMac + ' actual=' + $actualMac)
+    }
+
+    $Progress.state = 'replacement-active'
+    $Progress.actualMac = $actualMac
+    $Progress.registryActual = $afterRestart
+    $Progress.appliedUtc = [DateTime]::UtcNow.ToString('o')
+    Write-HostJournal $Journal
+    return [ordered]@{
+        action = 'apply-registry'
+        pnpDeviceId = $pnp
+        interfaceGuid = $guid
+        registrySubKey = $registrySubKey
+        registryValueKind = 'String'
+        registryValue = $replacementHex
+        original = $originalMac
+        expected = $replacementMac
+        actual = $actualMac
+        matchesExpected = $true
+        mutationStarted = [bool]$Journal.mutationStarted
+    }
 }
 
 function Write-HostJournal {
@@ -1429,6 +1900,9 @@ function Invoke-HostRun {
 
     $gatePath = if ([string]::IsNullOrWhiteSpace($VmGatePath)) { Join-Path $reportsRoot 'nic-reader-gap-20261017\vm-seven-reader-gate.json' } else { [IO.Path]::GetFullPath($VmGatePath) }
     $gate = Assert-HostVmGate $gatePath $RepositoryRoot $tsv $nativePath
+    $registryVmCapturePath = Join-Path $RepositoryRoot $script:ExpectedRegistryVmCaptureRelativePath
+    $registryVmCapture = Assert-HostRegistryVmCapture -CapturePath $registryVmCapturePath -ExpectedCaptureSha256 $script:ExpectedRegistryVmCaptureSha256 -LockedBindings $bindings -RepositoryRoot $RepositoryRoot
+    $vmnetDriverPin = Assert-HostVmnetAdapterDriverPin
     $journalPath = Join-Path $run 'journal.json'
     $script:HostBindings = $bindings
     $journal = [ordered]@{
@@ -1447,6 +1921,9 @@ function Invoke-HostRun {
         certificateThumbprint = $thumbprint
         hostIdentity = [ordered]@{ baseboardManufacturer = $script:ExpectedBaseboardManufacturer; uuid = $script:ExpectedHostUuid }
         vmGate = $gate
+        registryVmCapture = $registryVmCapture
+        vmnetAdapterDriverPin = $vmnetDriverPin
+        backend = 'RegistryNetworkAddress'
         adapterSnapshots = @()
         adapterProgress = @()
         linkRestoreChecks = @()
@@ -1473,26 +1950,7 @@ function Invoke-HostRun {
 
         foreach ($snapshot in $journal.adapterSnapshots) {
             $progress = @($journal.adapterProgress | Where-Object { [string]::Equals([string]$_.pnpDeviceId, [string]$snapshot.pnpDeviceId, [StringComparison]::OrdinalIgnoreCase) })[0]
-            $progress.applyIntentUtc = [DateTime]::UtcNow.ToString('o')
-            $progress.targetMac = [string]$snapshot.replacement
-            $progress.state = 'apply-intent-recorded'
-            Write-HostJournal $journal
-            $live = Get-HostExactAdapter $snapshot
-            $currentMac = ConvertTo-HostCanonicalMac (Get-HostProperty $live.adapter 'MacAddress') ('Pre-apply adapter MAC for ' + [string]$snapshot.pnpDeviceId)
-            if ((ConvertTo-HostMacKey $currentMac) -cne (ConvertTo-HostMacKey $snapshot.original)) { throw ('Adapter changed before Set-NetAdapter: pnp=' + $snapshot.pnpDeviceId + ' expected=' + $snapshot.original + ' actual=' + $currentMac) }
-            $setCommand = Get-Command Set-NetAdapter -ErrorAction Stop
-            if (-not $setCommand.Parameters.ContainsKey('InputObject') -or -not $setCommand.Parameters.ContainsKey('MacAddress')) { throw 'Set-NetAdapter must expose exact InputObject and MacAddress parameters.' }
-            $mutationStarted = $true
-            $journal.mutationStarted = $true
-            Write-HostJournal $journal
-            Set-NetAdapter -InputObject $live.adapter -MacAddress ([string]$snapshot.replacement) -Confirm:$false -ErrorAction Stop | Out-Null
-            $postSet = Get-HostExactAdapter $snapshot
-            $actual = ConvertTo-HostCanonicalMac (Get-HostProperty $postSet.adapter 'MacAddress') ('Set-NetAdapter readback for ' + [string]$snapshot.pnpDeviceId)
-            if ((ConvertTo-HostMacKey $actual) -cne (ConvertTo-HostMacKey $snapshot.replacement)) { throw ('Set-NetAdapter readback mismatch: pnp=' + $snapshot.pnpDeviceId + ' expected=' + $snapshot.replacement + ' actual=' + $actual) }
-            $progress.state = 'replacement-active'
-            $progress.actualMac = $actual
-            $progress.appliedUtc = [DateTime]::UtcNow.ToString('o')
-            Write-HostJournal $journal
+            [void](Invoke-HostAdapterRegistryApply -Snapshot $snapshot -Journal $journal -Progress $progress -MutationStarted ([ref]$mutationStarted))
         }
         $journal.state = 'REPLACEMENT_CONFIGURED'
         Write-HostJournal $journal

@@ -283,7 +283,8 @@ function Restore-HostAdapters { $script:MockRestoreCalls++; return @('unexpected
 $functionsNeeded = @(
     'Get-HostProperty', 'Get-HostSha256', 'Write-HostJsonAtomic', 'Write-HostJournal',
     'Test-HostManagedBcdFile', 'Assert-HostBcdSnapshotUsable', 'Get-HostEspSnapshot',
-    'Get-HostBcdSnapshot', 'Get-HostStablePlatformData', 'Assert-HostPlatformUnchanged', 'Invoke-HostRun'
+    'Get-HostBcdSnapshot', 'Get-HostStablePlatformData', 'Assert-HostPlatformUnchanged',
+    'Assert-HostVmnetAdapterDriverPin', 'Invoke-HostRun'
 )
 $sourceTokens = $null
 $sourceErrors = $null
@@ -305,6 +306,23 @@ function Write-HostJournal {
     $Journal.updatedUtc = [DateTime]::UtcNow.ToString('o')
     Write-HostJsonAtomic ([string]$Journal.journalPath) $Journal
 }
+function Assert-HostRegistryVmCapture {
+    param([string]$CapturePath,[string]$ExpectedCaptureSha256,[object[]]$LockedBindings,[string]$RepositoryRoot)
+    $script:MockRegistryVmCaptureCalls++
+    if ($CapturePath -cne (Join-Path $RepositoryRoot $script:ExpectedRegistryVmCaptureRelativePath) -or $ExpectedCaptureSha256 -cne $script:ExpectedRegistryVmCaptureSha256 -or $LockedBindings.Count -ne 4) {
+        throw 'Synthetic registry VM capture fixture received unexpected preflight arguments.'
+    }
+    return [ordered]@{ status = 'SYNTHETIC_VM_CAPTURE_PASS'; captureSha256 = $ExpectedCaptureSha256; actualValueCount = 84 }
+}
+function Assert-HostVmnetAdapterDriverPin {
+    $script:MockVmnetDriverPinCalls++
+    return [ordered]@{ path = 'synthetic:SystemRoot/System32/drivers/vmnetadapter.sys'; sha256 = $script:ExpectedVmnetAdapterDriverSha256; expectedSha256 = $script:ExpectedVmnetAdapterDriverSha256; verified = $true }
+}
+function Invoke-HostAdapterRegistryApply {
+    param([object]$Snapshot,[object]$Journal,[object]$Progress,[ref]$MutationStarted)
+    $script:MockRegistryApplyCalls++
+    throw 'Registry adapter apply must not run after platform preflight failure.'
+}
 
 $script:MockPartitions = @()
 $script:MockBcdMode = 'success'
@@ -313,10 +331,16 @@ $script:MockPlatformSnapshotCount = 0
 $script:MockAdapterSnapshotCalls = 0
 $script:MockSetCalls = 0
 $script:MockRestoreCalls = 0
+$script:MockRegistryVmCaptureCalls = 0
+$script:MockVmnetDriverPinCalls = 0
+$script:MockRegistryApplyCalls = 0
 $script:HostRunSchema = 'nic-host-address-roundtrip.v1'
 $script:ExpectedCertificateThumbprint = 'TEST-ONLY'
 $script:ExpectedBaseboardManufacturer = 'Micro-Star International Co., Ltd.'
 $script:ExpectedHostUuid = 'C88B4631-C88C-871B-A6D7-D8BBC1D85720'
+$script:ExpectedRegistryVmCaptureRelativePath = 'spoof-handoff\reports\fixture\kernel-metadata.json'
+$script:ExpectedRegistryVmCaptureSha256 = 'E' * 64
+$script:ExpectedVmnetAdapterDriverSha256 = 'D' * 64
 $script:ActiveHostTemporaryDirectory = $null
 $sourceEspBody = $functionAsts | Where-Object { $_.Name -ceq 'Get-HostEspSnapshot' } | ForEach-Object { $_.Extent.Text }
 $helperFunctions = @('Get-HostProperty', 'Get-HostSha256', 'Test-HostManagedBcdFile', 'Assert-HostBcdSnapshotUsable', 'Get-HostEspSnapshot', 'Get-HostBcdSnapshot', 'Get-HostStablePlatformData', 'Assert-HostPlatformUnchanged', 'Invoke-HostRun')
@@ -486,6 +510,9 @@ Invoke-TestCase 'preflight-platform-failure-records-original-reads-and-never-mut
     $script:MockAdapterSnapshotCalls = 0
     $script:MockSetCalls = 0
     $script:MockRestoreCalls = 0
+    $script:MockRegistryVmCaptureCalls = 0
+    $script:MockVmnetDriverPinCalls = 0
+    $script:MockRegistryApplyCalls = 0
     $script:NativeExe = $nativeExe
     $script:VmGatePath = ''
     try { [void](Invoke-HostRun $workspace 'synthetic-worktree') }
@@ -497,12 +524,14 @@ Invoke-TestCase 'preflight-platform-failure-records-original-reads-and-never-mut
     Assert-True ($runFailure -match 'PREFLIGHT_FAILED_NO_ADAPTER_CHANGES' -and $runFailure -match 'synthetic live BCD snapshot failure') ('Host-run preflight failure was not preserved: ' + [string]$runFailure)
     Assert-True ($script:MockReadbackModes.Count -eq 2 -and @($script:MockReadbackModes | Where-Object { $_ -ceq 'Original' }).Count -eq 2) 'Original readback did not run both before and after the pre-mutation failure.'
     Assert-True ($script:MockPlatformSnapshotCount -eq 2) 'Expected a preflight failure plus post-failure read-only platform capture.'
-    Assert-True ($script:MockAdapterSnapshotCalls -eq 0 -and $script:MockSetCalls -eq 0 -and $script:MockRestoreCalls -eq 0) 'Adapter snapshot/apply/restore was called after platform preflight failed.'
+    Assert-True ($script:MockAdapterSnapshotCalls -eq 0 -and $script:MockSetCalls -eq 0 -and $script:MockRegistryApplyCalls -eq 0 -and $script:MockRestoreCalls -eq 0) 'Adapter snapshot/apply/restore was called after platform preflight failed.'
+    Assert-True ($script:MockRegistryVmCaptureCalls -eq 1 -and $script:MockVmnetDriverPinCalls -eq 1) ('Registry VM proof or vendor driver pin was not checked exactly once before platform snapshots: vmCapture=' + $script:MockRegistryVmCaptureCalls + ' driverPin=' + $script:MockVmnetDriverPinCalls)
     $journalPath = Get-ChildItem -LiteralPath (Join-Path $repoReports 'nic-reader-gap-20261017\host-runs') -Filter journal.json -Recurse | Select-Object -First 1 -ExpandProperty FullName
     if (-not $journalPath) { throw 'Synthetic host-run journal was not persisted.' }
     $journal = Get-Content -LiteralPath $journalPath -Raw | ConvertFrom-Json
     Assert-True ($journal.state -ceq 'PREFLIGHT_FAILED_NO_ADAPTER_CHANGES' -and -not $journal.mutationStarted) ('Incorrect preflight state: ' + $journal.state)
     Assert-True ($journal.adapterSnapshots.Count -eq 0 -and $journal.adapterProgress.Count -eq 0) 'A preflight failure persisted adapter mutation intent.'
+    Assert-True ($journal.backend -ceq 'RegistryNetworkAddress' -and $journal.registryVmCapture.status -ceq 'SYNTHETIC_VM_CAPTURE_PASS' -and $journal.vmnetAdapterDriverPin.verified -and $journal.vmnetAdapterDriverPin.sha256 -ceq $script:ExpectedVmnetAdapterDriverSha256) 'New backend or preflight evidence was not recorded in the journal.'
     Assert-True ($null -ne $journal.readbacks.preflightOriginal -and $null -ne $journal.readbacks.originalAfterRestore -and $null -eq $journal.readbacks.replacement) 'Preflight and final original readback evidence is incomplete or claims replacement.'
     Assert-True ($null -ne $journal.preflightOriginal -and $journal.failure.exception -match 'synthetic live BCD snapshot failure') 'Legacy root readback alias or original failure details were not persisted.'
     return ('No adapter actions were called; two Original reads recorded; state=' + $journal.state + '; journal=' + $journalPath)
