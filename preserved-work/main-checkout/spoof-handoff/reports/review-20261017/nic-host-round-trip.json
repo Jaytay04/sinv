@@ -1,0 +1,799 @@
+{
+    "schema":  "nic-host-round-trip-closeout.v1",
+    "recordedUtc":  "2026-10-18T01:35:22.0662038Z",
+    "status":  "ROUND_TRIP_PASS_AND_RESTORED",
+    "runDirectory":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T013020912Z.569ae5e9bb194eb1b48994e33f4cd4a2",
+    "host":  {
+                 "computer":  "DESKTOP-5852FUT",
+                 "manufacturer":  "MAINGEAR",
+                 "model":  "VYBE",
+                 "windowsBuild":  "26200.9711",
+                 "board":  "MSI PRO B660M-A CEC WIFI DDR4 (MS-7D37)",
+                 "identity":  {
+                                  "baseboardManufacturer":  "Micro-Star International Co., Ltd.",
+                                  "uuid":  "C88B4631-C88C-871B-A6D7-D8BBC1D85720"
+                              }
+             },
+    "evidence":  {
+                     "journal":  {
+                                     "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T013020912Z.569ae5e9bb194eb1b48994e33f4cd4a2/journal.json",
+                                     "bytes":  403604,
+                                     "sha256":  "83906F41B77A9B45B605E8DC03A6E9224641413D0EE8CD4C0F069C9508E6A481"
+                                 },
+                     "summary":  {
+                                     "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T013020912Z.569ae5e9bb194eb1b48994e33f4cd4a2/summary.json",
+                                     "bytes":  14304,
+                                     "sha256":  "55719AEDB73E966E1EF7A26CBA965B6DDBAFD3658C2ECE2A7650853E1B894356"
+                                 },
+                     "lockedMap":  {
+                                       "path":  "spoof-handoff/reports/client-originals.tsv",
+                                       "bytes":  1102,
+                                       "sha256":  "F628CB25D18F549A877C1529A82986B524BFD3D8B9801A776405F969FC4F42C3"
+                                   },
+                     "implementation":  {
+                                            "path":  ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/host-address-roundtrip.ps1",
+                                            "bytes":  146887,
+                                            "sha256":  "9B66BB8E0AC09C24C9DA03CF49E3BDA2E31647B9FF87D587CC29BE6C48575285"
+                                        },
+                     "readbacks":  {
+                                       "preflightOriginal":  {
+                                                                 "report":  {
+                                                                                "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T013020912Z.569ae5e9bb194eb1b48994e33f4cd4a2/readback-original/readback.20261018T013022099Z.124338807c7046019cc087916983a661.json",
+                                                                                "bytes":  95133,
+                                                                                "sha256":  "AF04E3714AFA2CD3732A09AF52E4A3EF14A1DE9461C2E42321D542D0B5E1561E"
+                                                                            },
+                                                                 "rawNative":  {
+                                                                                   "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T013020912Z.569ae5e9bb194eb1b48994e33f4cd4a2/readback-original/native.20261018T013022099Z.124338807c7046019cc087916983a661.json",
+                                                                                   "bytes":  60489,
+                                                                                   "sha256":  "610E0CE750CE25687D1001BA3B4022D4E4816C9B7D5656A1263D5CEBDED9B569"
+                                                                               },
+                                                                 "capturedUtc":  "2026-10-18T01:30:23.3000211Z",
+                                                                 "expectedMode":  "Original"
+                                                             },
+                                       "replacement":  {
+                                                           "report":  {
+                                                                          "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T013020912Z.569ae5e9bb194eb1b48994e33f4cd4a2/readback-replacement/readback.20261018T013030077Z.f2138b0a7366493aa0942ad27fcdc29b.json",
+                                                                          "bytes":  86618,
+                                                                          "sha256":  "318203ECC5096020CCB8BB9D4B21059B5D62A447411F1F86FB24952B922BAB29"
+                                                                      },
+                                                           "rawNative":  {
+                                                                             "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T013020912Z.569ae5e9bb194eb1b48994e33f4cd4a2/readback-replacement/native.20261018T013030077Z.f2138b0a7366493aa0942ad27fcdc29b.json",
+                                                                             "bytes":  52256,
+                                                                             "sha256":  "360BB4D5D1CD7F9B5904AC4D737D89E0AFEAD34995CDF91C8A6BB37E314F70B7"
+                                                                         },
+                                                           "capturedUtc":  "2026-10-18T01:30:33.9133347Z",
+                                                           "expectedMode":  "Replacement"
+                                                       },
+                                       "originalAfterRestore":  {
+                                                                    "report":  {
+                                                                                   "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T013020912Z.569ae5e9bb194eb1b48994e33f4cd4a2/readback-original-restored/readback.20261018T013041021Z.0f04acdbf51e4bf0b8983a12316800cf.json",
+                                                                                   "bytes":  89106,
+                                                                                   "sha256":  "9B6645DE3D44BEEB316AEE429CC684FF6E59CB08EAD62F95DDE2A21B4383FF4E"
+                                                                               },
+                                                                    "rawNative":  {
+                                                                                      "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T013020912Z.569ae5e9bb194eb1b48994e33f4cd4a2/readback-original-restored/native.20261018T013041021Z.0f04acdbf51e4bf0b8983a12316800cf.json",
+                                                                                      "bytes":  54793,
+                                                                                      "sha256":  "74AF687F4AA4F59289C35A8EADF1DC59C682CF0B5FAC0E2C1F8097F6861983FF"
+                                                                                  },
+                                                                    "capturedUtc":  "2026-10-18T01:30:41.9706570Z",
+                                                                    "expectedMode":  "Original"
+                                                                }
+                                   }
+                 },
+    "mechanism":  "Per-device REG_SZ NetworkAddress configuration and adapter restart; no project filter, boot payload, certificate or security-policy change during this NIC run.",
+    "counts":  {
+                   "adapters":  4,
+                   "commonReaders":  7,
+                   "phases":  3,
+                   "commonReaderObservations":  84,
+                   "wifiDot11Observations":  3,
+                   "totalApplicableObservations":  87,
+                   "nonWifiDot11NotApplicable":  9
+               },
+    "adapters":  [
+                     {
+                         "name":  "VMware Network Adapter VMnet8",
+                         "description":  "VMware Virtual Ethernet Adapter for VMnet8",
+                         "pnpDeviceId":  "ROOT\\VMWARE\\0001",
+                         "interfaceGuid":  "E89EFD0E-E452-43D4-8E93-45DA2AF75831",
+                         "original":  "00:50:56:C0:00:08",
+                         "replacement":  "02:90:10:20:30:40",
+                         "restored":  "00:50:56:C0:00:08",
+                         "readers":  {
+                                         "original":  {
+                                                          "OID_802_3_CURRENT_ADDRESS":  [
+                                                                                            "00:50:56:C0:00:08"
+                                                                                        ],
+                                                          "GetAdaptersAddresses":  [
+                                                                                       "00:50:56:C0:00:08"
+                                                                                   ],
+                                                          "GetAdaptersInfo":  [
+                                                                                  "00:50:56:C0:00:08"
+                                                                              ],
+                                                          "GetIfTable2":  [
+                                                                              "00:50:56:C0:00:08"
+                                                                          ],
+                                                          "Win32_NetworkAdapter.MACAddress":  [
+                                                                                                  "00:50:56:C0:00:08"
+                                                                                              ],
+                                                          "MSFT_NetAdapter.NetworkAddresses":  [
+                                                                                                   "005056C00008"
+                                                                                               ],
+                                                          "Get-NetAdapter.MacAddress":  [
+                                                                                            "00-50-56-C0-00-08"
+                                                                                        ]
+                                                      },
+                                         "replacement":  {
+                                                             "OID_802_3_CURRENT_ADDRESS":  [
+                                                                                               "02:90:10:20:30:40"
+                                                                                           ],
+                                                             "GetAdaptersAddresses":  [
+                                                                                          "02:90:10:20:30:40"
+                                                                                      ],
+                                                             "GetAdaptersInfo":  [
+                                                                                     "02:90:10:20:30:40"
+                                                                                 ],
+                                                             "GetIfTable2":  [
+                                                                                 "02:90:10:20:30:40"
+                                                                             ],
+                                                             "Win32_NetworkAdapter.MACAddress":  [
+                                                                                                     "02:90:10:20:30:40"
+                                                                                                 ],
+                                                             "MSFT_NetAdapter.NetworkAddresses":  [
+                                                                                                      "029010203040"
+                                                                                                  ],
+                                                             "Get-NetAdapter.MacAddress":  [
+                                                                                               "02-90-10-20-30-40"
+                                                                                           ]
+                                                         },
+                                         "restored":  {
+                                                          "OID_802_3_CURRENT_ADDRESS":  [
+                                                                                            "00:50:56:C0:00:08"
+                                                                                        ],
+                                                          "GetAdaptersAddresses":  [
+                                                                                       "00:50:56:C0:00:08"
+                                                                                   ],
+                                                          "GetAdaptersInfo":  [
+                                                                                  "00:50:56:C0:00:08"
+                                                                              ],
+                                                          "GetIfTable2":  [
+                                                                              "00:50:56:C0:00:08"
+                                                                          ],
+                                                          "Win32_NetworkAdapter.MACAddress":  [
+                                                                                                  "00:50:56:C0:00:08"
+                                                                                              ],
+                                                          "MSFT_NetAdapter.NetworkAddresses":  [
+                                                                                                   "005056C00008"
+                                                                                               ],
+                                                          "Get-NetAdapter.MacAddress":  [
+                                                                                            "00-50-56-C0-00-08"
+                                                                                        ]
+                                                      }
+                                     },
+                         "registryBefore":  {
+                                                "present":  false,
+                                                "kind":  null,
+                                                "encoding":  "none",
+                                                "rawValue":  null
+                                            },
+                         "registryRestored":  {
+                                                  "present":  false,
+                                                  "kind":  null,
+                                                  "encoding":  "none",
+                                                  "rawValue":  null
+                                              },
+                         "adminRestored":  "Up",
+                         "linkRestore":  {
+                                             "pnpDeviceId":  "ROOT\\VMWARE\\0001",
+                                             "interfaceGuid":  "E89EFD0E-E452-43D4-8E93-45DA2AF75831",
+                                             "expectedConnected":  true,
+                                             "expectedMediaConnectState":  "1",
+                                             "source":  "MSFT_NetAdapter.MediaConnectState+Get-NetAdapter.Status",
+                                             "actualConnected":  true,
+                                             "actualMediaConnectState":  "1",
+                                             "actualAdapterStatus":  "Up",
+                                             "matchesBaseline":  true,
+                                             "timedOut":  false,
+                                             "error":  null
+                                         },
+                         "finalMediaConnectState":  1,
+                         "originalMediaConnectState":  "1"
+                     },
+                     {
+                         "name":  "VMware Network Adapter VMnet1",
+                         "description":  "VMware Virtual Ethernet Adapter for VMnet1",
+                         "pnpDeviceId":  "ROOT\\VMWARE\\0000",
+                         "interfaceGuid":  "219E20CD-E7F3-409C-9AB4-99FF1E29203E",
+                         "original":  "00:50:56:C0:00:01",
+                         "replacement":  "02:90:10:20:30:41",
+                         "restored":  "00:50:56:C0:00:01",
+                         "readers":  {
+                                         "original":  {
+                                                          "OID_802_3_CURRENT_ADDRESS":  [
+                                                                                            "00:50:56:C0:00:01"
+                                                                                        ],
+                                                          "GetAdaptersAddresses":  [
+                                                                                       "00:50:56:C0:00:01"
+                                                                                   ],
+                                                          "GetAdaptersInfo":  [
+                                                                                  "00:50:56:C0:00:01"
+                                                                              ],
+                                                          "GetIfTable2":  [
+                                                                              "00:50:56:C0:00:01"
+                                                                          ],
+                                                          "Win32_NetworkAdapter.MACAddress":  [
+                                                                                                  "00:50:56:C0:00:01"
+                                                                                              ],
+                                                          "MSFT_NetAdapter.NetworkAddresses":  [
+                                                                                                   "005056C00001"
+                                                                                               ],
+                                                          "Get-NetAdapter.MacAddress":  [
+                                                                                            "00-50-56-C0-00-01"
+                                                                                        ]
+                                                      },
+                                         "replacement":  {
+                                                             "OID_802_3_CURRENT_ADDRESS":  [
+                                                                                               "02:90:10:20:30:41"
+                                                                                           ],
+                                                             "GetAdaptersAddresses":  [
+                                                                                          "02:90:10:20:30:41"
+                                                                                      ],
+                                                             "GetAdaptersInfo":  [
+                                                                                     "02:90:10:20:30:41"
+                                                                                 ],
+                                                             "GetIfTable2":  [
+                                                                                 "02:90:10:20:30:41"
+                                                                             ],
+                                                             "Win32_NetworkAdapter.MACAddress":  [
+                                                                                                     "02:90:10:20:30:41"
+                                                                                                 ],
+                                                             "MSFT_NetAdapter.NetworkAddresses":  [
+                                                                                                      "029010203041"
+                                                                                                  ],
+                                                             "Get-NetAdapter.MacAddress":  [
+                                                                                               "02-90-10-20-30-41"
+                                                                                           ]
+                                                         },
+                                         "restored":  {
+                                                          "OID_802_3_CURRENT_ADDRESS":  [
+                                                                                            "00:50:56:C0:00:01"
+                                                                                        ],
+                                                          "GetAdaptersAddresses":  [
+                                                                                       "00:50:56:C0:00:01"
+                                                                                   ],
+                                                          "GetAdaptersInfo":  [
+                                                                                  "00:50:56:C0:00:01"
+                                                                              ],
+                                                          "GetIfTable2":  [
+                                                                              "00:50:56:C0:00:01"
+                                                                          ],
+                                                          "Win32_NetworkAdapter.MACAddress":  [
+                                                                                                  "00:50:56:C0:00:01"
+                                                                                              ],
+                                                          "MSFT_NetAdapter.NetworkAddresses":  [
+                                                                                                   "005056C00001"
+                                                                                               ],
+                                                          "Get-NetAdapter.MacAddress":  [
+                                                                                            "00-50-56-C0-00-01"
+                                                                                        ]
+                                                      }
+                                     },
+                         "registryBefore":  {
+                                                "present":  false,
+                                                "kind":  null,
+                                                "encoding":  "none",
+                                                "rawValue":  null
+                                            },
+                         "registryRestored":  {
+                                                  "present":  false,
+                                                  "kind":  null,
+                                                  "encoding":  "none",
+                                                  "rawValue":  null
+                                              },
+                         "adminRestored":  "Up",
+                         "linkRestore":  {
+                                             "pnpDeviceId":  "ROOT\\VMWARE\\0000",
+                                             "interfaceGuid":  "219E20CD-E7F3-409C-9AB4-99FF1E29203E",
+                                             "expectedConnected":  true,
+                                             "expectedMediaConnectState":  "1",
+                                             "source":  "MSFT_NetAdapter.MediaConnectState+Get-NetAdapter.Status",
+                                             "actualConnected":  true,
+                                             "actualMediaConnectState":  "1",
+                                             "actualAdapterStatus":  "Up",
+                                             "matchesBaseline":  true,
+                                             "timedOut":  false,
+                                             "error":  null
+                                         },
+                         "finalMediaConnectState":  1,
+                         "originalMediaConnectState":  "1"
+                     },
+                     {
+                         "name":  "Wi-Fi",
+                         "description":  "Intel(R) Wi-Fi 6 AX201 160MHz",
+                         "pnpDeviceId":  "PCI\\VEN_8086\u0026DEV_7AF0\u0026SUBSYS_00748086\u0026REV_11\\3\u002611583659\u00261\u0026A3",
+                         "interfaceGuid":  "1D78C3CF-2BF6-453B-ABAF-2320AF9137F1",
+                         "original":  "C4:BD:E5:32:06:D1",
+                         "replacement":  "02:90:10:20:30:42",
+                         "restored":  "C4:BD:E5:32:06:D1",
+                         "readers":  {
+                                         "original":  {
+                                                          "OID_802_3_CURRENT_ADDRESS":  [
+                                                                                            "C4:BD:E5:32:06:D1"
+                                                                                        ],
+                                                          "GetAdaptersAddresses":  [
+                                                                                       "C4:BD:E5:32:06:D1"
+                                                                                   ],
+                                                          "GetAdaptersInfo":  [
+                                                                                  "C4:BD:E5:32:06:D1"
+                                                                              ],
+                                                          "GetIfTable2":  [
+                                                                              "C4:BD:E5:32:06:D1"
+                                                                          ],
+                                                          "Win32_NetworkAdapter.MACAddress":  [
+                                                                                                  "C4:BD:E5:32:06:D1"
+                                                                                              ],
+                                                          "MSFT_NetAdapter.NetworkAddresses":  [
+                                                                                                   "C4BDE53206D1"
+                                                                                               ],
+                                                          "Get-NetAdapter.MacAddress":  [
+                                                                                            "C4-BD-E5-32-06-D1"
+                                                                                        ],
+                                                          "OID_DOT11_CURRENT_ADDRESS":  [
+                                                                                            "C4:BD:E5:32:06:D1"
+                                                                                        ]
+                                                      },
+                                         "replacement":  {
+                                                             "OID_802_3_CURRENT_ADDRESS":  [
+                                                                                               "02:90:10:20:30:42"
+                                                                                           ],
+                                                             "GetAdaptersAddresses":  [
+                                                                                          "02:90:10:20:30:42"
+                                                                                      ],
+                                                             "GetAdaptersInfo":  [
+                                                                                     "02:90:10:20:30:42"
+                                                                                 ],
+                                                             "GetIfTable2":  [
+                                                                                 "02:90:10:20:30:42"
+                                                                             ],
+                                                             "Win32_NetworkAdapter.MACAddress":  [
+                                                                                                     "02:90:10:20:30:42"
+                                                                                                 ],
+                                                             "MSFT_NetAdapter.NetworkAddresses":  [
+                                                                                                      "029010203042"
+                                                                                                  ],
+                                                             "Get-NetAdapter.MacAddress":  [
+                                                                                               "02-90-10-20-30-42"
+                                                                                           ],
+                                                             "OID_DOT11_CURRENT_ADDRESS":  [
+                                                                                               "02:90:10:20:30:42"
+                                                                                           ]
+                                                         },
+                                         "restored":  {
+                                                          "OID_802_3_CURRENT_ADDRESS":  [
+                                                                                            "C4:BD:E5:32:06:D1"
+                                                                                        ],
+                                                          "GetAdaptersAddresses":  [
+                                                                                       "C4:BD:E5:32:06:D1"
+                                                                                   ],
+                                                          "GetAdaptersInfo":  [
+                                                                                  "C4:BD:E5:32:06:D1"
+                                                                              ],
+                                                          "GetIfTable2":  [
+                                                                              "C4:BD:E5:32:06:D1"
+                                                                          ],
+                                                          "Win32_NetworkAdapter.MACAddress":  [
+                                                                                                  "C4:BD:E5:32:06:D1"
+                                                                                              ],
+                                                          "MSFT_NetAdapter.NetworkAddresses":  [
+                                                                                                   "C4BDE53206D1"
+                                                                                               ],
+                                                          "Get-NetAdapter.MacAddress":  [
+                                                                                            "C4-BD-E5-32-06-D1"
+                                                                                        ],
+                                                          "OID_DOT11_CURRENT_ADDRESS":  [
+                                                                                            "C4:BD:E5:32:06:D1"
+                                                                                        ]
+                                                      }
+                                     },
+                         "registryBefore":  {
+                                                "present":  false,
+                                                "kind":  null,
+                                                "encoding":  "none",
+                                                "rawValue":  null
+                                            },
+                         "registryRestored":  {
+                                                  "present":  false,
+                                                  "kind":  null,
+                                                  "encoding":  "none",
+                                                  "rawValue":  null
+                                              },
+                         "adminRestored":  "Up",
+                         "linkRestore":  {
+                                             "pnpDeviceId":  "PCI\\VEN_8086\u0026DEV_7AF0\u0026SUBSYS_00748086\u0026REV_11\\3\u002611583659\u00261\u0026A3",
+                                             "interfaceGuid":  "1D78C3CF-2BF6-453B-ABAF-2320AF9137F1",
+                                             "expectedConnected":  true,
+                                             "expectedMediaConnectState":  "1",
+                                             "source":  "MSFT_NetAdapter.MediaConnectState+Get-NetAdapter.Status",
+                                             "actualConnected":  true,
+                                             "actualMediaConnectState":  "1",
+                                             "actualAdapterStatus":  "Up",
+                                             "matchesBaseline":  true,
+                                             "timedOut":  false,
+                                             "error":  null
+                                         },
+                         "finalMediaConnectState":  1,
+                         "originalMediaConnectState":  "1"
+                     },
+                     {
+                         "name":  "Ethernet",
+                         "description":  "Realtek Gaming 2.5GbE Family Controller",
+                         "pnpDeviceId":  "PCI\\VEN_10EC\u0026DEV_8125\u0026SUBSYS_7D371462\u0026REV_05\\4\u00263FA6681\u00260\u002600E2",
+                         "interfaceGuid":  "1291F611-0C4F-4ACF-99A6-E6A22D2F9026",
+                         "original":  "D8:BB:C1:D8:57:20",
+                         "replacement":  "02:90:10:20:30:43",
+                         "restored":  "D8:BB:C1:D8:57:20",
+                         "readers":  {
+                                         "original":  {
+                                                          "OID_802_3_CURRENT_ADDRESS":  [
+                                                                                            "D8:BB:C1:D8:57:20"
+                                                                                        ],
+                                                          "GetAdaptersAddresses":  [
+                                                                                       "D8:BB:C1:D8:57:20"
+                                                                                   ],
+                                                          "GetAdaptersInfo":  [
+                                                                                  "D8:BB:C1:D8:57:20"
+                                                                              ],
+                                                          "GetIfTable2":  [
+                                                                              "D8:BB:C1:D8:57:20"
+                                                                          ],
+                                                          "Win32_NetworkAdapter.MACAddress":  [
+                                                                                                  "D8:BB:C1:D8:57:20"
+                                                                                              ],
+                                                          "MSFT_NetAdapter.NetworkAddresses":  [
+                                                                                                   "D8BBC1D85720"
+                                                                                               ],
+                                                          "Get-NetAdapter.MacAddress":  [
+                                                                                            "D8-BB-C1-D8-57-20"
+                                                                                        ]
+                                                      },
+                                         "replacement":  {
+                                                             "OID_802_3_CURRENT_ADDRESS":  [
+                                                                                               "02:90:10:20:30:43"
+                                                                                           ],
+                                                             "GetAdaptersAddresses":  [
+                                                                                          "02:90:10:20:30:43"
+                                                                                      ],
+                                                             "GetAdaptersInfo":  [
+                                                                                     "02:90:10:20:30:43"
+                                                                                 ],
+                                                             "GetIfTable2":  [
+                                                                                 "02:90:10:20:30:43"
+                                                                             ],
+                                                             "Win32_NetworkAdapter.MACAddress":  [
+                                                                                                     "02:90:10:20:30:43"
+                                                                                                 ],
+                                                             "MSFT_NetAdapter.NetworkAddresses":  [
+                                                                                                      "029010203043"
+                                                                                                  ],
+                                                             "Get-NetAdapter.MacAddress":  [
+                                                                                               "02-90-10-20-30-43"
+                                                                                           ]
+                                                         },
+                                         "restored":  {
+                                                          "OID_802_3_CURRENT_ADDRESS":  [
+                                                                                            "D8:BB:C1:D8:57:20"
+                                                                                        ],
+                                                          "GetAdaptersAddresses":  [
+                                                                                       "D8:BB:C1:D8:57:20"
+                                                                                   ],
+                                                          "GetAdaptersInfo":  [
+                                                                                  "D8:BB:C1:D8:57:20"
+                                                                              ],
+                                                          "GetIfTable2":  [
+                                                                              "D8:BB:C1:D8:57:20"
+                                                                          ],
+                                                          "Win32_NetworkAdapter.MACAddress":  [
+                                                                                                  "D8:BB:C1:D8:57:20"
+                                                                                              ],
+                                                          "MSFT_NetAdapter.NetworkAddresses":  [
+                                                                                                   "D8BBC1D85720"
+                                                                                               ],
+                                                          "Get-NetAdapter.MacAddress":  [
+                                                                                            "D8-BB-C1-D8-57-20"
+                                                                                        ]
+                                                      }
+                                     },
+                         "registryBefore":  {
+                                                "present":  false,
+                                                "kind":  null,
+                                                "encoding":  "none",
+                                                "rawValue":  null
+                                            },
+                         "registryRestored":  {
+                                                  "present":  false,
+                                                  "kind":  null,
+                                                  "encoding":  "none",
+                                                  "rawValue":  null
+                                              },
+                         "adminRestored":  "Up",
+                         "linkRestore":  {
+                                             "pnpDeviceId":  "PCI\\VEN_10EC\u0026DEV_8125\u0026SUBSYS_7D371462\u0026REV_05\\4\u00263FA6681\u00260\u002600E2",
+                                             "interfaceGuid":  "1291F611-0C4F-4ACF-99A6-E6A22D2F9026",
+                                             "expectedConnected":  false,
+                                             "expectedMediaConnectState":  "2",
+                                             "source":  "MSFT_NetAdapter.MediaConnectState+Get-NetAdapter.Status",
+                                             "actualConnected":  false,
+                                             "actualMediaConnectState":  "0",
+                                             "actualAdapterStatus":  "Disconnected",
+                                             "matchesBaseline":  true,
+                                             "timedOut":  false,
+                                             "error":  null
+                                         },
+                         "finalMediaConnectState":  2,
+                         "originalMediaConnectState":  "2"
+                     }
+                 ],
+    "dot11NotApplicable":  [
+                               {
+                                   "phase":  "preflightOriginal",
+                                   "pnpDeviceId":  "ROOT\\VMWARE\\0001",
+                                   "win32Error":  87,
+                                   "status":  "not_applicable"
+                               },
+                               {
+                                   "phase":  "preflightOriginal",
+                                   "pnpDeviceId":  "ROOT\\VMWARE\\0000",
+                                   "win32Error":  87,
+                                   "status":  "not_applicable"
+                               },
+                               {
+                                   "phase":  "preflightOriginal",
+                                   "pnpDeviceId":  "PCI\\VEN_10EC\u0026DEV_8125\u0026SUBSYS_7D371462\u0026REV_05\\4\u00263FA6681\u00260\u002600E2",
+                                   "win32Error":  87,
+                                   "status":  "not_applicable"
+                               },
+                               {
+                                   "phase":  "replacement",
+                                   "pnpDeviceId":  "ROOT\\VMWARE\\0001",
+                                   "win32Error":  87,
+                                   "status":  "not_applicable"
+                               },
+                               {
+                                   "phase":  "replacement",
+                                   "pnpDeviceId":  "ROOT\\VMWARE\\0000",
+                                   "win32Error":  87,
+                                   "status":  "not_applicable"
+                               },
+                               {
+                                   "phase":  "replacement",
+                                   "pnpDeviceId":  "PCI\\VEN_10EC\u0026DEV_8125\u0026SUBSYS_7D371462\u0026REV_05\\4\u00263FA6681\u00260\u002600E2",
+                                   "win32Error":  87,
+                                   "status":  "not_applicable"
+                               },
+                               {
+                                   "phase":  "originalAfterRestore",
+                                   "pnpDeviceId":  "ROOT\\VMWARE\\0001",
+                                   "win32Error":  87,
+                                   "status":  "not_applicable"
+                               },
+                               {
+                                   "phase":  "originalAfterRestore",
+                                   "pnpDeviceId":  "ROOT\\VMWARE\\0000",
+                                   "win32Error":  87,
+                                   "status":  "not_applicable"
+                               },
+                               {
+                                   "phase":  "originalAfterRestore",
+                                   "pnpDeviceId":  "PCI\\VEN_10EC\u0026DEV_8125\u0026SUBSYS_7D371462\u0026REV_05\\4\u00263FA6681\u00260\u002600E2",
+                                   "win32Error":  87,
+                                   "status":  "not_applicable"
+                               }
+                           ],
+    "restoration":  {
+                        "platformStableDataComparison":  "PASS",
+                        "secureBootBefore":  true,
+                        "secureBootAfter":  true,
+                        "testSigningBefore":  false,
+                        "testSigningAfter":  false,
+                        "trustStoresBefore":  {
+                                                  "Root":  false,
+                                                  "TrustedPublisher":  false
+                                              },
+                        "trustStoresAfter":  {
+                                                 "Root":  false,
+                                                 "TrustedPublisher":  false
+                                             },
+                        "filterBefore":  {
+                                             "servicePresent":  false,
+                                             "serviceRegistryPath":  "HKLM:\\SYSTEM\\CurrentControlSet\\Services\\HypersinvNicAddressFilter",
+                                             "matchingBindings":  [
+
+                                                                  ],
+                                             "clear":  true
+                                         },
+                        "filterAfter":  {
+                                            "servicePresent":  false,
+                                            "serviceRegistryPath":  "HKLM:\\SYSTEM\\CurrentControlSet\\Services\\HypersinvNicAddressFilter",
+                                            "matchingBindings":  [
+
+                                                                 ],
+                                            "clear":  true
+                                        },
+                        "firmwareBefore":  {
+                                               "SecureBoot":  {
+                                                                  "state":  "present",
+                                                                  "guid":  "8be4df61-93ca-11d2-aa0d-00e098032b8c",
+                                                                  "attributes":  6,
+                                                                  "size":  1,
+                                                                  "bytesPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\nic-reader-gap-20261017\\host-runs\\20261018T013020912Z.569ae5e9bb194eb1b48994e33f4cd4a2\\platform-before\\firmware\\firmware-variables\\SecureBoot.bin",
+                                                                  "bytesSha256":  "4BF5122F344554C53BDE2EBB8CD2B7E3D1600AD631C385A5D7CCE23C7785459A",
+                                                                  "bytesHex":  "01",
+                                                                  "win32Error":  0,
+                                                                  "privilegeRestored":  true
+                                                              },
+                                               "SetupMode":  {
+                                                                 "state":  "present",
+                                                                 "guid":  "8be4df61-93ca-11d2-aa0d-00e098032b8c",
+                                                                 "attributes":  6,
+                                                                 "size":  1,
+                                                                 "bytesPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\nic-reader-gap-20261017\\host-runs\\20261018T013020912Z.569ae5e9bb194eb1b48994e33f4cd4a2\\platform-before\\firmware\\firmware-variables\\SetupMode.bin",
+                                                                 "bytesSha256":  "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D",
+                                                                 "bytesHex":  "00",
+                                                                 "win32Error":  0,
+                                                                 "privilegeRestored":  true
+                                                             },
+                                               "BootOrder":  {
+                                                                 "state":  "present",
+                                                                 "guid":  "8be4df61-93ca-11d2-aa0d-00e098032b8c",
+                                                                 "attributes":  7,
+                                                                 "size":  6,
+                                                                 "bytesPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\nic-reader-gap-20261017\\host-runs\\20261018T013020912Z.569ae5e9bb194eb1b48994e33f4cd4a2\\platform-before\\firmware\\firmware-variables\\BootOrder.bin",
+                                                                 "bytesSha256":  "90C2698921CA9FD02950BE353F721888760E33AB5095A21E50F1E4360B6DE1A0",
+                                                                 "bytesHex":  "000001000200",
+                                                                 "win32Error":  0,
+                                                                 "privilegeRestored":  true
+                                                             },
+                                               "BootNext":  {
+                                                                "state":  "absent",
+                                                                "guid":  "8be4df61-93ca-11d2-aa0d-00e098032b8c",
+                                                                "win32Error":  203,
+                                                                "error":  "The system could not find the environment option that was entered",
+                                                                "privilegeRestored":  true
+                                                            },
+                                               "BootCurrent":  {
+                                                                   "state":  "present",
+                                                                   "guid":  "8be4df61-93ca-11d2-aa0d-00e098032b8c",
+                                                                   "attributes":  6,
+                                                                   "size":  2,
+                                                                   "bytesPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\nic-reader-gap-20261017\\host-runs\\20261018T013020912Z.569ae5e9bb194eb1b48994e33f4cd4a2\\platform-before\\firmware\\firmware-variables\\BootCurrent.bin",
+                                                                   "bytesSha256":  "96A296D224F285C67BEE93C30F8A309157F0DAA35DC5B87E410B78630A09CFC7",
+                                                                   "bytesHex":  "0000",
+                                                                   "win32Error":  0,
+                                                                   "privilegeRestored":  true
+                                                               }
+                                           },
+                        "firmwareAfter":  {
+                                              "SecureBoot":  {
+                                                                 "state":  "present",
+                                                                 "guid":  "8be4df61-93ca-11d2-aa0d-00e098032b8c",
+                                                                 "attributes":  6,
+                                                                 "size":  1,
+                                                                 "bytesPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\nic-reader-gap-20261017\\host-runs\\20261018T013020912Z.569ae5e9bb194eb1b48994e33f4cd4a2\\platform-after\\firmware\\firmware-variables\\SecureBoot.bin",
+                                                                 "bytesSha256":  "4BF5122F344554C53BDE2EBB8CD2B7E3D1600AD631C385A5D7CCE23C7785459A",
+                                                                 "bytesHex":  "01",
+                                                                 "win32Error":  0,
+                                                                 "privilegeRestored":  true
+                                                             },
+                                              "SetupMode":  {
+                                                                "state":  "present",
+                                                                "guid":  "8be4df61-93ca-11d2-aa0d-00e098032b8c",
+                                                                "attributes":  6,
+                                                                "size":  1,
+                                                                "bytesPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\nic-reader-gap-20261017\\host-runs\\20261018T013020912Z.569ae5e9bb194eb1b48994e33f4cd4a2\\platform-after\\firmware\\firmware-variables\\SetupMode.bin",
+                                                                "bytesSha256":  "6E340B9CFFB37A989CA544E6BB780A2C78901D3FB33738768511A30617AFA01D",
+                                                                "bytesHex":  "00",
+                                                                "win32Error":  0,
+                                                                "privilegeRestored":  true
+                                                            },
+                                              "BootOrder":  {
+                                                                "state":  "present",
+                                                                "guid":  "8be4df61-93ca-11d2-aa0d-00e098032b8c",
+                                                                "attributes":  7,
+                                                                "size":  6,
+                                                                "bytesPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\nic-reader-gap-20261017\\host-runs\\20261018T013020912Z.569ae5e9bb194eb1b48994e33f4cd4a2\\platform-after\\firmware\\firmware-variables\\BootOrder.bin",
+                                                                "bytesSha256":  "90C2698921CA9FD02950BE353F721888760E33AB5095A21E50F1E4360B6DE1A0",
+                                                                "bytesHex":  "000001000200",
+                                                                "win32Error":  0,
+                                                                "privilegeRestored":  true
+                                                            },
+                                              "BootNext":  {
+                                                               "state":  "absent",
+                                                               "guid":  "8be4df61-93ca-11d2-aa0d-00e098032b8c",
+                                                               "win32Error":  203,
+                                                               "error":  "The system could not find the environment option that was entered",
+                                                               "privilegeRestored":  true
+                                                           },
+                                              "BootCurrent":  {
+                                                                  "state":  "present",
+                                                                  "guid":  "8be4df61-93ca-11d2-aa0d-00e098032b8c",
+                                                                  "attributes":  6,
+                                                                  "size":  2,
+                                                                  "bytesPath":  "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\nic-reader-gap-20261017\\host-runs\\20261018T013020912Z.569ae5e9bb194eb1b48994e33f4cd4a2\\platform-after\\firmware\\firmware-variables\\BootCurrent.bin",
+                                                                  "bytesSha256":  "96A296D224F285C67BEE93C30F8A309157F0DAA35DC5B87E410B78630A09CFC7",
+                                                                  "bytesHex":  "0000",
+                                                                  "win32Error":  0,
+                                                                  "privilegeRestored":  true
+                                                              }
+                                          },
+                        "bcdEnumerationResultsUnchanged":  true,
+                        "bcdExportBefore":  {
+                                                "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T013020912Z.569ae5e9bb194eb1b48994e33f4cd4a2/platform-before/bcd/boot-store-export.bcd",
+                                                "bytes":  32768,
+                                                "sha256":  "96BAED8F7B714ABDDAEBA5185089D71987E29C74EF930EBDBEBED227473509EF"
+                                            },
+                        "bcdExportAfter":  {
+                                               "path":  "spoof-handoff/reports/nic-reader-gap-20261017/host-runs/20261018T013020912Z.569ae5e9bb194eb1b48994e33f4cd4a2/platform-after/bcd/boot-store-export.bcd",
+                                               "bytes":  32768,
+                                               "sha256":  "F65F498D8A6F7DBDFB1CCA526E2B6DC42D5F1676632A8DF4BE48538B4F5622AD"
+                                           },
+                        "espFilesInventoried":  164,
+                        "espFilesHashCompared":  159,
+                        "bcdFilesComparedThroughSupportedApis":  4,
+                        "mutableBootStatusFiles":  1,
+                        "registryAndAdminRestoredCount":  4,
+                        "logicalLinkStateRestoredCount":  4,
+                        "notes":  [
+                                      "Raw live BCD hive/log byte equality is not claimed; both supported exports and all live/exported BCD enumerations were checked.",
+                                      "BOOTSTAT.DAT is explicitly mutable. Firmware proof covers SecureBoot, SetupMode, BootOrder, BootNext and BootCurrent, plus firmware boot entries from bcdedit enumeration.",
+                                      "Realtek immediate restore checkpoint recorded MediaConnectState 0 versus baseline 2, both disconnected. The later final raw MSFT read returned 2 and matched baseline; all four final raw media states matched."
+                                  ]
+                    },
+    "historicalConfirmedCoverage":  {
+                                        "confirmedCategories":  9,
+                                        "totalCategories":  9,
+                                        "allNineSimultaneouslyTested":  false,
+                                        "smbiosSeven":  {
+                                                            "path":  "spoof-handoff/reports/smbios-boot-20261013/seven-fields/seven-fields-round-trip-proof.20261014T205503097Z.bbb7ba67c9924b91a68533cc4fa62a7c.json",
+                                                            "bytes":  6497,
+                                                            "sha256":  "79278FB7081C284EC82A72C01D967E20F3E4681AA97D89CB5C7F8B6F038B50BD"
+                                                        },
+                                        "smbiosReadPaths":  [
+                                                                "GetSystemFirmwareTable(RSMB)",
+                                                                "Fresh WMI Win32_ComputerSystemProduct / Win32_BaseBoard"
+                                                            ],
+                                        "disk":  {
+                                                     "path":  "spoof-handoff/reports/review-20261017/storage-host-round-trip.json",
+                                                     "bytes":  53599,
+                                                     "sha256":  "03D8D8374665AADC4FB060597D81A838F237346E052E81CBCACBE6596CB8FA57"
+                                                 },
+                                        "diskReadPaths":  [
+                                                              "CreateFileW + IOCTL_STORAGE_QUERY_PROPERTY / StorageDeviceProperty",
+                                                              "Fresh Win32_DiskDrive CIM/WMI"
+                                                          ],
+                                        "nicReadPaths":  [
+                                                             "OID_802_3_CURRENT_ADDRESS",
+                                                             "GetAdaptersAddresses",
+                                                             "GetAdaptersInfo",
+                                                             "GetIfTable2",
+                                                             "Win32_NetworkAdapter.MACAddress",
+                                                             "MSFT_NetAdapter.NetworkAddresses",
+                                                             "Get-NetAdapter.MacAddress",
+                                                             "OID_DOT11_CURRENT_ADDRESS on Intel Wi-Fi"
+                                                         ],
+                                        "scope":  [
+                                                      "Nine confirmed field categories have separate host original/replacement/restored proofs. This is not one combined simultaneous run.",
+                                                      "Disk proof covers one explicitly pinned physical boot disk and two read paths. NIC proof covers four locked adapters and the listed current-address readers.",
+                                                      "Permanent MAC properties remain informational and are not claimed changed. Untested readers, all disks, and every adapter outside the locked map are not covered.",
+                                                      "CPU/GPU serial fields remain zero/disabled. No host mutations or new live runs were performed while recording this closeout."
+                                                  ]
+                                    },
+    "regressions":  {
+                        "runtimeSourceChanged":  false,
+                        "priorVmAndSuiteEvidence":  {
+                                                        "path":  "spoof-handoff/reports/review-20261017/nic-vmnet-compatibility-validation.json",
+                                                        "bytes":  73988,
+                                                        "sha256":  "90520EB5944492CC7113D8B32B6A80F18AE08C38FDF631CC6A44E9FB3E607C44"
+                                                    },
+                        "scope":  "Documentation and evidence closeout only. Prior unchanged source passed recorded 32 apply/capture tests, eight snapshot tests, 46 SMBIOS checks and other referenced suites. Loader service test remains unavailable; not claimed passed."
+                    }
+}

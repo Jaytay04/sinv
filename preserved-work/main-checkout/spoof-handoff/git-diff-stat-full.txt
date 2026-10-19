@@ -1,0 +1,17 @@
+ components/uefi-loader/CMakeLists.txt              | 123 +++++-
+ .../src/fixtures/tests/image_launch_test.c         |  31 ++
+ .../src/fixtures/tests/install_bootnext_test.c     | 118 ++++++
+ .../src/fixtures/tests/install_oneshot_test.c      | 371 +++++++++++++++++-
+ components/uefi-loader/src/install/bootnext.c      | 120 ++++--
+ components/uefi-loader/src/install/bootnext.h      |  19 +
+ components/uefi-loader/src/install/main.c          |  50 ++-
+ components/uefi-loader/src/install/oneshot.c       | 413 ++++++++++++++++++++-
+ components/uefi-loader/src/install/oneshot.h       |  29 ++
+ components/uefi-loader/src/loader/efi_entry.c      |  53 ++-
+ components/uefi-loader/src/loader/image_launch.c   |  17 +-
+ components/uefi-loader/src/loader/image_launch.h   |   6 +-
+ components/uefi-loader/src/vendor/Uefi.h           |   9 +-
+ docs/BUILD_BOOT_TEST.md                            |   9 +-
+ tools/hwid_spoofer/hwid_spoofer.c                  |  36 +-
+ tools/hwid_spoofer/hwid_spoofer.h                  |   6 +-
+ 16 files changed, 1331 insertions(+), 79 deletions(-)

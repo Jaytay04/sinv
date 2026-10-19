@@ -1,0 +1,17 @@
+﻿Local work preserved before merging the validated feature branch into main.
+
+main-checkout/ contains 68 existing local files, including all 60 paths that
+overlap the incoming branch. windows-inventory/ contains the 68 modified or
+untracked source/documentation files from that worktree. Originals were not
+edited. manifest.json records original paths, base revisions, sizes, SHA-256
+hashes, and exact Git blob hashes; .gitattributes preserves file bytes.
+
+These are snapshots, not reviewed additions to the production code or current
+operator guidance. Compare them with the merged tree before applying changes.
+The feature's original commits and existing main commits remain reachable.
+
+VM disks/state, credentials/signing material, PDBs, generated build state, and
+uncurated raw reports are retained locally, not included in this Git snapshot.
+The 60 colliding main-checkout originals will additionally be moved into the
+primary workspace's .codex-build/pre-merge-local-files-20261019/ before merging;
+the remaining original files and other worktrees stay in place.

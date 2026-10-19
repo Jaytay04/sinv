@@ -1,0 +1,3 @@
+ tools/hwid_spoofer/hwid_spoofer.c | 36 +++++++++++++++++-------------------
+ tools/hwid_spoofer/hwid_spoofer.h |  6 +++++-
+ 2 files changed, 22 insertions(+), 20 deletions(-)

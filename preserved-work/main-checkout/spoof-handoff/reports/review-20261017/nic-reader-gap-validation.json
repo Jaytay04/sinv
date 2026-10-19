@@ -1,0 +1,4085 @@
+{
+  "schema": "nic-seven-reader-validation.v1",
+  "createdUtc": "2026-10-18T00:12:58.622329+00:00",
+  "result": "VM_SEVEN_READER_PASS_HOST_PENDING",
+  "physicalHostReplacementExecuted": false,
+  "physicalHostProvenCategories": "8/9; NIC remains unproven on the physical host",
+  "physicalHostOriginals": [
+    {
+      "pnpDeviceId": "ROOT\\VMWARE\\0001",
+      "original": "00:50:56:C0:00:08",
+      "lockedReplacement": "02:90:10:20:30:40",
+      "requiredReaders": 7,
+      "originalReadersMatch": true,
+      "observations": {
+        "getAdaptersInfoAddress": {
+          "value": "00:50:56:C0:00:08",
+          "normalizedValue": "005056C00008",
+          "expected": "00:50:56:C0:00:08",
+          "normalizedExpected": "005056C00008",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "win32NetworkAdapter": {
+          "value": "00:50:56:C0:00:08",
+          "normalizedValue": "005056C00008",
+          "expected": "00:50:56:C0:00:08",
+          "normalizedExpected": "005056C00008",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "msftNetAdapterNetworkAddresses": [
+          {
+            "value": "005056C00008",
+            "normalizedValue": "005056C00008",
+            "expected": "00:50:56:C0:00:08",
+            "normalizedExpected": "005056C00008",
+            "matchesExpected": true,
+            "matchesLockedOriginal": true
+          }
+        ],
+        "msftNetAdapterPermanentAddress": {
+          "value": "005056C00008",
+          "comparedToLockedCurrentOriginal": false,
+          "note": "PermanentAddress is recorded for context and is not treated as the current MAC."
+        },
+        "getAdaptersAddresses": {
+          "value": "00:50:56:C0:00:08",
+          "normalizedValue": "005056C00008",
+          "expected": "00:50:56:C0:00:08",
+          "normalizedExpected": "005056C00008",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "getIfTable2": {
+          "value": "00:50:56:C0:00:08",
+          "normalizedValue": "005056C00008",
+          "expected": "00:50:56:C0:00:08",
+          "normalizedExpected": "005056C00008",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "ndisOid8023CurrentAddress": {
+          "value": "00:50:56:C0:00:08",
+          "normalizedValue": "005056C00008",
+          "expected": "00:50:56:C0:00:08",
+          "normalizedExpected": "005056C00008",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "ndisOidDot11CurrentAddress": {
+          "api": "OID_DOT11_CURRENT_ADDRESS",
+          "applicable": false,
+          "status": "not_applicable",
+          "ioctlSucceeded": false,
+          "win32Error": 87,
+          "win32ErrorText": "The parameter is incorrect.",
+          "bytesReturned": 0,
+          "outputBytesHex": "",
+          "actual": null,
+          "normalizedActual": null,
+          "expectedMac": "00:50:56:C0:00:08",
+          "matchesExpected": null,
+          "matchesLockedOriginal": null
+        },
+        "getNetAdapter": {
+          "value": "00-50-56-C0-00-08",
+          "normalizedValue": "005056C00008",
+          "expected": "00:50:56:C0:00:08",
+          "normalizedExpected": "005056C00008",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "permanentAddressComparisons": {
+          "getAdaptersInfoAddress": {
+            "leftValue": "00:50:56:C0:00:08",
+            "rightValue": "005056C00008",
+            "leftComparable": "005056C00008",
+            "rightComparable": "005056C00008",
+            "equal": true
+          },
+          "getAdaptersAddressesPhysicalAddress": {
+            "leftValue": "00:50:56:C0:00:08",
+            "rightValue": "005056C00008",
+            "leftComparable": "005056C00008",
+            "rightComparable": "005056C00008",
+            "equal": true
+          },
+          "getIfTable2PhysicalAddress": {
+            "leftValue": "00:50:56:C0:00:08",
+            "rightValue": "005056C00008",
+            "leftComparable": "005056C00008",
+            "rightComparable": "005056C00008",
+            "equal": true
+          },
+          "win32NetworkAdapterMacAddress": {
+            "leftValue": "00:50:56:C0:00:08",
+            "rightValue": "005056C00008",
+            "leftComparable": "005056C00008",
+            "rightComparable": "005056C00008",
+            "equal": true
+          },
+          "getNetAdapterMacAddress": {
+            "leftValue": "00-50-56-C0-00-08",
+            "rightValue": "005056C00008",
+            "leftComparable": "005056C00008",
+            "rightComparable": "005056C00008",
+            "equal": true
+          },
+          "ndisOid8023CurrentAddress": {
+            "leftValue": "00:50:56:C0:00:08",
+            "rightValue": "005056C00008",
+            "leftComparable": "005056C00008",
+            "rightComparable": "005056C00008",
+            "equal": true
+          },
+          "interpretation": "These are byte-normalized equality comparisons only; no API value is assumed to mean current or permanent unless its API names that property."
+        }
+      },
+      "dot11CurrentAddress": {
+        "api": "OID_DOT11_CURRENT_ADDRESS",
+        "applicable": false,
+        "status": "not_applicable",
+        "ioctlSucceeded": false,
+        "win32Error": 87,
+        "win32ErrorText": "The parameter is incorrect.",
+        "bytesReturned": 0,
+        "outputBytesHex": "",
+        "actual": null,
+        "normalizedActual": null,
+        "expectedMac": "00:50:56:C0:00:08",
+        "matchesExpected": null,
+        "matchesLockedOriginal": null
+      }
+    },
+    {
+      "pnpDeviceId": "ROOT\\VMWARE\\0000",
+      "original": "00:50:56:C0:00:01",
+      "lockedReplacement": "02:90:10:20:30:41",
+      "requiredReaders": 7,
+      "originalReadersMatch": true,
+      "observations": {
+        "getAdaptersInfoAddress": {
+          "value": "00:50:56:C0:00:01",
+          "normalizedValue": "005056C00001",
+          "expected": "00:50:56:C0:00:01",
+          "normalizedExpected": "005056C00001",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "win32NetworkAdapter": {
+          "value": "00:50:56:C0:00:01",
+          "normalizedValue": "005056C00001",
+          "expected": "00:50:56:C0:00:01",
+          "normalizedExpected": "005056C00001",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "msftNetAdapterNetworkAddresses": [
+          {
+            "value": "005056C00001",
+            "normalizedValue": "005056C00001",
+            "expected": "00:50:56:C0:00:01",
+            "normalizedExpected": "005056C00001",
+            "matchesExpected": true,
+            "matchesLockedOriginal": true
+          }
+        ],
+        "msftNetAdapterPermanentAddress": {
+          "value": "005056C00001",
+          "comparedToLockedCurrentOriginal": false,
+          "note": "PermanentAddress is recorded for context and is not treated as the current MAC."
+        },
+        "getAdaptersAddresses": {
+          "value": "00:50:56:C0:00:01",
+          "normalizedValue": "005056C00001",
+          "expected": "00:50:56:C0:00:01",
+          "normalizedExpected": "005056C00001",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "getIfTable2": {
+          "value": "00:50:56:C0:00:01",
+          "normalizedValue": "005056C00001",
+          "expected": "00:50:56:C0:00:01",
+          "normalizedExpected": "005056C00001",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "ndisOid8023CurrentAddress": {
+          "value": "00:50:56:C0:00:01",
+          "normalizedValue": "005056C00001",
+          "expected": "00:50:56:C0:00:01",
+          "normalizedExpected": "005056C00001",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "ndisOidDot11CurrentAddress": {
+          "api": "OID_DOT11_CURRENT_ADDRESS",
+          "applicable": false,
+          "status": "not_applicable",
+          "ioctlSucceeded": false,
+          "win32Error": 87,
+          "win32ErrorText": "The parameter is incorrect.",
+          "bytesReturned": 0,
+          "outputBytesHex": "",
+          "actual": null,
+          "normalizedActual": null,
+          "expectedMac": "00:50:56:C0:00:01",
+          "matchesExpected": null,
+          "matchesLockedOriginal": null
+        },
+        "getNetAdapter": {
+          "value": "00-50-56-C0-00-01",
+          "normalizedValue": "005056C00001",
+          "expected": "00:50:56:C0:00:01",
+          "normalizedExpected": "005056C00001",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "permanentAddressComparisons": {
+          "getAdaptersInfoAddress": {
+            "leftValue": "00:50:56:C0:00:01",
+            "rightValue": "005056C00001",
+            "leftComparable": "005056C00001",
+            "rightComparable": "005056C00001",
+            "equal": true
+          },
+          "getAdaptersAddressesPhysicalAddress": {
+            "leftValue": "00:50:56:C0:00:01",
+            "rightValue": "005056C00001",
+            "leftComparable": "005056C00001",
+            "rightComparable": "005056C00001",
+            "equal": true
+          },
+          "getIfTable2PhysicalAddress": {
+            "leftValue": "00:50:56:C0:00:01",
+            "rightValue": "005056C00001",
+            "leftComparable": "005056C00001",
+            "rightComparable": "005056C00001",
+            "equal": true
+          },
+          "win32NetworkAdapterMacAddress": {
+            "leftValue": "00:50:56:C0:00:01",
+            "rightValue": "005056C00001",
+            "leftComparable": "005056C00001",
+            "rightComparable": "005056C00001",
+            "equal": true
+          },
+          "getNetAdapterMacAddress": {
+            "leftValue": "00-50-56-C0-00-01",
+            "rightValue": "005056C00001",
+            "leftComparable": "005056C00001",
+            "rightComparable": "005056C00001",
+            "equal": true
+          },
+          "ndisOid8023CurrentAddress": {
+            "leftValue": "00:50:56:C0:00:01",
+            "rightValue": "005056C00001",
+            "leftComparable": "005056C00001",
+            "rightComparable": "005056C00001",
+            "equal": true
+          },
+          "interpretation": "These are byte-normalized equality comparisons only; no API value is assumed to mean current or permanent unless its API names that property."
+        }
+      },
+      "dot11CurrentAddress": {
+        "api": "OID_DOT11_CURRENT_ADDRESS",
+        "applicable": false,
+        "status": "not_applicable",
+        "ioctlSucceeded": false,
+        "win32Error": 87,
+        "win32ErrorText": "The parameter is incorrect.",
+        "bytesReturned": 0,
+        "outputBytesHex": "",
+        "actual": null,
+        "normalizedActual": null,
+        "expectedMac": "00:50:56:C0:00:01",
+        "matchesExpected": null,
+        "matchesLockedOriginal": null
+      }
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_7AF0&SUBSYS_00748086&REV_11\\3&11583659&1&A3",
+      "original": "C4:BD:E5:32:06:D1",
+      "lockedReplacement": "02:90:10:20:30:42",
+      "requiredReaders": 7,
+      "originalReadersMatch": true,
+      "observations": {
+        "getAdaptersInfoAddress": {
+          "value": "C4:BD:E5:32:06:D1",
+          "normalizedValue": "C4BDE53206D1",
+          "expected": "C4:BD:E5:32:06:D1",
+          "normalizedExpected": "C4BDE53206D1",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "win32NetworkAdapter": {
+          "value": "C4:BD:E5:32:06:D1",
+          "normalizedValue": "C4BDE53206D1",
+          "expected": "C4:BD:E5:32:06:D1",
+          "normalizedExpected": "C4BDE53206D1",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "msftNetAdapterNetworkAddresses": [
+          {
+            "value": "C4BDE53206D1",
+            "normalizedValue": "C4BDE53206D1",
+            "expected": "C4:BD:E5:32:06:D1",
+            "normalizedExpected": "C4BDE53206D1",
+            "matchesExpected": true,
+            "matchesLockedOriginal": true
+          }
+        ],
+        "msftNetAdapterPermanentAddress": {
+          "value": "C4BDE53206D1",
+          "comparedToLockedCurrentOriginal": false,
+          "note": "PermanentAddress is recorded for context and is not treated as the current MAC."
+        },
+        "getAdaptersAddresses": {
+          "value": "C4:BD:E5:32:06:D1",
+          "normalizedValue": "C4BDE53206D1",
+          "expected": "C4:BD:E5:32:06:D1",
+          "normalizedExpected": "C4BDE53206D1",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "getIfTable2": {
+          "value": "C4:BD:E5:32:06:D1",
+          "normalizedValue": "C4BDE53206D1",
+          "expected": "C4:BD:E5:32:06:D1",
+          "normalizedExpected": "C4BDE53206D1",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "ndisOid8023CurrentAddress": {
+          "value": "C4:BD:E5:32:06:D1",
+          "normalizedValue": "C4BDE53206D1",
+          "expected": "C4:BD:E5:32:06:D1",
+          "normalizedExpected": "C4BDE53206D1",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "ndisOidDot11CurrentAddress": {
+          "api": "OID_DOT11_CURRENT_ADDRESS",
+          "applicable": true,
+          "status": "supported",
+          "ioctlSucceeded": true,
+          "win32Error": 0,
+          "win32ErrorText": null,
+          "bytesReturned": 6,
+          "outputBytesHex": "C4:BD:E5:32:06:D1",
+          "actual": "C4:BD:E5:32:06:D1",
+          "normalizedActual": "C4BDE53206D1",
+          "expectedMac": "C4:BD:E5:32:06:D1",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "getNetAdapter": {
+          "value": "C4-BD-E5-32-06-D1",
+          "normalizedValue": "C4BDE53206D1",
+          "expected": "C4:BD:E5:32:06:D1",
+          "normalizedExpected": "C4BDE53206D1",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "permanentAddressComparisons": {
+          "getAdaptersInfoAddress": {
+            "leftValue": "C4:BD:E5:32:06:D1",
+            "rightValue": "C4BDE53206D1",
+            "leftComparable": "C4BDE53206D1",
+            "rightComparable": "C4BDE53206D1",
+            "equal": true
+          },
+          "getAdaptersAddressesPhysicalAddress": {
+            "leftValue": "C4:BD:E5:32:06:D1",
+            "rightValue": "C4BDE53206D1",
+            "leftComparable": "C4BDE53206D1",
+            "rightComparable": "C4BDE53206D1",
+            "equal": true
+          },
+          "getIfTable2PhysicalAddress": {
+            "leftValue": "C4:BD:E5:32:06:D1",
+            "rightValue": "C4BDE53206D1",
+            "leftComparable": "C4BDE53206D1",
+            "rightComparable": "C4BDE53206D1",
+            "equal": true
+          },
+          "win32NetworkAdapterMacAddress": {
+            "leftValue": "C4:BD:E5:32:06:D1",
+            "rightValue": "C4BDE53206D1",
+            "leftComparable": "C4BDE53206D1",
+            "rightComparable": "C4BDE53206D1",
+            "equal": true
+          },
+          "getNetAdapterMacAddress": {
+            "leftValue": "C4-BD-E5-32-06-D1",
+            "rightValue": "C4BDE53206D1",
+            "leftComparable": "C4BDE53206D1",
+            "rightComparable": "C4BDE53206D1",
+            "equal": true
+          },
+          "ndisOid8023CurrentAddress": {
+            "leftValue": "C4:BD:E5:32:06:D1",
+            "rightValue": "C4BDE53206D1",
+            "leftComparable": "C4BDE53206D1",
+            "rightComparable": "C4BDE53206D1",
+            "equal": true
+          },
+          "interpretation": "These are byte-normalized equality comparisons only; no API value is assumed to mean current or permanent unless its API names that property."
+        }
+      },
+      "dot11CurrentAddress": {
+        "api": "OID_DOT11_CURRENT_ADDRESS",
+        "applicable": true,
+        "status": "supported",
+        "ioctlSucceeded": true,
+        "win32Error": 0,
+        "win32ErrorText": null,
+        "bytesReturned": 6,
+        "outputBytesHex": "C4:BD:E5:32:06:D1",
+        "actual": "C4:BD:E5:32:06:D1",
+        "normalizedActual": "C4BDE53206D1",
+        "expectedMac": "C4:BD:E5:32:06:D1",
+        "matchesExpected": true,
+        "matchesLockedOriginal": true
+      }
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_10EC&DEV_8125&SUBSYS_7D371462&REV_05\\4&3FA6681&0&00E2",
+      "original": "D8:BB:C1:D8:57:20",
+      "lockedReplacement": "02:90:10:20:30:43",
+      "requiredReaders": 7,
+      "originalReadersMatch": true,
+      "observations": {
+        "getAdaptersInfoAddress": {
+          "value": "D8:BB:C1:D8:57:20",
+          "normalizedValue": "D8BBC1D85720",
+          "expected": "D8:BB:C1:D8:57:20",
+          "normalizedExpected": "D8BBC1D85720",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "win32NetworkAdapter": {
+          "value": "D8:BB:C1:D8:57:20",
+          "normalizedValue": "D8BBC1D85720",
+          "expected": "D8:BB:C1:D8:57:20",
+          "normalizedExpected": "D8BBC1D85720",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "msftNetAdapterNetworkAddresses": [
+          {
+            "value": "D8BBC1D85720",
+            "normalizedValue": "D8BBC1D85720",
+            "expected": "D8:BB:C1:D8:57:20",
+            "normalizedExpected": "D8BBC1D85720",
+            "matchesExpected": true,
+            "matchesLockedOriginal": true
+          }
+        ],
+        "msftNetAdapterPermanentAddress": {
+          "value": "D8BBC1D85720",
+          "comparedToLockedCurrentOriginal": false,
+          "note": "PermanentAddress is recorded for context and is not treated as the current MAC."
+        },
+        "getAdaptersAddresses": {
+          "value": "D8:BB:C1:D8:57:20",
+          "normalizedValue": "D8BBC1D85720",
+          "expected": "D8:BB:C1:D8:57:20",
+          "normalizedExpected": "D8BBC1D85720",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "getIfTable2": {
+          "value": "D8:BB:C1:D8:57:20",
+          "normalizedValue": "D8BBC1D85720",
+          "expected": "D8:BB:C1:D8:57:20",
+          "normalizedExpected": "D8BBC1D85720",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "ndisOid8023CurrentAddress": {
+          "value": "D8:BB:C1:D8:57:20",
+          "normalizedValue": "D8BBC1D85720",
+          "expected": "D8:BB:C1:D8:57:20",
+          "normalizedExpected": "D8BBC1D85720",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "ndisOidDot11CurrentAddress": {
+          "api": "OID_DOT11_CURRENT_ADDRESS",
+          "applicable": false,
+          "status": "not_applicable",
+          "ioctlSucceeded": false,
+          "win32Error": 87,
+          "win32ErrorText": "The parameter is incorrect.",
+          "bytesReturned": 0,
+          "outputBytesHex": "",
+          "actual": null,
+          "normalizedActual": null,
+          "expectedMac": "D8:BB:C1:D8:57:20",
+          "matchesExpected": null,
+          "matchesLockedOriginal": null
+        },
+        "getNetAdapter": {
+          "value": "D8-BB-C1-D8-57-20",
+          "normalizedValue": "D8BBC1D85720",
+          "expected": "D8:BB:C1:D8:57:20",
+          "normalizedExpected": "D8BBC1D85720",
+          "matchesExpected": true,
+          "matchesLockedOriginal": true
+        },
+        "permanentAddressComparisons": {
+          "getAdaptersInfoAddress": {
+            "leftValue": "D8:BB:C1:D8:57:20",
+            "rightValue": "D8BBC1D85720",
+            "leftComparable": "D8BBC1D85720",
+            "rightComparable": "D8BBC1D85720",
+            "equal": true
+          },
+          "getAdaptersAddressesPhysicalAddress": {
+            "leftValue": "D8:BB:C1:D8:57:20",
+            "rightValue": "D8BBC1D85720",
+            "leftComparable": "D8BBC1D85720",
+            "rightComparable": "D8BBC1D85720",
+            "equal": true
+          },
+          "getIfTable2PhysicalAddress": {
+            "leftValue": "D8:BB:C1:D8:57:20",
+            "rightValue": "D8BBC1D85720",
+            "leftComparable": "D8BBC1D85720",
+            "rightComparable": "D8BBC1D85720",
+            "equal": true
+          },
+          "win32NetworkAdapterMacAddress": {
+            "leftValue": "D8:BB:C1:D8:57:20",
+            "rightValue": "D8BBC1D85720",
+            "leftComparable": "D8BBC1D85720",
+            "rightComparable": "D8BBC1D85720",
+            "equal": true
+          },
+          "getNetAdapterMacAddress": {
+            "leftValue": "D8-BB-C1-D8-57-20",
+            "rightValue": "D8BBC1D85720",
+            "leftComparable": "D8BBC1D85720",
+            "rightComparable": "D8BBC1D85720",
+            "equal": true
+          },
+          "ndisOid8023CurrentAddress": {
+            "leftValue": "D8:BB:C1:D8:57:20",
+            "rightValue": "D8BBC1D85720",
+            "leftComparable": "D8BBC1D85720",
+            "rightComparable": "D8BBC1D85720",
+            "equal": true
+          },
+          "interpretation": "These are byte-normalized equality comparisons only; no API value is assumed to mean current or permanent unless its API names that property."
+        }
+      },
+      "dot11CurrentAddress": {
+        "api": "OID_DOT11_CURRENT_ADDRESS",
+        "applicable": false,
+        "status": "not_applicable",
+        "ioctlSucceeded": false,
+        "win32Error": 87,
+        "win32ErrorText": "The parameter is incorrect.",
+        "bytesReturned": 0,
+        "outputBytesHex": "",
+        "actual": null,
+        "normalizedActual": null,
+        "expectedMac": "D8:BB:C1:D8:57:20",
+        "matchesExpected": null,
+        "matchesLockedOriginal": null
+      }
+    }
+  ],
+  "coverage": [
+    {
+      "reader": "Get-NetAdapter.MacAddress",
+      "adapters": 4,
+      "replacementMatches": 4,
+      "restoredMatches": 4
+    },
+    {
+      "reader": "GetAdaptersAddresses",
+      "adapters": 4,
+      "replacementMatches": 4,
+      "restoredMatches": 4
+    },
+    {
+      "reader": "GetAdaptersInfo",
+      "adapters": 4,
+      "replacementMatches": 4,
+      "restoredMatches": 4
+    },
+    {
+      "reader": "GetIfTable2",
+      "adapters": 4,
+      "replacementMatches": 4,
+      "restoredMatches": 4
+    },
+    {
+      "reader": "MSFT_NetAdapter.NetworkAddresses",
+      "adapters": 4,
+      "replacementMatches": 4,
+      "restoredMatches": 4
+    },
+    {
+      "reader": "OID_802_3_CURRENT_ADDRESS",
+      "adapters": 4,
+      "replacementMatches": 4,
+      "restoredMatches": 4
+    },
+    {
+      "reader": "Win32_NetworkAdapter.MACAddress",
+      "adapters": 4,
+      "replacementMatches": 4,
+      "restoredMatches": 4
+    }
+  ],
+  "proofs": [
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+      "reader": "OID_802_3_CURRENT_ADDRESS",
+      "original": "00:50:56:C0:00:08",
+      "expectedReplacement": "02:90:10:20:30:40",
+      "activeObserved": "02:90:10:20:30:40",
+      "restored": "00:50:56:C0:00:08",
+      "unfilteredObserved": "02:90:10:20:30:40",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+      "reader": "GetAdaptersAddresses",
+      "original": "00:50:56:C0:00:08",
+      "expectedReplacement": "02:90:10:20:30:40",
+      "activeObserved": "02:90:10:20:30:40",
+      "restored": "00:50:56:C0:00:08",
+      "unfilteredObserved": "02:90:10:20:30:40",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+      "reader": "GetAdaptersInfo",
+      "original": "00:50:56:C0:00:08",
+      "expectedReplacement": "02:90:10:20:30:40",
+      "activeObserved": "02:90:10:20:30:40",
+      "restored": "00:50:56:C0:00:08",
+      "unfilteredObserved": "02:90:10:20:30:40",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+      "reader": "GetIfTable2",
+      "original": "00:50:56:C0:00:08",
+      "expectedReplacement": "02:90:10:20:30:40",
+      "activeObserved": "02:90:10:20:30:40",
+      "restored": "00:50:56:C0:00:08",
+      "unfilteredObserved": "02:90:10:20:30:40",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+      "reader": "Win32_NetworkAdapter.MACAddress",
+      "original": "00:50:56:C0:00:08",
+      "expectedReplacement": "02:90:10:20:30:40",
+      "activeObserved": "02:90:10:20:30:40",
+      "restored": "00:50:56:C0:00:08",
+      "unfilteredObserved": "02:90:10:20:30:40",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+      "reader": "MSFT_NetAdapter.NetworkAddresses",
+      "original": "005056C00008",
+      "expectedReplacement": "02:90:10:20:30:40",
+      "activeObserved": "029010203040",
+      "restored": "005056C00008",
+      "unfilteredObserved": "029010203040",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+      "reader": "Get-NetAdapter.MacAddress",
+      "original": "00-50-56-C0-00-08",
+      "expectedReplacement": "02:90:10:20:30:40",
+      "activeObserved": "02-90-10-20-30-40",
+      "restored": "00-50-56-C0-00-08",
+      "unfilteredObserved": "02-90-10-20-30-40",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+      "reader": "OID_802_3_CURRENT_ADDRESS",
+      "original": "00:50:56:C0:00:01",
+      "expectedReplacement": "02:90:10:20:30:41",
+      "activeObserved": "02:90:10:20:30:41",
+      "restored": "00:50:56:C0:00:01",
+      "unfilteredObserved": "02:90:10:20:30:41",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+      "reader": "GetAdaptersAddresses",
+      "original": "00:50:56:C0:00:01",
+      "expectedReplacement": "02:90:10:20:30:41",
+      "activeObserved": "02:90:10:20:30:41",
+      "restored": "00:50:56:C0:00:01",
+      "unfilteredObserved": "02:90:10:20:30:41",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+      "reader": "GetAdaptersInfo",
+      "original": "00:50:56:C0:00:01",
+      "expectedReplacement": "02:90:10:20:30:41",
+      "activeObserved": "02:90:10:20:30:41",
+      "restored": "00:50:56:C0:00:01",
+      "unfilteredObserved": "02:90:10:20:30:41",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+      "reader": "GetIfTable2",
+      "original": "00:50:56:C0:00:01",
+      "expectedReplacement": "02:90:10:20:30:41",
+      "activeObserved": "02:90:10:20:30:41",
+      "restored": "00:50:56:C0:00:01",
+      "unfilteredObserved": "02:90:10:20:30:41",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+      "reader": "Win32_NetworkAdapter.MACAddress",
+      "original": "00:50:56:C0:00:01",
+      "expectedReplacement": "02:90:10:20:30:41",
+      "activeObserved": "02:90:10:20:30:41",
+      "restored": "00:50:56:C0:00:01",
+      "unfilteredObserved": "02:90:10:20:30:41",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+      "reader": "MSFT_NetAdapter.NetworkAddresses",
+      "original": "005056C00001",
+      "expectedReplacement": "02:90:10:20:30:41",
+      "activeObserved": "029010203041",
+      "restored": "005056C00001",
+      "unfilteredObserved": "029010203041",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+      "reader": "Get-NetAdapter.MacAddress",
+      "original": "00-50-56-C0-00-01",
+      "expectedReplacement": "02:90:10:20:30:41",
+      "activeObserved": "02-90-10-20-30-41",
+      "restored": "00-50-56-C0-00-01",
+      "unfilteredObserved": "02-90-10-20-30-41",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+      "reader": "OID_802_3_CURRENT_ADDRESS",
+      "original": "C4:BD:E5:32:06:D1",
+      "expectedReplacement": "02:90:10:20:30:42",
+      "activeObserved": "02:90:10:20:30:42",
+      "restored": "C4:BD:E5:32:06:D1",
+      "unfilteredObserved": "02:90:10:20:30:42",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+      "reader": "GetAdaptersAddresses",
+      "original": "C4:BD:E5:32:06:D1",
+      "expectedReplacement": "02:90:10:20:30:42",
+      "activeObserved": "02:90:10:20:30:42",
+      "restored": "C4:BD:E5:32:06:D1",
+      "unfilteredObserved": "02:90:10:20:30:42",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+      "reader": "GetAdaptersInfo",
+      "original": "C4:BD:E5:32:06:D1",
+      "expectedReplacement": "02:90:10:20:30:42",
+      "activeObserved": "02:90:10:20:30:42",
+      "restored": "C4:BD:E5:32:06:D1",
+      "unfilteredObserved": "02:90:10:20:30:42",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+      "reader": "GetIfTable2",
+      "original": "C4:BD:E5:32:06:D1",
+      "expectedReplacement": "02:90:10:20:30:42",
+      "activeObserved": "02:90:10:20:30:42",
+      "restored": "C4:BD:E5:32:06:D1",
+      "unfilteredObserved": "02:90:10:20:30:42",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+      "reader": "Win32_NetworkAdapter.MACAddress",
+      "original": "C4:BD:E5:32:06:D1",
+      "expectedReplacement": "02:90:10:20:30:42",
+      "activeObserved": "02:90:10:20:30:42",
+      "restored": "C4:BD:E5:32:06:D1",
+      "unfilteredObserved": "02:90:10:20:30:42",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+      "reader": "MSFT_NetAdapter.NetworkAddresses",
+      "original": "C4BDE53206D1",
+      "expectedReplacement": "02:90:10:20:30:42",
+      "activeObserved": "029010203042",
+      "restored": "C4BDE53206D1",
+      "unfilteredObserved": "029010203042",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+      "reader": "Get-NetAdapter.MacAddress",
+      "original": "C4-BD-E5-32-06-D1",
+      "expectedReplacement": "02:90:10:20:30:42",
+      "activeObserved": "02-90-10-20-30-42",
+      "restored": "C4-BD-E5-32-06-D1",
+      "unfilteredObserved": "02-90-10-20-30-42",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+      "reader": "OID_802_3_CURRENT_ADDRESS",
+      "original": "D8:BB:C1:D8:57:20",
+      "expectedReplacement": "02:90:10:20:30:43",
+      "activeObserved": "02:90:10:20:30:43",
+      "restored": "D8:BB:C1:D8:57:20",
+      "unfilteredObserved": "02:90:10:20:30:43",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+      "reader": "GetAdaptersAddresses",
+      "original": "D8:BB:C1:D8:57:20",
+      "expectedReplacement": "02:90:10:20:30:43",
+      "activeObserved": "02:90:10:20:30:43",
+      "restored": "D8:BB:C1:D8:57:20",
+      "unfilteredObserved": "02:90:10:20:30:43",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+      "reader": "GetAdaptersInfo",
+      "original": "D8:BB:C1:D8:57:20",
+      "expectedReplacement": "02:90:10:20:30:43",
+      "activeObserved": "02:90:10:20:30:43",
+      "restored": "D8:BB:C1:D8:57:20",
+      "unfilteredObserved": "02:90:10:20:30:43",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+      "reader": "GetIfTable2",
+      "original": "D8:BB:C1:D8:57:20",
+      "expectedReplacement": "02:90:10:20:30:43",
+      "activeObserved": "02:90:10:20:30:43",
+      "restored": "D8:BB:C1:D8:57:20",
+      "unfilteredObserved": "02:90:10:20:30:43",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+      "reader": "Win32_NetworkAdapter.MACAddress",
+      "original": "D8:BB:C1:D8:57:20",
+      "expectedReplacement": "02:90:10:20:30:43",
+      "activeObserved": "02:90:10:20:30:43",
+      "restored": "D8:BB:C1:D8:57:20",
+      "unfilteredObserved": "02:90:10:20:30:43",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+      "reader": "MSFT_NetAdapter.NetworkAddresses",
+      "original": "D8BBC1D85720",
+      "expectedReplacement": "02:90:10:20:30:43",
+      "activeObserved": "029010203043",
+      "restored": "D8BBC1D85720",
+      "unfilteredObserved": "029010203043",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    },
+    {
+      "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+      "reader": "Get-NetAdapter.MacAddress",
+      "original": "D8-BB-C1-D8-57-20",
+      "expectedReplacement": "02:90:10:20:30:43",
+      "activeObserved": "02-90-10-20-30-43",
+      "restored": "D8-BB-C1-D8-57-20",
+      "unfilteredObserved": "02-90-10-20-30-43",
+      "unfilteredMatches": true,
+      "originalMatches": true,
+      "replacementMatches": true,
+      "restoredMatches": true,
+      "roundTripPass": true
+    }
+  ],
+  "captures": {
+    "original": {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233114-765bc7624d/evidence/kernel-metadata.json",
+      "bytes": 187579,
+      "sha256": "BA027DEACAA9A398721BDAD00FB2542007A87D28A8605994F6A3F4548286285B"
+    },
+    "active": {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233834-8d4a1017ed/evidence/kernel-metadata.json",
+      "bytes": 202801,
+      "sha256": "EF468E9B611CE4F6F30B3AC3962FB8B97AFFDA320AA316574058611BA5494F1B"
+    },
+    "unfilteredActive": {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234025-36406a146b/evidence/kernel-metadata.json",
+      "bytes": 187702,
+      "sha256": "09F5801B123A0A52C45B941E65D3ACFD066B3CC95CF987490D121A5CE32D297A"
+    },
+    "restored": {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234313-876dc991d3/evidence/kernel-metadata.json",
+      "bytes": 187579,
+      "sha256": "AED5A724CE949C09504DD76159E592577A7774AFD236B67F36C303FFADEC5D22"
+    },
+    "hostBefore": {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/host-originals-before/readback.20261017T232938571Z.9c3c61c7784f479c991c808e0a6dded6.json",
+      "bytes": 87825,
+      "sha256": "03329C07BA1C2B432706A1C8374AD9200A827E7E9AAF8D25A69B32216A6C17D5"
+    },
+    "hostAfter": {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/host-originals-after-canceled-launch/readback.20261018T000509195Z.c0ce6e41886e441798fe4ffc22eb5d9e.json",
+      "bytes": 95001,
+      "sha256": "4694FDFD979A327501A7AE783155BBD2BCE1AFD88F39701E365927A715673A3E"
+    }
+  },
+  "finalState": {
+    "utc": "2026-10-18T00:05:09.0350988Z",
+    "readOnlyHostQueries": true,
+    "hostActivationExecuted": false,
+    "hostWindowsBuild": "26200.9711",
+    "hostSecureBootCachedFlag": 1,
+    "secureBootEvidenceScope": "Windows boot-state registry flag; user previously supplied elevated Confirm-SecureBootUEFI=True. No host firmware or boot-policy write was performed.",
+    "hostKernelIntegrityNtStatus": "0x00000000",
+    "hostKernelIntegrityOptions": "0x0000C001",
+    "hostKernelTestSigning": false,
+    "hostTrustMembership": {
+      "Root": false,
+      "TrustedPublisher": false
+    },
+    "hostNicServicePresent": false,
+    "hostStorageServicePresent": false,
+    "sourceVmx": "C:\\Users\\jayli\\OneDrive\\Documents\\Virtual Machines\\UEFILoader-Win11-ExactBuild-Gate\\UEFILoader-Win11-ExactBuild-Gate.vmx",
+    "sourceVmxSha256": "537BBE6D91DFA716D698A5E8301F5C2C59FC98CC65308BC905A9938A3129F0C9",
+    "sourceVmxUnchanged": true,
+    "mainCheckoutHead": "9b82c1dc5409b36829842bae6ac841ef60481c72",
+    "mainCheckoutHeadUnchanged": true,
+    "mainCheckoutIndexSha256": "C15E40DC497E9C24BE73197E96ACCC5B43D3C62F14AB0199C3286BE65198D2F9",
+    "mainCheckoutIndexUnchanged": true,
+    "virtualMachinesRunning": 0,
+    "vmrunList": [
+      "Total running VMs: 0"
+    ],
+    "hostBcdEspFirmwareScope": "No host deployment or changes; no fresh byte-for-byte BCD/ESP/firmware restore claim is made."
+  },
+  "finalStateEvidence": {
+    "path": "spoof-handoff/reports/nic-reader-gap-20261017/host-state-after-canceled-launch.json",
+    "bytes": 1561,
+    "sha256": "65E698F925C454C16CA74C3EE3504E3E4C1790302BFD2C774067903AB5835702"
+  },
+  "softwareTests": {
+    "independentPureSuites": {
+      "schema": "nic-reader-gap-independent-validation-counts.v2",
+      "capturedUtc": "2026-10-18T00:01:21.9426063Z",
+      "suites": [
+        {
+          "name": "NIC VM journal/readback evaluator pure suite",
+          "assertions": 191,
+          "failed": 0,
+          "status": "PASS",
+          "result": "spoof-handoff/reports/nic-vm-20261017/tests/result.20261017T234812329Z.fe3f20588ee14fedaa76cc85085e49dc.json"
+        },
+        {
+          "name": "NIC adapter address pure suite",
+          "assertions": 53,
+          "failed": 0,
+          "status": "PASS",
+          "result": "spoof-handoff/reports/nic-reader-gap-20261017/adapter-address-unit.20261017T234814384Z.4fe9fb63b27b47138a0bb2cc0868c037.json"
+        },
+        {
+          "name": "SMBIOS workflow fixtures",
+          "assertions": 30,
+          "failed": 0,
+          "status": "PASS",
+          "rawOutput": "smbios-workflow.stdout.txt"
+        },
+        {
+          "name": "SMBIOS snapshot fixtures",
+          "assertions": 16,
+          "failed": 0,
+          "status": "PASS",
+          "rawOutput": "smbios-snapshot.stdout.txt"
+        },
+        {
+          "name": "Storage host pure model",
+          "assertions": 126,
+          "failed": 0,
+          "status": "PASS",
+          "rawOutput": "storage-host-model.stdout.txt"
+        },
+        {
+          "name": "Frozen NIC host helper AST and synthetic restore tests",
+          "assertions": 15,
+          "failed": 0,
+          "status": "PASS",
+          "rawOutput": "host-frozen-ast.stdout.txt",
+          "details": "Includes sealed-gate verification, 112 actual reader-value comparisons, atomic JSON create/replace, deep mutable journal conversion, typed registry snapshots, four-adapter mock restore, and injected journal-write failures."
+        }
+      ],
+      "totalAssertions": 431,
+      "allSuitesPass": true,
+      "noHostOrVmMutation": true
+    },
+    "independentSuiteEvidence": {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/suite-counts.json",
+      "bytes": 2535,
+      "sha256": "E02D60AA4E0B6278254A51D955200C426CBEF31CC9DD9C0DD01B0DB60B4C6BD4"
+    },
+    "revisedRawInputGate": {
+      "evidence": {
+        "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/20261018T001149Z.fe8b13147fb34fbfb572e8409ff11ea0/raw-input-gate-tests.json",
+        "bytes": 80910,
+        "sha256": "BD1477E9030A3C1AAA514DB54014C0391F50B13A573465A40A4A0A8B28D21F65"
+      },
+      "result": {
+        "schema": "nic-vm-raw-input-host-gate-tests.v1",
+        "status": "PASS",
+        "source": {
+          "path": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\tools\\nic_vm\\host-address-roundtrip.ps1",
+          "sha256": "703A3E20896241D528805B4B9D5B647A1CE93BD6C739E54AC9B3C0569B086108",
+          "extraction": "PowerShell AST function extents only; selected pure reader-verification helpers; main Run/Rollback entry points not invoked."
+        },
+        "testSource": {
+          "path": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\worktrees\\smbios-boot-serial-probe\\spoof-handoff\\tools\\nic_vm\\host-gate-tests.ps1",
+          "sha256": "3CADAFC4A6D48DC8DF53BDEF882B14EE917291707CC60D85363385ABFC07E40F"
+        },
+        "gate": {
+          "path": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\nic-reader-gap-20261017\\vm-seven-reader-gate.json",
+          "sha256": "118E71B245CF1FF163E1E0F6DB1AB5C11575CE6B59A08FA67975135FD15CDE83"
+        },
+        "lockedTsv": {
+          "path": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\client-originals.tsv",
+          "sha256": "F628CB25D18F549A877C1529A82986B524BFD3D8B9801A776405F969FC4F42C3"
+        },
+        "runDirectory": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\nic-reader-gap-20261017\\raw-gate-validation\\20261018T001149Z.fe8b13147fb34fbfb572e8409ff11ea0",
+        "summary": {
+          "rawInputComparisons": 112,
+          "negativeCases": 3,
+          "passed": 4,
+          "failed": 0,
+          "deviceOrHostActions": 0
+        },
+        "tests": [
+          {
+            "name": "positive-raw-input-recompute",
+            "status": "PASS",
+            "detail": "Recomputed all four adapters x seven readers across original, filtered-active, unfiltered-active, and restored captures; all 112 raw observations matched both locked TSV values and the sealed gate.",
+            "fixturePath": "",
+            "fixtureSha256": ""
+          },
+          {
+            "name": "tampered-GetAdaptersAddresses",
+            "status": "PASS",
+            "detail": "Rejected malformed raw input while all evaluation booleans remained true; VM raw reader did not match the locked mode: phase=filteredActive pnp=PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100 reader=GetAdaptersAddresses expected=029010203041 actual=02AABBCCDDEE",
+            "fixturePath": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\nic-reader-gap-20261017\\raw-gate-validation\\20261018T001149Z.fe8b13147fb34fbfb572e8409ff11ea0\\fixtures\\tampered-GetAdaptersAddresses.json",
+            "fixtureSha256": "EF4D54A4FC853F4EF9F707452B74DC5BDB35528772F3707B0ACE14AEB56198F6"
+          },
+          {
+            "name": "missing-GetAdaptersInfo-row",
+            "status": "PASS",
+            "detail": "Rejected malformed raw input while all evaluation booleans remained true; Raw GetAdaptersInfo for PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100 identity must resolve to exactly one row; GUID=04402209-F995-47B3-83A1-A5C88643893B matches=0",
+            "fixturePath": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\nic-reader-gap-20261017\\raw-gate-validation\\20261018T001149Z.fe8b13147fb34fbfb572e8409ff11ea0\\fixtures\\missing-GetAdaptersInfo-row.json",
+            "fixtureSha256": "8C8DC3BE1C5AC0045C9A2F523B8A4E1FDDC4CAFEAA45176F98C6B0AC94D07CA5"
+          },
+          {
+            "name": "duplicate-GetIfTable2-row",
+            "status": "PASS",
+            "detail": "Rejected malformed raw input while all evaluation booleans remained true; Raw GetIfTable2 for PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100 identity must resolve to exactly one row; GUID=04402209-F995-47B3-83A1-A5C88643893B matches=2",
+            "fixturePath": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\nic-reader-gap-20261017\\raw-gate-validation\\20261018T001149Z.fe8b13147fb34fbfb572e8409ff11ea0\\fixtures\\duplicate-GetIfTable2-row.json",
+            "fixtureSha256": "5160C9542F66D36195BD310278FEE951B6CA83511D413A547438DD044614AFCF"
+          }
+        ],
+        "captures": {
+          "original": {
+            "path": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\nic-vm-20261017\\uefi-windows-probe-20261017-233114-765bc7624d\\evidence\\kernel-metadata.json",
+            "sha256": "BA027DEACAA9A398721BDAD00FB2542007A87D28A8605994F6A3F4548286285B"
+          },
+          "filteredActive": {
+            "path": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\nic-vm-20261017\\uefi-windows-probe-20261017-233834-8d4a1017ed\\evidence\\kernel-metadata.json",
+            "sha256": "EF468E9B611CE4F6F30B3AC3962FB8B97AFFDA320AA316574058611BA5494F1B"
+          },
+          "unfilteredActive": {
+            "path": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\nic-vm-20261017\\uefi-windows-probe-20261017-234025-36406a146b\\evidence\\kernel-metadata.json",
+            "sha256": "09F5801B123A0A52C45B941E65D3ACFD066B3CC95CF987490D121A5CE32D297A"
+          },
+          "restored": {
+            "path": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\spoof-handoff\\reports\\nic-vm-20261017\\uefi-windows-probe-20261017-234313-876dc991d3\\evidence\\kernel-metadata.json",
+            "sha256": "AED5A724CE949C09504DD76159E592577A7774AFD236B67F36C303FFADEC5D22"
+          }
+        },
+        "inputComparisons": [
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "Get-NetAdapter.MacAddress",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00001",
+            "sealedGateValue": "00-50-56-C0-00-01",
+            "lockedTsvValue": "00:50:56:C0:00:01",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "GetAdaptersAddresses",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00001",
+            "sealedGateValue": "00:50:56:C0:00:01",
+            "lockedTsvValue": "00:50:56:C0:00:01",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "GetAdaptersInfo",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00001",
+            "sealedGateValue": "00:50:56:C0:00:01",
+            "lockedTsvValue": "00:50:56:C0:00:01",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "GetIfTable2",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00001",
+            "sealedGateValue": "00:50:56:C0:00:01",
+            "lockedTsvValue": "00:50:56:C0:00:01",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "MSFT_NetAdapter.NetworkAddresses",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00001",
+            "sealedGateValue": "005056C00001",
+            "lockedTsvValue": "00:50:56:C0:00:01",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "OID_802_3_CURRENT_ADDRESS",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00001",
+            "sealedGateValue": "00:50:56:C0:00:01",
+            "lockedTsvValue": "00:50:56:C0:00:01",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "Win32_NetworkAdapter.MACAddress",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00001",
+            "sealedGateValue": "00:50:56:C0:00:01",
+            "lockedTsvValue": "00:50:56:C0:00:01",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "Get-NetAdapter.MacAddress",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00008",
+            "sealedGateValue": "00-50-56-C0-00-08",
+            "lockedTsvValue": "00:50:56:C0:00:08",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "GetAdaptersAddresses",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00008",
+            "sealedGateValue": "00:50:56:C0:00:08",
+            "lockedTsvValue": "00:50:56:C0:00:08",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "GetAdaptersInfo",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00008",
+            "sealedGateValue": "00:50:56:C0:00:08",
+            "lockedTsvValue": "00:50:56:C0:00:08",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "GetIfTable2",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00008",
+            "sealedGateValue": "00:50:56:C0:00:08",
+            "lockedTsvValue": "00:50:56:C0:00:08",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "MSFT_NetAdapter.NetworkAddresses",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00008",
+            "sealedGateValue": "005056C00008",
+            "lockedTsvValue": "00:50:56:C0:00:08",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "OID_802_3_CURRENT_ADDRESS",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00008",
+            "sealedGateValue": "00:50:56:C0:00:08",
+            "lockedTsvValue": "00:50:56:C0:00:08",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "Win32_NetworkAdapter.MACAddress",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00008",
+            "sealedGateValue": "00:50:56:C0:00:08",
+            "lockedTsvValue": "00:50:56:C0:00:08",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "Get-NetAdapter.MacAddress",
+            "expectedMode": "Original",
+            "rawInputValue": "C4BDE53206D1",
+            "sealedGateValue": "C4-BD-E5-32-06-D1",
+            "lockedTsvValue": "C4:BD:E5:32:06:D1",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "GetAdaptersAddresses",
+            "expectedMode": "Original",
+            "rawInputValue": "C4BDE53206D1",
+            "sealedGateValue": "C4:BD:E5:32:06:D1",
+            "lockedTsvValue": "C4:BD:E5:32:06:D1",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "GetAdaptersInfo",
+            "expectedMode": "Original",
+            "rawInputValue": "C4BDE53206D1",
+            "sealedGateValue": "C4:BD:E5:32:06:D1",
+            "lockedTsvValue": "C4:BD:E5:32:06:D1",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "GetIfTable2",
+            "expectedMode": "Original",
+            "rawInputValue": "C4BDE53206D1",
+            "sealedGateValue": "C4:BD:E5:32:06:D1",
+            "lockedTsvValue": "C4:BD:E5:32:06:D1",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "MSFT_NetAdapter.NetworkAddresses",
+            "expectedMode": "Original",
+            "rawInputValue": "C4BDE53206D1",
+            "sealedGateValue": "C4BDE53206D1",
+            "lockedTsvValue": "C4:BD:E5:32:06:D1",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "OID_802_3_CURRENT_ADDRESS",
+            "expectedMode": "Original",
+            "rawInputValue": "C4BDE53206D1",
+            "sealedGateValue": "C4:BD:E5:32:06:D1",
+            "lockedTsvValue": "C4:BD:E5:32:06:D1",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "Win32_NetworkAdapter.MACAddress",
+            "expectedMode": "Original",
+            "rawInputValue": "C4BDE53206D1",
+            "sealedGateValue": "C4:BD:E5:32:06:D1",
+            "lockedTsvValue": "C4:BD:E5:32:06:D1",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "Get-NetAdapter.MacAddress",
+            "expectedMode": "Original",
+            "rawInputValue": "D8BBC1D85720",
+            "sealedGateValue": "D8-BB-C1-D8-57-20",
+            "lockedTsvValue": "D8:BB:C1:D8:57:20",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "GetAdaptersAddresses",
+            "expectedMode": "Original",
+            "rawInputValue": "D8BBC1D85720",
+            "sealedGateValue": "D8:BB:C1:D8:57:20",
+            "lockedTsvValue": "D8:BB:C1:D8:57:20",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "GetAdaptersInfo",
+            "expectedMode": "Original",
+            "rawInputValue": "D8BBC1D85720",
+            "sealedGateValue": "D8:BB:C1:D8:57:20",
+            "lockedTsvValue": "D8:BB:C1:D8:57:20",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "GetIfTable2",
+            "expectedMode": "Original",
+            "rawInputValue": "D8BBC1D85720",
+            "sealedGateValue": "D8:BB:C1:D8:57:20",
+            "lockedTsvValue": "D8:BB:C1:D8:57:20",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "MSFT_NetAdapter.NetworkAddresses",
+            "expectedMode": "Original",
+            "rawInputValue": "D8BBC1D85720",
+            "sealedGateValue": "D8BBC1D85720",
+            "lockedTsvValue": "D8:BB:C1:D8:57:20",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "OID_802_3_CURRENT_ADDRESS",
+            "expectedMode": "Original",
+            "rawInputValue": "D8BBC1D85720",
+            "sealedGateValue": "D8:BB:C1:D8:57:20",
+            "lockedTsvValue": "D8:BB:C1:D8:57:20",
+            "matched": true
+          },
+          {
+            "phase": "original",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "Win32_NetworkAdapter.MACAddress",
+            "expectedMode": "Original",
+            "rawInputValue": "D8BBC1D85720",
+            "sealedGateValue": "D8:BB:C1:D8:57:20",
+            "lockedTsvValue": "D8:BB:C1:D8:57:20",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "Get-NetAdapter.MacAddress",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203041",
+            "sealedGateValue": "02-90-10-20-30-41",
+            "lockedTsvValue": "02:90:10:20:30:41",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "GetAdaptersAddresses",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203041",
+            "sealedGateValue": "02:90:10:20:30:41",
+            "lockedTsvValue": "02:90:10:20:30:41",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "GetAdaptersInfo",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203041",
+            "sealedGateValue": "02:90:10:20:30:41",
+            "lockedTsvValue": "02:90:10:20:30:41",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "GetIfTable2",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203041",
+            "sealedGateValue": "02:90:10:20:30:41",
+            "lockedTsvValue": "02:90:10:20:30:41",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "MSFT_NetAdapter.NetworkAddresses",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203041",
+            "sealedGateValue": "029010203041",
+            "lockedTsvValue": "02:90:10:20:30:41",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "OID_802_3_CURRENT_ADDRESS",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203041",
+            "sealedGateValue": "02:90:10:20:30:41",
+            "lockedTsvValue": "02:90:10:20:30:41",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "Win32_NetworkAdapter.MACAddress",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203041",
+            "sealedGateValue": "02:90:10:20:30:41",
+            "lockedTsvValue": "02:90:10:20:30:41",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "Get-NetAdapter.MacAddress",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203040",
+            "sealedGateValue": "02-90-10-20-30-40",
+            "lockedTsvValue": "02:90:10:20:30:40",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "GetAdaptersAddresses",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203040",
+            "sealedGateValue": "02:90:10:20:30:40",
+            "lockedTsvValue": "02:90:10:20:30:40",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "GetAdaptersInfo",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203040",
+            "sealedGateValue": "02:90:10:20:30:40",
+            "lockedTsvValue": "02:90:10:20:30:40",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "GetIfTable2",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203040",
+            "sealedGateValue": "02:90:10:20:30:40",
+            "lockedTsvValue": "02:90:10:20:30:40",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "MSFT_NetAdapter.NetworkAddresses",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203040",
+            "sealedGateValue": "029010203040",
+            "lockedTsvValue": "02:90:10:20:30:40",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "OID_802_3_CURRENT_ADDRESS",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203040",
+            "sealedGateValue": "02:90:10:20:30:40",
+            "lockedTsvValue": "02:90:10:20:30:40",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "Win32_NetworkAdapter.MACAddress",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203040",
+            "sealedGateValue": "02:90:10:20:30:40",
+            "lockedTsvValue": "02:90:10:20:30:40",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "Get-NetAdapter.MacAddress",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203042",
+            "sealedGateValue": "02-90-10-20-30-42",
+            "lockedTsvValue": "02:90:10:20:30:42",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "GetAdaptersAddresses",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203042",
+            "sealedGateValue": "02:90:10:20:30:42",
+            "lockedTsvValue": "02:90:10:20:30:42",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "GetAdaptersInfo",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203042",
+            "sealedGateValue": "02:90:10:20:30:42",
+            "lockedTsvValue": "02:90:10:20:30:42",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "GetIfTable2",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203042",
+            "sealedGateValue": "02:90:10:20:30:42",
+            "lockedTsvValue": "02:90:10:20:30:42",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "MSFT_NetAdapter.NetworkAddresses",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203042",
+            "sealedGateValue": "029010203042",
+            "lockedTsvValue": "02:90:10:20:30:42",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "OID_802_3_CURRENT_ADDRESS",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203042",
+            "sealedGateValue": "02:90:10:20:30:42",
+            "lockedTsvValue": "02:90:10:20:30:42",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "Win32_NetworkAdapter.MACAddress",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203042",
+            "sealedGateValue": "02:90:10:20:30:42",
+            "lockedTsvValue": "02:90:10:20:30:42",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "Get-NetAdapter.MacAddress",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203043",
+            "sealedGateValue": "02-90-10-20-30-43",
+            "lockedTsvValue": "02:90:10:20:30:43",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "GetAdaptersAddresses",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203043",
+            "sealedGateValue": "02:90:10:20:30:43",
+            "lockedTsvValue": "02:90:10:20:30:43",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "GetAdaptersInfo",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203043",
+            "sealedGateValue": "02:90:10:20:30:43",
+            "lockedTsvValue": "02:90:10:20:30:43",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "GetIfTable2",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203043",
+            "sealedGateValue": "02:90:10:20:30:43",
+            "lockedTsvValue": "02:90:10:20:30:43",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "MSFT_NetAdapter.NetworkAddresses",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203043",
+            "sealedGateValue": "029010203043",
+            "lockedTsvValue": "02:90:10:20:30:43",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "OID_802_3_CURRENT_ADDRESS",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203043",
+            "sealedGateValue": "02:90:10:20:30:43",
+            "lockedTsvValue": "02:90:10:20:30:43",
+            "matched": true
+          },
+          {
+            "phase": "filteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "Win32_NetworkAdapter.MACAddress",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203043",
+            "sealedGateValue": "02:90:10:20:30:43",
+            "lockedTsvValue": "02:90:10:20:30:43",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "Get-NetAdapter.MacAddress",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203041",
+            "sealedGateValue": "02-90-10-20-30-41",
+            "lockedTsvValue": "02:90:10:20:30:41",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "GetAdaptersAddresses",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203041",
+            "sealedGateValue": "02:90:10:20:30:41",
+            "lockedTsvValue": "02:90:10:20:30:41",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "GetAdaptersInfo",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203041",
+            "sealedGateValue": "02:90:10:20:30:41",
+            "lockedTsvValue": "02:90:10:20:30:41",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "GetIfTable2",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203041",
+            "sealedGateValue": "02:90:10:20:30:41",
+            "lockedTsvValue": "02:90:10:20:30:41",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "MSFT_NetAdapter.NetworkAddresses",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203041",
+            "sealedGateValue": "029010203041",
+            "lockedTsvValue": "02:90:10:20:30:41",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "OID_802_3_CURRENT_ADDRESS",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203041",
+            "sealedGateValue": "02:90:10:20:30:41",
+            "lockedTsvValue": "02:90:10:20:30:41",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "Win32_NetworkAdapter.MACAddress",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203041",
+            "sealedGateValue": "02:90:10:20:30:41",
+            "lockedTsvValue": "02:90:10:20:30:41",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "Get-NetAdapter.MacAddress",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203040",
+            "sealedGateValue": "02-90-10-20-30-40",
+            "lockedTsvValue": "02:90:10:20:30:40",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "GetAdaptersAddresses",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203040",
+            "sealedGateValue": "02:90:10:20:30:40",
+            "lockedTsvValue": "02:90:10:20:30:40",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "GetAdaptersInfo",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203040",
+            "sealedGateValue": "02:90:10:20:30:40",
+            "lockedTsvValue": "02:90:10:20:30:40",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "GetIfTable2",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203040",
+            "sealedGateValue": "02:90:10:20:30:40",
+            "lockedTsvValue": "02:90:10:20:30:40",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "MSFT_NetAdapter.NetworkAddresses",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203040",
+            "sealedGateValue": "029010203040",
+            "lockedTsvValue": "02:90:10:20:30:40",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "OID_802_3_CURRENT_ADDRESS",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203040",
+            "sealedGateValue": "02:90:10:20:30:40",
+            "lockedTsvValue": "02:90:10:20:30:40",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "Win32_NetworkAdapter.MACAddress",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203040",
+            "sealedGateValue": "02:90:10:20:30:40",
+            "lockedTsvValue": "02:90:10:20:30:40",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "Get-NetAdapter.MacAddress",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203042",
+            "sealedGateValue": "02-90-10-20-30-42",
+            "lockedTsvValue": "02:90:10:20:30:42",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "GetAdaptersAddresses",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203042",
+            "sealedGateValue": "02:90:10:20:30:42",
+            "lockedTsvValue": "02:90:10:20:30:42",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "GetAdaptersInfo",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203042",
+            "sealedGateValue": "02:90:10:20:30:42",
+            "lockedTsvValue": "02:90:10:20:30:42",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "GetIfTable2",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203042",
+            "sealedGateValue": "02:90:10:20:30:42",
+            "lockedTsvValue": "02:90:10:20:30:42",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "MSFT_NetAdapter.NetworkAddresses",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203042",
+            "sealedGateValue": "029010203042",
+            "lockedTsvValue": "02:90:10:20:30:42",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "OID_802_3_CURRENT_ADDRESS",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203042",
+            "sealedGateValue": "02:90:10:20:30:42",
+            "lockedTsvValue": "02:90:10:20:30:42",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "Win32_NetworkAdapter.MACAddress",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203042",
+            "sealedGateValue": "02:90:10:20:30:42",
+            "lockedTsvValue": "02:90:10:20:30:42",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "Get-NetAdapter.MacAddress",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203043",
+            "sealedGateValue": "02-90-10-20-30-43",
+            "lockedTsvValue": "02:90:10:20:30:43",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "GetAdaptersAddresses",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203043",
+            "sealedGateValue": "02:90:10:20:30:43",
+            "lockedTsvValue": "02:90:10:20:30:43",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "GetAdaptersInfo",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203043",
+            "sealedGateValue": "02:90:10:20:30:43",
+            "lockedTsvValue": "02:90:10:20:30:43",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "GetIfTable2",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203043",
+            "sealedGateValue": "02:90:10:20:30:43",
+            "lockedTsvValue": "02:90:10:20:30:43",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "MSFT_NetAdapter.NetworkAddresses",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203043",
+            "sealedGateValue": "029010203043",
+            "lockedTsvValue": "02:90:10:20:30:43",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "OID_802_3_CURRENT_ADDRESS",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203043",
+            "sealedGateValue": "02:90:10:20:30:43",
+            "lockedTsvValue": "02:90:10:20:30:43",
+            "matched": true
+          },
+          {
+            "phase": "unfilteredActive",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "Win32_NetworkAdapter.MACAddress",
+            "expectedMode": "Replacement",
+            "rawInputValue": "029010203043",
+            "sealedGateValue": "02:90:10:20:30:43",
+            "lockedTsvValue": "02:90:10:20:30:43",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "Get-NetAdapter.MacAddress",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00001",
+            "sealedGateValue": "00-50-56-C0-00-01",
+            "lockedTsvValue": "00:50:56:C0:00:01",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "GetAdaptersAddresses",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00001",
+            "sealedGateValue": "00:50:56:C0:00:01",
+            "lockedTsvValue": "00:50:56:C0:00:01",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "GetAdaptersInfo",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00001",
+            "sealedGateValue": "00:50:56:C0:00:01",
+            "lockedTsvValue": "00:50:56:C0:00:01",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "GetIfTable2",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00001",
+            "sealedGateValue": "00:50:56:C0:00:01",
+            "lockedTsvValue": "00:50:56:C0:00:01",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "MSFT_NetAdapter.NetworkAddresses",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00001",
+            "sealedGateValue": "005056C00001",
+            "lockedTsvValue": "00:50:56:C0:00:01",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "OID_802_3_CURRENT_ADDRESS",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00001",
+            "sealedGateValue": "00:50:56:C0:00:01",
+            "lockedTsvValue": "00:50:56:C0:00:01",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\005056FFFFC0000100",
+            "reader": "Win32_NetworkAdapter.MACAddress",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00001",
+            "sealedGateValue": "00:50:56:C0:00:01",
+            "lockedTsvValue": "00:50:56:C0:00:01",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "Get-NetAdapter.MacAddress",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00008",
+            "sealedGateValue": "00-50-56-C0-00-08",
+            "lockedTsvValue": "00:50:56:C0:00:08",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "GetAdaptersAddresses",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00008",
+            "sealedGateValue": "00:50:56:C0:00:08",
+            "lockedTsvValue": "00:50:56:C0:00:08",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "GetAdaptersInfo",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00008",
+            "sealedGateValue": "00:50:56:C0:00:08",
+            "lockedTsvValue": "00:50:56:C0:00:08",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "GetIfTable2",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00008",
+            "sealedGateValue": "00:50:56:C0:00:08",
+            "lockedTsvValue": "00:50:56:C0:00:08",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "MSFT_NetAdapter.NetworkAddresses",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00008",
+            "sealedGateValue": "005056C00008",
+            "lockedTsvValue": "00:50:56:C0:00:08",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "OID_802_3_CURRENT_ADDRESS",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00008",
+            "sealedGateValue": "00:50:56:C0:00:08",
+            "lockedTsvValue": "00:50:56:C0:00:08",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_8086&DEV_10D3&SUBSYS_07D015AD&REV_00\\000C29FFFF180FE400",
+            "reader": "Win32_NetworkAdapter.MACAddress",
+            "expectedMode": "Original",
+            "rawInputValue": "005056C00008",
+            "sealedGateValue": "00:50:56:C0:00:08",
+            "lockedTsvValue": "00:50:56:C0:00:08",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "Get-NetAdapter.MacAddress",
+            "expectedMode": "Original",
+            "rawInputValue": "C4BDE53206D1",
+            "sealedGateValue": "C4-BD-E5-32-06-D1",
+            "lockedTsvValue": "C4:BD:E5:32:06:D1",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "GetAdaptersAddresses",
+            "expectedMode": "Original",
+            "rawInputValue": "C4BDE53206D1",
+            "sealedGateValue": "C4:BD:E5:32:06:D1",
+            "lockedTsvValue": "C4:BD:E5:32:06:D1",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "GetAdaptersInfo",
+            "expectedMode": "Original",
+            "rawInputValue": "C4BDE53206D1",
+            "sealedGateValue": "C4:BD:E5:32:06:D1",
+            "lockedTsvValue": "C4:BD:E5:32:06:D1",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "GetIfTable2",
+            "expectedMode": "Original",
+            "rawInputValue": "C4BDE53206D1",
+            "sealedGateValue": "C4:BD:E5:32:06:D1",
+            "lockedTsvValue": "C4:BD:E5:32:06:D1",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "MSFT_NetAdapter.NetworkAddresses",
+            "expectedMode": "Original",
+            "rawInputValue": "C4BDE53206D1",
+            "sealedGateValue": "C4BDE53206D1",
+            "lockedTsvValue": "C4:BD:E5:32:06:D1",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "OID_802_3_CURRENT_ADDRESS",
+            "expectedMode": "Original",
+            "rawInputValue": "C4BDE53206D1",
+            "sealedGateValue": "C4:BD:E5:32:06:D1",
+            "lockedTsvValue": "C4:BD:E5:32:06:D1",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\C4BDE5FFFF3206D100",
+            "reader": "Win32_NetworkAdapter.MACAddress",
+            "expectedMode": "Original",
+            "rawInputValue": "C4BDE53206D1",
+            "sealedGateValue": "C4:BD:E5:32:06:D1",
+            "lockedTsvValue": "C4:BD:E5:32:06:D1",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "Get-NetAdapter.MacAddress",
+            "expectedMode": "Original",
+            "rawInputValue": "D8BBC1D85720",
+            "sealedGateValue": "D8-BB-C1-D8-57-20",
+            "lockedTsvValue": "D8:BB:C1:D8:57:20",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "GetAdaptersAddresses",
+            "expectedMode": "Original",
+            "rawInputValue": "D8BBC1D85720",
+            "sealedGateValue": "D8:BB:C1:D8:57:20",
+            "lockedTsvValue": "D8:BB:C1:D8:57:20",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "GetAdaptersInfo",
+            "expectedMode": "Original",
+            "rawInputValue": "D8BBC1D85720",
+            "sealedGateValue": "D8:BB:C1:D8:57:20",
+            "lockedTsvValue": "D8:BB:C1:D8:57:20",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "GetIfTable2",
+            "expectedMode": "Original",
+            "rawInputValue": "D8BBC1D85720",
+            "sealedGateValue": "D8:BB:C1:D8:57:20",
+            "lockedTsvValue": "D8:BB:C1:D8:57:20",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "MSFT_NetAdapter.NetworkAddresses",
+            "expectedMode": "Original",
+            "rawInputValue": "D8BBC1D85720",
+            "sealedGateValue": "D8BBC1D85720",
+            "lockedTsvValue": "D8:BB:C1:D8:57:20",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "OID_802_3_CURRENT_ADDRESS",
+            "expectedMode": "Original",
+            "rawInputValue": "D8BBC1D85720",
+            "sealedGateValue": "D8:BB:C1:D8:57:20",
+            "lockedTsvValue": "D8:BB:C1:D8:57:20",
+            "matched": true
+          },
+          {
+            "phase": "restored",
+            "pnpDeviceId": "PCI\\VEN_15AD&DEV_07B0&SUBSYS_07B015AD&REV_01\\D8BBC1FFFFD8572000",
+            "reader": "Win32_NetworkAdapter.MACAddress",
+            "expectedMode": "Original",
+            "rawInputValue": "D8BBC1D85720",
+            "sealedGateValue": "D8:BB:C1:D8:57:20",
+            "lockedTsvValue": "D8:BB:C1:D8:57:20",
+            "matched": true
+          }
+        ]
+      }
+    },
+    "ctestPasses": {
+      "deviceFilter": 2,
+      "identifier": 8,
+      "smbios": 2,
+      "uefiLoaderPure": 27,
+      "nativeDeviceIo": 1
+    },
+    "ctestEvidenceDirectory": "spoof-handoff/reports/nic-reader-gap-20261017/regression",
+    "ctestExclusion": "The unbuilt optional nested_e2e_service_test was not executed; initial Not Run and the 27-test pure rerun are both preserved.",
+    "olderFrozenHostTestScope": "The 15 AST/mock checks in independentPureSuites tested their recorded source hash. The final raw-input gate revision is validated separately; neither is live host proof."
+  },
+  "hostLaunchAttempts": [
+    {
+      "evidence": {
+        "path": "spoof-handoff/reports/nic-reader-gap-20261017/host-launches/20261018T000020922Z.1ee17cb890ed4b2a8788646a07e9d376/start-error.json",
+        "bytes": 434,
+        "sha256": "9AA687035719F0A0FEC97147CC3F05A62F6561D899C0C49EFE46AFA0E6F94278"
+      },
+      "result": {
+        "status": "LAUNCH_FAILED",
+        "exception": "System.InvalidOperationException: This command cannot be run due to the error: The operation was canceled by the user.\r\n   at System.Management.Automation.MshCommandRuntime.ThrowTerminatingError(ErrorRecord errorRecord)",
+        "errorRecord": "This command cannot be run due to the error: The operation was canceled by the user.",
+        "utc": "2026-10-18T00:02:35.0022787Z"
+      },
+      "elevatedProcessStarted": false,
+      "hostResultExists": false
+    }
+  ],
+  "evidenceFiles": [
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/adapter-address-unit.20261017T233115495Z.aa88b3ee389046ffaa42e9797ab63945.json",
+      "bytes": 1357,
+      "sha256": "E9DD50640F0A0EBAE5C5196D737D778D0ABD1DD855AC7A09FBC00135EA9A547A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/adapter-address-unit.20261017T233123223Z.94ff3fc0351a4fb1a94bd21d8ba38239.json",
+      "bytes": 4253,
+      "sha256": "8FFDAB57901304F3721978297A030DFC0B282568E09CF9FE24537E0A9C3652D8"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/adapter-address-unit.20261017T233129279Z.ae82bbe3cfce4a9897bb847d872d9efa.json",
+      "bytes": 14838,
+      "sha256": "60B917C63B5AED33C0972BB92532D48DEBA845D5DCBC2A9E3CF674FEDC9B6758"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/adapter-address-unit.20261017T233521927Z.9be295326df54542ab503eadede56165.json",
+      "bytes": 15429,
+      "sha256": "7A492A450CEAA1AE0F62219759827F404B6DE031FE6860D7A242B1A715470A14"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/adapter-address-unit.20261017T234814384Z.4fe9fb63b27b47138a0bb2cc0868c037.json",
+      "bytes": 15429,
+      "sha256": "35C91B94AFA82E52E682E0CC64DD42058337C830060364493BA77F0D447846EC"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/before-state.json",
+      "bytes": 364,
+      "sha256": "6869BCF5235F687F2929744551F922D0D9DA11D3BDECC965506710907E1AF09F"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/host-launches/20261018T000020922Z.1ee17cb890ed4b2a8788646a07e9d376/request.json",
+      "bytes": 1895,
+      "sha256": "FA75D95C1535AD16807660142B125C3704CF9775A579EDF1FE1A33E68E4342FC"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/host-launches/20261018T000020922Z.1ee17cb890ed4b2a8788646a07e9d376/start-error.json",
+      "bytes": 434,
+      "sha256": "9AA687035719F0A0FEC97147CC3F05A62F6561D899C0C49EFE46AFA0E6F94278"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/host-originals-after-canceled-launch/native.20261018T000509195Z.c0ce6e41886e441798fe4ffc22eb5d9e.json",
+      "bytes": 60489,
+      "sha256": "67AF1168EC85C778B2D0AD6E684467A8282342C4CC9985979925BCD1DF7F1378"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/host-originals-after-canceled-launch/native.20261018T000509195Z.c0ce6e41886e441798fe4ffc22eb5d9e.stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/host-originals-after-canceled-launch/native.20261018T000509195Z.c0ce6e41886e441798fe4ffc22eb5d9e.stdout.txt",
+      "bytes": 574,
+      "sha256": "BFC6A28033EFDCB64222613799CB96FEF840ED72EB2828C100F2694B44B238B0"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/host-originals-after-canceled-launch/readback.20261018T000509195Z.c0ce6e41886e441798fe4ffc22eb5d9e.json",
+      "bytes": 95001,
+      "sha256": "4694FDFD979A327501A7AE783155BBD2BCE1AFD88F39701E365927A715673A3E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/host-originals-after-vm/native.20261017T234420942Z.0f576271d26f464898a87062c9b9c64c.json",
+      "bytes": 60489,
+      "sha256": "93E3C4C6CD7F4FF9D9DDB659829E969DFADE0CD4C0B31F3A9EC234C6D4C3B20E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/host-originals-after-vm/native.20261017T234420942Z.0f576271d26f464898a87062c9b9c64c.stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/host-originals-after-vm/native.20261017T234420942Z.0f576271d26f464898a87062c9b9c64c.stdout.txt",
+      "bytes": 548,
+      "sha256": "E767A92FA38D3F2A089A70C9EA53FC5FBDA0EC3D77CF0E750AF3C2CFA48AE857"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/host-originals-after-vm/readback.20261017T234420942Z.0f576271d26f464898a87062c9b9c64c.json",
+      "bytes": 91409,
+      "sha256": "0A6BF18AD9680FCD73B087A9B9E06BC1EF8746248383EB044E41F2169CC39680"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/host-originals-before/native.20261017T232938571Z.9c3c61c7784f479c991c808e0a6dded6.json",
+      "bytes": 60489,
+      "sha256": "3161C1B435C95C9DB9D69FE6ACAF566706B5F399EB33F5086AFACF655E104BDE"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/host-originals-before/native.20261017T232938571Z.9c3c61c7784f479c991c808e0a6dded6.stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/host-originals-before/native.20261017T232938571Z.9c3c61c7784f479c991c808e0a6dded6.stdout.txt",
+      "bytes": 544,
+      "sha256": "6E3441CE613D0894924AEE47189FEAF1AA615C9D7DB719BC5BD4C04AA323929D"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/host-originals-before/readback.20261017T232938571Z.9c3c61c7784f479c991c808e0a6dded6.json",
+      "bytes": 87825,
+      "sha256": "03329C07BA1C2B432706A1C8374AD9200A827E7E9AAF8D25A69B32216A6C17D5"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/host-read/native.20261017T232848003Z.bbd51360631b48018a1a5366bbc166a1.json",
+      "bytes": 60489,
+      "sha256": "4B5F3D47EB64B4778D805B467647A1363E73C6AB9F603BCF1FCDA8DDCB9F698C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/host-read/native.20261017T232848003Z.bbd51360631b48018a1a5366bbc166a1.stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/host-read/native.20261017T232848003Z.bbd51360631b48018a1a5366bbc166a1.stdout.txt",
+      "bytes": 520,
+      "sha256": "6CFBABD31003593486022F23F6F2BEAD534A3F2C4660961DC4E7AFF46996E1C1"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/host-read/readback.20261017T232848003Z.bbd51360631b48018a1a5366bbc166a1.json",
+      "bytes": 80716,
+      "sha256": "1A4929BB2CC17BD430CB1198EBBEFE5712985D03B8D724A6A67F809CB879DE64"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/host-state-after-canceled-launch.json",
+      "bytes": 1561,
+      "sha256": "65E698F925C454C16CA74C3EE3504E3E4C1790302BFD2C774067903AB5835702"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/adapter-address.stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/adapter-address.stdout.txt",
+      "bytes": 15615,
+      "sha256": "DF3564F1B1E2BCBF1E92B2823399704BDD9E79C4E713D0BD3EC063A5217D69DA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/evidence-manifest.json",
+      "bytes": 16486,
+      "sha256": "9972D367C9AF5BD7236435703232464CC9622CF55225801AED0BBCBC0CA0F8B6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/fixtures/atomic.113144b3b5d5427aad4c84f7954bd320/journal.json",
+      "bytes": 141,
+      "sha256": "69CEE4C3A20EDB1BEE5D06D47772F926249DE41A8DC70702F4A90D8879EE8FCA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/fixtures/atomic.7dab4315a10f44058159d99f46c3bfbe/journal.json",
+      "bytes": 141,
+      "sha256": "69CEE4C3A20EDB1BEE5D06D47772F926249DE41A8DC70702F4A90D8879EE8FCA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/fixtures/atomic.844dea5a33ed454b80a8138963a7a71d/journal.json",
+      "bytes": 141,
+      "sha256": "69CEE4C3A20EDB1BEE5D06D47772F926249DE41A8DC70702F4A90D8879EE8FCA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/fixtures/atomic.ab59965289984ffe91c7430a1fd966c7/journal.json",
+      "bytes": 141,
+      "sha256": "69CEE4C3A20EDB1BEE5D06D47772F926249DE41A8DC70702F4A90D8879EE8FCA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/fixtures/atomic.c4a299dfe5964df4985ff90a3f11f514/journal.json",
+      "bytes": 141,
+      "sha256": "69CEE4C3A20EDB1BEE5D06D47772F926249DE41A8DC70702F4A90D8879EE8FCA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/fixtures/atomic.c99dc765a1664bffab2ec9fed9fcf425/journal.json",
+      "bytes": 141,
+      "sha256": "69CEE4C3A20EDB1BEE5D06D47772F926249DE41A8DC70702F4A90D8879EE8FCA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/fixtures/atomic.df128cb86f4b4d95813f22e70e4e8649/journal.json",
+      "bytes": 141,
+      "sha256": "69CEE4C3A20EDB1BEE5D06D47772F926249DE41A8DC70702F4A90D8879EE8FCA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/host-frozen-ast-iteration-notes.txt",
+      "bytes": 1738,
+      "sha256": "61400398FD8F658E9CB9DF37ACB7463FB3BD7961D8720E9E4EDCA08344343BA4"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/host-frozen-ast-results.json",
+      "bytes": 10385,
+      "sha256": "0E2FF99E5335DD179A5A289AE6BB0888B284CA330D014094A57A0D58CB62ABA1"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/host-frozen-ast-tests.ps1",
+      "bytes": 24939,
+      "sha256": "6EADA638E40903F8FB4A039C4AB5A1360CA7A6ABED866025AFBF52C276929391"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/host-frozen-ast.exit.txt",
+      "bytes": 3,
+      "sha256": "13BF7B3039C63BF5A50491FA3CFD8EB4E699D1BA1436315AEF9CBE5711530354"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/host-frozen-ast.stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/host-frozen-ast.stdout.txt",
+      "bytes": 206,
+      "sha256": "D4597323B74CB580BD7895ECD539D7DC0C5DED75BE2455F175F6649A8D33FEDE"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/nic-vm-journal.stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/nic-vm-journal.stdout.txt",
+      "bytes": 30102,
+      "sha256": "65013B0C8B1D1AF76714C37F54181AD14AF83519043D3C29E5A61B9A205006E7"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/smbios-snapshot.stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/smbios-snapshot.stdout.txt",
+      "bytes": 1005,
+      "sha256": "27D6696F9370CA85B02EA254127C509ED54926D668BA07A74FC4848C531C6167"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/smbios-workflow.stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/smbios-workflow.stdout.txt",
+      "bytes": 33,
+      "sha256": "A2010F83C319B0389E3A13259ED70D47CA71AF824AFE559A815F1DAEDBF77D19"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/storage-host-model.stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/storage-host-model.stdout.txt",
+      "bytes": 191,
+      "sha256": "14E8345D01FE5FF66F2BF8DEFDF0D114DC1E5337CF9EE2BD20F435A5482E503D"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/suite-counts.json",
+      "bytes": 2535,
+      "sha256": "E02D60AA4E0B6278254A51D955200C426CBEF31CC9DD9C0DD01B0DB60B4C6BD4"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/independent-validation/suite-results.json",
+      "bytes": 5308,
+      "sha256": "291204B771EA4839A72761CF44A7FE1E305A5641646D3580DD1C60B1D0201625"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/20261018T001005Z.e0f4e56ef3284d8291519dcc1c9ffff1/raw-input-gate-tests.json",
+      "bytes": 1431,
+      "sha256": "09CD4C8E47FC4178C5C591F7804CC9DF3EA90B653CBB4FA5E1DA45D7657E8013"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/20261018T001014Z.60b28570df074262a4098c3772d03619/raw-input-gate-tests.json",
+      "bytes": 1433,
+      "sha256": "69C703B4D3741C0941D1C574CAE633EB3ED4AF1966E05AFF55577B282539E324"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/20261018T001022Z.a7549564b7fd414c8a732a9de67027cf/fixtures/tampered-GetAdaptersAddresses.json",
+      "bytes": 202801,
+      "sha256": "EF4D54A4FC853F4EF9F707452B74DC5BDB35528772F3707B0ACE14AEB56198F6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/20261018T001022Z.a7549564b7fd414c8a732a9de67027cf/raw-input-gate-tests.json",
+      "bytes": 2220,
+      "sha256": "DFCB4CE8D2C9F826633C183E3C3604AC8806BF30BF333D2CF750AB96CFA392FA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/20261018T001045Z.99fca4362d6944fbb9d82938efa3c881/fixtures/duplicate-GetIfTable2-row.json",
+      "bytes": 204128,
+      "sha256": "5160C9542F66D36195BD310278FEE951B6CA83511D413A547438DD044614AFCF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/20261018T001045Z.99fca4362d6944fbb9d82938efa3c881/fixtures/missing-GetAdaptersInfo-row.json",
+      "bytes": 201806,
+      "sha256": "8C8DC3BE1C5AC0045C9A2F523B8A4E1FDDC4CAFEAA45176F98C6B0AC94D07CA5"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/20261018T001045Z.99fca4362d6944fbb9d82938efa3c881/fixtures/tampered-GetAdaptersAddresses.json",
+      "bytes": 202801,
+      "sha256": "EF4D54A4FC853F4EF9F707452B74DC5BDB35528772F3707B0ACE14AEB56198F6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/20261018T001045Z.99fca4362d6944fbb9d82938efa3c881/raw-input-gate-tests.json",
+      "bytes": 80570,
+      "sha256": "9ACC27402043BED8739857A77FFBDAB530E383EB39DD42595D14FB1AD16155EF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/20261018T001149Z.fe8b13147fb34fbfb572e8409ff11ea0/fixtures/duplicate-GetIfTable2-row.json",
+      "bytes": 204128,
+      "sha256": "5160C9542F66D36195BD310278FEE951B6CA83511D413A547438DD044614AFCF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/20261018T001149Z.fe8b13147fb34fbfb572e8409ff11ea0/fixtures/missing-GetAdaptersInfo-row.json",
+      "bytes": 201806,
+      "sha256": "8C8DC3BE1C5AC0045C9A2F523B8A4E1FDDC4CAFEAA45176F98C6B0AC94D07CA5"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/20261018T001149Z.fe8b13147fb34fbfb572e8409ff11ea0/fixtures/tampered-GetAdaptersAddresses.json",
+      "bytes": 202801,
+      "sha256": "EF4D54A4FC853F4EF9F707452B74DC5BDB35528772F3707B0ACE14AEB56198F6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/20261018T001149Z.fe8b13147fb34fbfb572e8409ff11ea0/raw-input-gate-tests.json",
+      "bytes": 80910,
+      "sha256": "BD1477E9030A3C1AAA514DB54014C0391F50B13A573465A40A4A0A8B28D21F65"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/launcher-20261018T001005Z.3c32be74ea88437eab388d1915187465/launcher-result.json",
+      "bytes": 886,
+      "sha256": "4FABB552655EED68A44B2293DCB71EDCE54ED3014048A2A5C37782190FA3EEB4"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/launcher-20261018T001005Z.3c32be74ea88437eab388d1915187465/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/launcher-20261018T001005Z.3c32be74ea88437eab388d1915187465/stdout.txt",
+      "bytes": 2868,
+      "sha256": "8A2A4157073CBFE87CDDC69A3C745DB554F35A54AE61799693E1CA3C8B8ED3F5"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/launcher-20261018T001013Z.562b7e048d694780b962a22433d5d231/launcher-result.json",
+      "bytes": 886,
+      "sha256": "7EAE19E0494613A7A10A3A1A7D60D28E2EAE9C1BD27FD98D86948C72C6367B5A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/launcher-20261018T001013Z.562b7e048d694780b962a22433d5d231/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/launcher-20261018T001013Z.562b7e048d694780b962a22433d5d231/stdout.txt",
+      "bytes": 2872,
+      "sha256": "F0F715299F66CEDD2F1E72B8083FF4924E24A29EC4F68FDACD3CED005FDC951D"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/launcher-20261018T001022Z.07d2506652a649edbd93815dd364a3c9/launcher-result.json",
+      "bytes": 886,
+      "sha256": "6C70E49D37270199AA14D8CD3B9948551C9452B58546F84D2B20FAEC3835EDAF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/launcher-20261018T001022Z.07d2506652a649edbd93815dd364a3c9/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/launcher-20261018T001022Z.07d2506652a649edbd93815dd364a3c9/stdout.txt",
+      "bytes": 4446,
+      "sha256": "135ADFF3406FCA0C401F49C3951CE6E4D436C2B8B2B96AAF9205AF4CA64D8AFC"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/launcher-20261018T001044Z.36974c1924a6448ebd0e0985bf680824/launcher-result.json",
+      "bytes": 886,
+      "sha256": "2A4052207A1AEE9055A19B80F42F303959BD1369799EB33B42CD19FA66B422DE"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/launcher-20261018T001044Z.36974c1924a6448ebd0e0985bf680824/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/launcher-20261018T001044Z.36974c1924a6448ebd0e0985bf680824/stdout.txt",
+      "bytes": 161146,
+      "sha256": "63E59AEEDE95E8AB3D6756117E13F05428ED7C1EF3C4221B0535290464F59E49"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/launcher-20261018T001149Z.3e12fbf9008b40479be306a8a940255d/launcher-result.json",
+      "bytes": 886,
+      "sha256": "FFC9D5078216949579B23D2EACF9E8A7EA52B0B03A4D945FFF4C5B47441733AC"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/launcher-20261018T001149Z.3e12fbf9008b40479be306a8a940255d/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/raw-gate-validation/launcher-20261018T001149Z.3e12fbf9008b40479be306a8a940255d/stdout.txt",
+      "bytes": 161826,
+      "sha256": "8A2999DE1F6ED77B52BF2CC115943538F3E1D919A59C60FCEC39CCA77CA410D7"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/regression/device-filter.txt",
+      "bytes": 922,
+      "sha256": "2F74E0DA33C74DCE23EBF868024502DBCE501553241A6C33C4F9F7D200E79AA1"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/regression/device-native-io.txt",
+      "bytes": 718,
+      "sha256": "06007F24AFEED7ADF872FA18D5FCBBA1168C6583DC6628659D5EBF388BFBEC72"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/regression/identifiers.txt",
+      "bytes": 2368,
+      "sha256": "236419A9F0E033858F1DD6560174C20080D2C8D416E2B09560073806F53337FA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/regression/loader-pure-rerun.txt",
+      "bytes": 6282,
+      "sha256": "AEF1B47BA096F7D53418916B7CA4299F73E2A37E7AD8B38FB1561A4079464EA2"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/regression/loader.txt",
+      "bytes": 10300,
+      "sha256": "204665001FF6C7B609AC270EADD17F300FF9CD6F52C277AA0E0386566967D532"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/regression/smbios.txt",
+      "bytes": 960,
+      "sha256": "33B18A1CAE1CAAF9A19E4EB418FD2404387686151C8FEB16E8A21BDDB08364F7"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/vm-final-host-state.json",
+      "bytes": 1561,
+      "sha256": "D99F6D0E35100D53A682487F1B91A2CAC3CA4F939A77F38C0EB2E58202BF9372"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-reader-gap-20261017/vm-seven-reader-gate.json",
+      "bytes": 16949,
+      "sha256": "118E71B245CF1FF163E1E0F6DB1AB5C11575CE6B59A08FA67975135FD15CDE83"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/AddressApply.20261017T233755798Z.db8f20e952a54061b4a0d9490b3ddfb0.ps1",
+      "bytes": 723980,
+      "sha256": "124BE2C9259CD1CDBF8BAB988990D351FE97B6CA7F37C6238CB547F47444E5B6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/AddressRestore.20261017T234102309Z.5829b80cec7345c1bc2e4ddfea26a106.ps1",
+      "bytes": 725963,
+      "sha256": "79E7A36FA87AAFF1794165EA8451BAF4AE774706C52ADA7AA144116C94021164"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/AddressSnapshot.20261017T233408272Z.bd32336462274f9aad3b7daccffd40e0.ps1",
+      "bytes": 723959,
+      "sha256": "310EA83F11558BAD0B4549157329AB3A47A7C167F81E4C0D6D5858C2438200CF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/AddressSnapshot.20261017T233630773Z.65536a7276134ad4989e59a3d02c2630.ps1",
+      "bytes": 723984,
+      "sha256": "EE6ECD28E5881B31075FBD1E86CB0F38A843748A514D8B74CBD825A2B06D100E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/Install.20261017T233714838Z.e776a171577c46a18e69b5aa297d4767.ps1",
+      "bytes": 763304,
+      "sha256": "FBC94C4ED46CC06FF211DDF7901EFE3CD908D78FC5F5CE4217C96E3D4A5E3A83"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/Inventory.20261017T233007541Z.2d065914551c4e748047be647e10b3f4.ps1",
+      "bytes": 720783,
+      "sha256": "633EA0C674117BA56ACD6B36C12203310B74291B741EA647DDB314BDCF7C8AFE"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/PreparePolicy.20261017T233214701Z.d58ff789243e4a38ad30437f7bba8a9f.ps1",
+      "bytes": 723544,
+      "sha256": "3200B2010FEEA9039D70387B68BD50A29B351D324F38E54DF153C5E3D7606E42"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/Readback.20261017T233114191Z.ce38f4ab05464b418bb55e0b9f46dce4.ps1",
+      "bytes": 723231,
+      "sha256": "8DF60C0462133E3EEEE35D76943E4C6D447DCE608D668F03FE982919E2CDB628"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/Readback.20261017T233833526Z.6ed9a523d9e64e088d4cdb4e7e0e52e9.ps1",
+      "bytes": 723984,
+      "sha256": "882DAE69C6982A3A127A8F692A9365156A601ECD3621E060479E123C7BDBC12B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/Readback.20261017T234024999Z.8400e5728ec44db4906c9db555eae3e5.ps1",
+      "bytes": 725975,
+      "sha256": "343E6CC7171150E2325D18CDAE21C6A7282876B10BD42F05FBB89B6FACE12401"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/Readback.20261017T234313215Z.f6740b770b7e4437a833206c8a4976a4.ps1",
+      "bytes": 725959,
+      "sha256": "00B7E2FD8D24D43D8A457753563B0D1367D0B6532FAECBA41770D10B701283A6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/Reboot.20261017T233250708Z.91dde94cb2b948fb807285798528fb54.ps1",
+      "bytes": 723947,
+      "sha256": "2B9C13C1C9E62DC42E299246993163B88B856CF6303A7C852CC5CF5F509BD2BF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/Reboot.20261017T234218856Z.a4d593ac12954665aeaddd4dca2d9f97.ps1",
+      "bytes": 725951,
+      "sha256": "13823EB0952DF61AF3C99D8E2684B19BBCE301B6A79C2D44773F312222C5D809"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/RemoveForAddressReadback.20261017T233949015Z.63be77170f61425b8be8c53405797274.ps1",
+      "bytes": 725975,
+      "sha256": "D789AF310F5A3C74A35DBDC62E82ECE7DF38E1C5584AD601CA24B140F5BBFAF5"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/guest-actions/RestorePolicy.20261017T234141421Z.6cdbea37f3784164b77f5c4bfe8c4809.ps1",
+      "bytes": 725963,
+      "sha256": "27FF02341556C940DE35B43D71D04542C6ED7D6C077DC6D2DFB8014334A081A6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/recovery.20261017T233548063Z.bae2fed5973d4350bfa2ee591633e3b4.json",
+      "bytes": 3144,
+      "sha256": "10F8953BE78A4774544C153556188FEAE43A3E450B584696C2E46BEC1AE21315"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/recovery.20261017T234420706Z.678838734c0744759b2bfa4b84a8e99f.json",
+      "bytes": 3144,
+      "sha256": "75281213FBFF848E55B898A31FF227B6C96869D843DCAFF8489926B79C50BE9B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/console.20261017T232821295Z.33fffdcaae124442947d3cda3f6a26b3.txt",
+      "bytes": 29260,
+      "sha256": "3E870B6F9DBEF4673D33029F047AD29D0D587443DBF0F149AAB2D1ECCB7CDC0B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/console.20261017T232828822Z.272649d1ad7248f48710a12b43cd80b1.txt",
+      "bytes": 29961,
+      "sha256": "6325EB6F523E4F1CDC5E18B24C61223B28A92CE0CD3889BE7422077B486A43DB"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/console.20261017T232953578Z.aea8d1d3bb924d9a94b1c4900078f970.txt",
+      "bytes": 30102,
+      "sha256": "28A6D54880ACA23CDA78B064166E110262983D6FB275296ACF7AE9149156A5A3"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/console.20261017T234812329Z.fe3f20588ee14fedaa76cc85085e49dc.txt",
+      "bytes": 30102,
+      "sha256": "65013B0C8B1D1AF76714C37F54181AD14AF83519043D3C29E5A61B9A205006E7"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T232821295Z.33fffdcaae124442947d3cda3f6a26b3/journal.json",
+      "bytes": 1091,
+      "sha256": "0FAB135B8754220FD349DA715DD5CBACD60E2F835B94EBA0185C803B7C980383"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T232828822Z.272649d1ad7248f48710a12b43cd80b1/journal.json",
+      "bytes": 1091,
+      "sha256": "0FAB135B8754220FD349DA715DD5CBACD60E2F835B94EBA0185C803B7C980383"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T232828822Z.272649d1ad7248f48710a12b43cd80b1/reader-not-executed.exe",
+      "bytes": 4096,
+      "sha256": "AD7FACB2586FC6E966C004D7D1D16B024F5805FF7CB47C7A85DABD8B48892CA7"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T232828822Z.272649d1ad7248f48710a12b43cd80b1/wrong-uuid-profile.json",
+      "bytes": 191,
+      "sha256": "E9E02AEC5003292D5B7307770173205AF8CEAAF3F201086B8B947C0660E12D26"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T232953578Z.aea8d1d3bb924d9a94b1c4900078f970/journal.json",
+      "bytes": 1091,
+      "sha256": "0FAB135B8754220FD349DA715DD5CBACD60E2F835B94EBA0185C803B7C980383"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T232953578Z.aea8d1d3bb924d9a94b1c4900078f970/reader-not-executed.exe",
+      "bytes": 4096,
+      "sha256": "AD7FACB2586FC6E966C004D7D1D16B024F5805FF7CB47C7A85DABD8B48892CA7"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T232953578Z.aea8d1d3bb924d9a94b1c4900078f970/wrong-uuid-profile.json",
+      "bytes": 191,
+      "sha256": "E9E02AEC5003292D5B7307770173205AF8CEAAF3F201086B8B947C0660E12D26"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T234812329Z.fe3f20588ee14fedaa76cc85085e49dc/journal.json",
+      "bytes": 1091,
+      "sha256": "0FAB135B8754220FD349DA715DD5CBACD60E2F835B94EBA0185C803B7C980383"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T234812329Z.fe3f20588ee14fedaa76cc85085e49dc/reader-not-executed.exe",
+      "bytes": 4096,
+      "sha256": "AD7FACB2586FC6E966C004D7D1D16B024F5805FF7CB47C7A85DABD8B48892CA7"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/fixtures/journal.20261017T234812329Z.fe3f20588ee14fedaa76cc85085e49dc/wrong-uuid-profile.json",
+      "bytes": 191,
+      "sha256": "E9E02AEC5003292D5B7307770173205AF8CEAAF3F201086B8B947C0660E12D26"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/result.20261017T232821295Z.33fffdcaae124442947d3cda3f6a26b3.json",
+      "bytes": 60290,
+      "sha256": "54EB6BDDE1CC0B5C104242999BA3E610C86937950965BF3155F39F4E5D6B404B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/result.20261017T232828822Z.272649d1ad7248f48710a12b43cd80b1.json",
+      "bytes": 86963,
+      "sha256": "48623A4456386C3F32CF57766D277BAF78F9622FF05C5842AF8D40173B804EAB"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/result.20261017T232953578Z.aea8d1d3bb924d9a94b1c4900078f970.json",
+      "bytes": 87252,
+      "sha256": "EF765F6DC8B10350BC2666671C2F8CE0517DB3AFC981EAF9ADE55AAC57BA3343"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/tests/result.20261017T234812329Z.fe3f20588ee14fedaa76cc85085e49dc.json",
+      "bytes": 87252,
+      "sha256": "C987920520613D5FADC331B7C64D805061BF3F4267E5BBC1350CEC9760538846"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233008-d81803d303/cleanup.json",
+      "bytes": 5697,
+      "sha256": "BEB1E2E2BAF7EF11E0719F7F07A751A92ECA144E4589607C3AB8FE2081EA5567"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233008-d81803d303/evidence/kernel-metadata.json",
+      "bytes": 154924,
+      "sha256": "355A41379CCB124CBFF9609564D159F19EF021C8F223541765A580E1ED75C784"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233008-d81803d303/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233008-d81803d303/evidence/stdout.txt",
+      "bytes": 1304,
+      "sha256": "9C949705E7F0693BEA35E19007E742F139B42D2E32AF4136DFD2A6788750E37C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233008-d81803d303/guest-evidence.zip",
+      "bytes": 8714,
+      "sha256": "765D1BE4A338E9DCD9985E14185B0D75C01FA3B7A4054465B57DC7FA112BD4C0"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233008-d81803d303/request-metadata.json",
+      "bytes": 6197,
+      "sha256": "258E277544A7B40E91C322BD81A47866E6A15DF17456790B55E57B6C1AE4CF75"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233008-d81803d303/request-package.zip",
+      "bytes": 405529,
+      "sha256": "0D8ED98A81E75DC5F91E59A54DDD50B9B148301B02DD4A8B84C7E9FC08AD9CE4"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233008-d81803d303/request.json",
+      "bytes": 521,
+      "sha256": "D7D81E364D9674AAB3194C4FCECF3342BF5EEB059246F66403E1F7B8F8A62C12"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233008-d81803d303/response-metadata.json",
+      "bytes": 669,
+      "sha256": "35AD41241BA972F083A01C6DB87B2C4917EFC1BC0C67B82A28597651F6BEA66D"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233008-d81803d303/response.json",
+      "bytes": 591,
+      "sha256": "A5F7A388D50FC308362C8B2C90094BD74BFB8F7E839D9772E329E2EE8C721D8C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233008-d81803d303/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 720783,
+      "sha256": "633EA0C674117BA56ACD6B36C12203310B74291B741EA647DDB314BDCF7C8AFE"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233008-d81803d303/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "1B418EBBEC1DFD851D5C75D44E0CAF0611B5A5DB4530547DC1CD6FCF8386ADFC"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233114-765bc7624d/cleanup.json",
+      "bytes": 5813,
+      "sha256": "9BDEBB58759729E40DA1C93477DCC0C09B61F74F2F20FF86A24D0442147D5C12"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233114-765bc7624d/evidence/kernel-metadata.json",
+      "bytes": 187579,
+      "sha256": "BA027DEACAA9A398721BDAD00FB2542007A87D28A8605994F6A3F4548286285B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233114-765bc7624d/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233114-765bc7624d/evidence/stdout.txt",
+      "bytes": 1304,
+      "sha256": "B519B7853DB07D03BF2C946DBCEA063A0A1E345866C3557E08C7A5B3FDCA4F06"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233114-765bc7624d/guest-evidence.zip",
+      "bytes": 10149,
+      "sha256": "A1EF7462E94FEEC877841CD3D082E9B777AB906FD47F4EAF2627788E22C8AE6B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233114-765bc7624d/request-metadata.json",
+      "bytes": 6197,
+      "sha256": "882E5682B53449DEC0CAC6E39E9AB20C470B659EA81DBDFAB186169910FF1531"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233114-765bc7624d/request-package.zip",
+      "bytes": 405820,
+      "sha256": "235B1DB40A3FE6BC80AE1C412D8AAD4198FB33B0740A215198953737A24EC400"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233114-765bc7624d/request.json",
+      "bytes": 521,
+      "sha256": "069C7CBF61AD7436218C96C0CC4256683451F6543EA43117A040E1E1AE877F08"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233114-765bc7624d/response-metadata.json",
+      "bytes": 670,
+      "sha256": "154BB85DEBBB0F2C6D06517FB9C2FB59A996F8BBAE5441E88474DB39116BB595"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233114-765bc7624d/response.json",
+      "bytes": 592,
+      "sha256": "D8B65059189DA1DB1BC4681ED0ED7FEE6DCB04BD2667C0875B93F5B0C6E940DF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233114-765bc7624d/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 723231,
+      "sha256": "8DF60C0462133E3EEEE35D76943E4C6D447DCE608D668F03FE982919E2CDB628"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233114-765bc7624d/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "08A4197FC5C7186648BA04959246E8A4132C8D2F117DCC16F61AB237A6A48D21"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233215-64c7abc829/cleanup.json",
+      "bytes": 5697,
+      "sha256": "B2867BB3D6DA71FBC4FCC23C84FAE0B38DE33D834AB29F9C5511F10E6D21A222"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233215-64c7abc829/evidence/kernel-metadata.json",
+      "bytes": 156051,
+      "sha256": "B2430C6474C0120DDECA9976C86390DE1BB4CD3E639ADE50CB60F5B4FDF5ADB9"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233215-64c7abc829/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233215-64c7abc829/evidence/stdout.txt",
+      "bytes": 2196,
+      "sha256": "3D65BFC362AD64011445962CCCCC0898852423FF4FE13FA830879EFE5690487B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233215-64c7abc829/guest-evidence.zip",
+      "bytes": 8576,
+      "sha256": "485720F99B45F69DD405C2E16ED6A45EC3D376F8D231C171E0E7E91888218A68"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233215-64c7abc829/request-metadata.json",
+      "bytes": 6197,
+      "sha256": "7132296108B6F8FEB8191E932E2A91F0B7EE990519324D7DCFAB417563F020CD"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233215-64c7abc829/request-package.zip",
+      "bytes": 405884,
+      "sha256": "D8272A050BC5B07E283DD531AF62BB9472FD799D50FD6584D79112EF64D05212"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233215-64c7abc829/request.json",
+      "bytes": 521,
+      "sha256": "C95C5CF6648BCC34DF70E48AF24ACE5A32772453ABA73729D5955EF9109D3E1A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233215-64c7abc829/response-metadata.json",
+      "bytes": 669,
+      "sha256": "21B24DD722629B499170D6091284169F7D56A3A530236D207CC41A77E3430FBF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233215-64c7abc829/response.json",
+      "bytes": 591,
+      "sha256": "A9BFC5CD64C83696186EF5777A9EB2500A9C5F8680E2FC5D8BEBEA644157CDAF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233215-64c7abc829/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 723544,
+      "sha256": "3200B2010FEEA9039D70387B68BD50A29B351D324F38E54DF153C5E3D7606E42"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233215-64c7abc829/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "575284ADB53B879383945F54203A2875AAC69D2118A4B684534E4C7A5C5F9170"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233251-7f210d9412/cleanup.json",
+      "bytes": 5697,
+      "sha256": "C214AA4FB843681B9B6D91142449D660A50D44CBCA81F4F07D69458E9305347A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233251-7f210d9412/evidence/kernel-metadata.json",
+      "bytes": 154057,
+      "sha256": "9DE1C8E6ED43020BEF993F979D8E77609C232BD568F41D4F9B8C032D0DA9CF8D"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233251-7f210d9412/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233251-7f210d9412/evidence/stdout.txt",
+      "bytes": 1437,
+      "sha256": "C23E4319CA1CFE6982B6B490DDD30F44FD989A557015461334CC4AD246EB1E1A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233251-7f210d9412/guest-evidence.zip",
+      "bytes": 8454,
+      "sha256": "6B21636831CFCE42418E0EB5273DBA3515BE07FEB98E9F611C8D187D5378068C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233251-7f210d9412/request-metadata.json",
+      "bytes": 6197,
+      "sha256": "467B4AF6D8D472295FB740E7BBA24572CBA654D9488E602C0726A4D07A43ADD1"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233251-7f210d9412/request-package.zip",
+      "bytes": 405926,
+      "sha256": "FAE4E4EFC51C2B8863E09DF5CA3902A2B65A296A92C45BB0EB5333D8EDC2B7C1"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233251-7f210d9412/request.json",
+      "bytes": 521,
+      "sha256": "243EB1AA660F7FDDBA7DB3368CA0B69ED19883CA0B87A7087A6F8BAB4B02DD83"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233251-7f210d9412/response-metadata.json",
+      "bytes": 669,
+      "sha256": "60A707A2004A589335E7C2CE8C2C80C1EC6B4E03AD297CBDC7CF975540834EB2"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233251-7f210d9412/response.json",
+      "bytes": 591,
+      "sha256": "2017DD2252B2C91080C2F8440C9835148D1BE12DEFA358E286FDC5802D076D99"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233251-7f210d9412/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 723947,
+      "sha256": "2B9C13C1C9E62DC42E299246993163B88B856CF6303A7C852CC5CF5F509BD2BF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233251-7f210d9412/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "90705017CFCE0D03553C25CF6F9242E901ED3D19C758722C7A0E1BA497EDB789"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233408-b76a7226b5/cleanup.json",
+      "bytes": 5813,
+      "sha256": "48A72B94A3B3457D1C8BD2BD0E310272C1A7E8921D52D67D45905696AE4E2D98"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233408-b76a7226b5/error.json",
+      "bytes": 287,
+      "sha256": "F6C9663F93EABEFEC59A724D9876A0AF547B787AFB81546309B99E46C9BA76FB"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233408-b76a7226b5/evidence/kernel-metadata.json",
+      "bytes": 155723,
+      "sha256": "F000FD42F8C30F25F4FF792185CD54344FC96DF8F35D0832CB174D74198C0704"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233408-b76a7226b5/evidence/stderr.txt",
+      "bytes": 1048,
+      "sha256": "3873849AA165DEDFF65D279FFE2EA741638FC89C83B9C97A9DF115B419BC1F41"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233408-b76a7226b5/evidence/stdout.txt",
+      "bytes": 1248,
+      "sha256": "C91E17AF658D6BA8D9BA0CFC509C2A4F9A02FC9C10E5794DD069A45782ECD696"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233408-b76a7226b5/guest-evidence.zip",
+      "bytes": 9170,
+      "sha256": "D2EB1C411B0B6A21B04A1D2361F17382EDC8BD5CCA7A49CF27A8E5C106316F06"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233408-b76a7226b5/request-metadata.json",
+      "bytes": 6197,
+      "sha256": "AFD13117D901ECDFBC1B8839FF24914A81526E76CE33FFAB9535D7113EC1BA0E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233408-b76a7226b5/request-package.zip",
+      "bytes": 405937,
+      "sha256": "3445C4C23F11B47EFE8F04CBFD841027AB6C25AA98D2351DC7DA63E795156D2B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233408-b76a7226b5/request.json",
+      "bytes": 521,
+      "sha256": "ABCD9D6BE247D24BAD154D9160E48F3B172C78E8A72650F0A5C1507C039437ED"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233408-b76a7226b5/response-metadata.json",
+      "bytes": 652,
+      "sha256": "0A9C15D87D35773A14F12D88FC8BE491C456EA5E696D05198471BF45EFDB8310"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233408-b76a7226b5/response.json",
+      "bytes": 563,
+      "sha256": "498AB12AAD957E2C437A79D8DD4A06916F15852C81C92F374AB157854837F257"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233408-b76a7226b5/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 723959,
+      "sha256": "310EA83F11558BAD0B4549157329AB3A47A7C167F81E4C0D6D5858C2438200CF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233631-e60af9e858/cleanup.json",
+      "bytes": 5813,
+      "sha256": "8BBAEFC09D914F54A3C18FBC2EF436B26072A4DA4987D5297D2C5A64E3328D20"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233631-e60af9e858/evidence/kernel-metadata.json",
+      "bytes": 173482,
+      "sha256": "4C7666D26D93C82C209A9AC7DB203E50341EA9003B1206E58518194AAF624721"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233631-e60af9e858/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233631-e60af9e858/evidence/stdout.txt",
+      "bytes": 1333,
+      "sha256": "855FBE75C1FF3150E9D51AD000082C4C58E488E6D9E10B2B914D455AF64731D4"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233631-e60af9e858/guest-evidence.zip",
+      "bytes": 9373,
+      "sha256": "2068BB7FB251DB84FCDB5F740490698E6A751CC093219245A7A79255F3F0D3F2"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233631-e60af9e858/request-metadata.json",
+      "bytes": 6197,
+      "sha256": "E0C74168CF6D1CF67F99091AB3B807627C414E099EBABED9B819DBBCECFE8ECA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233631-e60af9e858/request-package.zip",
+      "bytes": 405944,
+      "sha256": "FB554F2C9DBF6151C8BA17A813164151EDD0A4C43C2DDBE59178436DA174B0BA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233631-e60af9e858/request.json",
+      "bytes": 521,
+      "sha256": "EACB6B04773E393DF0EDFCEFF154F0CAB9DA48E7B4E19C6B8F295A236E87F814"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233631-e60af9e858/response-metadata.json",
+      "bytes": 669,
+      "sha256": "6E1E6A678F263806AEB90DB9F250721A0182351A73A2FED6732A9CDF2EC7BB3E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233631-e60af9e858/response.json",
+      "bytes": 591,
+      "sha256": "1FE65A11C13804AF20D6B2DDBB69B963BDA84CEDD7B7143515F101F6CC164645"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233631-e60af9e858/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 723984,
+      "sha256": "EE6ECD28E5881B31075FBD1E86CB0F38A843748A514D8B74CBD825A2B06D100E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233631-e60af9e858/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "0E84A60082FC25E27C00AFEE450EAAB29321B4CBCE419ABC8B93B918F3D3BA61"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233715-6dd16b2623/cleanup.json",
+      "bytes": 5928,
+      "sha256": "1D195EC3D253C2D9AC2530B788601802E4DA424F450AFB15D31A8326133E65C8"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233715-6dd16b2623/evidence/kernel-metadata.json",
+      "bytes": 177738,
+      "sha256": "FC5C219B681FAA8EAA5370BD1071B2981C4B65A1591144F6F3F5B22ABFA20B1F"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233715-6dd16b2623/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233715-6dd16b2623/evidence/stdout.txt",
+      "bytes": 2427,
+      "sha256": "885B0CDDCD9B9BAC5E47A7A70DB15FBF54C53201D3E5D86D336C85BC9A8E10EB"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233715-6dd16b2623/guest-evidence.zip",
+      "bytes": 10163,
+      "sha256": "7FE51DEA9F100CD6446E3E95B0C3266E8D7D852774E46EE9D7C55D5065C7D7EE"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233715-6dd16b2623/request-metadata.json",
+      "bytes": 6317,
+      "sha256": "46153EC2D7A0611736724A8C553F8F4EF8989EE56CC503F6DFB5D7B147D8F066"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233715-6dd16b2623/request-package.zip",
+      "bytes": 421062,
+      "sha256": "A8B7BE9D207E4777F3E6DF3C82C4F84CF286EA9D031E4774AD12868555E4F406"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233715-6dd16b2623/request.json",
+      "bytes": 521,
+      "sha256": "90FC61ACE2FDD337C20AA36DC1D1B976B7C64E1A45D9246B10CE3D8517D89DFB"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233715-6dd16b2623/response-metadata.json",
+      "bytes": 670,
+      "sha256": "3C404BA2C2C920A8E93C60BE86C9CC438CC3AFB17D5C8C98409C82F008837A30"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233715-6dd16b2623/response.json",
+      "bytes": 592,
+      "sha256": "577F90E3507912A04DDE7E98D8194AEC8FA801E0D4AEBFAC4D827DAA2D344F43"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233715-6dd16b2623/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 763304,
+      "sha256": "FBC94C4ED46CC06FF211DDF7901EFE3CD908D78FC5F5CE4217C96E3D4A5E3A83"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233715-6dd16b2623/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "37C5B04C7C6B203EFCDFC6104E0263B33F817A0A4F273C8DF24906B34AA5B120"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233756-9c118e1a8a/cleanup.json",
+      "bytes": 5813,
+      "sha256": "928A18AF6CF9ACBB31DDBE6CE114563DF502B0ECD0BB09DBE8928F9B5DF63AC4"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233756-9c118e1a8a/evidence/kernel-metadata.json",
+      "bytes": 171174,
+      "sha256": "28E52397727515C1EB5F2E78C0B7928770F4DB96ADECB8F439274EC1797D41AB"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233756-9c118e1a8a/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233756-9c118e1a8a/evidence/stdout.txt",
+      "bytes": 1333,
+      "sha256": "B5C32AE6C7F9F90DA26BE969A26C10A08987DF1F8BB1301F12535FD40A936DBB"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233756-9c118e1a8a/guest-evidence.zip",
+      "bytes": 9544,
+      "sha256": "66D7EF9864EF0D9019CA9B0965999CC029FA8BAB83B0F52688B48201A6EE533B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233756-9c118e1a8a/request-metadata.json",
+      "bytes": 6197,
+      "sha256": "03C02CF88BAD0CB29DE1EE13694E066E3965CD1C3AACA693580C05F00CAE7C20"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233756-9c118e1a8a/request-package.zip",
+      "bytes": 405940,
+      "sha256": "4ED9EB77432EBA42DEAD76A2D0B49CF1DFB7C1FF6F3A21164040B9C9FB69F694"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233756-9c118e1a8a/request.json",
+      "bytes": 521,
+      "sha256": "AF6D806CBE3EB02E147E70D98F5135D83BB7623341843086A44222D331B12F07"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233756-9c118e1a8a/response-metadata.json",
+      "bytes": 669,
+      "sha256": "B7770DD3DBF80ABB3A28AAF2A6BFD9DD5616EF7A99C5765AE4FD4E9B70D21D3E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233756-9c118e1a8a/response.json",
+      "bytes": 591,
+      "sha256": "7C34E2FCFC61942CEDC5EF99480F29F465FB4D6AD260B6B0F49050860F737DDC"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233756-9c118e1a8a/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 723980,
+      "sha256": "124BE2C9259CD1CDBF8BAB988990D351FE97B6CA7F37C6238CB547F47444E5B6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233756-9c118e1a8a/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "5C0E57936ED330918A25FA7C041CF0B16EBE9BEA9EBD58BD6924234CCAD221B5"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233834-8d4a1017ed/cleanup.json",
+      "bytes": 5813,
+      "sha256": "9E4D781133F8A6375654A489C434E0D0CFDE214B487D8AF60DE7D48D8064C4D1"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233834-8d4a1017ed/evidence/kernel-metadata.json",
+      "bytes": 202801,
+      "sha256": "EF468E9B611CE4F6F30B3AC3962FB8B97AFFDA320AA316574058611BA5494F1B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233834-8d4a1017ed/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233834-8d4a1017ed/evidence/stdout.txt",
+      "bytes": 1333,
+      "sha256": "19900E0EE63DE49770C0010D1A115A2D3C4375F99A08A5F51A559C7AAD4E51F6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233834-8d4a1017ed/guest-evidence.zip",
+      "bytes": 10938,
+      "sha256": "EE9DB9584A6A77DE12D7F2CD516F25DAB8635786C4E9A19C53B197CB1B24EA9A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233834-8d4a1017ed/request-metadata.json",
+      "bytes": 6197,
+      "sha256": "1D4EA6670FCA60649E54A6D7969E26FBCAC7C4D74F74F3E48D801B3FA7E1A753"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233834-8d4a1017ed/request-package.zip",
+      "bytes": 405903,
+      "sha256": "9DD8E1F658E9F9AB102ED7989D2DA4A7681F66F597763288D03976D5FC8BEF03"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233834-8d4a1017ed/request.json",
+      "bytes": 521,
+      "sha256": "618276CC6F093D33420368415AF4BE9ECDFA197389D0B61DCE7024AA3DC4283A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233834-8d4a1017ed/response-metadata.json",
+      "bytes": 670,
+      "sha256": "64D140A0B47DA714A14F3AAB771116DFA4AA43AF3C2FD558CFCABD3DDB0DDF62"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233834-8d4a1017ed/response.json",
+      "bytes": 592,
+      "sha256": "1C054D092DC1856B1D514F50FD5BFEA0AA2C12F131EE76F7B7FDC1782D333E2E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233834-8d4a1017ed/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 723984,
+      "sha256": "882DAE69C6982A3A127A8F692A9365156A601ECD3621E060479E123C7BDBC12B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233834-8d4a1017ed/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "647E6A4E97EED059B8E4595BB76717CE4D9C81805483B0ACAADA171D74891AFE"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233949-58b16521f7/cleanup.json",
+      "bytes": 5697,
+      "sha256": "836C05F03062F025C1786F1B31404DBC95173251EC3115C3477FED0C4200A3FF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233949-58b16521f7/evidence/kernel-metadata.json",
+      "bytes": 155293,
+      "sha256": "D1707E7EF3873C25BDDB596B80B9E1E819AD82266218A6E4F366D858201218BE"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233949-58b16521f7/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233949-58b16521f7/evidence/stdout.txt",
+      "bytes": 1780,
+      "sha256": "70C37F9562614193726FD56A9ADF8BE2433D8BA4DA2E8651DF4053D1B027E658"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233949-58b16521f7/guest-evidence.zip",
+      "bytes": 8677,
+      "sha256": "DD0B8EF050338E8603F920DE887C74D04AE7DC73FEF17951F3575F7E99FFA47E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233949-58b16521f7/request-metadata.json",
+      "bytes": 6197,
+      "sha256": "0D7DF9C5FAA768E65DC644E84811CFC7388190E885BF1D38F21B2B49DCA74744"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233949-58b16521f7/request-package.zip",
+      "bytes": 406311,
+      "sha256": "BCE03F8888670E0CFFE2624599B498092E2B21E476E1176EC177A1D1FC04983A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233949-58b16521f7/request.json",
+      "bytes": 521,
+      "sha256": "A58173E5211836235929756A5F58013E0535288FBD2A1AA55212ABC0AABBC376"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233949-58b16521f7/response-metadata.json",
+      "bytes": 669,
+      "sha256": "47E44518F3A843982FC2171E38615E2BEA3379176DCACD083EF367A8147B5C72"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233949-58b16521f7/response.json",
+      "bytes": 591,
+      "sha256": "82B04F1AF031DC48AFAC34714CDD5CEECEF870EFCDC3837049DB4D74CBCD23D7"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233949-58b16521f7/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 725975,
+      "sha256": "D789AF310F5A3C74A35DBDC62E82ECE7DF38E1C5584AD601CA24B140F5BBFAF5"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-233949-58b16521f7/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "91A3EFF691DEC95DBC16839D798C6CFD3B3A724302A8286B9F7B3ABF280E2559"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234025-36406a146b/cleanup.json",
+      "bytes": 5813,
+      "sha256": "D5B4566B3A72C2BE6DF90B3D6A925A0A2E10EE7E12EADA7C9EE5FB67741E2411"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234025-36406a146b/evidence/kernel-metadata.json",
+      "bytes": 187702,
+      "sha256": "09F5801B123A0A52C45B941E65D3ACFD066B3CC95CF987490D121A5CE32D297A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234025-36406a146b/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234025-36406a146b/evidence/stdout.txt",
+      "bytes": 1333,
+      "sha256": "3111148925C778421923357015B5D5C7472F86B5F56367508833AA5FDA1EB8BC"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234025-36406a146b/guest-evidence.zip",
+      "bytes": 10129,
+      "sha256": "69404B23EB3E08832CE8315126E17088D407096FDA64FFF340499C52187E0F14"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234025-36406a146b/request-metadata.json",
+      "bytes": 6197,
+      "sha256": "BA060F8E888436ACAE5CA767EEB3E0BFAFFFA47EE4F8AD9CCBF2C85CB29EC9A7"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234025-36406a146b/request-package.zip",
+      "bytes": 406270,
+      "sha256": "88579983896FD78B6C63F3963773759A6C9BFE0BD1F4F6D2F2EDA8EB40DCA8C1"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234025-36406a146b/request.json",
+      "bytes": 521,
+      "sha256": "5F6E053C2A6EFA280286B4AF62A9FCCE944E67343A4C94306B17C93D99029A9B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234025-36406a146b/response-metadata.json",
+      "bytes": 670,
+      "sha256": "55668E4BFF9D3BFC891FF5EDB1522A2BC7C54B63C9CAF8142A00D9844A11CF35"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234025-36406a146b/response.json",
+      "bytes": 592,
+      "sha256": "4550B6781F7B9E93563AD2A488DF135ACA3A980958EEEEA0A89CE3A6345F2287"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234025-36406a146b/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 725975,
+      "sha256": "343E6CC7171150E2325D18CDAE21C6A7282876B10BD42F05FBB89B6FACE12401"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234025-36406a146b/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "182170E1B8E2F7C64831A2DE42ACBAC2B529FCFCB74CEC6BB2E2B6CDD43BC1FB"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234103-82ec2f8e99/cleanup.json",
+      "bytes": 5697,
+      "sha256": "1164EA02F7776D05F1FFA9B62A70445CD69F8EAA08089432320170258FD5B0B3"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234103-82ec2f8e99/evidence/kernel-metadata.json",
+      "bytes": 160953,
+      "sha256": "9ED7DC744F3281B1E84BE3893E5B5D1D24E4026FB883ECB120C413C3489029B8"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234103-82ec2f8e99/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234103-82ec2f8e99/evidence/stdout.txt",
+      "bytes": 1333,
+      "sha256": "BA20E29E2D53C099E6C2C86B4567C6772150A524F852FA60AD4221B75F15E880"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234103-82ec2f8e99/guest-evidence.zip",
+      "bytes": 8820,
+      "sha256": "2BA92B3AF658D3BDDDA31F4411693AB94B8E57CE9034A7456B8D4C4070D377D6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234103-82ec2f8e99/request-metadata.json",
+      "bytes": 6197,
+      "sha256": "35B0BF6049D104BBCBE3103E767A6D87DE648B5799EA42F02359D9D674005040"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234103-82ec2f8e99/request-package.zip",
+      "bytes": 406340,
+      "sha256": "DC49C1035768C74DEA33A6EC1A0304D7DA1E7904C2FBBDD86E8EA3B6B38723E1"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234103-82ec2f8e99/request.json",
+      "bytes": 521,
+      "sha256": "16E3C93D9E5654ACA9D39BAD8775B72B3D92FB46DDBEC6AEE6011863311A731B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234103-82ec2f8e99/response-metadata.json",
+      "bytes": 669,
+      "sha256": "6C901265332CE7AA160AA1462D955A5993492C92E99F0E7706DC9CF835E910EF"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234103-82ec2f8e99/response.json",
+      "bytes": 591,
+      "sha256": "3E93790A994B8E7769C4D8397955FA7BB29C71145165220375BBB8D93A84CE04"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234103-82ec2f8e99/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 725963,
+      "sha256": "79E7A36FA87AAFF1794165EA8451BAF4AE774706C52ADA7AA144116C94021164"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234103-82ec2f8e99/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "51257699736C38408EF4C93B7E70C46E1EDE37716482866370A61968447AAA8C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234142-5e68dbc7e0/cleanup.json",
+      "bytes": 5813,
+      "sha256": "C9AED08DB0F04D67145414BA867CFA7FF2EBD472BDF28F198EA030210D96C234"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234142-5e68dbc7e0/evidence/kernel-metadata.json",
+      "bytes": 202131,
+      "sha256": "56110A04650F93F171B8C6BE8EEDF02D572005305D276A711C318FDA1070D777"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234142-5e68dbc7e0/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234142-5e68dbc7e0/evidence/stdout.txt",
+      "bytes": 2201,
+      "sha256": "29A917C9E21EE060F477F344113AB97970776C50474B9459B6E986DB76717017"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234142-5e68dbc7e0/guest-evidence.zip",
+      "bytes": 11724,
+      "sha256": "46E5056476CAEE7C284965EEAF26B8FF6AE4F8184DCDEF50CB2137B0D8C3780B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234142-5e68dbc7e0/request-metadata.json",
+      "bytes": 6197,
+      "sha256": "61EBFA0B1C829605F7D6415D46ADC9C29BC14C5A470B6AA09C9BB15CB32B37CD"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234142-5e68dbc7e0/request-package.zip",
+      "bytes": 406314,
+      "sha256": "79386544EB9C962BAD0E70C63E89FF1050A0C76CB42F78D66392D33B900892D4"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234142-5e68dbc7e0/request.json",
+      "bytes": 521,
+      "sha256": "44F0C114C8FCC6D324B17A423F8991382B6D7BEAC6A82871D5A4084371400195"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234142-5e68dbc7e0/response-metadata.json",
+      "bytes": 670,
+      "sha256": "99348619D1A0CC33BD90F460D937E968F05D468ECEF9168374A0DC469A9B7AB8"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234142-5e68dbc7e0/response.json",
+      "bytes": 592,
+      "sha256": "2EFC4A469F7AC7987413E22B9B33CE8EF7F31292A0D8B0AA16226EA5F2D8DD71"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234142-5e68dbc7e0/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 725963,
+      "sha256": "27FF02341556C940DE35B43D71D04542C6ED7D6C077DC6D2DFB8014334A081A6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234142-5e68dbc7e0/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "8849A68BE65149A0F20FF0B6A50190868F15C652410BA59A29A9C48F3D8BD6E5"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234219-1a2a0d58f9/cleanup.json",
+      "bytes": 5697,
+      "sha256": "4328475E3709927852B71573D0547A61875BC8B94FB00D18F38851DC4829C679"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234219-1a2a0d58f9/evidence/kernel-metadata.json",
+      "bytes": 153998,
+      "sha256": "6CEFC738367849E107044009E77C492F6DFF1EE8224B24BA37ABDB75195C360A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234219-1a2a0d58f9/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234219-1a2a0d58f9/evidence/stdout.txt",
+      "bytes": 1408,
+      "sha256": "791FEE046655F34FEB6F857A99C0283FB44D280748F1D7C37646D44710602F71"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234219-1a2a0d58f9/guest-evidence.zip",
+      "bytes": 8454,
+      "sha256": "F493C63363F62F14FA9FF01D34CA43A8786A8237E6E230CF531573F51E0A1055"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234219-1a2a0d58f9/request-metadata.json",
+      "bytes": 6197,
+      "sha256": "86FE870C66DA186362C1FD6D064FD20AC71AE373411CCE38641D2399973E66A6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234219-1a2a0d58f9/request-package.zip",
+      "bytes": 406289,
+      "sha256": "9A6871D5A80F242AE5F6DD01420281CF338C1482F5F5BE02337912EF1939A3C5"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234219-1a2a0d58f9/request.json",
+      "bytes": 521,
+      "sha256": "17567A0EC0D3DAD47FDEA3AA93CDBC3A30FCFE193A81D0872757BAB68536D86B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234219-1a2a0d58f9/response-metadata.json",
+      "bytes": 669,
+      "sha256": "5918972BB115B4614A2A0B271F7EE5D4EB2428DACB8285E9C8ED8E70BEB3DDDA"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234219-1a2a0d58f9/response.json",
+      "bytes": 591,
+      "sha256": "A08C90CFB7BB56777C836E63C829989A014D7AEC0DD904EEA96849DCF0ECB135"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234219-1a2a0d58f9/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 725951,
+      "sha256": "13823EB0952DF61AF3C99D8E2684B19BBCE301B6A79C2D44773F312222C5D809"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234219-1a2a0d58f9/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "E063F979CE9B6232B44447A106182D3F3483B8F30ED4E0BDCF37D9E380B56ABB"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234313-876dc991d3/cleanup.json",
+      "bytes": 5813,
+      "sha256": "BC8AA7F24D4F10233AC554D8B3EA8595654319657EEC2412257E47CA612BF845"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234313-876dc991d3/evidence/kernel-metadata.json",
+      "bytes": 187579,
+      "sha256": "AED5A724CE949C09504DD76159E592577A7774AFD236B67F36C303FFADEC5D22"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234313-876dc991d3/evidence/stderr.txt",
+      "bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234313-876dc991d3/evidence/stdout.txt",
+      "bytes": 1304,
+      "sha256": "D6FF1F945B919BABEC5E372C74233030E448B58A2B6433A7C1CC846BC5C52AB5"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234313-876dc991d3/guest-evidence.zip",
+      "bytes": 10148,
+      "sha256": "EA29E0983BA41557E94EF55CDC646081E72EAB1EE5C971A42D374A83F1C9759E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234313-876dc991d3/request-metadata.json",
+      "bytes": 6197,
+      "sha256": "2C946C3D7A4FF0B9C71C5BD42B2CEFB6BD9CE18FF8D917CD277E4C7709B6524B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234313-876dc991d3/request-package.zip",
+      "bytes": 406336,
+      "sha256": "1F2025C017D4B944806023A9D5F889093DE21AC21C051E561498B4CDBD89BDA6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234313-876dc991d3/request.json",
+      "bytes": 521,
+      "sha256": "66832AB886845907BEE96341181DB0846B568A24E87A2F6485C175A44F01158C"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234313-876dc991d3/response-metadata.json",
+      "bytes": 670,
+      "sha256": "BBBA37246116E9D208B2CDC6F9DC1E165D28C86AAD578F33393A0573DD543E3E"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234313-876dc991d3/response.json",
+      "bytes": 592,
+      "sha256": "98E42AA6F9E8040154DC88BF85AA3294E0A9F7A4B3CCE7CEF949D922C006E50F"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234313-876dc991d3/stage/Invoke-WindowsGuestTest.ps1",
+      "bytes": 725959,
+      "sha256": "00B7E2FD8D24D43D8A457753563B0D1367D0B6532FAECBA41770D10B701283A6"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/uefi-windows-probe-20261017-234313-876dc991d3/transport-metadata.json",
+      "bytes": 904,
+      "sha256": "7C1C158084485DBC8A05495E5E2B617E69EC3BD1659DBA0BED7AC8B5A2D2B89B"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.checkToolsState.20261017T232721339Z.d569ad68d39e4254945a8842f4238d44.json",
+      "bytes": 476,
+      "sha256": "DAC2520FEC53BF9148CFF879464FF4E497D05896FE5BC0943E5BB2558BFD6080"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.checkToolsState.20261017T233352920Z.ff7f7327c56f4e93b7d0037ae1b67af6.json",
+      "bytes": 474,
+      "sha256": "9B010DDFB05FE86607BD551972B433877D9B82C6641A32E72280408687089729"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.checkToolsState.20261017T233619900Z.f9694c82168242389fe2e8520371eb8e.json",
+      "bytes": 476,
+      "sha256": "7F26F81E8799CC5620DEB9A4FDD4BA62BEBC7B9F8058E12ED99B49FC4477E45A"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.checkToolsState.20261017T234304373Z.00ae7f19f4404c2290c79c68a0a1ae38.json",
+      "bytes": 474,
+      "sha256": "F925DD3141F401CCEA3FFF4EBC022E56D73AE41E2CEE0B721A351FE0A49DA111"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.revertToSnapshot.20261017T233547813Z.31a0e127e5d9425f841d303f17481c92.json",
+      "bytes": 520,
+      "sha256": "E64330AA758F94330133492BA4C2E2E5746DA5E93D2EDFC9A649869C4C378660"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.revertToSnapshot.20261017T233548784Z.0514365744514424b06e61addac1b8ed.json",
+      "bytes": 522,
+      "sha256": "22A6C1E4BD8E7AD19694B9F2D5F2EAE53589DF5C026B4953096FA8229585AA81"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.revertToSnapshot.20261017T234420458Z.c6135dc964c043abb23a96e7d5bfb717.json",
+      "bytes": 520,
+      "sha256": "A614743A16BB8AFB9184ED997E5D16052361EF408F5067A21E49205BC4B79597"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.start.20261017T232642572Z.6b86baa04b0043feb4f2df3a0344575c.json",
+      "bytes": 485,
+      "sha256": "6F374CD6AF139DA80B80280CDA79943F9E87E26F91AC2936FAFE60D84CB47547"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.start.20261017T233549990Z.b4128c440a5a4695a952704686dd6ff3.json",
+      "bytes": 485,
+      "sha256": "6831CD97D3917D0D079B4897A726FD6DA400E7863402A80D026B302F993327C4"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.stop.20261017T233546877Z.7676e61388d647e089048a27eb8cd67b.json",
+      "bytes": 483,
+      "sha256": "B406952BD83881DB4CCCBBB871A06FA71D7F83EBCFAE7CC62C033A5001110D49"
+    },
+    {
+      "path": "spoof-handoff/reports/nic-vm-20261017/vmrun.stop.20261017T234419494Z.cc2c954c5fca44e7aedac737592b33b6.json",
+      "bytes": 483,
+      "sha256": "664556B723F898B95E1AE43063BEBA1313B4565D8AA0B88BFAA9DE5EA9035585"
+    }
+  ],
+  "sourceFiles": [
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/adapter-address-tests.ps1",
+      "bytes": 12390,
+      "sha256": "69FF69EE70B5FBD16F8E5A86DBF22EDFA048EF937D4AE71A97BB7B18CF0D7C01",
+      "repositoryPath": "spoof-handoff/tools/nic_vm/adapter-address-tests.ps1"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/adapter-address.ps1",
+      "bytes": 36945,
+      "sha256": "0FC46280A1631FC09844A00BA4186A5AF77719DF8C4266BB2E915A7B25E58768",
+      "repositoryPath": "spoof-handoff/tools/nic_vm/adapter-address.ps1"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/build-nic.ps1",
+      "bytes": 28893,
+      "sha256": "5536CF19BC85EBF055AE1AC6B8655E9639DECE4AC52CDC50506A60165CBFBB1A",
+      "repositoryPath": "spoof-handoff/tools/nic_vm/build-nic.ps1"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/capture-host-state.ps1",
+      "bytes": 4113,
+      "sha256": "39035F2683DB38BFC21241600ED4A71B05E768AFBEEB15AAE0C3D1E008B045AB",
+      "repositoryPath": "spoof-handoff/tools/nic_vm/capture-host-state.ps1"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/guest.ps1",
+      "bytes": 65784,
+      "sha256": "755A5A8E5808FE415F7675F021572324C3AA3363B74234D1B60575A98A2E833A",
+      "repositoryPath": "spoof-handoff/tools/nic_vm/guest.ps1"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/host-address-roundtrip.ps1",
+      "bytes": 106858,
+      "sha256": "703A3E20896241D528805B4B9D5B647A1CE93BD6C739E54AC9B3C0569B086108",
+      "repositoryPath": "spoof-handoff/tools/nic_vm/host-address-roundtrip.ps1"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/host-gate-tests.ps1",
+      "bytes": 19854,
+      "sha256": "3CADAFC4A6D48DC8DF53BDEF882B14EE917291707CC60D85363385ABFC07E40F",
+      "repositoryPath": "spoof-handoff/tools/nic_vm/host-gate-tests.ps1"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/invoke-phase.ps1",
+      "bytes": 2253,
+      "sha256": "95AD434912942F0A9673A5985E93BE0A05C0790BBF12073F916711C6622582A6",
+      "repositoryPath": "spoof-handoff/tools/nic_vm/invoke-phase.ps1"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/launch-host.ps1",
+      "bytes": 4030,
+      "sha256": "C6E35EC4E149DF77EC9034D8E09068B895211BA99DF9212F65F4916BD1C21015",
+      "repositoryPath": "spoof-handoff/tools/nic_vm/launch-host.ps1"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/recover.ps1",
+      "bytes": 2824,
+      "sha256": "10F6D2A5138368B68F345B77F91432CC6977E7DFDED2D836BC5C4045B2689C99",
+      "repositoryPath": "spoof-handoff/tools/nic_vm/recover.ps1"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/render-guest.ps1",
+      "bytes": 12289,
+      "sha256": "53FA95C3EE92151CEC26AC884DAB9AA5535EF931876AE1A462415B2FF81BCF04",
+      "repositoryPath": "spoof-handoff/tools/nic_vm/render-guest.ps1"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/tests.ps1",
+      "bytes": 24251,
+      "sha256": "83CD913DE4267B8F8281357D7D48CBD93B120BFCA8B6C902AAFF144E07581549",
+      "repositoryPath": "spoof-handoff/tools/nic_vm/tests.ps1"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/analyze-reader-gap.py",
+      "bytes": 14810,
+      "sha256": "A5A12BB3A7F291EDCD8C8C4BC886B9002AC06350FC17ABF02E42779EE6D8BC5A",
+      "repositoryPath": "spoof-handoff/tools/nic_vm/analyze-reader-gap.py"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm/analyze.py",
+      "bytes": 12103,
+      "sha256": "9C3D02A4E13EC648977B8BE764BDA9D78F61AA92EA9E40B79FB080F1DE49C760",
+      "repositoryPath": "spoof-handoff/tools/nic_vm/analyze.py"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm_probe/CMakeLists.txt",
+      "bytes": 797,
+      "sha256": "B3C5885112CA21622FFE79ACC574471C8254ACFB0F7B328A64B1C606EEB9D203",
+      "repositoryPath": "spoof-handoff/tools/nic_vm_probe/CMakeLists.txt"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm_probe/native_read.cpp",
+      "bytes": 34746,
+      "sha256": "E10E7A21088603CF2C1D2C16FDDF6A1942ACAC5E184581E1E8E5211DC6DCAD5F",
+      "repositoryPath": "spoof-handoff/tools/nic_vm_probe/native_read.cpp"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/tools/nic_vm_probe/read-host.ps1",
+      "bytes": 33269,
+      "sha256": "612DB756A9344D0ACFACCC6B0C141315669338AD16649D8915224B5E4203265B",
+      "repositoryPath": "spoof-handoff/tools/nic_vm_probe/read-host.ps1"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/docs/NIC_VM_VALIDATION.md",
+      "bytes": 8502,
+      "sha256": "D6FDB2A79F4D65C68007202E360FB5FE3FC7B74105CBF36F8314E5F50A5009FD",
+      "repositoryPath": "spoof-handoff/docs/NIC_VM_VALIDATION.md"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/commands/nic-host-test.ps1",
+      "bytes": 1263,
+      "sha256": "ACB895755AD8D4F9F074C84D8BFDED68CC6FF924186470252A509E21308F2CBB",
+      "repositoryPath": "spoof-handoff/commands/nic-host-test.ps1"
+    },
+    {
+      "path": ".codex-build/worktrees/smbios-boot-serial-probe/spoof-handoff/commands/nic-host-rollback.ps1",
+      "bytes": 452,
+      "sha256": "63C5BE3BB1BA18C1B8140809EE3A4A2DC9136E36BD1748415D2A15C829942F1A",
+      "repositoryPath": "spoof-handoff/commands/nic-host-rollback.ps1"
+    }
+  ],
+  "readerArtifact": {
+    "path": "spoof-handoff/artifacts/nic-reader-gap-20261017/native-build-vs18/Release/nic_native_read.exe",
+    "bytes": 348160,
+    "sha256": "BF553F39E4E7024C75272C24215D995858627AEDD5E946A4B1289A8033DA1642"
+  },
+  "scope": "Current adapter MACs only. Permanent addresses remain informational. VM adapters are two e1000e and two vmxnet3, not the physical host miniports.",
+  "missing": "Physical-host all-reader round trip is pending. The administrator launch was canceled before the host script started; run the reviewed command from an elevated PowerShell session.",
+  "excluded": "No private keys, credentials, VM disks, snapshots or generated build trees are published."
+}
