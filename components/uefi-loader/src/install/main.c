@@ -25,10 +25,11 @@ static void usage(void)
         L"  ib-install stage --signer-cert DER --shim PATH --loader PATH "
         L"--log PATH --payload PATH [--esp-volume auto|VOLUME | --test-root DIR]\n"
         L"  ib-install oneshot --mode replace|verify|bootnext|off "
-        L"[--profile legacy|inventory|shim-inventory] "
+        L"[--profile legacy|inventory|shim-inventory|vm-direct] "
         L"[--esp-volume auto|VOLUME | --test-root DIR] "
         L"[--partition-number N --partition-start N --partition-size N "
         L"--partition-guid GUID]\n"
+        L"  vm-direct is only for disposable VM fixtures; never use it for physical deployment.\n"
         L"  ib-install enroll-mok\n");
 }
 
@@ -291,6 +292,9 @@ static int run_oneshot(int argc, wchar_t **argv)
         } else if (wcscmp(profile_text, L"shim-inventory") == 0) {
             profile = IB_ONESHOT_PROFILE_SHIM_INVENTORY;
             boot_profile = IB_BOOTNEXT_PROFILE_SHIM_INVENTORY;
+        } else if (wcscmp(profile_text, L"vm-direct") == 0) {
+            profile = IB_ONESHOT_PROFILE_VM_DIRECT;
+            boot_profile = IB_BOOTNEXT_PROFILE_VM_DIRECT;
         } else {
             fwprintf(stderr, L"one-shot failed: unknown profile %ls\n", profile_text);
             return 2;

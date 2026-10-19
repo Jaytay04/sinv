@@ -319,6 +319,81 @@ static void shim_inventory_profile_uses_its_owned_boot_path(void)
     CHECK(!vars.entries[0].present && vars.bootorder_writes == 0);
 }
 
+static void vm_direct_profile_uses_its_owned_boot_path(void)
+{
+    fake_vars_t vars; ib_bootnext_variable_ops_t ops; ib_bootnext_request_t request;
+    ib_bootnext_partition_t p = partition(0x51u);
+    unsigned char bytes[512] = { 0 }; size_t size = sizeof(bytes);
+    unsigned short number = 0u; wchar_t error[256] = L"";
+
+    CHECK(ib_bootnext_serialize_profile(&p, IB_BOOTNEXT_PROFILE_VM_DIRECT,
+                                        bytes, &size));
+    CHECK(contains_utf16_ascii(bytes, size, "Hypersinv VM Direct Loader"));
+    CHECK(contains_utf16_ascii(bytes, size,
+          "\\EFI\\insecure-boot\\grubx64.efi"));
+    CHECK(ib_bootnext_is_owned_profile(bytes, size, &p,
+                                       IB_BOOTNEXT_PROFILE_VM_DIRECT));
+    CHECK(!ib_bootnext_is_owned_profile(bytes, size, &p,
+                                        IB_BOOTNEXT_PROFILE_LEGACY));
+    CHECK(!ib_bootnext_is_owned_profile(bytes, size, &p,
+                                        IB_BOOTNEXT_PROFILE_SHIM_INVENTORY));
+    size = sizeof(bytes);
+    CHECK(!ib_bootnext_serialize_profile(&p, (ib_bootnext_profile_t)99,
+                                         bytes, &size));
+
+    memset(&vars, 0, sizeof(vars));
+    request = request_for(&vars, &ops, p);
+    CHECK(ib_bootnext_set_profile(&request, IB_BOOTNEXT_PROFILE_VM_DIRECT,
+                                  &number, error,
+                                  sizeof(error) / sizeof(error[0])));
+    CHECK(vars.bootnext.present && vars.entries[number].present);
+    CHECK(vars.bootorder_writes == 0);
+    {
+        unsigned short other_number = 0u;
+        CHECK(!ib_bootnext_set_profile(&request, IB_BOOTNEXT_PROFILE_LEGACY,
+                                       &other_number, error,
+                                       sizeof(error) / sizeof(error[0])));
+        CHECK(vars.bootnext.present && vars.entries[number].present);
+        CHECK(vars.bootorder_writes == 0);
+    }
+    CHECK(!ib_bootnext_clear_owned_profile(&request, IB_BOOTNEXT_PROFILE_LEGACY,
+                                          error, sizeof(error) / sizeof(error[0])));
+    CHECK(vars.bootnext.present && vars.entries[number].present);
+    CHECK(!ib_bootnext_clear_owned_profile(&request,
+          IB_BOOTNEXT_PROFILE_SHIM_INVENTORY, error,
+          sizeof(error) / sizeof(error[0])));
+    CHECK(vars.bootnext.present && vars.entries[number].present);
+    CHECK(ib_bootnext_clear_owned_profile(&request, IB_BOOTNEXT_PROFILE_VM_DIRECT,
+                                          error, sizeof(error) / sizeof(error[0])));
+    CHECK(!vars.bootnext.present && !vars.entries[number].present);
+    CHECK(vars.bootorder_writes == 0);
+
+    memset(&vars, 0, sizeof(vars));
+    request = request_for(&vars, &ops, p);
+    CHECK(ib_bootnext_set_profile(&request, IB_BOOTNEXT_PROFILE_LEGACY,
+                                  &number, error,
+                                  sizeof(error) / sizeof(error[0])));
+    CHECK(!ib_bootnext_clear_owned_profile(&request,
+          IB_BOOTNEXT_PROFILE_VM_DIRECT, error,
+          sizeof(error) / sizeof(error[0])));
+    CHECK(vars.bootnext.present && vars.entries[number].present);
+    CHECK(ib_bootnext_clear_owned_profile(&request, IB_BOOTNEXT_PROFILE_LEGACY,
+                                          error, sizeof(error) / sizeof(error[0])));
+    CHECK(!vars.bootnext.present && !vars.entries[number].present);
+
+    memset(&vars, 0, sizeof(vars));
+    request = request_for(&vars, &ops, p);
+    CHECK(ib_bootnext_set_profile(&request, IB_BOOTNEXT_PROFILE_VM_DIRECT,
+                                  &number, error,
+                                  sizeof(error) / sizeof(error[0])));
+    CHECK(!ib_bootnext_clear_owned_profile(&request, (ib_bootnext_profile_t)99,
+                                           error, sizeof(error) / sizeof(error[0])));
+    CHECK(vars.bootnext.present && vars.entries[number].present);
+    CHECK(ib_bootnext_clear_owned_profile(&request, IB_BOOTNEXT_PROFILE_VM_DIRECT,
+                                          error, sizeof(error) / sizeof(error[0])));
+    CHECK(!vars.bootnext.present && !vars.entries[number].present);
+}
+
 static void set_preserves_existing_and_order(void)
 {
     fake_vars_t vars; ib_bootnext_variable_ops_t ops; ib_bootnext_request_t request;
@@ -629,6 +704,7 @@ int main(void)
     clear_uses_recoverable_entry_first_order(); clear_leaves_unrelated_entries_alone();
     profiles_cannot_delete_each_others_entries();
     shim_inventory_profile_uses_its_owned_boot_path();
+    vm_direct_profile_uses_its_owned_boot_path();
     if (g_failures != 0) { fprintf(stderr, "%d BootNext tests failed\n", g_failures); return 1; }
     puts("install BootNext tests passed"); return 0;
 }

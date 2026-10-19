@@ -7,7 +7,9 @@
 typedef enum {
     IB_ONESHOT_PROFILE_LEGACY = 0,
     IB_ONESHOT_PROFILE_INVENTORY = 1,
-    IB_ONESHOT_PROFILE_SHIM_INVENTORY = 2
+    IB_ONESHOT_PROFILE_SHIM_INVENTORY = 2,
+    /* Direct launch is only for disposable VM fixtures, never physical deployment. */
+    IB_ONESHOT_PROFILE_VM_DIRECT = 3
 } ib_oneshot_profile_t;
 
 typedef int (*ib_oneshot_verify_signature_fn)(const wchar_t *image_path,

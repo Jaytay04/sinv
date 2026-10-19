@@ -16,6 +16,9 @@ static const wchar_t g_inventory_loader_path[] = L"\\EFI\\HypersinvInventory\\lo
 static const wchar_t g_shim_inventory_description[] = L"Hypersinv Shim Inventory";
 static const wchar_t g_shim_inventory_loader_path[] =
     L"\\EFI\\HypersinvShimInventory\\shimx64.efi";
+static const wchar_t g_vm_direct_description[] = L"Hypersinv VM Direct Loader";
+static const wchar_t g_vm_direct_loader_path[] =
+    L"\\EFI\\insecure-boot\\grubx64.efi";
 
 static void set_error(wchar_t *error, size_t count, const wchar_t *format, ...)
 {
@@ -61,6 +64,11 @@ static int profile_strings(ib_bootnext_profile_t profile,
     if (profile == IB_BOOTNEXT_PROFILE_SHIM_INVENTORY) {
         *description = g_shim_inventory_description;
         *loader_path = g_shim_inventory_loader_path;
+        return 1;
+    }
+    if (profile == IB_BOOTNEXT_PROFILE_VM_DIRECT) {
+        *description = g_vm_direct_description;
+        *loader_path = g_vm_direct_loader_path;
         return 1;
     }
     return 0;
@@ -471,7 +479,8 @@ int ib_bootnext_clear_owned_profile(const ib_bootnext_request_t *request,
     }
     if (profile != IB_BOOTNEXT_PROFILE_LEGACY &&
         profile != IB_BOOTNEXT_PROFILE_INVENTORY &&
-        profile != IB_BOOTNEXT_PROFILE_SHIM_INVENTORY) {
+        profile != IB_BOOTNEXT_PROFILE_SHIM_INVENTORY &&
+        profile != IB_BOOTNEXT_PROFILE_VM_DIRECT) {
         set_error(error, error_count, L"BootNext profile is invalid");
         return 0;
     }

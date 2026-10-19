@@ -644,6 +644,25 @@ static void shim_inventory_profile_preflight_verifies_manifest_pins_and_mok_sign
     cleanup(&p);
 }
 
+static void vm_direct_profile_reuses_strict_legacy_file_manifest_preflight(void)
+{
+    test_paths_t p;
+    ib_oneshot_request_t request;
+    wchar_t error[256] = L"";
+
+    CHECK(setup(&p));
+    ZeroMemory(&request, sizeof(request));
+    request.test_root = p.root;
+
+    CHECK(ib_oneshot_validate_staged_profile(&request,
+          IB_ONESHOT_PROFILE_VM_DIRECT, error, _countof(error)));
+    CHECK(write_bytes(p.loader, "modified direct loader"));
+    CHECK(!ib_oneshot_validate_staged_profile(&request,
+          IB_ONESHOT_PROFILE_VM_DIRECT, error, _countof(error)));
+    CHECK(wcsstr(error, L"staged shim/loader") != NULL);
+    cleanup(&p);
+}
+
 static void shim_inventory_profile_rejects_replace_and_verify_modes(void)
 {
     CHECK(ib_oneshot_profile_supports_mode(IB_ONESHOT_PROFILE_SHIM_INVENTORY,
@@ -662,6 +681,20 @@ static void shim_inventory_profile_rejects_replace_and_verify_modes(void)
                                            L"replace"));
     CHECK(ib_oneshot_profile_supports_mode(IB_ONESHOT_PROFILE_LEGACY,
                                            L"verify"));
+}
+
+static void vm_direct_profile_rejects_replace_and_verify_modes(void)
+{
+    CHECK(ib_oneshot_profile_supports_mode(IB_ONESHOT_PROFILE_VM_DIRECT,
+                                           L"bootnext"));
+    CHECK(ib_oneshot_profile_supports_mode(IB_ONESHOT_PROFILE_VM_DIRECT,
+                                           L"off"));
+    CHECK(!ib_oneshot_profile_supports_mode(IB_ONESHOT_PROFILE_VM_DIRECT,
+                                            L"replace"));
+    CHECK(!ib_oneshot_profile_supports_mode(IB_ONESHOT_PROFILE_VM_DIRECT,
+                                            L"verify"));
+    CHECK(!ib_oneshot_profile_supports_mode(IB_ONESHOT_PROFILE_VM_DIRECT,
+                                            L"stage"));
 }
 
 static void injected_failures_restore_original(void)
@@ -691,6 +724,8 @@ int main(void)
     inventory_profile_preflight_is_scoped_and_strict();
     shim_inventory_profile_preflight_verifies_manifest_pins_and_mok_signatures();
     shim_inventory_profile_rejects_replace_and_verify_modes();
+    vm_direct_profile_reuses_strict_legacy_file_manifest_preflight();
+    vm_direct_profile_rejects_replace_and_verify_modes();
     injected_failures_restore_original();
     if (g_failures != 0) { fprintf(stderr, "%d one-shot tests failed\n", g_failures); return 1; }
     puts("install one-shot tests passed"); return 0;

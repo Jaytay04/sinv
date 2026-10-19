@@ -42,9 +42,9 @@
     },
     "Windows": {
       "Enabled": false,
-      "VmxPath": "C:\\Users\\jayli\\OneDrive\\Documents\\Virtual Machines\\UEFILoader-Win11-vTPM-ExactBuild-Gate\\UEFILoader-Win11-vTPM-ExactBuild-Gate.vmx",
-      "DisplayName": "UEFILoader-Win11-vTPM-ExactBuild-Gate",
-      "SnapshotName": "",
+      "VmxPath": "C:\\Users\\jayli\\OneDrive\\Documents\\Projects\\hsinv\\.codex-build\\gpu_windows_vm\\run-01\\standalone\\hsinv-Windows-25H2.vmx",
+      "DisplayName": "hsinv Windows 25H2",
+      "SnapshotName": "hsinv-default-25h2-26200.9457",
       "GuestTransport": "VmwareGuestInfo",
       "MailboxCredentialFile": "windows-clone-mailbox-key.xml",
       "GuestUser": "UEFILoaderVm",

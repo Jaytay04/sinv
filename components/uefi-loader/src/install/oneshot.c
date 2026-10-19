@@ -943,7 +943,8 @@ int ib_oneshot_validate_staged_profile(const ib_oneshot_request_t *request,
         release_lock(&lock);
         return valid;
     }
-    if (profile != IB_ONESHOT_PROFILE_LEGACY) {
+    if (profile != IB_ONESHOT_PROFILE_LEGACY &&
+        profile != IB_ONESHOT_PROFILE_VM_DIRECT) {
         set_error(error, error_count, L"one-shot profile is invalid");
         return 0;
     }
@@ -981,7 +982,8 @@ int ib_oneshot_profile_supports_mode(ib_oneshot_profile_t profile,
                wcscmp(mode, L"bootnext") == 0 || wcscmp(mode, L"off") == 0;
     }
     if (profile == IB_ONESHOT_PROFILE_INVENTORY ||
-        profile == IB_ONESHOT_PROFILE_SHIM_INVENTORY) {
+        profile == IB_ONESHOT_PROFILE_SHIM_INVENTORY ||
+        profile == IB_ONESHOT_PROFILE_VM_DIRECT) {
         return wcscmp(mode, L"bootnext") == 0 || wcscmp(mode, L"off") == 0;
     }
     return 0;

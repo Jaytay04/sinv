@@ -542,6 +542,10 @@ if(WIN32)
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
             -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/Test-GpuDiagnosticPreflight.ps1"
             -ToolPath "${CMAKE_CURRENT_SOURCE_DIR}/../../setup/Get-GpuDiagnosticPreflight.ps1")
+    add_test(NAME uefi_hypervisor_gpu_windows_vm_controller_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/../../setup/tests/Test-GpuHalWindowsVmController.ps1"
+            -ControllerPath "${CMAKE_CURRENT_SOURCE_DIR}/../../setup/Test-GpuHalWindowsVm.ps1")
     add_test(NAME uefi_hypervisor_vmexit_asm_contracts
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
             -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/Test-EfiVmExitContracts.ps1"

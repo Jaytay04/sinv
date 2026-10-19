@@ -10,7 +10,9 @@
 typedef enum {
     IB_BOOTNEXT_PROFILE_LEGACY = 0,
     IB_BOOTNEXT_PROFILE_INVENTORY = 1,
-    IB_BOOTNEXT_PROFILE_SHIM_INVENTORY = 2
+    IB_BOOTNEXT_PROFILE_SHIM_INVENTORY = 2,
+    /* Direct launch is only for disposable VM fixtures, never physical deployment. */
+    IB_BOOTNEXT_PROFILE_VM_DIRECT = 3
 } ib_bootnext_profile_t;
 
 typedef struct {

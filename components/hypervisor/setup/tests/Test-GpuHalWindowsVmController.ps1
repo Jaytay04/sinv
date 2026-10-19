@@ -1,0 +1,818 @@
+[CmdletBinding()]
+param(
+    [string]$ControllerPath
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+$RepositoryRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\..\..'))
+if ([string]::IsNullOrWhiteSpace($ControllerPath)) {
+    $ControllerPath = Join-Path $PSScriptRoot '..\Test-GpuHalWindowsVm.ps1'
+}
+$ControllerPath = [IO.Path]::GetFullPath($ControllerPath)
+if (-not (Test-Path -LiteralPath $ControllerPath -PathType Leaf)) {
+    throw "GPU HAL Windows VM controller was not found: $ControllerPath"
+}
+
+$Tokens = $null
+$ParseErrors = $null
+$ControllerAst = [Management.Automation.Language.Parser]::ParseFile(
+    $ControllerPath, [ref]$Tokens, [ref]$ParseErrors)
+if ($ParseErrors.Count -gt 0) {
+    throw "Controller parse failed: $($ParseErrors[0].Message)"
+}
+
+# Execute only the controller's guarded Add-Type literal. This exercises the
+# production interop declaration used by Get-WindowsHardLinkCount without
+# executing any other top-level controller statement.
+$SafetyGuards = @($ControllerAst.FindAll({
+            param($Node)
+            $Node -is [Management.Automation.Language.IfStatementAst] -and
+                $Node.Extent.Text.Contains('GpuHalWindowsVmSafety.NativeMethods') -and
+                $Node.Extent.Text.Contains('Add-Type -TypeDefinition')
+        }, $true))
+if ($SafetyGuards.Count -ne 1 -or $SafetyGuards[0].Clauses.Count -ne 1 -or
+    $null -ne $SafetyGuards[0].ElseClause) {
+    throw 'Controller native interop guard changed shape; review the pure test before proceeding.'
+}
+$SafetyCommands = @($SafetyGuards[0].Clauses[0].Item2.FindAll({
+            param($Node)
+            $Node -is [Management.Automation.Language.CommandAst]
+        }, $true))
+if ($SafetyCommands.Count -ne 1 -or
+    $SafetyCommands[0].GetCommandName() -cne 'Add-Type' -or
+    $SafetyCommands[0].CommandElements.Count -ne 3 -or
+    $SafetyCommands[0].CommandElements[1].ParameterName -cne 'TypeDefinition' -or
+    $SafetyCommands[0].CommandElements[2] -isnot
+        [Management.Automation.Language.StringConstantExpressionAst] -or
+    -not ([string]$SafetyCommands[0].CommandElements[2].Value).Contains('GetFileInformationByHandle')) {
+    throw 'Controller native interop declaration is not the expected literal Add-Type command.'
+}
+. ([scriptblock]::Create($SafetyGuards[0].Extent.Text))
+
+# Load only pure function definitions. The controller's outer lifecycle, including
+# vmrun/snapshot/start/stop actions, is never dot-sourced or invoked here.
+$FunctionNames = @(
+    'Get-FullPath', 'Test-PathWithin', 'Assert-NoReparsePoint',
+    'Assert-NoReparsePathChain', 'Get-WindowsHardLinkCount',
+    'Assert-SingleHardLink', 'Resolve-VmxRelativePath',
+    'Assert-StandaloneDisk', 'Get-VmxSetting', 'Assert-PreparedClone',
+    'Set-VmxSetting', 'Get-SafeVmxSummary', 'Test-ConstantHex',
+    'Get-AuthenticatedWindowsResult', 'Write-CommandRecord',
+    'Stop-OnlyTargetVm', 'Get-VerifiedLiteralAssignmentValue',
+    'Import-VmwareGuestInfoConstants', 'Assert-GuestInspection',
+    'Read-BoundedText', 'Get-Sha256', 'Test-EfiMarkers',
+    'Wait-WindowsVmEvidence'
+)
+$FunctionDefinitions = @{}
+foreach ($Definition in $ControllerAst.FindAll({
+            param($Node)
+            $Node -is [Management.Automation.Language.FunctionDefinitionAst]
+        }, $true)) {
+    $FunctionDefinitions[[string]$Definition.Name] = $Definition
+}
+foreach ($Name in $FunctionNames) {
+    if (-not $FunctionDefinitions.ContainsKey($Name)) {
+        throw "Controller pure-function definition is missing: $Name"
+    }
+    . ([scriptblock]::Create($FunctionDefinitions[$Name].Extent.Text))
+}
+
+function Find-FunctionDefinitionAst {
+    param(
+        [Parameter(Mandatory = $true)][Management.Automation.Language.Ast]$Ast,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+    $Matches = @($Ast.FindAll({
+                param($Node)
+                $Node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+                    $Node.Name -ceq $Name
+            }, $true))
+    if ($Matches.Count -ne 1) { throw "Expected one pure function definition: $Name" }
+    return $Matches[0]
+}
+
+function Invoke-MockedSecureBootValue {
+    param(
+        [Parameter(Mandatory = $true)][string]$DefinitionText,
+        [AllowNull()]$Value,
+        [bool]$Missing,
+        [bool]$AccessFailure
+    )
+    return & {
+        param($DefinitionText, $Value, $Missing, $AccessFailure)
+        $MockRegistryState = [pscustomobject]@{
+            Value = $Value
+            Missing = $Missing
+        }
+        Add-Member -InputObject $MockRegistryState -MemberType ScriptMethod -Name GetValue -Value {
+            param($Name, $Default)
+            if ($Name -cne 'UEFISecureBootEnabled') {
+                throw "Unexpected synthetic registry value name: $Name"
+            }
+            if ($this.Missing) { return $Default }
+            return $this.Value
+        }
+        function Get-Item {
+            param([string]$LiteralPath, [string]$ErrorAction)
+            if ($LiteralPath -cne 'HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\State') {
+                throw "Unexpected synthetic registry path: $LiteralPath"
+            }
+            if ($AccessFailure) { throw 'Synthetic registry access denied.' }
+            return $MockRegistryState
+        }
+        . ([scriptblock]::Create($DefinitionText))
+        return Get-SecureBootValue
+    } $DefinitionText $Value $Missing $AccessFailure
+}
+
+$HostRunnerPath = Join-Path $RepositoryRoot 'tools\host-runner\Invoke-UEFILoaderHostRunner.ps1'
+$HostRunnerTokens = $null
+$HostRunnerErrors = $null
+$HostRunnerAst = [Management.Automation.Language.Parser]::ParseFile(
+    $HostRunnerPath, [ref]$HostRunnerTokens, [ref]$HostRunnerErrors)
+if ($HostRunnerErrors.Count -gt 0) {
+    throw "HostRunner parse failed: $($HostRunnerErrors[0].Message)"
+}
+$CorePath = Join-Path $RepositoryRoot 'tools\host-runner\HostRunner.Core.psm1'
+$CoreTokens = $null
+$CoreErrors = $null
+$CoreAst = [Management.Automation.Language.Parser]::ParseFile(
+    $CorePath, [ref]$CoreTokens, [ref]$CoreErrors)
+if ($CoreErrors.Count -gt 0) {
+    throw "HostRunner.Core parse failed: $($CoreErrors[0].Message)"
+}
+$GuestScriptPath = Join-Path $RepositoryRoot 'components\hypervisor\setup\guest\Invoke-GpuHalWindowsGuest.ps1'
+$GuestTokens = $null
+$GuestErrors = $null
+$GuestAst = [Management.Automation.Language.Parser]::ParseFile(
+    $GuestScriptPath, [ref]$GuestTokens, [ref]$GuestErrors)
+if ($GuestErrors.Count -gt 0) {
+    throw "Windows guest worker parse failed: $($GuestErrors[0].Message)"
+}
+$StartupScriptPath = Join-Path $RepositoryRoot 'components\hypervisor\setup\guest\Invoke-GpuHalWindowsStartup.ps1'
+$StartupTokens = $null
+$StartupErrors = $null
+$StartupAst = [Management.Automation.Language.Parser]::ParseFile(
+    $StartupScriptPath, [ref]$StartupTokens, [ref]$StartupErrors)
+if ($StartupErrors.Count -gt 0) {
+    throw "Windows startup worker parse failed: $($StartupErrors[0].Message)"
+}
+$GuestTextWriter = Find-FunctionDefinitionAst $GuestAst 'Write-Utf8NoBom'
+$StartupByteWriter = Find-FunctionDefinitionAst $StartupAst 'Write-Bytes'
+$GuestSecureBootGetter = Find-FunctionDefinitionAst $GuestAst 'Get-SecureBootValue'
+$StartupSecureBootGetter = Find-FunctionDefinitionAst $StartupAst 'Get-SecureBootValue'
+. ([scriptblock]::Create((Find-FunctionDefinitionAst $CoreAst 'Test-UhrRunId').Extent.Text))
+. ([scriptblock]::Create((Find-FunctionDefinitionAst $HostRunnerAst 'Test-UhrGuestInfoRunId').Extent.Text))
+. ([scriptblock]::Create((Find-FunctionDefinitionAst $HostRunnerAst 'Get-VmwareGuestInfoBase').Extent.Text))
+[void](Import-VmwareGuestInfoConstants -HostRunnerEndBlock $HostRunnerAst.EndBlock)
+
+$ExpectedGuestInfoConstants = [ordered]@{
+    VmwareGuestInfoPrefix = 'uefiloader'
+    VmwareGuestInfoRequestManifest = 'uefiloader.request.manifest'
+    VmwareGuestInfoResponseManifest = 'uefiloader.response.manifest'
+    VmwareGuestInfoWorkerStatus = 'uefiloader.worker.status'
+    VmwareGuestInfoRequestChunkPrefix = 'uefiloader.request.chunk.'
+    VmwareGuestInfoResponseChunkPrefix = 'uefiloader.response.chunk.'
+    VmwareGuestInfoDirectStage2Prefix = 'uefiloader.direct.stage2.'
+    VmwareGuestInfoExactStatus = 'uefiloader.exact.status'
+    VmwareGuestInfoExactStatusGuestName = 'guestinfo.uefiloader.exact.status'
+    VmwareGuestInfoChunkBytes = 9000
+    VmwareGuestInfoChunkChars = 12000
+    VmwareGuestInfoMaxPackageBytes = 4194304
+    VmwareGuestInfoMaxRequestChunks = 256
+    VmwareGuestInfoMaxEvidenceBytes = 33554432
+    VmwareGuestInfoMaxManifestChars = 65536
+    VmwareGuestInfoTombstone = 'MA=='
+}
+$GuestInfoConstantsMatch = $true
+foreach ($Name in $ExpectedGuestInfoConstants.Keys) {
+    $Actual = Get-Variable -Name $Name -Scope Script -ValueOnly
+    if ($Actual -cne $ExpectedGuestInfoConstants[$Name]) {
+        $GuestInfoConstantsMatch = $false
+        break
+    }
+}
+$ActualBase = Get-VmwareGuestInfoBase -RunId 'uefi-windows-probe-20261019-142200-0123456789'
+if ($ActualBase -cne [string]$script:VmwareGuestInfoPrefix) {
+    $GuestInfoConstantsMatch = $false
+}
+if (-not $GuestInfoConstantsMatch) {
+    throw 'HostRunner GuestInfo constants were not imported from the actual AST values.'
+}
+$script:HostConstantsImported = $GuestInfoConstantsMatch
+
+$script:ReviewKey = [byte[]](1..32)
+$script:Selected = [pscustomobject]@{
+    VmxPath = 'synthetic-vmx'
+    MailboxCredentialFile = 'synthetic-mailbox'
+}
+$ExpectedBuild = 26200
+$ExpectedUbr = 9457
+$ExpectedCpus = 4
+function Get-MailboxKeyBytes {
+    param($Selected)
+    return ,([byte[]]$script:ReviewKey.Clone())
+}
+
+$script:Passed = 0
+function Assert-Check {
+    param([bool]$Condition, [string]$Name)
+    if (-not $Condition) { throw "FAIL: $Name" }
+    $script:Passed++
+    Write-Output "PASS: $Name"
+}
+
+function Assert-Throws {
+    param(
+        [Parameter(Mandatory = $true)][scriptblock]$Operation,
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$MessagePattern
+    )
+    $Message = $null
+    try { $null = & $Operation }
+    catch { $Message = [string]$_.Exception.Message }
+    Assert-Check ($null -ne $Message -and $Message -match $MessagePattern) $Name
+}
+Assert-Check $script:HostConstantsImported `
+    'all GuestInfo literals import from actual HostRunner AST and resolve the base'
+
+$BuildRoot = Join-Path $RepositoryRoot '.codex-build'
+if (-not (Test-Path -LiteralPath $BuildRoot -PathType Container)) {
+    New-Item -ItemType Directory -Path $BuildRoot | Out-Null
+}
+$BuildRoot = [IO.Path]::GetFullPath($BuildRoot)
+$FixtureRoot = Join-Path $BuildRoot ('gpu-controller-contract-' + [Guid]::NewGuid().ToString('N'))
+$FixtureRoot = [IO.Path]::GetFullPath($FixtureRoot)
+$VmxFixtureRoot = Join-Path $FixtureRoot 'vm'
+$OutsideFixtureRoot = Join-Path $FixtureRoot 'outside'
+$JunctionPaths = [Collections.Generic.List[string]]::new()
+$Hmac = $null
+
+try {
+    New-Item -ItemType Directory -Path $VmxFixtureRoot, $OutsideFixtureRoot | Out-Null
+
+    $SecureBootCases = @(
+        [pscustomobject]@{ Name = 'DWORD 0 reports false'; Value = 0; Missing = $false; AccessFailure = $false; Expected = 'False' }
+        [pscustomobject]@{ Name = 'DWORD 1 reports true'; Value = 1; Missing = $false; AccessFailure = $false; Expected = 'True' }
+        [pscustomobject]@{ Name = 'missing registry value reports unknown'; Value = $null; Missing = $true; AccessFailure = $false; Expected = 'Null' }
+        [pscustomobject]@{ Name = 'invalid registry value reports unknown'; Value = 2; Missing = $false; AccessFailure = $false; Expected = 'Null' }
+        [pscustomobject]@{ Name = 'registry access failure reports unknown'; Value = $null; Missing = $false; AccessFailure = $true; Expected = 'Null' }
+    )
+    foreach ($Getter in @(
+            [pscustomobject]@{ Name = 'guest'; Definition = $GuestSecureBootGetter }
+            [pscustomobject]@{ Name = 'startup'; Definition = $StartupSecureBootGetter }
+        )) {
+        $RegistryCommands = @($Getter.Definition.FindAll({
+                    param($Node)
+                    $Node -is [Management.Automation.Language.CommandAst]
+                }, $true))
+        Assert-Check ($RegistryCommands.Count -eq 1 -and
+            $RegistryCommands[0].GetCommandName() -ceq 'Get-Item' -and
+            $Getter.Definition.Extent.Text.Contains('HKLM:\SYSTEM\CurrentControlSet\Control\SecureBoot\State')) `
+            "$($Getter.Name) SecureBoot getter uses only the mocked read-only registry path"
+        foreach ($Case in $SecureBootCases) {
+            $ActualSecureBoot = Invoke-MockedSecureBootValue `
+                -DefinitionText $Getter.Definition.Extent.Text `
+                -Value $Case.Value -Missing $Case.Missing -AccessFailure $Case.AccessFailure
+            $CaseMatches = switch ($Case.Expected) {
+                'True' { ($ActualSecureBoot -is [bool]) -and $ActualSecureBoot }
+                'False' { ($ActualSecureBoot -is [bool]) -and (-not $ActualSecureBoot) }
+                'Null' { $null -eq $ActualSecureBoot }
+            }
+            Assert-Check $CaseMatches "$($Getter.Name) SecureBoot getter: $($Case.Name)"
+        }
+    }
+
+    $OpenSerialPath = Join-Path $FixtureRoot 'open-vmware-serial.txt'
+    $OpenSerialWriter = $null
+    try {
+        $OpenSerialWriter = [IO.File]::Open($OpenSerialPath,
+            [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::ReadWrite)
+        $SerialBytes = [Text.Encoding]::ASCII.GetBytes('abc')
+        $OpenSerialWriter.Write($SerialBytes, 0, $SerialBytes.Length)
+        $OpenSerialWriter.Flush($true)
+        $OpenSerialDigest = Get-Sha256 $OpenSerialPath
+        Assert-Check ($OpenSerialDigest -ceq 'BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD') `
+            'SHA-256 reads a flushed VMware serial file while its shared writer remains open'
+    }
+    catch {
+        Assert-Check $false "SHA-256 reads a flushed VMware serial file while its shared writer remains open ($($_.Exception.Message))"
+    }
+    finally {
+        if ($null -ne $OpenSerialWriter) { $OpenSerialWriter.Dispose() }
+    }
+
+    # Exercise the two production writers in an isolated child scope. Only their
+    # FunctionDefinitionAst bodies are dot-sourced; guest worker entrypoints stay inert.
+    $TextOutputPath = Join-Path $FixtureRoot 'empty-worker-text.txt'
+    $ByteOutputPath = Join-Path $FixtureRoot 'empty-startup-bytes.bin'
+    $EmptyWriterResults = & {
+        param($TextWriterDefinition, $ByteWriterDefinition, $TextPath, $BytesPath)
+        . ([scriptblock]::Create($TextWriterDefinition))
+        Write-Utf8NoBom -Path $TextPath -Text ''
+        . ([scriptblock]::Create($ByteWriterDefinition))
+        Write-Bytes -Path $BytesPath -Bytes ([byte[]]::new(0))
+        [pscustomobject]@{
+            TextFileExists = Test-Path -LiteralPath $TextPath -PathType Leaf
+            TextFileLength = (Get-Item -LiteralPath $TextPath).Length
+            ByteFileExists = Test-Path -LiteralPath $BytesPath -PathType Leaf
+            ByteFileLength = (Get-Item -LiteralPath $BytesPath).Length
+        }
+    } $GuestTextWriter.Extent.Text $StartupByteWriter.Extent.Text $TextOutputPath $ByteOutputPath
+    Assert-Check ($EmptyWriterResults.TextFileExists -and $EmptyWriterResults.TextFileLength -eq 0) `
+        'guest UTF-8 writer accepts mandatory empty text and writes a zero-byte file'
+    Assert-Check ($EmptyWriterResults.ByteFileExists -and $EmptyWriterResults.ByteFileLength -eq 0) `
+        'startup byte writer accepts an empty mandatory byte array and writes a zero-byte file'
+
+    # HostRunner's authenticated result.json is a transport envelope; the
+    # guest inspection metadata, including SecureBoot and the boot-manager
+    # digest, arrives in its authenticated stdout evidence archive.
+    $InspectionEvidence = Join-Path $FixtureRoot 'inspection-evidence'
+    New-Item -ItemType Directory -Path $InspectionEvidence | Out-Null
+    $InspectionResultPath = Join-Path $InspectionEvidence 'result.json'
+    $InspectionStdoutPath = Join-Path $InspectionEvidence 'stdout.txt'
+    $HostRunnerResult = [ordered]@{
+        SchemaVersion = 1
+        RunId = 'gpu-hal-inspect-run-20261019-0123456789'
+        Status = 'PASS'
+        Message = 'Guest task completed.'
+        CompletedUtc = '2026-10-19T12:00:00Z'
+        Evidence = @()
+    } | ConvertTo-Json -Compress
+    [IO.File]::WriteAllText($InspectionResultPath, $HostRunnerResult,
+        [Text.UTF8Encoding]::new($false))
+    $InspectionPaths = [pscustomobject]@{ Evidence = $InspectionEvidence }
+    $BootManagerHash = 'A' * 64
+    $ValidInspectionOutput = @(
+        'WindowsBuild=26200.9457'
+        'DisplayVersion=24H2'
+        'ExpectedBuild=26200.9457'
+        'ExpectedCpus=4 ActualCpus=4'
+        "BootManagerSha256=$BootManagerHash"
+        'SecureBoot=True'
+    ) -join "`r`n"
+    [IO.File]::WriteAllText($InspectionStdoutPath, $ValidInspectionOutput,
+        [Text.UTF8Encoding]::new($false))
+    $Inspection = Assert-GuestInspection -Paths $InspectionPaths -Phase 'Inspect'
+    Assert-Check ($Inspection.Status -ceq 'PASS' -and
+        $Inspection.RunId -ceq 'gpu-hal-inspect-run-20261019-0123456789' -and
+        $Inspection.SecureBoot -eq $true -and
+        $Inspection.BootManagerSha256 -ceq $BootManagerHash) `
+        'HostRunner result without SecureBoot accepts and parses stdout metadata'
+
+    $MissingBootHashOutput = $ValidInspectionOutput.Replace("BootManagerSha256=$BootManagerHash`r`n", '')
+    [IO.File]::WriteAllText($InspectionStdoutPath, $MissingBootHashOutput,
+        [Text.UTF8Encoding]::new($false))
+    Assert-Throws {
+        Assert-GuestInspection -Paths $InspectionPaths -Phase 'Inspect'
+    } 'missing boot-manager hash metadata is rejected' 'inspection evidence did not match'
+
+    $DuplicateBootHashOutput = $ValidInspectionOutput + "`r`nBootManagerSha256=$BootManagerHash"
+    [IO.File]::WriteAllText($InspectionStdoutPath, $DuplicateBootHashOutput,
+        [Text.UTF8Encoding]::new($false))
+    Assert-Throws {
+        Assert-GuestInspection -Paths $InspectionPaths -Phase 'Inspect'
+    } 'duplicate boot-manager hash metadata is rejected' 'inspection evidence did not match'
+
+    $MalformedBootHashOutput = $ValidInspectionOutput.Replace(
+        "BootManagerSha256=$BootManagerHash", 'BootManagerSha256=NOT-A-SHA256')
+    [IO.File]::WriteAllText($InspectionStdoutPath, $MalformedBootHashOutput,
+        [Text.UTF8Encoding]::new($false))
+    Assert-Throws {
+        Assert-GuestInspection -Paths $InspectionPaths -Phase 'Inspect'
+    } 'malformed boot-manager hash metadata is rejected' 'inspection evidence did not match'
+
+    $OutsideVmx = Join-Path $OutsideFixtureRoot 'source.vmx'
+    [IO.File]::WriteAllText($OutsideVmx, 'vhv.enable = "TRUE"')
+    Assert-Throws {
+        Assert-PreparedClone -Root $RepositoryRoot -BuildRoot $VmxFixtureRoot -Vmx $OutsideVmx
+    } 'VMX outside the private build root is rejected' 'prepared disposable clone under|private build workspace'
+
+    $MissingVmx = Join-Path $VmxFixtureRoot 'missing-disk.vmx'
+    [IO.File]::WriteAllText($MissingVmx, "vhv.enable = `"TRUE`"`r`nscsi0:0.fileName = `"missing.vmdk`"")
+    Assert-Throws {
+        Assert-PreparedClone -Root $RepositoryRoot -BuildRoot $VmxFixtureRoot -Vmx $MissingVmx
+    } 'missing VMDK is rejected' 'VMDK backing descriptor is missing or outside'
+
+    $ExternalParentDisk = Join-Path $OutsideFixtureRoot 'external-parent.vmdk'
+    [IO.File]::WriteAllText($ExternalParentDisk, @'
+# Disk DescriptorFile
+CID=87654321
+parentCID=ffffffff
+RW 8 SPARSE "external-parent-flat.vmdk"
+'@)
+    [IO.File]::WriteAllText((Join-Path $OutsideFixtureRoot 'external-parent-flat.vmdk'), 'synthetic extent')
+    $ExternalChildDisk = Join-Path $VmxFixtureRoot 'external-parent-child.vmdk'
+    [IO.File]::WriteAllText($ExternalChildDisk, @"
+# Disk DescriptorFile
+CID=12345678
+parentCID=87654321
+parentFileNameHint = `"$ExternalParentDisk`"
+RW 8 SPARSE `"external-child-flat.vmdk`"
+"@)
+    [IO.File]::WriteAllText((Join-Path $VmxFixtureRoot 'external-child-flat.vmdk'), 'synthetic extent')
+    Assert-Throws {
+        Assert-StandaloneDisk -DiskPath $ExternalChildDisk -BuildRoot $VmxFixtureRoot
+    } 'VMDK parent descriptor outside the private root is rejected' 'escapes the private build workspace'
+
+    $GoodVmx = Join-Path $VmxFixtureRoot 'standalone.vmx'
+    $GoodDisk = Join-Path $VmxFixtureRoot 'standalone.vmdk'
+    [IO.File]::WriteAllText($GoodVmx, "vhv.enable = `"TRUE`"`r`nscsi0:0.fileName = `"standalone.vmdk`"")
+    [IO.File]::WriteAllText($GoodDisk, @'
+# Disk DescriptorFile
+CID=12345678
+parentCID=ffffffff
+createType="monolithicSparse"
+RW 8 SPARSE "standalone-flat.vmdk"
+'@)
+    [IO.File]::WriteAllText((Join-Path $VmxFixtureRoot 'standalone-flat.vmdk'), 'synthetic extent')
+    try {
+        $null = Assert-PreparedClone -Root $RepositoryRoot -BuildRoot $VmxFixtureRoot -Vmx $GoodVmx
+        Assert-Check $true 'standalone private VMDK is accepted'
+    }
+    catch { Assert-Check $false "standalone private VMDK is accepted ($($_.Exception.Message))" }
+
+    $ParentChainDisk = Join-Path $VmxFixtureRoot 'backing-child.vmdk'
+    [IO.File]::WriteAllText((Join-Path $VmxFixtureRoot 'backing-parent.vmdk'), @'
+# Disk DescriptorFile
+CID=11223344
+parentCID=ffffffff
+RW 8 SPARSE "backing-parent-flat.vmdk"
+'@)
+    [IO.File]::WriteAllText((Join-Path $VmxFixtureRoot 'backing-parent-flat.vmdk'), 'synthetic extent')
+    [IO.File]::WriteAllText($ParentChainDisk, @'
+# Disk DescriptorFile
+CID=AABBCCDD
+parentCID=11223344
+parentFileNameHint = "backing-parent.vmdk"
+RW 8 SPARSE "backing-child-flat.vmdk"
+'@)
+    [IO.File]::WriteAllText((Join-Path $VmxFixtureRoot 'backing-child-flat.vmdk'), 'synthetic extent')
+    try {
+        Assert-StandaloneDisk -DiskPath $ParentChainDisk -BuildRoot $VmxFixtureRoot
+        Assert-Check $true 'private parent VMDK chain with matching CIDs is accepted'
+    }
+    catch { Assert-Check $false "private parent VMDK chain with matching CIDs is accepted ($($_.Exception.Message))" }
+
+    $MissingParentDisk = Join-Path $VmxFixtureRoot 'missing-parent-child.vmdk'
+    [IO.File]::WriteAllText($MissingParentDisk, @'
+# Disk DescriptorFile
+CID=11112222
+parentCID=33334444
+parentFileNameHint = "missing-parent.vmdk"
+RW 8 SPARSE "missing-parent-child-flat.vmdk"
+'@)
+    [IO.File]::WriteAllText((Join-Path $VmxFixtureRoot 'missing-parent-child-flat.vmdk'), 'synthetic extent')
+    Assert-Throws {
+        Assert-StandaloneDisk -DiskPath $MissingParentDisk -BuildRoot $VmxFixtureRoot
+    } 'missing VMDK parent is rejected' 'backing descriptor is missing or outside'
+
+    [IO.File]::WriteAllText((Join-Path $VmxFixtureRoot 'cycle-a.vmdk'), @'
+# Disk DescriptorFile
+CID=AAAA0001
+parentCID=BBBB0002
+parentFileNameHint = "cycle-b.vmdk"
+RW 8 SPARSE "cycle-a-flat.vmdk"
+'@)
+    [IO.File]::WriteAllText((Join-Path $VmxFixtureRoot 'cycle-b.vmdk'), @'
+# Disk DescriptorFile
+CID=BBBB0002
+parentCID=AAAA0001
+parentFileNameHint = "cycle-a.vmdk"
+RW 8 SPARSE "cycle-b-flat.vmdk"
+'@)
+    [IO.File]::WriteAllText((Join-Path $VmxFixtureRoot 'cycle-a-flat.vmdk'), 'synthetic extent')
+    [IO.File]::WriteAllText((Join-Path $VmxFixtureRoot 'cycle-b-flat.vmdk'), 'synthetic extent')
+    Assert-Throws {
+        Assert-StandaloneDisk -DiskPath (Join-Path $VmxFixtureRoot 'cycle-a.vmdk') `
+            -BuildRoot $VmxFixtureRoot
+    } 'cyclic VMDK backing chain is rejected' 'contains a cycle'
+
+    [IO.File]::WriteAllText((Join-Path $VmxFixtureRoot 'cid-mismatch-parent.vmdk'), @'
+# Disk DescriptorFile
+CID=99998888
+parentCID=ffffffff
+RW 8 SPARSE "cid-mismatch-parent-flat.vmdk"
+'@)
+    [IO.File]::WriteAllText((Join-Path $VmxFixtureRoot 'cid-mismatch-parent-flat.vmdk'), 'synthetic extent')
+    [IO.File]::WriteAllText((Join-Path $VmxFixtureRoot 'cid-mismatch-child.vmdk'), @'
+# Disk DescriptorFile
+CID=77776666
+parentCID=11112222
+parentFileNameHint = "cid-mismatch-parent.vmdk"
+RW 8 SPARSE "cid-mismatch-child-flat.vmdk"
+'@)
+    [IO.File]::WriteAllText((Join-Path $VmxFixtureRoot 'cid-mismatch-child-flat.vmdk'), 'synthetic extent')
+    Assert-Throws {
+        Assert-StandaloneDisk -DiskPath (Join-Path $VmxFixtureRoot 'cid-mismatch-child.vmdk') `
+            -BuildRoot $VmxFixtureRoot
+    } 'parent CID mismatch is rejected' 'parent CID does not match'
+
+    $Payload = [ordered]@{
+        SchemaVersion = 1
+        RunId = 'gpu-hal-windows-test-001'
+        Status = 'PASS'
+        CurrentBuild = $ExpectedBuild
+        Ubr = $ExpectedUbr
+        ExpectedCpus = $ExpectedCpus
+        CpuPassCount = $ExpectedCpus
+        HealthPassed = $true
+        BootManagerUnchanged = $true
+        BootManagerSha256Before = ('A' * 64)
+        BootManagerSha256After = ('A' * 64)
+    } | ConvertTo-Json -Compress
+    $PayloadBytes = [Text.UTF8Encoding]::new($false).GetBytes($Payload)
+    $Hmac = [Security.Cryptography.HMACSHA256]::new($script:ReviewKey)
+    $Digest = $Hmac.ComputeHash($PayloadBytes)
+    $DigestHex = ([BitConverter]::ToString($Digest)).Replace('-', '')
+    $PayloadBase64 = [Convert]::ToBase64String($PayloadBytes)
+    $ValidFrame = "GPU_HAL_WINDOWS:RESULT:$PayloadBase64.$DigestHex"
+    $Accepted = Get-AuthenticatedWindowsResult -SerialText $ValidFrame `
+        -ExpectedRunId 'gpu-hal-windows-test-001'
+    Assert-Check ($null -ne $Accepted) 'valid HMAC, run, build, CPU, health, and boot hash are accepted'
+
+    $WrongHmacFrame = "GPU_HAL_WINDOWS:RESULT:$PayloadBase64.$(('0' * 64))"
+    $WrongHmacResult = Get-AuthenticatedWindowsResult -SerialText $WrongHmacFrame `
+        -ExpectedRunId 'gpu-hal-windows-test-001'
+    Assert-Check ($null -eq $WrongHmacResult) 'wrong HMAC is rejected'
+
+    Assert-Throws {
+        Get-AuthenticatedWindowsResult -SerialText $ValidFrame `
+            -ExpectedRunId 'gpu-hal-windows-other'
+    } 'wrong run identity is rejected' 'failed its exact identity'
+
+    $MissingHealthPayload = [ordered]@{
+        SchemaVersion = 1
+        RunId = 'gpu-hal-windows-test-001'
+        Status = 'PASS'
+        CurrentBuild = $ExpectedBuild
+        Ubr = $ExpectedUbr
+        ExpectedCpus = $ExpectedCpus
+        CpuPassCount = $ExpectedCpus
+        BootManagerUnchanged = $true
+        BootManagerSha256Before = ('A' * 64)
+        BootManagerSha256After = ('A' * 64)
+    } | ConvertTo-Json -Compress
+    $MissingHealthBytes = [Text.UTF8Encoding]::new($false).GetBytes($MissingHealthPayload)
+    $MissingHealthDigest = $Hmac.ComputeHash($MissingHealthBytes)
+    $MissingHealthHex = ([BitConverter]::ToString($MissingHealthDigest)).Replace('-', '')
+    $MissingHealthFrame = "GPU_HAL_WINDOWS:RESULT:$([Convert]::ToBase64String($MissingHealthBytes)).$MissingHealthHex"
+    $MissingHealthResult = Get-AuthenticatedWindowsResult -SerialText $MissingHealthFrame `
+        -ExpectedRunId 'gpu-hal-windows-test-001'
+    Assert-Check ($null -eq $MissingHealthResult) 'missing Windows health proof is rejected'
+
+    $StartupRunId = 'gpu-hal-startup-fail-20261019-0123456789'
+    $SignedFailurePayload = [ordered]@{
+        SchemaVersion = 1
+        RunId = $StartupRunId
+        Status = 'FAIL'
+        Message = 'Synthetic authenticated startup failure.'
+    } | ConvertTo-Json -Compress
+    $SignedFailureBytes = [Text.UTF8Encoding]::new($false).GetBytes($SignedFailurePayload)
+    $SignedFailureDigest = $Hmac.ComputeHash($SignedFailureBytes)
+    $SignedFailureHex = ([BitConverter]::ToString($SignedFailureDigest)).Replace('-', '')
+    $SignedFailureFrame = "GPU_HAL_WINDOWS:RESULT:$([Convert]::ToBase64String($SignedFailureBytes)).$SignedFailureHex"
+    $ForgedFailureHex = if ($SignedFailureHex[0] -ceq '0') {
+        '1' + $SignedFailureHex.Substring(1)
+    } else { '0' + $SignedFailureHex.Substring(1) }
+    $ForgedFailureFrame = "GPU_HAL_WINDOWS:RESULT:$([Convert]::ToBase64String($SignedFailureBytes)).$ForgedFailureHex"
+
+    # Exercise the real waiter and HMAC parser with only serial reads/sleep
+    # mocked. A same-run signed FAIL must terminate before the absent EFI log
+    # can trigger its longer wait timeout; an invalid MAC must not be trusted.
+    $OriginalReadBoundedText = [scriptblock]::Create(
+        $FunctionDefinitions['Read-BoundedText'].Extent.Text)
+    $OriginalStartSleep = Get-Command Start-Sleep -CommandType Function -ErrorAction SilentlyContinue
+    $OldTimeoutVariable = Get-Variable -Name TimeoutSeconds -Scope Script -ErrorAction SilentlyContinue
+    $OldTimeoutSeconds = if ($null -ne $OldTimeoutVariable) { $OldTimeoutVariable.Value } else { $null }
+    $script:Serial0Path = 'synthetic-empty-efi-serial'
+    $script:Serial1Path = 'synthetic-windows-com2-serial'
+    $script:WaitMockEfiText = ''
+    $script:WaitMockWindowsText = ''
+    $script:WaitMockReadCount = 0
+    $script:WaitMockSleepCount = 0
+    Set-Item -Path Function:\Read-BoundedText -Value {
+        param([string]$Path, [int]$MaximumBytes = 33554432)
+        $script:WaitMockReadCount++
+        if ($Path -ceq $script:Serial0Path) { return $script:WaitMockEfiText }
+        if ($Path -ceq $script:Serial1Path) { return $script:WaitMockWindowsText }
+        throw "Unexpected synthetic serial path: $Path"
+    }
+    Set-Item -Path Function:\Start-Sleep -Value {
+        param([int]$Milliseconds, [int]$Seconds)
+        $script:WaitMockSleepCount++
+    }
+    try {
+        $TimeoutSeconds = 30
+        $script:EfiStatus = 'NOT_RUN'
+        $script:StartupStatus = 'NOT_RUN'
+        $script:WaitMockWindowsText = $SignedFailureFrame
+        $script:WaitMockReadCount = 0
+        $script:WaitMockSleepCount = 0
+        $SignedFailureError = $null
+        try { $null = Wait-WindowsVmEvidence -StartupRunId $StartupRunId }
+        catch { $SignedFailureError = [string]$_.Exception.Message }
+        Assert-Check ($SignedFailureError -match 'authenticated Windows startup result failed: Synthetic authenticated startup failure' -and
+            $script:WaitMockReadCount -eq 2 -and $script:WaitMockSleepCount -eq 0) `
+            'signed same-run startup failure is authenticated and aborts before EFI timeout'
+
+        $TimeoutSeconds = 0
+        $script:EfiStatus = 'NOT_RUN'
+        $script:StartupStatus = 'NOT_RUN'
+        $script:WaitMockWindowsText = $ForgedFailureFrame
+        $script:WaitMockReadCount = 0
+        $script:WaitMockSleepCount = 0
+        $ForgedFailureError = $null
+        try { $null = Wait-WindowsVmEvidence -StartupRunId $StartupRunId }
+        catch { $ForgedFailureError = [string]$_.Exception.Message }
+        Assert-Check ($ForgedFailureError -match 'Timed out waiting for EFI model' -and
+            $ForgedFailureError -notmatch 'authenticated Windows startup result failed' -and
+            $script:WaitMockReadCount -eq 2 -and $script:WaitMockSleepCount -eq 1) `
+            'forged startup FAIL HMAC is ignored and cannot preempt EFI timeout'
+    }
+    finally {
+        Set-Item -Path Function:\Read-BoundedText -Value $OriginalReadBoundedText
+        if ($null -ne $OriginalStartSleep) {
+            Set-Item -Path Function:\Start-Sleep -Value $OriginalStartSleep.ScriptBlock
+        } else {
+            Remove-Item -Path Function:\Start-Sleep -Force -ErrorAction SilentlyContinue
+        }
+        if ($null -ne $OldTimeoutVariable) {
+            Set-Variable -Name TimeoutSeconds -Scope Script -Value $OldTimeoutSeconds
+        } else {
+            Remove-Variable -Name TimeoutSeconds -Scope Script -ErrorAction SilentlyContinue
+        }
+        Remove-Variable -Name Serial0Path, Serial1Path, WaitMockEfiText,
+            WaitMockWindowsText, WaitMockReadCount, WaitMockSleepCount,
+            EfiStatus, StartupStatus -Scope Script -ErrorAction SilentlyContinue
+    }
+
+    # Run02 regression: PowerShell binds mandatory string-list parameters against
+    # blank VMX lines, and callers may also pass an initially empty line list.
+    $EmptyLines = [Collections.Generic.List[string]]::new()
+    Set-VmxSetting -Lines $EmptyLines -Key 'firmware' -Value 'efi'
+    Assert-Check ($EmptyLines.Count -eq 1 -and $EmptyLines[0] -ceq 'firmware = "efi"') `
+        'empty VMX line list accepts a mandatory setting'
+    $BlankLines = [Collections.Generic.List[string]]::new([string[]]@('', ' ', 'vhv.enable = "TRUE"', ''))
+    Set-VmxSetting -Lines $BlankLines -Key 'snapshot.disabled' -Value 'TRUE'
+    Assert-Check ($BlankLines.Count -eq 5 -and $BlankLines[0] -ceq '' -and
+        $BlankLines[1] -ceq ' ' -and $BlankLines[3] -ceq '' -and
+        $BlankLines[4] -ceq 'snapshot.disabled = "TRUE"') `
+        'blank VMX lines survive settings update without binder failure'
+
+    $JunctionTarget = Join-Path $OutsideFixtureRoot 'junction-target'
+    New-Item -ItemType Directory -Path $JunctionTarget | Out-Null
+    $Junction = Join-Path $VmxFixtureRoot 'ancestor-junction'
+    New-Item -ItemType Junction -Path $Junction -Target $JunctionTarget | Out-Null
+    $JunctionPaths.Add($Junction)
+    [IO.File]::WriteAllText((Join-Path $JunctionTarget 'alias.vmx'),
+        "vhv.enable = `"TRUE`"`r`nscsi0:0.fileName = `"alias.vmdk`"")
+    [IO.File]::WriteAllText((Join-Path $JunctionTarget 'alias.vmdk'), @'
+# Disk DescriptorFile
+CID=12345678
+parentCID=ffffffff
+RW 8 SPARSE "alias-flat.vmdk"
+'@)
+    [IO.File]::WriteAllText((Join-Path $JunctionTarget 'alias-flat.vmdk'), 'synthetic extent')
+    Assert-Throws {
+        Assert-PreparedClone -Root $RepositoryRoot -BuildRoot $VmxFixtureRoot `
+            -Vmx (Join-Path $Junction 'alias.vmx')
+    } 'ancestor junction is rejected' 'reparse point|path boundary'
+
+    $script:CommandLog = Join-Path $FixtureRoot 'redaction.jsonl'
+    $script:CommandNumber = 0
+    $script:CommandLogLimit = 256
+    $SyntheticPassword = 'synthetic-vm-password'
+    $SyntheticGuestInfo = 'synthetic-guestinfo-payload'
+    Write-CommandRecord -FilePath 'synthetic-vmrun.exe' `
+        -ArgumentList @('-vp', $SyntheticPassword, 'writeVariable', 'fixture.vmx',
+            'guestVar', 'fixture.request.chunk.000000', $SyntheticGuestInfo) `
+        -WorkingDirectory $FixtureRoot -TimeoutSeconds 3 -Redactions @($SyntheticPassword)
+    $CommandLogText = Get-Content -Raw -LiteralPath $script:CommandLog
+    Assert-Check ($CommandLogText.Contains('redacted') -and
+        $CommandLogText.Contains('guestinfo-value-redacted') -and
+        -not $CommandLogText.Contains($SyntheticPassword) -and
+        -not $CommandLogText.Contains($SyntheticGuestInfo)) `
+        'command log redacts synthetic VM password and GuestInfo payload'
+
+    $script:VmStartAttempted = $true
+    $script:VmOffConfirmed = $false
+    $script:Selected = [pscustomobject]@{ VmxPath = 'synthetic-vmx' }
+    $script:CleanupFailures = [Collections.Generic.List[string]]::new()
+    $script:StopEvents = [Collections.Generic.List[string]]::new()
+    $script:RunningProbes = 0
+    $script:StopCalls = [Collections.Generic.List[string]]::new()
+    function Test-TargetVmRunning {
+        $script:RunningProbes++
+        if ($script:RunningProbes -eq 1) { return $true }
+        throw 'synthetic process-list failure'
+    }
+    function Invoke-TargetVmrun {
+        param([string[]]$Operation, [int]$Timeout)
+        $script:StopCalls.Add(($Operation -join ' '))
+        return [pscustomobject]@{ ExitCode = 0; TimedOut = $false }
+    }
+    Stop-OnlyTargetVm
+    Assert-Check (-not $script:VmOffConfirmed -and $script:CleanupFailures.Count -gt 0) `
+        'uncertain VM state remains fail-closed and records cleanup failure'
+    Assert-Check (($script:StopCalls -join '|') -match 'soft' -and
+        ($script:StopCalls -join '|') -match 'hard') `
+        'uncertain VM stop attempts bounded soft and hard stop'
+
+    $HardVmx = Join-Path $VmxFixtureRoot 'hardlink.vmx'
+    $HardDisk = Join-Path $VmxFixtureRoot 'hardlink.vmdk'
+    $OutsideHardlinkDir = Join-Path $OutsideFixtureRoot 'hardlink-vm'
+    New-Item -ItemType Directory -Path $OutsideHardlinkDir | Out-Null
+    $OutsideExtent = Join-Path $OutsideHardlinkDir 'shared-flat.vmdk'
+    $BuildExtent = Join-Path $VmxFixtureRoot 'shared-flat.vmdk'
+    [IO.File]::WriteAllText($OutsideExtent, 'synthetic shared extent')
+    New-Item -ItemType HardLink -Path $BuildExtent -Target $OutsideExtent | Out-Null
+    [IO.File]::WriteAllText($HardVmx,
+        "vhv.enable = `"TRUE`"`r`nscsi0:0.fileName = `"hardlink.vmdk`"")
+    [IO.File]::WriteAllText($HardDisk, @'
+# Disk DescriptorFile
+CID=12345678
+parentCID=ffffffff
+RW 8 SPARSE "shared-flat.vmdk"
+'@)
+    $LinkCount = Get-WindowsHardLinkCount $BuildExtent
+    Assert-Check ($LinkCount -eq 2) 'Win32 file metadata observes the synthetic outside hard link'
+    Assert-Throws {
+        Assert-PreparedClone -Root $RepositoryRoot -BuildRoot $VmxFixtureRoot -Vmx $HardVmx
+    } 'hard-linked VMDK extent is rejected' 'exactly one filesystem link'
+
+    $OutsideVmx = Join-Path $OutsideFixtureRoot 'shared-source.vmx'
+    $HardVmxAlias = Join-Path $VmxFixtureRoot 'hardlinked-source.vmx'
+    [IO.File]::WriteAllText($OutsideVmx,
+        "vhv.enable = `"TRUE`"`r`nscsi0:0.fileName = `"standalone.vmdk`"")
+    New-Item -ItemType HardLink -Path $HardVmxAlias -Target $OutsideVmx | Out-Null
+    Assert-Throws {
+        Assert-PreparedClone -Root $RepositoryRoot -BuildRoot $VmxFixtureRoot -Vmx $HardVmxAlias
+    } 'hard-linked VMX is rejected' 'exactly one filesystem link'
+
+    $OutsideDisk = Join-Path $OutsideFixtureRoot 'shared-source.vmdk'
+    $HardDiskAlias = Join-Path $VmxFixtureRoot 'hardlinked-source.vmdk'
+    [IO.File]::WriteAllText((Join-Path $VmxFixtureRoot 'descriptor-flat.vmdk'), 'synthetic extent')
+    [IO.File]::WriteAllText($OutsideDisk, @'
+# Disk DescriptorFile
+CID=12345678
+parentCID=ffffffff
+RW 8 SPARSE "descriptor-flat.vmdk"
+'@)
+    New-Item -ItemType HardLink -Path $HardDiskAlias -Target $OutsideDisk | Out-Null
+    $DiskHardlinkVmx = Join-Path $VmxFixtureRoot 'disk-hardlink.vmx'
+    [IO.File]::WriteAllText($DiskHardlinkVmx,
+        "vhv.enable = `"TRUE`"`r`nscsi0:0.fileName = `"hardlinked-source.vmdk`"")
+    Assert-Throws {
+        Assert-PreparedClone -Root $RepositoryRoot -BuildRoot $VmxFixtureRoot -Vmx $DiskHardlinkVmx
+    } 'hard-linked VMDK descriptor is rejected' 'exactly one filesystem link'
+
+    $OutsideNvram = Join-Path $OutsideFixtureRoot 'shared-source.nvram'
+    $NvramAlias = Join-Path $VmxFixtureRoot 'shared-source.nvram'
+    [IO.File]::WriteAllText($OutsideNvram, 'synthetic NVRAM')
+    New-Item -ItemType HardLink -Path $NvramAlias -Target $OutsideNvram | Out-Null
+    $NvramVmx = Join-Path $VmxFixtureRoot 'nvram-hardlink.vmx'
+    [IO.File]::WriteAllText($NvramVmx,
+        "vhv.enable = `"TRUE`"`r`nscsi0:0.fileName = `"standalone.vmdk`"`r`nnvram = `"shared-source.nvram`"")
+    Assert-Throws {
+        Assert-PreparedClone -Root $RepositoryRoot -BuildRoot $VmxFixtureRoot -Vmx $NvramVmx
+    } 'hard-linked NVRAM is rejected' 'exactly one filesystem link'
+
+    Write-Output "RESULT: $script:Passed pure controller checks passed."
+}
+finally {
+    if ($null -ne $Hmac) { $Hmac.Dispose() }
+    if (Test-Path -LiteralPath $FixtureRoot) {
+        $ExpectedBuildRoot = [IO.Path]::GetFullPath((Join-Path $RepositoryRoot '.codex-build'))
+        $ExpectedFixtureRoot = Join-Path $ExpectedBuildRoot ([IO.Path]::GetFileName($FixtureRoot))
+        $ActualParent = [IO.Path]::GetFullPath((Split-Path -Parent $FixtureRoot))
+        $FixtureItem = Get-Item -LiteralPath $FixtureRoot -Force
+        $IsExpectedRoot = $FixtureRoot.Equals(
+            [IO.Path]::GetFullPath($ExpectedFixtureRoot), [StringComparison]::OrdinalIgnoreCase) -and
+            $ActualParent.Equals($ExpectedBuildRoot, [StringComparison]::OrdinalIgnoreCase) -and
+            $FixtureItem.Name -match '^gpu-controller-contract-[0-9a-f]{32}$' -and
+            (($FixtureItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0)
+        if (-not $IsExpectedRoot) {
+            Write-Warning "Fixture cleanup skipped because the absolute root failed ownership validation: $FixtureRoot"
+        }
+        else {
+            foreach ($JunctionPath in $JunctionPaths) {
+                if (Test-Path -LiteralPath $JunctionPath) {
+                    $JunctionItem = Get-Item -LiteralPath $JunctionPath -Force
+                    if (($JunctionItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) {
+                        throw "Fixture junction cleanup refused a non-reparse entry: $JunctionPath"
+                    }
+                    [IO.Directory]::Delete($JunctionPath, $false)
+                }
+            }
+            $RemainingReparsePoints = @(Get-ChildItem -LiteralPath $FixtureRoot -Force -Recurse |
+                Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 })
+            if ($RemainingReparsePoints.Count -gt 0) {
+                throw "Fixture cleanup refused nested reparse points: $($RemainingReparsePoints[0].FullName)"
+            }
+            Remove-Item -LiteralPath $FixtureRoot -Recurse -Force
+        }
+    }
+}
