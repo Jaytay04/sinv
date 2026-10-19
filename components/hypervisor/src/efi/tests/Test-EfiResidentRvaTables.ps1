@@ -150,6 +150,215 @@ $unreferencedReferences = @(Get-EfiResidentExternalReferences `
     -SectionVirtualSize $sectionVirtualSize)
 Assert-True ($unreferencedReferences.Count -eq 1) 'An unreferenced fake call remains audited.'
 
+$chainedImage = [byte[]]$image.Clone()
+$firstTableOffset = 0x200 + (0x1c494 - 0x1000)
+Set-UInt32 $chainedImage $firstTableOffset 0x1300
+Set-UInt32 $chainedImage ($firstTableOffset + 4) 0x1380
+$secondTableOffset = 0x200 + (0x1c49c - 0x1000)
+Set-UInt32 $chainedImage $secondTableOffset 0x1300
+Set-UInt32 $chainedImage ($secondTableOffset + 4) 0x1380
+Set-UInt32 $chainedImage ($secondTableOffset + 8) 0x1318
+$chainedDisassembly = @'
+0000000140001100: call 000000018F01C66C
+0000000140001104: mov rax,qword ptr [000000018F01C66Ch]
+0000000140001200: cmp eax, 1
+0000000140001203: ja 0000000140001280
+0000000140001209: cdqe
+000000014000120B: lea rdx, [140000000h]
+0000000140001212: mov ecx, dword ptr [rdx+rax*4+1C494h]
+000000014000121A: add rcx, rdx
+000000014000121D: jmp rcx
+0000000140001280: ret
+0000000140001300: mov dword ptr [rbx+48h],0
+0000000140001307: lea rcx,[rbx+10h]
+000000014000130E: mov eax,2
+0000000140001313: sub rax,rdi
+0000000140001316: jne 0000000140001313
+0000000140001318: mov eax,1
+000000014000131D: dec eax
+0000000140001320: cmp eax, 2
+0000000140001323: ja 0000000140001380
+0000000140001329: mov ecx, dword ptr [rdx+rax*4+1C49Ch]
+0000000140001330: add rcx, rdx
+0000000140001333: jmp rcx
+0000000140001380: ret
+000000014001C494: call 000000018F01C66C
+000000014001C49C: mov rax,qword ptr [000000018F01C66Ch]
+'@
+$chainedRanges = @(Get-EfiResidentRvaTableRanges `
+    -DisassemblyText $chainedDisassembly `
+    -ImageBytes $chainedImage `
+    -ImageBase $imageBase `
+    -SectionRva $sectionRva `
+    -SectionVirtualSize $sectionVirtualSize `
+    -SectionRawOffset $sectionRawOffset `
+    -SectionRawSize $sectionRawSize)
+Assert-True ($chainedRanges.Count -eq 2) `
+    'A reused image-base dispatch is recognized only after the validated first table.'
+Assert-True ($chainedRanges[0].StartRva -eq 0x1c494 -and
+    $chainedRanges[0].ByteLength -eq 8 -and
+    $chainedRanges[1].StartRva -eq 0x1c49c -and
+    $chainedRanges[1].ByteLength -eq 12 -and
+    $chainedRanges[1].EntryCount -eq 3) `
+    'Fresh and reused tables exempt exactly their bounded entry bytes.'
+$chainedReferences = @(Get-EfiResidentExternalReferences `
+    -DisassemblyText $chainedDisassembly `
+    -DataRanges $chainedRanges `
+    -ImageBase $imageBase `
+    -SectionRva $sectionRva `
+    -SectionVirtualSize $sectionVirtualSize)
+Assert-True ($chainedReferences.Count -eq 2 -and
+    @($chainedReferences | Where-Object { $_.Kind -eq 'direct call' }).Count -eq 1 -and
+    @($chainedReferences | Where-Object { $_.Kind -eq 'absolute static reference' }).Count -eq 1) `
+    'Genuine external calls and static references outside both tables remain flagged.'
+
+$baseChangedDispatch = $chainedDisassembly.Replace(
+    '000000014000120B: lea rdx, [140000000h]',
+    '000000014000120B: lea r8, [140000000h]')
+$baseChangedDispatch = $baseChangedDispatch.Replace(
+    '0000000140001212: mov ecx, dword ptr [rdx+rax*4+1C494h]',
+    '0000000140001212: mov ecx, dword ptr [r8+rax*4+1C494h]')
+$baseChangedDispatch = $baseChangedDispatch.Replace(
+    '000000014000121A: add rcx, rdx',
+    '000000014000121A: add rcx, r8')
+$changedBaseRanges = @(Get-EfiResidentRvaTableRanges `
+    -DisassemblyText $baseChangedDispatch `
+    -ImageBytes $chainedImage `
+    -ImageBase $imageBase `
+    -SectionRva $sectionRva `
+    -SectionVirtualSize $sectionVirtualSize `
+    -SectionRawOffset $sectionRawOffset `
+    -SectionRawSize $sectionRawSize)
+Assert-True ($changedBaseRanges.Count -eq 1) `
+    'A reused base without a matching trusted dispatch fact is not exempted.'
+
+$conflictingImage = [byte[]]$chainedImage.Clone()
+$conflictingTableOffset = 0x200 + (0x1c4a4 - 0x1000)
+Set-UInt32 $conflictingImage $conflictingTableOffset 0x1300
+Set-UInt32 $conflictingImage ($conflictingTableOffset + 4) 0x1380
+Set-UInt32 $conflictingImage ($conflictingTableOffset + 8) 0x1318
+$conflictingDisassembly = $chainedDisassembly.Replace(
+    '0000000140001280: ret', @'
+0000000140001280: ret
+0000000140001290: cmp eax, 1
+0000000140001293: ja 00000001400012F0
+0000000140001299: lea r8, [140000000h]
+00000001400012A0: mov ecx, dword ptr [r8+rax*4+1C49Ch]
+00000001400012A8: add rcx, r8
+00000001400012AB: jmp rcx
+00000001400012F0: ret
+'@)
+$conflictingDisassembly = $conflictingDisassembly.Replace(
+    '0000000140001329: mov ecx, dword ptr [rdx+rax*4+1C49Ch]',
+    '0000000140001329: mov ecx, dword ptr [rdx+rax*4+1C4A4h]')
+$conflictingRanges = @(Get-EfiResidentRvaTableRanges `
+    -DisassemblyText $conflictingDisassembly `
+    -ImageBytes $conflictingImage `
+    -ImageBase $imageBase `
+    -SectionRva $sectionRva `
+    -SectionVirtualSize $sectionVirtualSize `
+    -SectionRawOffset $sectionRawOffset `
+    -SectionRawSize $sectionRawSize)
+Assert-True ($conflictingRanges.Count -eq 2) `
+    'Conflicting image-base facts for one entry prevent a reused-table exemption.'
+
+foreach ($clobber in @('mov edx,0', 'xor dl,dl')) {
+    $clobberedDisassembly = $chainedDisassembly.Replace(
+        '0000000140001300: mov dword ptr [rbx+48h],0',
+        "0000000140001300: $clobber")
+    $clobberedRanges = @(Get-EfiResidentRvaTableRanges `
+        -DisassemblyText $clobberedDisassembly `
+        -ImageBytes $chainedImage `
+        -ImageBase $imageBase `
+        -SectionRva $sectionRva `
+        -SectionVirtualSize $sectionVirtualSize `
+        -SectionRawOffset $sectionRawOffset `
+        -SectionRawSize $sectionRawSize)
+    Assert-True ($clobberedRanges.Count -eq 1) `
+        "A base clobber through $clobber prevents reused-table exemption."
+}
+
+$unsafeBlock = $chainedDisassembly.Replace(
+    '0000000140001307: lea rcx,[rbx+10h]',
+    '0000000140001307: call 000000018F01C66C')
+$unsafeRanges = @(Get-EfiResidentRvaTableRanges `
+    -DisassemblyText $unsafeBlock `
+    -ImageBytes $chainedImage `
+    -ImageBase $imageBase `
+    -SectionRva $sectionRva `
+    -SectionVirtualSize $sectionVirtualSize `
+    -SectionRawOffset $sectionRawOffset `
+    -SectionRawSize $sectionRawSize)
+Assert-True ($unsafeRanges.Count -eq 1) 'A call in the proof block prevents reused-table exemption.'
+
+$escapingBlock = $chainedDisassembly.Replace(
+    '0000000140001316: jne 0000000140001313',
+    '0000000140001316: jne 0000000140001400')
+$escapingRanges = @(Get-EfiResidentRvaTableRanges `
+    -DisassemblyText $escapingBlock `
+    -ImageBytes $chainedImage `
+    -ImageBase $imageBase `
+    -SectionRva $sectionRva `
+    -SectionVirtualSize $sectionVirtualSize `
+    -SectionRawOffset $sectionRawOffset `
+    -SectionRawSize $sectionRawSize)
+Assert-True ($escapingRanges.Count -eq 1) `
+    'An escaping or non-instruction branch target prevents reused-table exemption.'
+
+$incomingEdgeDisassembly = $chainedDisassembly.Replace(
+    '0000000140001280: ret',
+    "0000000140001270: jne 0000000140001300`r`n0000000140001280: ret")
+$incomingEdgeRanges = @(Get-EfiResidentRvaTableRanges `
+    -DisassemblyText $incomingEdgeDisassembly `
+    -ImageBytes $chainedImage `
+    -ImageBase $imageBase `
+    -SectionRva $sectionRva `
+    -SectionVirtualSize $sectionVirtualSize `
+    -SectionRawOffset $sectionRawOffset `
+    -SectionRawSize $sectionRawSize)
+Assert-True ($incomingEdgeRanges.Count -eq 1) `
+    'An external direct branch into the proof block prevents reused-table exemption.'
+
+$dispatchEdgeDisassembly = $chainedDisassembly.Replace(
+    '0000000140001280: ret',
+    "0000000140001270: jne 0000000140001320`r`n0000000140001280: ret")
+$dispatchEdgeRanges = @(Get-EfiResidentRvaTableRanges `
+    -DisassemblyText $dispatchEdgeDisassembly `
+    -ImageBytes $chainedImage `
+    -ImageBase $imageBase `
+    -SectionRva $sectionRva `
+    -SectionVirtualSize $sectionVirtualSize `
+    -SectionRawOffset $sectionRawOffset `
+    -SectionRawSize $sectionRawSize)
+Assert-True ($dispatchEdgeRanges.Count -eq 1) `
+    'An external direct branch to the candidate compare prevents reused-table exemption.'
+
+$tamperedSecondImage = [byte[]]$chainedImage.Clone()
+Set-UInt32 $tamperedSecondImage $secondTableOffset 0x900000
+Assert-Throws {
+    Get-EfiResidentRvaTableRanges `
+        -DisassemblyText $chainedDisassembly `
+        -ImageBytes $tamperedSecondImage `
+        -ImageBase $imageBase `
+        -SectionRva $sectionRva `
+        -SectionVirtualSize $sectionVirtualSize `
+        -SectionRawOffset $sectionRawOffset `
+        -SectionRawSize $sectionRawSize
+} 'A proven reused-base table with an invalid RVA target fails closed.'
+
+$tableDataTargetImage = [byte[]]$chainedImage.Clone()
+Set-UInt32 $tableDataTargetImage $secondTableOffset 0x1c494
+Assert-Throws {
+    Get-EfiResidentRvaTableRanges `
+        -DisassemblyText $chainedDisassembly `
+        -ImageBytes $tableDataTargetImage `
+        -ImageBase $imageBase `
+        -SectionRva $sectionRva `
+        -SectionVirtualSize $sectionVirtualSize `
+        -SectionRawOffset $sectionRawOffset `
+        -SectionRawSize $sectionRawSize
+} 'A table entry targeting previously validated table data fails closed.'
+
 $tamperedImage = [byte[]]$image.Clone()
 $tableFileOffset = 0x200 + (0x1c494 - 0x1000)
 Set-UInt32 $tamperedImage $tableFileOffset 0x900000

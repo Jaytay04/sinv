@@ -115,6 +115,181 @@ function Get-EfiResidentRegister64 {
     return $null
 }
 
+function Get-EfiResidentRegisterAlias64 {
+    param([Parameter(Mandatory=$true)][string]$Register)
+    $register = $Register.ToLowerInvariant()
+    if ($register -match '^r(8|9|1[0-5])(?:d|w|b)?$') {
+        return 'r' + $Matches[1]
+    }
+    $aliases = @{
+        rax='rax'; eax='rax'; ax='rax'; al='rax'; ah='rax'
+        rbx='rbx'; ebx='rbx'; bx='rbx'; bl='rbx'; bh='rbx'
+        rcx='rcx'; ecx='rcx'; cx='rcx'; cl='rcx'; ch='rcx'
+        rdx='rdx'; edx='rdx'; dx='rdx'; dl='rdx'; dh='rdx'
+        rsi='rsi'; esi='rsi'; si='rsi'; sil='rsi'
+        rdi='rdi'; edi='rdi'; di='rdi'; dil='rdi'
+        rsp='rsp'; esp='rsp'; sp='rsp'; spl='rsp'
+        rbp='rbp'; ebp='rbp'; bp='rbp'; bpl='rbp'
+    }
+    if ($aliases.ContainsKey($register)) { return $aliases[$register] }
+    return $null
+}
+
+function Test-EfiResidentScalarOperand {
+    param([Parameter(Mandatory=$true)][string]$Operand)
+    $value = $Operand.Trim()
+    if ($value -match '^(?:(?:byte|word|dword|qword) ptr\s*)?\[[^\]]+\]$') {
+        return $true
+    }
+    if ($null -ne (Get-EfiResidentRegisterAlias64 $value)) { return $true }
+    return $value -match '^(?:[-+]?(?:0x)?[0-9a-f]+h?|[0-9]+)$'
+}
+
+function Test-EfiResidentBasePreservingInstruction {
+    param(
+        [Parameter(Mandatory=$true)][string]$Text,
+        [Parameter(Mandatory=$true)][string]$BaseRegister
+    )
+
+    $instruction = $Text.Trim().ToLowerInvariant()
+    $branch = [regex]::Match($instruction,
+        '^j(?:a|ae|b|be|c|e|g|ge|l|le|na|nae|nb|nbe|nc|ne|ng|nge|nl|nle|no|np|ns|nz|o|p|pe|po|s|z)\s+(?<target>(?:0x)?[0-9a-f]{8,16}h?)$')
+    if ($branch.Success) {
+        return [pscustomobject]@{
+            IsConditionalBranch = $true
+            BranchTarget = [uint64](ConvertTo-EfiResidentNumber $branch.Groups['target'].Value $true)
+            PreservesBase = $true
+        }
+    }
+    if ($instruction -match '^(?:nop|endbr64)$') {
+        return [pscustomobject]@{
+            IsConditionalBranch = $false; BranchTarget = [uint64]0
+            PreservesBase = $true
+        }
+    }
+
+    $mnemonicMatch = [regex]::Match($instruction, '^(?<mnemonic>[a-z][a-z0-9]*)\s+(?<operands>.+)$')
+    if (-not $mnemonicMatch.Success) { return $null }
+    $mnemonic = $mnemonicMatch.Groups['mnemonic'].Value
+    $operands = $mnemonicMatch.Groups['operands'].Value.Trim()
+    $unary = $mnemonic -match '^(?:inc|dec|neg|not)$'
+    $twoOperand = $mnemonic -match '^(?:mov|movzx|movsx|movsxd|lea|test|cmp|cmov[a-z]+|add|sub|and|or|xor|shl|shr|sar|sal)$'
+    if ($unary) {
+        if ($operands.Contains(',' ) -or -not (Test-EfiResidentScalarOperand $operands)) {
+            return $null
+        }
+        $destination = $operands
+    } elseif ($twoOperand) {
+        $separator = $operands.IndexOf(',')
+        if ($separator -lt 1 -or $operands.IndexOf(',', $separator + 1) -ge 0) {
+            return $null
+        }
+        $destination = $operands.Substring(0, $separator).Trim()
+        $source = $operands.Substring($separator + 1).Trim()
+        if (-not (Test-EfiResidentScalarOperand $destination) -or
+            -not (Test-EfiResidentScalarOperand $source)) {
+            return $null
+        }
+        if ($mnemonic -match '^(?:lea|movzx|movsx|movsxd|cmov[a-z]+)$' -and
+            $null -eq (Get-EfiResidentRegisterAlias64 $destination)) {
+            return $null
+        }
+    } else {
+        return $null
+    }
+
+    $destinationRegister = Get-EfiResidentRegisterAlias64 $destination
+    $preservesBase = $null -eq $destinationRegister -or
+        $destinationRegister -ine $BaseRegister.ToLowerInvariant()
+    return [pscustomobject]@{
+        IsConditionalBranch = $false; BranchTarget = [uint64]0
+        PreservesBase = [bool]$preservesBase
+    }
+}
+
+function Test-EfiResidentReusedImageBase {
+    param(
+        [Parameter(Mandatory=$true)][object[]]$Instructions,
+        [Parameter(Mandatory=$true)][System.Collections.Generic.HashSet[UInt64]]$InstructionStarts,
+        [Parameter(Mandatory=$true)][object[]]$ValidatedTables,
+        [Parameter(Mandatory=$true)][uint64]$EntryAddress,
+        [Parameter(Mandatory=$true)][uint64]$DispatchAddress,
+        [Parameter(Mandatory=$true)][string]$BaseRegister,
+        [Parameter(Mandatory=$true)][uint64]$SectionStart
+    )
+
+    # This is local provenance for a modeled dispatch sequence, not whole-program
+    # control-flow integrity.
+    $entryFacts = @($ValidatedTables | Where-Object {
+        $_.Targets -contains [uint64]$EntryAddress
+    })
+    if ($entryFacts.Count -eq 0) { return $false }
+    foreach ($fact in $entryFacts) {
+        if ($fact.BaseRegister -ine $BaseRegister) { return $false }
+    }
+
+    $entryIndex = -1
+    $dispatchIndex = -1
+    for ($index = 0; $index -lt $Instructions.Count; ++$index) {
+        if ($Instructions[$index].Address -eq $EntryAddress) { $entryIndex = $index }
+        if ($Instructions[$index].Address -eq $DispatchAddress) { $dispatchIndex = $index }
+    }
+    if ($entryIndex -lt 0 -or $dispatchIndex -le $entryIndex) { return $false }
+    $instructionCount = $dispatchIndex - $entryIndex
+    if ($instructionCount -gt 64) { return $false }
+
+    if ($entryIndex -eq 0) {
+        if ($EntryAddress -ne $SectionStart) { return $false }
+    } else {
+        $previous = $Instructions[$entryIndex - 1].Text.Trim().ToLowerInvariant()
+        if ($previous -notmatch '^(?:jmp\s+.+|ret(?:\s+.+)?)$') {
+            return $false
+        }
+    }
+
+    # An entry reached from another validated table carries the value established
+    # by that table's dispatch. Conflicting aliases inside the candidate block
+    # make the value ambiguous and therefore cannot support an exemption.
+    foreach ($table in $ValidatedTables) {
+        foreach ($target in $table.Targets) {
+            if ($target -ge $EntryAddress -and $target -le $DispatchAddress -and
+                $table.BaseRegister -ine $BaseRegister) {
+                return $false
+            }
+        }
+    }
+
+    # Direct branches and calls from outside the proven block could enter it
+    # without carrying the image-base value supplied by the validated table.
+    foreach ($instruction in $Instructions) {
+        if ($instruction.Address -ge $EntryAddress -and
+            $instruction.Address -lt $DispatchAddress) { continue }
+        $edge = [regex]::Match($instruction.Text.Trim(),
+            '^(?:call|j[a-z]+)\s+(?:near ptr\s+)?(?<target>(?:0x)?[0-9a-f]{8,16}h?)\b',
+            [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+        if (-not $edge.Success) { continue }
+        $targetAddress = ConvertTo-EfiResidentNumber $edge.Groups['target'].Value $true
+        if ($targetAddress -ge $EntryAddress -and $targetAddress -le $DispatchAddress) {
+            return $false
+        }
+    }
+
+    for ($index = $entryIndex; $index -lt $dispatchIndex; ++$index) {
+        $instruction = $Instructions[$index]
+        $proof = Test-EfiResidentBasePreservingInstruction `
+            -Text $instruction.Text -BaseRegister $BaseRegister
+        if ($null -eq $proof -or -not $proof.PreservesBase) { return $false }
+        if ($proof.IsConditionalBranch) {
+            $target = [uint64]$proof.BranchTarget
+            if ($target -lt $EntryAddress -or $target -gt $DispatchAddress -or
+                -not $InstructionStarts.Contains($target)) {
+                return $false
+            }
+        }
+    }
+    return $true
+}
+
 function Get-EfiResidentRvaTableRanges {
     param(
         [Parameter(Mandatory=$true)][string]$DisassemblyText,
@@ -132,7 +307,7 @@ function Get-EfiResidentRvaTableRanges {
     }
     $sectionEnd = $SectionRva + $SectionVirtualSize
     if ($sectionEnd -lt $SectionRva) { throw 'Resident section RVA overflows.' }
-    $instructions = @(Get-EfiResidentInstructions $DisassemblyText)
+    $instructions = @(Get-EfiResidentInstructions $DisassemblyText | Sort-Object Address)
     $starts = [System.Collections.Generic.HashSet[UInt64]]::new()
     foreach ($instruction in $instructions) {
         if ($instruction.Address -ge $ImageBase + $SectionRva -and
@@ -142,11 +317,12 @@ function Get-EfiResidentRvaTableRanges {
     }
 
     $ranges = [System.Collections.Generic.List[object]]::new()
+    $validatedTables = [System.Collections.Generic.List[object]]::new()
     for ($index = 0; $index -lt $instructions.Count; ++$index) {
         $compare = [regex]::Match($instructions[$index].Text,
             '^cmp\s+(?<index>e(?:ax|bx|cx|dx|si|di|sp|bp)|r(?:8|9|1[0-5])d)\s*,\s*(?<bound>(?:0x)?[0-9a-f]+h?)$',
             [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-        if (-not $compare.Success -or $index + 5 -ge $instructions.Count) { continue }
+        if (-not $compare.Success -or $index + 4 -ge $instructions.Count) { continue }
         $branch = [regex]::Match($instructions[$index + 1].Text,
             '^ja\s+(?<target>(?:0x)?[0-9a-f]{8,16}h?)$',
             [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
@@ -155,35 +331,66 @@ function Get-EfiResidentRvaTableRanges {
         $sequence = $index + 2
         $hasCdqe = $instructions[$sequence].Text -match '^cdqe$'
         if ($hasCdqe) { ++$sequence }
-        if ($sequence + 3 -ge $instructions.Count) { continue }
+        if ($sequence + 2 -ge $instructions.Count) { continue }
 
         $lea = [regex]::Match($instructions[$sequence].Text,
             '^lea\s+(?<base>r(?:ax|bx|cx|dx|si|di|sp|bp|8|9|1[0-5]))\s*,\s*\[(?<image>(?:0x)?[0-9a-f]+h?)\]$',
             [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-        $load = [regex]::Match($instructions[$sequence + 1].Text,
+        $reusesBase = -not $lea.Success
+        $loadIndex = if ($reusesBase) { $sequence } else { $sequence + 1 }
+        $addIndex = $loadIndex + 1
+        $jumpIndex = $loadIndex + 2
+        if ($jumpIndex -ge $instructions.Count) { continue }
+        $load = [regex]::Match($instructions[$loadIndex].Text,
             '^mov\s+(?<dst>e(?:ax|bx|cx|dx|si|di|sp|bp)|r(?:8|9|1[0-5])d)\s*,\s*dword ptr\s*\[\s*(?<base>r(?:ax|bx|cx|dx|si|di|sp|bp|8|9|1[0-5]))\s*\+\s*(?<index>r(?:ax|bx|cx|dx|si|di|sp|bp|8|9|1[0-5]))\s*\*\s*4\s*\+\s*(?<table>(?:0x)?[0-9a-f]+h?)\s*\]$',
             [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-        if (-not $lea.Success -or -not $load.Success) { continue }
-        $add = [regex]::Match($instructions[$sequence + 2].Text,
+        if (-not $load.Success) { continue }
+        $add = [regex]::Match($instructions[$addIndex].Text,
             '^add\s+(?<dst>r(?:ax|bx|cx|dx|si|di|sp|bp|8|9|1[0-5]))\s*,\s*(?<base>r(?:ax|bx|cx|dx|si|di|sp|bp|8|9|1[0-5]))$',
             [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-        $jump = [regex]::Match($instructions[$sequence + 3].Text,
+        $jump = [regex]::Match($instructions[$jumpIndex].Text,
             '^jmp\s+(?<dst>r(?:ax|bx|cx|dx|si|di|sp|bp|8|9|1[0-5]))$',
             [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
         if (-not $add.Success -or -not $jump.Success) { continue }
 
         $index64 = Get-EfiResidentRegister64 $compare.Groups['index'].Value
         $dst64 = Get-EfiResidentRegister64 $load.Groups['dst'].Value
-        $baseRegister = $lea.Groups['base'].Value.ToLowerInvariant()
+        $baseRegister = if ($lea.Success) {
+            $lea.Groups['base'].Value.ToLowerInvariant()
+        } else {
+            $load.Groups['base'].Value.ToLowerInvariant()
+        }
         if ($hasCdqe -and $compare.Groups['index'].Value -ine 'eax') { continue }
         if ($null -eq $index64 -or $null -eq $dst64 -or
-            $load.Groups['base'].Value -ine $baseRegister -or
+            ($lea.Success -and $load.Groups['base'].Value -ine $baseRegister) -or
             $load.Groups['index'].Value -ine $index64 -or
             $add.Groups['dst'].Value -ine $dst64 -or
             $add.Groups['base'].Value -ine $baseRegister -or
             $jump.Groups['dst'].Value -ine $dst64 -or
             $baseRegister -eq $index64 -or $baseRegister -eq $dst64) {
             continue
+        }
+
+        if ($reusesBase) {
+            $entryProven = $false
+            foreach ($priorTable in $validatedTables) {
+                if ($priorTable.BaseRegister -ine $baseRegister) { continue }
+                foreach ($entryTarget in $priorTable.Targets) {
+                    if (Test-EfiResidentReusedImageBase `
+                        -Instructions $instructions `
+                        -InstructionStarts $starts `
+                        -ValidatedTables $validatedTables.ToArray() `
+                        -EntryAddress $entryTarget `
+                        -DispatchAddress $instructions[$index].Address `
+                        -BaseRegister $baseRegister `
+                        -SectionStart ([uint64]($ImageBase + $SectionRva))) {
+                        $entryProven = $true
+                        break
+                    }
+                }
+                if ($entryProven) { break }
+            }
+            if (-not $entryProven) { continue }
         }
 
         # The full bounded indirect-jump shape is now recognized. From this
@@ -198,7 +405,11 @@ function Get-EfiResidentRvaTableRanges {
             -not $starts.Contains([uint64]$branchTarget)) {
             throw 'Resident RVA jump table default branch is not resident code.'
         }
-        $baseValue = ConvertTo-EfiResidentNumber $lea.Groups['image'].Value $true
+        $baseValue = if ($lea.Success) {
+            ConvertTo-EfiResidentNumber $lea.Groups['image'].Value $true
+        } else {
+            [uint64]$ImageBase
+        }
         $tableRva = ConvertTo-EfiResidentNumber $load.Groups['table'].Value $true
         if ($baseValue -ne $ImageBase -or ($tableRva -band 3) -ne 0 -or
             $tableRva -lt $SectionRva -or $tableRva -ge $sectionEnd) {
@@ -217,9 +428,10 @@ function Get-EfiResidentRvaTableRanges {
         $tableAddress = $ImageBase + $tableRva
         if ($tableAddress -lt $ImageBase -or
             $tableAddress + $tableBytes -lt $tableAddress -or
-            $tableAddress -le $instructions[$sequence + 3].Address) {
+            $tableAddress -le $instructions[$jumpIndex].Address) {
             throw 'Resident RVA jump table must follow its dispatch code without overflow.'
         }
+        $targetAddresses = [System.Collections.Generic.List[UInt64]]::new()
         for ($entry = [uint64]0; $entry -lt $entryCount; ++$entry) {
             $entryOffset = [int]($fileOffset + ($entry * 4))
             $targetRva = [uint64][BitConverter]::ToUInt32($ImageBytes, $entryOffset)
@@ -230,6 +442,13 @@ function Get-EfiResidentRvaTableRanges {
                 -not $starts.Contains([uint64]$targetAddress)) {
                 throw 'Resident RVA jump table entry does not target a prior resident instruction.'
             }
+            foreach ($dataRange in $ranges) {
+                if ($targetAddress -ge $dataRange.StartAddress -and
+                    $targetAddress -lt $dataRange.EndAddress) {
+                    throw 'Resident RVA jump table entry targets validated table data.'
+                }
+            }
+            $targetAddresses.Add([uint64]$targetAddress)
         }
 
         $range = [pscustomobject]@{
@@ -246,7 +465,12 @@ function Get-EfiResidentRvaTableRanges {
             }
         }
         $ranges.Add($range)
-        $index = $sequence + 3
+        $validatedTables.Add([pscustomobject]@{
+            BaseRegister = $baseRegister
+            Targets = [uint64[]]@($targetAddresses)
+            Range = $range
+        })
+        $index = $jumpIndex
     }
     return $ranges.ToArray()
 }
