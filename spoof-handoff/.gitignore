@@ -2,6 +2,7 @@
 
 # Keep machine-local packages, VM disks, recovery snapshots and credentials local.
 /artifacts/
+/b/
 /reports/**
 !/reports/client-originals.tsv
 !/reports/client-host-proof.20261012T225155686Z.txt

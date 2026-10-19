@@ -62,6 +62,7 @@ else()
             user_vmcall_dispatch.c
             runtime_transport.cpp
             scanner.cpp
+            overlay_render.c
             efi_hypervisor.asm
             "${HYPERSINV_EFI_CRT}")
         if(HYPERSINV_KERNEL_PROFILE_AVAILABLE)
@@ -101,6 +102,9 @@ else()
             /OPT:REF
             /OPT:ICF
             /DYNAMICBASE:NO)
+        # Retain the diagnostic entry point so the existing resident-image
+        # audit covers its code and ROM even before a caller is integrated.
+        target_link_options(uefi_hypervisor PRIVATE /INCLUDE:HvOverlayRender)
         find_program(HYPERSINV_DUMPBIN_EXECUTABLE NAMES dumpbin.exe)
         find_program(HYPERSINV_POWERSHELL_EXECUTABLE
             NAMES powershell.exe pwsh.exe)
@@ -220,6 +224,23 @@ else()
 endif()
 add_test(NAME uefi_hypervisor_scanner_tests
     COMMAND uefi_hypervisor_scanner_tests)
+
+# Diagnostic renderer tests use only caller-owned RAM and execute no VMX code.
+add_executable(uefi_hypervisor_overlay_render_tests
+    tests/overlay_render_test.c
+    overlay_render.c)
+target_include_directories(uefi_hypervisor_overlay_render_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(uefi_hypervisor_overlay_render_tests PRIVATE c_std_11)
+if(MSVC)
+    target_compile_options(uefi_hypervisor_overlay_render_tests PRIVATE
+        /W4 /WX /GS- /Oi-)
+else()
+    target_compile_options(uefi_hypervisor_overlay_render_tests PRIVATE
+        -Wall -Wextra -Werror)
+endif()
+add_test(NAME uefi_hypervisor_overlay_render_tests
+    COMMAND uefi_hypervisor_overlay_render_tests)
 
 add_executable(uefi_hypervisor_runtime_scanner_tests
     tests/test_runtime_scanner.cpp
