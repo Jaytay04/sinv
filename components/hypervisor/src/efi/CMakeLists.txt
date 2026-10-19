@@ -63,6 +63,8 @@ else()
             runtime_transport.cpp
             scanner.cpp
             overlay_render.c
+            gpu_hal.c
+            gpu_intel.c
             efi_hypervisor.asm
             "${HYPERSINV_EFI_CRT}")
         if(HYPERSINV_KERNEL_PROFILE_AVAILABLE)
@@ -105,6 +107,12 @@ else()
         # Retain the diagnostic entry point so the existing resident-image
         # audit covers its code and ROM even before a caller is integrated.
         target_link_options(uefi_hypervisor PRIVATE /INCLUDE:HvOverlayRender)
+        # Keep the gated HAL and every cleanup entry in the resident-image
+        # audit even though no hardware exclusion backend is installed yet.
+        target_link_options(uefi_hypervisor PRIVATE
+            /INCLUDE:HvGpuInitialize /INCLUDE:HvGpuRender
+            /INCLUDE:HvGpuBeforeGuestResume /INCLUDE:HvGpuShutdown
+            /INCLUDE:HvGpuIntelParsePci)
         find_program(HYPERSINV_DUMPBIN_EXECUTABLE NAMES dumpbin.exe)
         find_program(HYPERSINV_POWERSHELL_EXECUTABLE
             NAMES powershell.exe pwsh.exe)
@@ -197,7 +205,11 @@ endif()
 # contract without executing privileged VMX instructions.
 add_executable(uefi_hypervisor_static_contracts
     tests/test_efi_hypervisor_math.c
-    efi_hypervisor_math.c)
+    efi_hypervisor_math.c
+    tests/gpu_hal_test.c
+    gpu_hal.c
+    gpu_intel.c
+    overlay_render.c)
 target_include_directories(uefi_hypervisor_static_contracts PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_features(uefi_hypervisor_static_contracts PRIVATE c_std_11)
@@ -209,6 +221,9 @@ else()
 endif()
 add_test(NAME uefi_hypervisor_static_contracts
     COMMAND uefi_hypervisor_static_contracts)
+# Reuse the existing host executable; no new CMake targets or EFI images.
+add_test(NAME uefi_hypervisor_gpu_hal_tests
+    COMMAND uefi_hypervisor_static_contracts --gpu-hal)
 
 add_executable(uefi_hypervisor_scanner_tests
     tests/test_scanner.cpp

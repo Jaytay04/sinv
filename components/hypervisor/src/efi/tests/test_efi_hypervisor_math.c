@@ -28,7 +28,9 @@ static uint64_t eptMemoryMapStorage[
     (TEST_MEMORY_DESCRIPTOR_STRIDE * TEST_MEMORY_DESCRIPTOR_COUNT) /
         sizeof(uint64_t)];
 
-int main(void)
+int HvGpuHalRunModelTests(void);
+
+int main(int argc, char **argv)
 {
     uint32_t adjusted = 0;
     uint32_t recordPages = 0;
@@ -46,6 +48,11 @@ int main(void)
     uint64_t basic = UINT64_C(0x1001) |
         (UINT64_C(0x1000) << HV_EFI_VMX_BASIC_VMCS_SIZE_SHIFT);
     int failures = 0;
+
+    if (argc == 2 && strcmp(argv[1], "--gpu-hal") == 0) {
+        return HvGpuHalRunModelTests();
+    }
+    if (argc != 1) return 1;
 
     failures += expect(HV_EFI_CPUID_LEAF1_GUEST_ECX_MASK ==
                            UINT32_C(0xffffff9f) &&
