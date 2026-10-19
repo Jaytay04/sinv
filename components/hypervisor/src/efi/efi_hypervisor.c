@@ -3562,6 +3562,27 @@ static EFI_STATUS HvEfiFailAndFree(HV_EFI_CONTEXT *context,
     return status;
 }
 
+#if defined(HYPERSINV_GPU_VM_SELFTEST)
+#include "gpu_vm_selftest.h"
+
+static void HvEfiGpuVmEmit(const char *message)
+{
+    CHAR16 text[128];
+    uint32_t index = 0;
+    HvEfiDebugPrintAscii(message);
+    HvEfiDebugPrintAscii("\n");
+    while (message[index] != 0 && index < 125) {
+        text[index] = (CHAR16)(uint8_t)message[index];
+        ++index;
+    }
+    text[index++] = '\r';
+    text[index++] = '\n';
+    text[index] = 0;
+    if (gST->ConOut != NULL && gST->ConOut->OutputString != NULL)
+        (void)gST->ConOut->OutputString(gST->ConOut, text);
+}
+#endif
+
 /* Called by the assembly EfiMain wrapper.  The resident guest return resumes
  * the active launch call, after which this body returns normally to firmware. */
 EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
@@ -3595,6 +3616,20 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
     gST = systemTable;
     gBS = systemTable->BootServices;
     HvEfiDebugInitializeSerial();
+
+#if defined(HYPERSINV_GPU_VM_SELFTEST)
+    /* Test-only image: refuse before VMX on anything except the explicitly
+     * selected VMware lab environment. This does not enable physical GPU use.
+     * The synthetic callbacks exist only before launch in the EFI image. */
+    HvEfiCpuid(1, 0, cpuid);
+    if ((cpuid[2] & (UINT32_C(1) << 31)) == 0) return EFI_UNSUPPORTED;
+    HvEfiCpuid(UINT32_C(0x40000000), 0, cpuid);
+    if (cpuid[1] != UINT32_C(0x61774d56) ||
+        cpuid[2] != UINT32_C(0x4d566572) ||
+        cpuid[3] != UINT32_C(0x65726177)) return EFI_UNSUPPORTED;
+    HvEfiGpuVmEmit("GPU_HAL_MODEL:ENVIRONMENT VMWARE_TEST_ONLY");
+    if (HvGpuVmSelfTest(HvEfiGpuVmEmit) != 1) return EFI_ABORTED;
+#endif
 
     status = HvEfiAllocateRuntime(EfiRuntimeServicesData, 1, &contextPa);
     if (EFI_ERROR(status)) {
@@ -4050,6 +4085,9 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
      * ownership, and stages the native return before resuming this frame.
      * Do not dereference the now-EPT-denied context from non-root mode. */
     if (launchResult == 0) {
+#if defined(HYPERSINV_GPU_VM_SELFTEST)
+        HvEfiGpuVmEmit("GPU_HAL_VM:VMX_FIRMWARE_RETURN PASS");
+#endif
         HvEfiDebugPrintAscii(
             "uefi hypervisor: BSP firmware return: PASS\n");
         return EFI_SUCCESS;

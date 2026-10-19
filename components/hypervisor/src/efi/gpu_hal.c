@@ -16,6 +16,7 @@ static void CopyBytes(void *to, const void *from, size_t bytes)
 static uint32_t BackendValid(const HV_GPU_BACKEND *backend)
 {
     return backend != NULL && backend->OwnershipHeld != NULL &&
+        backend->ReadExclusion != NULL &&
         backend->AddressingIsGgtt != NULL &&
         backend->ReadRegister != NULL && backend->ReadGgttPte != NULL &&
         backend->MapWc != NULL && backend->DrainWrites != NULL &&
@@ -39,6 +40,49 @@ static HV_GPU_STATUS LoseOwnership(HV_GPU_STATE *state)
     ReleaseCpuMapping(state);
     state->Phase = HV_GPU_OWNERSHIP_LOST;
     return HV_GPU_NOT_SUPPORTED;
+}
+
+HV_GPU_STATUS HvGpuValidateExclusion(const HV_GPU_EXCLUSION_PROOF *proof,
+                                     const HV_GPU_ADAPTER *adapter,
+                                     const HV_GPU_ALLOCATION *allocation,
+                                     uint64_t expectedSessionId)
+{
+    if (proof == NULL || adapter == NULL || allocation == NULL)
+        return HV_GPU_INVALID_ARGUMENT;
+    if (proof->Size != sizeof(*proof) ||
+        proof->Version != HV_GPU_EXCLUSION_VERSION ||
+        proof->Method != HV_GPU_EXCLUSION_BOOT_VPCI_EPT_VTD ||
+        proof->EnforcementMask != HV_GPU_EXCLUSION_REQUIRED ||
+        proof->GuestAccessMask != 0 || proof->LockedUntilReboot != 1 ||
+        proof->PhysicalOutputVerified != 1 || proof->Reserved != 0 ||
+        proof->SessionId == 0 ||
+        (expectedSessionId != 0 && proof->SessionId != expectedSessionId) ||
+        proof->Adapter.VendorId != adapter->VendorId ||
+        proof->Adapter.DeviceId != adapter->DeviceId ||
+        proof->Adapter.MmioPhysical != adapter->MmioPhysical ||
+        proof->Allocation.PhysicalBase != allocation->PhysicalBase ||
+        proof->Allocation.PinnedBytes != allocation->PinnedBytes ||
+        proof->Allocation.GgttBase != allocation->GgttBase ||
+        proof->Allocation.Pipe != allocation->Pipe ||
+        proof->Allocation.Width != allocation->Width ||
+        proof->Allocation.Height != allocation->Height ||
+        proof->Allocation.StrideBytes != allocation->StrideBytes) {
+        return HV_GPU_NOT_SUPPORTED;
+    }
+    return HV_GPU_OK;
+}
+
+static uint32_t ExclusionHeld(HV_GPU_STATE *state)
+{
+    HV_GPU_EXCLUSION_PROOF proof;
+    volatile uint8_t *bytes = (volatile uint8_t *)&proof;
+    size_t remaining = sizeof(proof);
+    while (remaining-- != 0) *bytes++ = 0;
+    if (state->Backend.ReadExclusion(state->Backend.Context, &proof) != 1 ||
+        HvGpuValidateExclusion(&proof, &state->Adapter, &state->Allocation,
+                               state->SessionId) != HV_GPU_OK) return 0;
+    if (state->SessionId == 0) state->SessionId = proof.SessionId;
+    return 1;
 }
 
 HV_GPU_STATUS HvGpuValidateExtent(const HV_GPU_ALLOCATION *allocation,
@@ -86,7 +130,8 @@ static HV_GPU_STATUS ValidateReservation(HV_GPU_STATE *state)
     HV_GPU_PLANE plane;
     uint32_t index;
     const HV_GPU_BACKEND *backend = &state->Backend;
-    if (backend->OwnershipHeld(backend->Context) != 1 ||
+    if (ExclusionHeld(state) != 1 ||
+        backend->OwnershipHeld(backend->Context) != 1 ||
         backend->AddressingIsGgtt(backend->Context) != 1 ||
         HvGpuIntelReadPlane(backend, state->Allocation.Pipe, &plane) != HV_GPU_OK ||
         HvGpuIntelValidatePlane(&plane, &state->Allocation) != HV_GPU_OK) {
@@ -110,7 +155,8 @@ static HV_GPU_STATUS ValidateReservation(HV_GPU_STATE *state)
     if (HvGpuIntelReadPlane(backend, state->Allocation.Pipe, &plane) != HV_GPU_OK ||
         HvGpuIntelValidatePlane(&plane, &state->Allocation) != HV_GPU_OK ||
         backend->AddressingIsGgtt(backend->Context) != 1 ||
-        backend->OwnershipHeld(backend->Context) != 1) {
+        backend->OwnershipHeld(backend->Context) != 1 ||
+        ExclusionHeld(state) != 1) {
         return LoseOwnership(state);
     }
     return HV_GPU_OK;

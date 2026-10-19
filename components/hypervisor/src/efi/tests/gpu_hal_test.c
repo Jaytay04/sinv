@@ -24,6 +24,8 @@ typedef struct TEST_REGISTER {
 typedef struct TEST_BACKEND_CONTEXT {
     uint32_t Owned;
     uint32_t GgttMode;
+    HV_GPU_EXCLUSION_PROOF Proof;
+    uint32_t ProofReadFails;
     uint32_t OwnershipCalls;
     uint32_t OwnershipFalseAtCall;
     TEST_REGISTER Registers[TEST_REGISTER_CAPACITY];
@@ -139,6 +141,14 @@ static uint32_t TestAddressingIsGgtt(void *opaque)
     return context->GgttMode;
 }
 
+static uint32_t TestReadExclusion(void *opaque, HV_GPU_EXCLUSION_PROOF *proof)
+{
+    TEST_BACKEND_CONTEXT *context = (TEST_BACKEND_CONTEXT *)opaque;
+    if (context->ProofReadFails) return 0;
+    *proof = context->Proof;
+    return 1;
+}
+
 static uint32_t TestReadRegister(void *opaque, uint32_t offset,
                                 uint32_t *value)
 {
@@ -228,6 +238,7 @@ static HV_GPU_BACKEND TestBackend(void)
 {
     HV_GPU_BACKEND backend;
     backend.Context = &gBackendContext;
+    backend.ReadExclusion = TestReadExclusion;
     backend.OwnershipHeld = TestOwnershipHeld;
     backend.AddressingIsGgtt = TestAddressingIsGgtt;
     backend.ReadRegister = TestReadRegister;
@@ -247,6 +258,15 @@ static void ResetFixture(void)
     memset(&gEntities, 0, sizeof(gEntities));
     gBackendContext.Owned = 1;
     gBackendContext.GgttMode = 1;
+    gBackendContext.Proof.Size = sizeof(gBackendContext.Proof);
+    gBackendContext.Proof.Version = HV_GPU_EXCLUSION_VERSION;
+    gBackendContext.Proof.Method = HV_GPU_EXCLUSION_BOOT_VPCI_EPT_VTD;
+    gBackendContext.Proof.EnforcementMask = HV_GPU_EXCLUSION_REQUIRED;
+    gBackendContext.Proof.LockedUntilReboot = 1;
+    gBackendContext.Proof.PhysicalOutputVerified = 1;
+    gBackendContext.Proof.SessionId = UINT64_C(0xc0deface);
+    gBackendContext.Proof.Adapter = gValidAdapter;
+    gBackendContext.Proof.Allocation = gValidAllocation;
     gBackendContext.MapMode = TEST_MAP_SUCCESS;
     gBackendContext.PteBaseIndex =
         gValidAllocation.GgttBase / (uint32_t)HV_GPU_PAGE_BYTES;
@@ -638,6 +658,7 @@ static int TestInitializationValidationAndLatch(void)
     {
         HV_GPU_ALLOCATION multiPage = gValidAllocation;
         multiPage.PinnedBytes = HV_GPU_PAGE_BYTES * 2;
+        gBackendContext.Proof.Allocation = multiPage;
         gBackendContext.PteCount = 2;
         gBackendContext.Ptes[1] = gValidAllocation.PhysicalBase +
                                   UINT64_C(3) * HV_GPU_PAGE_BYTES +
@@ -828,6 +849,73 @@ static int TestResumeAndShutdownCleanup(void)
 
 typedef int (*TEST_CASE_FN)(void);
 
+static int TestExclusionAdmission(void)
+{
+    HV_GPU_EXCLUSION_PROOF baseline;
+    HV_GPU_EXCLUSION_PROOF proof;
+    uint32_t bit;
+    ResetFixture();
+    baseline = gBackendContext.Proof;
+    CHECK(HvGpuValidateExclusion(&baseline, &gValidAdapter, &gValidAllocation,
+                                 baseline.SessionId) == HV_GPU_OK,
+          "complete bound boot exclusion readback is admitted");
+    for (bit = 1; bit <= HV_GPU_EXCLUDE_FIRMWARE_WRITERS; bit <<= 1) {
+        proof = baseline;
+        proof.EnforcementMask &= ~bit;
+        CHECK(HvGpuValidateExclusion(&proof, &gValidAdapter, &gValidAllocation,
+                                     baseline.SessionId) == HV_GPU_NOT_SUPPORTED,
+              "each missing enforcement requirement is rejected");
+    }
+    proof = baseline;
+    proof.GuestAccessMask = HV_GPU_EXCLUDE_CONFIG_ACCESS;
+    CHECK(HvGpuValidateExclusion(&proof, &gValidAdapter, &gValidAllocation, 0) ==
+              HV_GPU_NOT_SUPPORTED, "residual guest access prevents admission");
+    proof = baseline;
+    proof.LockedUntilReboot = 0;
+    CHECK(HvGpuValidateExclusion(&proof, &gValidAdapter, &gValidAllocation, 0) ==
+              HV_GPU_NOT_SUPPORTED, "runtime-reversible ownership is rejected");
+    proof = baseline;
+    proof.PhysicalOutputVerified = 0;
+    CHECK(HvGpuValidateExclusion(&proof, &gValidAdapter, &gValidAllocation, 0) ==
+              HV_GPU_NOT_SUPPORTED, "physical output gate must be closed");
+    proof = baseline;
+    proof.Allocation.GgttBase += (uint32_t)HV_GPU_PAGE_BYTES;
+    CHECK(HvGpuValidateExclusion(&proof, &gValidAdapter, &gValidAllocation, 0) ==
+              HV_GPU_NOT_SUPPORTED, "proof cannot authorize another GGTT range");
+    proof = baseline;
+    proof.Adapter.MmioPhysical += HV_GPU_PAGE_BYTES;
+    CHECK(HvGpuValidateExclusion(&proof, &gValidAdapter, &gValidAllocation, 0) ==
+              HV_GPU_NOT_SUPPORTED, "proof cannot authorize another adapter");
+    proof = baseline;
+    proof.SessionId = 0;
+    CHECK(HvGpuValidateExclusion(&proof, &gValidAdapter, &gValidAllocation, 0) ==
+              HV_GPU_NOT_SUPPORTED, "zero boot session is rejected");
+    proof = baseline;
+    proof.Version++;
+    CHECK(HvGpuValidateExclusion(&proof, &gValidAdapter, &gValidAllocation, 0) ==
+              HV_GPU_NOT_SUPPORTED, "unknown proof ABI is rejected");
+    proof = baseline;
+    proof.Method = 0;
+    CHECK(HvGpuValidateExclusion(&proof, &gValidAdapter, &gValidAllocation, 0) ==
+              HV_GPU_NOT_SUPPORTED, "driver unbind alone is not exclusion");
+    CHECK(InitializeValid(), "bound proof initializes the model");
+    ++gBackendContext.Proof.SessionId;
+    CHECK(HvGpuRender(&gState, &gEntities, NULL) == HV_GPU_NOT_SUPPORTED &&
+          gState.Phase == HV_GPU_OWNERSHIP_LOST && gBackendContext.MapCalls == 0,
+          "boot session change latches loss before mapping");
+    gBackendContext.Proof = baseline;
+    CHECK(HvGpuRender(&gState, &gEntities, NULL) == HV_GPU_NOT_SUPPORTED &&
+          gBackendContext.MapCalls == 0,
+          "restoring stale proof cannot clear ownership loss");
+    ResetFixture();
+    CHECK(InitializeValid(), "valid model initializes for proof failure");
+    gBackendContext.ProofReadFails = 1;
+    CHECK(HvGpuRender(&gState, &gEntities, NULL) == HV_GPU_NOT_SUPPORTED &&
+          gBackendContext.MapCalls == 0,
+          "failed enforcement readback cannot become ownership");
+    return 0;
+}
+
 typedef struct TEST_CASE {
     const char *Name;
     TEST_CASE_FN Function;
@@ -837,6 +925,7 @@ int HvGpuHalRunModelTests(void)
 {
     static const TEST_CASE cases[] = {
         { "PCI discovery", TestPciDiscovery },
+        { "boot exclusion admission", TestExclusionAdmission },
         { "extent bounds", TestExtentBounds },
         { "GGTT PTE parsing", TestGgttPteParsing },
         { "plane register parsing", TestPlaneRegisterParsing },

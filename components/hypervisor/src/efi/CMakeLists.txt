@@ -1,5 +1,8 @@
 # Freestanding EFI payloads and portable preflight contracts.
 
+option(HYPERSINV_GPU_VM_SELFTEST
+    "Run synthetic GPU HAL checks before VMX in a disposable VMware VM only" OFF)
+
 set(HYPERSINV_EFI_CRT "${HYPERSINV_UEFI_SUPPORT_DIR}/efi_crt.c")
 set(HYPERSINV_EFI_HEADER "${HYPERSINV_UEFI_SUPPORT_DIR}/Uefi.h")
 
@@ -67,6 +70,11 @@ else()
             gpu_intel.c
             efi_hypervisor.asm
             "${HYPERSINV_EFI_CRT}")
+        if(HYPERSINV_GPU_VM_SELFTEST)
+            target_sources(uefi_hypervisor PRIVATE gpu_vm_selftest.c)
+            target_compile_definitions(uefi_hypervisor PRIVATE
+                HYPERSINV_GPU_VM_SELFTEST=1)
+        endif()
         if(HYPERSINV_KERNEL_PROFILE_AVAILABLE)
             target_sources(uefi_hypervisor PRIVATE
                 "${HYPERSINV_KERNEL_PROFILE_HEADER}")
@@ -209,6 +217,7 @@ add_executable(uefi_hypervisor_static_contracts
     tests/gpu_hal_test.c
     gpu_hal.c
     gpu_intel.c
+    gpu_vm_selftest.c
     overlay_render.c)
 target_include_directories(uefi_hypervisor_static_contracts PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -224,6 +233,8 @@ add_test(NAME uefi_hypervisor_static_contracts
 # Reuse the existing host executable; no new CMake targets or EFI images.
 add_test(NAME uefi_hypervisor_gpu_hal_tests
     COMMAND uefi_hypervisor_static_contracts --gpu-hal)
+add_test(NAME uefi_hypervisor_gpu_vm_model_tests
+    COMMAND uefi_hypervisor_static_contracts --gpu-vm-model)
 
 add_executable(uefi_hypervisor_scanner_tests
     tests/test_scanner.cpp
@@ -489,6 +500,10 @@ add_test(NAME uefi_hypervisor_runtime_transport_tests
     COMMAND uefi_hypervisor_runtime_transport_tests)
 
 if(WIN32)
+    add_test(NAME uefi_hypervisor_gpu_preflight_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/Test-GpuDiagnosticPreflight.ps1"
+            -ToolPath "${CMAKE_CURRENT_SOURCE_DIR}/../../setup/Get-GpuDiagnosticPreflight.ps1")
     add_test(NAME uefi_hypervisor_vmexit_asm_contracts
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
             -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/Test-EfiVmExitContracts.ps1"

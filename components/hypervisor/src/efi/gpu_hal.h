@@ -107,10 +107,47 @@ typedef struct HV_GPU_EXTENT {
     uint32_t PageCount;
 } HV_GPU_EXTENT;
 
+#define HV_GPU_EXCLUSION_VERSION UINT32_C(1)
+#define HV_GPU_EXCLUSION_BOOT_VPCI_EPT_VTD UINT32_C(1)
+#define HV_GPU_EXCLUDE_PCI_ENUMERATION UINT32_C(0x001)
+#define HV_GPU_EXCLUDE_CONFIG_ACCESS UINT32_C(0x002)
+#define HV_GPU_EXCLUDE_MMIO_APERTURES UINT32_C(0x004)
+#define HV_GPU_EXCLUDE_GGTT_COMMANDS UINT32_C(0x008)
+#define HV_GPU_EXCLUDE_DMA_DOMAIN UINT32_C(0x010)
+#define HV_GPU_EXCLUDE_RESET_POWER UINT32_C(0x020)
+#define HV_GPU_EXCLUDE_PRIVATE_STATE UINT32_C(0x040)
+#define HV_GPU_EXCLUDE_FRAMEBUFFER UINT32_C(0x080)
+#define HV_GPU_EXCLUDE_ALL_CPUS UINT32_C(0x100)
+#define HV_GPU_EXCLUDE_FIRMWARE_WRITERS UINT32_C(0x200)
+#define HV_GPU_EXCLUSION_REQUIRED UINT32_C(0x3ff)
+
+/* Readback of an already-installed boot exclusion policy. This is NOT an
+ * activation request, credential, JSON configuration, or substitute for the
+ * enforcement provider. Only trusted resident platform code can supply it,
+ * after querying installed PCI filters, EPT and VT-d protection on every CPU.
+ * SessionId is generated once before guest launch and cannot change while
+ * scanout remains active. Adapter/allocation binding prevents reuse of an
+ * unrelated reservation. Tests explicitly simulate this readback in RAM.
+ */
+typedef struct HV_GPU_EXCLUSION_PROOF {
+    uint32_t Size;
+    uint32_t Version;
+    uint32_t Method;
+    uint32_t EnforcementMask;
+    uint32_t GuestAccessMask;
+    uint32_t LockedUntilReboot;
+    uint32_t PhysicalOutputVerified;
+    uint32_t Reserved;
+    uint64_t SessionId;
+    HV_GPU_ADAPTER Adapter;
+    HV_GPU_ALLOCATION Allocation;
+} HV_GPU_EXCLUSION_PROOF;
+
 typedef struct HV_GPU_BACKEND {
     /* Trusted callbacks are bound to the supplied adapter. All uint32_t
      * callbacks return exactly 1 for success/true; all other values fail. */
     void *Context;
+    uint32_t (*ReadExclusion)(void *context, HV_GPU_EXCLUSION_PROOF *proof);
     /* Must attest ENFORCED full-adapter exclusion described above, on every
      * call. Never infer ownership from the values of display registers. */
     uint32_t (*OwnershipHeld)(void *context);
@@ -141,6 +178,7 @@ typedef struct HV_GPU_BACKEND {
 typedef struct HV_GPU_STATE {
     uint32_t Phase;
     uint32_t CpuMappingActive;
+    uint64_t SessionId;
     HV_GPU_ADAPTER Adapter;
     HV_GPU_ALLOCATION Allocation;
     HV_GPU_EXTENT Extent;
@@ -156,6 +194,10 @@ HV_GPU_STATUS HvGpuIntelValidatePlane(const HV_GPU_PLANE *plane,
 HV_GPU_STATUS HvGpuIntelGgttPhysical(uint64_t pte, uint64_t *physical);
 HV_GPU_STATUS HvGpuValidateExtent(const HV_GPU_ALLOCATION *allocation,
                                   HV_GPU_EXTENT *extent);
+HV_GPU_STATUS HvGpuValidateExclusion(const HV_GPU_EXCLUSION_PROOF *proof,
+                                     const HV_GPU_ADAPTER *adapter,
+                                     const HV_GPU_ALLOCATION *allocation,
+                                     uint64_t expectedSessionId);
 
 HV_GPU_STATUS HvGpuInitialize(HV_GPU_STATE *state,
                               const HV_GPU_ADAPTER *adapter,

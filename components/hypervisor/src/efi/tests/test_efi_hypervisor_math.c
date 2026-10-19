@@ -5,6 +5,7 @@
 #include "efi_hypervisor.h"
 #include "efi_hypervisor_math.h"
 #include "scanner.h"
+#include "gpu_vm_selftest.h"
 
 static int expect(int condition, const char *message)
 {
@@ -30,6 +31,11 @@ static uint64_t eptMemoryMapStorage[
 
 int HvGpuHalRunModelTests(void);
 
+static void gpu_model_emit(const char *message)
+{
+    puts(message);
+}
+
 int main(int argc, char **argv)
 {
     uint32_t adjusted = 0;
@@ -51,6 +57,9 @@ int main(int argc, char **argv)
 
     if (argc == 2 && strcmp(argv[1], "--gpu-hal") == 0) {
         return HvGpuHalRunModelTests();
+    }
+    if (argc == 2 && strcmp(argv[1], "--gpu-vm-model") == 0) {
+        return HvGpuVmSelfTest(gpu_model_emit) == 1 ? 0 : 1;
     }
     if (argc != 1) return 1;
 
