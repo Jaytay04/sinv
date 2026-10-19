@@ -35,6 +35,29 @@ static void TestZero(void *buffer, size_t size)
     }
 }
 
+static int TestDomainIdCapability(void)
+{
+    TEST_ASSERT(HvEfiIommuDomainIdSupported(UINT64_C(0), 15) != 0,
+                "ND=0 supports its highest nonzero domain ID");
+    TEST_ASSERT(HvEfiIommuDomainIdSupported(UINT64_C(0), 16) == 0,
+                "ND=0 rejects the first out-of-range domain ID");
+    TEST_ASSERT(HvEfiIommuDomainIdSupported(UINT64_C(2), 255) != 0,
+                "ND=2 supports IDs below its 256-domain count");
+    TEST_ASSERT(HvEfiIommuDomainIdSupported(UINT64_C(2), 256) == 0,
+                "ND=2 rejects an ID equal to its 256-domain count");
+    TEST_ASSERT(HvEfiIommuDomainIdSupported(UINT64_C(6), 65535) != 0,
+                "ND=6 supports the highest 16-bit domain ID");
+    TEST_ASSERT(HvEfiIommuDomainIdSupported(UINT64_C(6), 65536) == 0,
+                "ND=6 rejects IDs beyond the 16-bit domain field");
+    TEST_ASSERT(HvEfiIommuDomainIdSupported(UINT64_C(7), 1) == 0,
+                "reserved ND=7 is unsupported");
+    TEST_ASSERT(HvEfiIommuDomainIdSupported(UINT64_C(6), 0) == 0,
+                "domain ID zero is reserved");
+    TEST_ASSERT(HvEfiIommuDomainIdSupported(UINT64_C(6), UINT32_MAX) == 0,
+                "domain IDs wider than the context field are rejected");
+    return 0;
+}
+
 static void Write16(uint8_t *bytes, uint16_t value)
 {
     bytes[0] = (uint8_t)value;
@@ -592,6 +615,8 @@ typedef struct TEST_PAGE_WALK_MEMORY {
 
 static uint64_t gTestEptStorage[515 * 512];
 static uint64_t gTestVtdStorage[772 * 512];
+static uint64_t gTestRootDeviceStorage[
+    HV_EFI_IOMMU_ROOT_DEVICE_TABLE_MAX_PAGES * 512];
 
 static uint32_t TestReadPhysical64(
     void *context, uint64_t physicalAddress, uint64_t *value)
@@ -800,7 +825,7 @@ static int TestLegacyIdentityDomain(void)
                     HV_EFI_IOMMU_RUNTIME_OK &&
                 result.RootTablePhysical == storagePhysical &&
                 result.SecondLevelRootPhysical ==
-                    storagePhysical + UINT64_C(257) * UINT64_C(4096) &&
+                    storagePhysical + UINT64_C(258) * UINT64_C(4096) &&
                 result.PagesUsed == 772 && result.SplitPageCount == 1 &&
                 result.LargePageCount == 1 && result.DomainId == 7,
                 "legacy VT-d domain uses identity leaves with bounded splits");
@@ -812,7 +837,9 @@ static int TestLegacyIdentityDomain(void)
     TEST_ASSERT((gTestVtdStorage[0] & 1) != 0 &&
                 (contexts[0] & 1) != 0 &&
                 (contexts[1] & UINT64_C(0xffff00)) == UINT64_C(0x700) &&
-                (pml4[0] & 3) == 3 && (pdpt[0] & 3) == 3 &&
+                pml4[0] == 0 &&
+                pdpt[0] == (storagePhysical + UINT64_C(259) *
+                    UINT64_C(4096) | UINT64_C(3)) &&
                 (pd[0] & (UINT64_C(1) << 7)) == 0 &&
                 (pd[1] & (UINT64_C(1) << 7)) != 0 &&
                 pt[0] == UINT64_C(3) && pt[1] == 0 &&
@@ -830,6 +857,169 @@ static int TestLegacyIdentityDomain(void)
                     &mapped, 1, &denied, 1, 7, &result) ==
                     HV_EFI_IOMMU_RUNTIME_RANGE_OVERLAP,
                 "RMRR overlap with hypervisor-private memory fails closed");
+    return 0;
+}
+
+static int TestRootDeviceDomain(void)
+{
+    HV_EFI_IOMMU_PROTECTED_RANGE mapped;
+    HV_EFI_IOMMU_PROTECTED_RANGE denied[2];
+    HV_EFI_IOMMU_LEGACY_TABLE_RESULT legacyResult;
+    HV_EFI_IOMMU_ROOT_DEVICE_PLAN rootPlan;
+    HV_EFI_IOMMU_ROOT_DEVICE_TABLE_RESULT rootResult;
+    const uint64_t legacyStoragePhysical = UINT64_C(0x1000000);
+    const uint64_t rootStoragePhysical = UINT64_C(0x2000000);
+    uint64_t *contexts;
+    uint64_t *rootPd;
+    uint64_t *rootPt;
+    uint64_t saved;
+    mapped.PhysicalBase = 0;
+    mapped.Size = UINT64_C(0x400000);
+    mapped.Kind = HV_EFI_IOMMU_MAPPING_RAM;
+    mapped.Reserved = 0;
+    denied[0].PhysicalBase = UINT64_C(0x1000);
+    denied[0].Size = UINT64_C(0x1000);
+    denied[0].Kind = HV_EFI_IOMMU_PROTECTED_PRIVATE;
+    denied[0].Reserved = 0;
+    denied[1].PhysicalBase = UINT64_C(0x3000);
+    denied[1].Size = UINT64_C(0x1000);
+    denied[1].Kind = HV_EFI_IOMMU_PROTECTED_PRIVATE;
+    denied[1].Reserved = 0;
+    TestZero(&rootPlan, sizeof(rootPlan));
+    rootPlan.DeviceIndex = 1;
+    rootPlan.Segment = 0;
+    rootPlan.Bus = 0;
+    rootPlan.Device = 2;
+    rootPlan.Function = 0;
+    rootPlan.RemappingUnitIndex = 0;
+    rootPlan.LegacyDomainId = 7;
+    rootPlan.DomainId = 8;
+    rootPlan.MappingCount = 2;
+    rootPlan.FramebufferBytes = UINT64_C(0x1000);
+    rootPlan.TranslationBytes = UINT64_C(0x1000);
+    rootPlan.MappedBytes = UINT64_C(0x2000);
+    rootPlan.Mappings[0].PhysicalBase = UINT64_C(0x1000);
+    rootPlan.Mappings[0].Size = UINT64_C(0x1000);
+    rootPlan.Mappings[0].Kind =
+        HV_EFI_IOMMU_ROOT_DEVICE_RANGE_FRAMEBUFFER;
+    rootPlan.Mappings[0].Access =
+        HV_EFI_IOMMU_ROOT_DEVICE_ACCESS_READ;
+    rootPlan.Mappings[1].PhysicalBase = UINT64_C(0x3000);
+    rootPlan.Mappings[1].Size = UINT64_C(0x1000);
+    rootPlan.Mappings[1].Kind =
+        HV_EFI_IOMMU_ROOT_DEVICE_RANGE_TRANSLATION;
+    rootPlan.Mappings[1].Access =
+        HV_EFI_IOMMU_ROOT_DEVICE_ACCESS_READ;
+    TEST_ASSERT(HvEfiIommuBuildLegacyIdentityDomain(
+                    gTestVtdStorage, 772, legacyStoragePhysical,
+                    &mapped, 1, denied, 2, 7, &legacyResult) ==
+                    HV_EFI_IOMMU_RUNTIME_OK,
+                "legacy root/context tables build with both GPU ranges denied");
+    TestZero(gTestRootDeviceStorage, sizeof(gTestRootDeviceStorage));
+    TEST_ASSERT(HvEfiIommuBuildRootDeviceDomain(
+                    gTestVtdStorage, 772, legacyStoragePhysical,
+                    &legacyResult, gTestRootDeviceStorage,
+                    HV_EFI_IOMMU_ROOT_DEVICE_TABLE_MAX_PAGES,
+                    rootStoragePhysical, &rootPlan, &rootResult) ==
+                    HV_EFI_IOMMU_RUNTIME_OK &&
+                rootResult.RootPhysical == rootStoragePhysical &&
+                rootResult.PagesUsed == 3 &&
+                rootResult.MappedPageCount == 2 &&
+                rootResult.DomainId == 8 &&
+                HvEfiIommuAuditRootDeviceDomain(
+                    gTestVtdStorage, 772, legacyStoragePhysical,
+                    &legacyResult, gTestRootDeviceStorage,
+                    HV_EFI_IOMMU_ROOT_DEVICE_TABLE_MAX_PAGES,
+                    rootStoragePhysical, &rootPlan, &rootResult) ==
+                    HV_EFI_IOMMU_RUNTIME_OK,
+                "dedicated GPU context points at a separately audited 4-KiB domain");
+    contexts = gTestVtdStorage + 512;
+    TEST_ASSERT(contexts[(2 * 8) * 2] ==
+                    (rootStoragePhysical | UINT64_C(1)) &&
+                contexts[(2 * 8) * 2 + 1] == UINT64_C(0x801) &&
+                contexts[(3 * 8 + 1) * 2] ==
+                    (legacyResult.SecondLevelRootPhysical | UINT64_C(1)) &&
+                contexts[(3 * 8 + 1) * 2 + 1] == UINT64_C(0x701),
+                "only the exact BDF context changes domain and second-level root");
+    rootPd = gTestRootDeviceStorage + 512;
+    rootPt = gTestRootDeviceStorage + 2 * 512;
+    TEST_ASSERT(gTestRootDeviceStorage[0] ==
+                    (rootStoragePhysical + UINT64_C(0x1000) | UINT64_C(3)) &&
+                rootPd[0] ==
+                    (rootStoragePhysical + UINT64_C(0x2000) | UINT64_C(3)) &&
+                rootPt[1] == UINT64_C(0x1001) &&
+                rootPt[3] == UINT64_C(0x3001) &&
+                (rootPt[1] & UINT64_C(2)) == 0 &&
+                (rootPt[3] & UINT64_C(2)) == 0,
+                "GPU domain maps only the two requested pages as read-only");
+
+    gTestVtdStorage[257 * 512 + 1] = UINT64_C(3);
+    TEST_ASSERT(HvEfiIommuAuditRootDeviceDomain(
+                    gTestVtdStorage, 772, legacyStoragePhysical,
+                    &legacyResult, gTestRootDeviceStorage,
+                    HV_EFI_IOMMU_ROOT_DEVICE_TABLE_MAX_PAGES,
+                    rootStoragePhysical, &rootPlan, &rootResult) ==
+                    HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED,
+                "39-bit legacy walk keeps its reserved PML4 page unused");
+    gTestVtdStorage[257 * 512 + 1] = 0;
+
+    rootPt[5] = UINT64_C(0x5001);
+    TEST_ASSERT(HvEfiIommuAuditRootDeviceDomain(
+                    gTestVtdStorage, 772, legacyStoragePhysical,
+                    &legacyResult, gTestRootDeviceStorage,
+                    HV_EFI_IOMMU_ROOT_DEVICE_TABLE_MAX_PAGES,
+                    rootStoragePhysical, &rootPlan, &rootResult) ==
+                    HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED,
+                "audit rejects an unplanned GPU DMA page");
+    rootPt[5] = 0;
+    saved = contexts[(3 * 8 + 1) * 2];
+    contexts[(3 * 8 + 1) * 2] = 0;
+    TEST_ASSERT(HvEfiIommuAuditRootDeviceDomain(
+                    gTestVtdStorage, 772, legacyStoragePhysical,
+                    &legacyResult, gTestRootDeviceStorage,
+                    HV_EFI_IOMMU_ROOT_DEVICE_TABLE_MAX_PAGES,
+                    rootStoragePhysical, &rootPlan, &rootResult) ==
+                    HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED,
+                "audit detects a modified non-target requester context");
+    contexts[(3 * 8 + 1) * 2] = saved;
+    {
+        uint64_t *legacyPt = gTestVtdStorage + 771 * 512;
+        legacyPt[1] = UINT64_C(0x1003);
+        TEST_ASSERT(HvEfiIommuAuditRootDeviceDomain(
+                        gTestVtdStorage, 772, legacyStoragePhysical,
+                        &legacyResult, gTestRootDeviceStorage,
+                        HV_EFI_IOMMU_ROOT_DEVICE_TABLE_MAX_PAGES,
+                        rootStoragePhysical, &rootPlan, &rootResult) ==
+                        HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED,
+                    "audit rejects GPU resources leaked into the legacy requester domain");
+        legacyPt[1] = 0;
+        legacyPt[1] = UINT64_C(0x1001);
+        TEST_ASSERT(HvEfiIommuAuditRootDeviceDomain(
+                        gTestVtdStorage, 772, legacyStoragePhysical,
+                        &legacyResult, gTestRootDeviceStorage,
+                        HV_EFI_IOMMU_ROOT_DEVICE_TABLE_MAX_PAGES,
+                        rootStoragePhysical, &rootPlan, &rootResult) ==
+                        HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED,
+                    "audit rejects even a read-only legacy alias of GPU pages");
+        legacyPt[1] = 0;
+    }
+
+    TEST_ASSERT(HvEfiIommuBuildLegacyIdentityDomain(
+                    gTestVtdStorage, 772, legacyStoragePhysical,
+                    &mapped, 1, denied, 2, 7, &legacyResult) ==
+                    HV_EFI_IOMMU_RUNTIME_OK,
+                "rebuilds ordinary contexts before capacity failure case");
+    TestZero(gTestRootDeviceStorage, sizeof(gTestRootDeviceStorage));
+    TEST_ASSERT(HvEfiIommuBuildRootDeviceDomain(
+                    gTestVtdStorage, 772, legacyStoragePhysical,
+                    &legacyResult, gTestRootDeviceStorage, 2,
+                    rootStoragePhysical, &rootPlan, &rootResult) ==
+                    HV_EFI_IOMMU_RUNTIME_CAPACITY &&
+                rootResult.PagesUsed == 0 &&
+                gTestRootDeviceStorage[0] == 0 &&
+                contexts[(2 * 8) * 2] ==
+                    (legacyResult.SecondLevelRootPhysical | UINT64_C(1)),
+                "insufficient GPU table capacity leaves no patched context or partial mapping");
     return 0;
 }
 
@@ -1040,13 +1230,15 @@ static int TestInjectedIsolationOrchestration(void)
 
 int main(void)
 {
-    if (TestDmarParsing() != 0 || TestProgrammingAndRuntime() != 0 ||
+    if (TestDomainIdCapability() != 0 || TestDmarParsing() != 0 ||
+        TestProgrammingAndRuntime() != 0 ||
         TestOwnershipAndTransactionalFailure() != 0 ||
         TestPhysicalAdmissionAndMediation() != 0 ||
         TestProtectedInventoryAndMmioPolicy() != 0 ||
         TestDecoderPageWalkAndShadow() != 0 ||
         TestAcpiShadowAndEptRemap() != 0 ||
         TestLegacyIdentityDomain() != 0 ||
+        TestRootDeviceDomain() != 0 ||
         TestMcfgPciQuiesce() != 0 ||
         TestInjectedIsolationOrchestration() != 0) {
         return 1;

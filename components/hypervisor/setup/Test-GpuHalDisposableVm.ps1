@@ -118,14 +118,20 @@ function Write-Result {
     if ($null -eq $script:RunRoot -or -not (Test-Path -LiteralPath $script:RunRoot)) { return }
     $modelPassed = $script:SerialText.Contains('GPU_HAL_MODEL:ALL_PASS')
     $vmxPassed = $script:SerialText.Contains('GPU_HAL_VM:VMX_FIRMWARE_RETURN PASS')
-    $badModel = $script:SerialText.Contains('GPU_HAL_MODEL:FAIL')
-    $badHypervisor = $script:SerialText -match '(?i)uefi hypervisor: .*FAIL|BSP virtualization failure:'
-    $passed = -not $script:Failure -and $modelPassed -and $vmxPassed -and -not $badModel -and -not $badHypervisor -and
+    $enforcementPassed = $script:SerialText.Contains('GPU_ENFORCEMENT_MODEL:ALL_PASS SYNTHETIC_ONLY')
+    $wcPassed = $script:SerialText.Contains('GPU_HAL_VM:ROOT_WC_RENDER PASS') -and
+        $script:SerialText.Contains('GPU_HAL_VM:ROOT_WC_UNMAPPED PASS') -and
+        $script:SerialText.Contains('GPU_HAL_VM:ROOT_WC_BOUNDS PASS') -and
+        $script:SerialText.Contains('GPU_HAL_VM:ROOT_WC_NO_BACKEND PASS')
+    $badModel = $script:SerialText -match 'GPU_HAL_MODEL:FAIL|GPU_ENFORCEMENT_MODEL:FAIL'
+    $badHypervisor = $script:SerialText -match '(?i)uefi hypervisor: .*(FAIL|FATAL)|BSP virtualization failure:|GPU_HAL_VM:.* FAIL'
+    $passed = -not $script:Failure -and $modelPassed -and $enforcementPassed -and $wcPassed -and $vmxPassed -and -not $badModel -and -not $badHypervisor -and
         $script:ConfigValidated -and $script:NetworkOffline -and $script:NoIntelDevice -and
         $script:SnapshotBefore -eq 'passed' -and $script:SnapshotAfter -eq 'passed' -and
         $script:StopStatus -in @('not_required', 'not_running', 'passed')
     $result = [ordered]@{
         Passed = [bool]$passed; SeparateEfiModel = [bool]$modelPassed; VMX = [bool]$vmxPassed
+        SyntheticEnforcementModel = [bool]$enforcementPassed; ActualRootWcRenderAndUnmap = [bool]$wcPassed
         ModelFailureMarker = [bool]$badModel; HypervisorFailureMarker = [bool]$badHypervisor
         VmxConfiguration = [ordered]@{ Path = $script:Vmx; Validated = [bool]$script:ConfigValidated }
         SnapshotBefore = $script:SnapshotBefore; SnapshotAfter = $script:SnapshotAfter
@@ -134,7 +140,8 @@ function Write-Result {
         RunDirectory = $script:RunRoot
         SerialLog = if ($script:RunRoot) { Join-Path $script:RunRoot 'serial.log' } else { $null }
         Failure = $script:Failure; ScopeLimitations = @(
-            'The EFI model self-test uses synthetic PCI, plane, exclusion, and GGTT data; it does not prove host ownership or real WC mappings.'
+            'PCI/EPT/VT-d admission and Intel plane/GGTT evidence in the EFI integration model are synthetic; they do not attest physical device exclusion.'
+            'ROOT_WC markers separately check a real VMX-root WC CPU mapping, renderer pixels and unmap in VM RAM; no Intel device or DMA engine is involved.'
             'VMware SVGA does not prove Intel UHD 770/Alder Lake PCH physical plane programming or scanout.'
             'This VM does not prove the host dual-GPU topology or that Windows excludes Intel while NVIDIA drives the desktop.'
             'A VMX firmware-return marker proves the EFI payload returned through its VMX path in this disposable VM only.'
@@ -241,16 +248,23 @@ try {
     $deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     do {
         $script:SerialText = Read-SerialLog $serial
-        if ($script:SerialText -match 'GPU_HAL_MODEL:FAIL|(?i)uefi hypervisor: .*FAIL|BSP virtualization failure:') { break }
+        if ($script:SerialText -match 'GPU_HAL_MODEL:FAIL|GPU_ENFORCEMENT_MODEL:FAIL|(?i)uefi hypervisor: .*(FAIL|FATAL)|BSP virtualization failure:|GPU_HAL_VM:.* FAIL') { break }
         if ($script:SerialText.Contains('GPU_HAL_MODEL:ALL_PASS') -and $script:SerialText.Contains('GPU_HAL_VM:VMX_FIRMWARE_RETURN PASS')) { break }
         Start-Sleep -Milliseconds 500
     } while ([DateTime]::UtcNow -lt $deadline)
     $script:SerialText = Read-SerialLog $serial
-    if ($script:SerialText -match 'GPU_HAL_MODEL:FAIL|(?i)uefi hypervisor: .*FAIL|BSP virtualization failure:') {
+    if ($script:SerialText -match 'GPU_HAL_MODEL:FAIL|GPU_ENFORCEMENT_MODEL:FAIL|(?i)uefi hypervisor: .*(FAIL|FATAL)|BSP virtualization failure:|GPU_HAL_VM:.* FAIL') {
         throw 'EFI serial log contains a model or hypervisor failure marker.'
     }
     if (-not $script:SerialText.Contains('GPU_HAL_MODEL:ALL_PASS')) { throw "Timed out waiting for GPU_HAL_MODEL:ALL_PASS; see $serial." }
     if (-not $script:SerialText.Contains('GPU_HAL_VM:VMX_FIRMWARE_RETURN PASS')) { throw "Timed out waiting for GPU_HAL_VM:VMX_FIRMWARE_RETURN PASS; see $serial." }
+    if (-not $script:SerialText.Contains('GPU_ENFORCEMENT_MODEL:ALL_PASS SYNTHETIC_ONLY') -or
+        -not $script:SerialText.Contains('GPU_HAL_VM:ROOT_WC_RENDER PASS') -or
+        -not $script:SerialText.Contains('GPU_HAL_VM:ROOT_WC_UNMAPPED PASS') -or
+        -not $script:SerialText.Contains('GPU_HAL_VM:ROOT_WC_BOUNDS PASS') -or
+        -not $script:SerialText.Contains('GPU_HAL_VM:ROOT_WC_NO_BACKEND PASS')) {
+        throw "Required enforcement-model or actual root WC markers are missing; see $serial."
+    }
 } catch {
     $script:Failure = $_.Exception.Message
 } finally {

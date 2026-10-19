@@ -39,7 +39,30 @@ extern "C" {
 #define HV_EFI_IOMMU_ASSIGNMENT_INTERRUPT_REMAP UINT32_C(0x00000008)
 
 #define HV_EFI_IOMMU_MAPPING_GUEST_RAM UINT32_C(0x00000001)
-#define HV_EFI_IOMMU_MAPPING_RMRR UINT32_C(0x00000002)
+#define HV_EFI_IOMMU_PLAN_MAPPING_RMRR UINT32_C(0x00000002)
+/* Historical planner alias. The runtime range-kind enum has a different
+ * historical value; combined-header callers use the explicit PLAN name. */
+#if !defined(HYPERSINV_EFI_IOMMU_RUNTIME_H)
+#define HV_EFI_IOMMU_MAPPING_RMRR HV_EFI_IOMMU_PLAN_MAPPING_RMRR
+#endif
+
+/*
+ * Separate root-owned DMA plan for the diagnostic display adapter.  These
+ * pages are intentionally absent from every ordinary per-device identity
+ * domain and are mapped read-only in the dedicated root domain.
+ */
+#define HV_EFI_IOMMU_ROOT_DEVICE_MAX_RANGES UINT32_C(4)
+#define HV_EFI_IOMMU_ROOT_DEVICE_MAX_FRAMEBUFFER_BYTES \
+    (UINT64_C(8) * 1024 * 1024)
+#define HV_EFI_IOMMU_ROOT_DEVICE_MAX_TRANSLATION_BYTES \
+    (UINT64_C(8) * 1024 * 1024)
+#define HV_EFI_IOMMU_ROOT_DEVICE_MAX_MAPPED_BYTES \
+    (HV_EFI_IOMMU_ROOT_DEVICE_MAX_FRAMEBUFFER_BYTES + \
+     HV_EFI_IOMMU_ROOT_DEVICE_MAX_TRANSLATION_BYTES)
+#define HV_EFI_IOMMU_ROOT_DEVICE_ACCESS_READ UINT32_C(0x00000001)
+#define HV_EFI_IOMMU_ROOT_DEVICE_ACCESS_WRITE UINT32_C(0x00000002)
+#define HV_EFI_IOMMU_ROOT_DEVICE_RANGE_FRAMEBUFFER UINT32_C(1)
+#define HV_EFI_IOMMU_ROOT_DEVICE_RANGE_TRANSLATION UINT32_C(2)
 
 typedef enum HV_EFI_IOMMU_STATUS {
     HV_EFI_IOMMU_OK = 0,
@@ -182,6 +205,32 @@ typedef struct HV_EFI_IOMMU_MAPPING_RESULT {
     uint32_t Reserved;
 } HV_EFI_IOMMU_MAPPING_RESULT;
 
+typedef struct HV_EFI_IOMMU_ROOT_DEVICE_RANGE {
+    uint64_t PhysicalBase;
+    uint64_t Size;
+    uint32_t Kind;
+    uint32_t Access;
+} HV_EFI_IOMMU_ROOT_DEVICE_RANGE;
+
+/* Fixed-size, boot-time plan: no allocation or external pointers required. */
+typedef struct HV_EFI_IOMMU_ROOT_DEVICE_PLAN {
+    uint32_t DeviceIndex;
+    uint32_t Segment;
+    uint32_t Bus;
+    uint32_t Device;
+    uint32_t Function;
+    uint32_t RemappingUnitIndex;
+    uint32_t LegacyDomainId;
+    uint32_t DomainId;
+    uint32_t MappingCount;
+    uint32_t Reserved;
+    uint64_t FramebufferBytes;
+    uint64_t TranslationBytes;
+    uint64_t MappedBytes;
+    HV_EFI_IOMMU_ROOT_DEVICE_RANGE
+        Mappings[HV_EFI_IOMMU_ROOT_DEVICE_MAX_RANGES];
+} HV_EFI_IOMMU_ROOT_DEVICE_PLAN;
+
 HV_EFI_IOMMU_STATUS HvEfiIommuBuildIdentityPlan(
     const HV_EFI_IOMMU_TOPOLOGY *topology,
     const HV_EFI_IOMMU_PLAN_STORAGE *storage,
@@ -198,6 +247,27 @@ HV_EFI_IOMMU_STATUS HvEfiIommuPlanMappingAt(
     uint32_t deviceIndex,
     uint64_t physicalAddress,
     HV_EFI_IOMMU_MAPPING_RESULT *result);
+
+/*
+ * Builds a separate read-only root-device plan from an already validated
+ * ordinary identity plan. legacyDomainId is the DID used by the existing
+ * shared legacy context table, which may differ from this device's planner
+ * assignment. domainId must be distinct from every ordinary assignment and
+ * the shared legacy DID. Every root range must be covered by the ordinary
+ * plan's hypervisor-deny inventory, so no legacy requester can access it.
+ */
+HV_EFI_IOMMU_STATUS HvEfiIommuBuildRootDevicePlan(
+    const HV_EFI_IOMMU_PLAN *identityPlan,
+    uint32_t deviceIndex,
+    uint32_t legacyDomainId,
+    uint32_t domainId,
+    const HV_EFI_IOMMU_ROOT_DEVICE_RANGE *ranges,
+    uint32_t rangeCount,
+    HV_EFI_IOMMU_ROOT_DEVICE_PLAN *rootPlan);
+
+HV_EFI_IOMMU_STATUS HvEfiIommuValidateRootDevicePlan(
+    const HV_EFI_IOMMU_PLAN *identityPlan,
+    const HV_EFI_IOMMU_ROOT_DEVICE_PLAN *rootPlan);
 
 #ifdef __cplusplus
 }

@@ -6,6 +6,7 @@
 #include "efi_hypervisor_math.h"
 #include "scanner.h"
 #include "gpu_vm_selftest.h"
+#include "gpu_enforcement_model.h"
 
 static int expect(int condition, const char *message)
 {
@@ -30,6 +31,8 @@ static uint64_t eptMemoryMapStorage[
         sizeof(uint64_t)];
 
 int HvGpuHalRunModelTests(void);
+int HvGpuGuestFilterRunTests(void);
+int HvEfiGpuWcRunTests(void);
 
 static void gpu_model_emit(const char *message)
 {
@@ -58,6 +61,12 @@ int main(int argc, char **argv)
     if (argc == 2 && strcmp(argv[1], "--gpu-hal") == 0) {
         return HvGpuHalRunModelTests();
     }
+    if (argc == 2 && strcmp(argv[1], "--gpu-filter") == 0)
+        return HvGpuGuestFilterRunTests();
+    if (argc == 2 && strcmp(argv[1], "--gpu-wc") == 0)
+        return HvEfiGpuWcRunTests();
+    if (argc == 2 && strcmp(argv[1], "--gpu-enforcement") == 0)
+        return HvGpuEnforcementModelTest(gpu_model_emit) == 1 ? 0 : 1;
     if (argc == 2 && strcmp(argv[1], "--gpu-vm-model") == 0) {
         return HvGpuVmSelfTest(gpu_model_emit) == 1 ? 0 : 1;
     }
@@ -70,8 +79,8 @@ int main(int argc, char **argv)
                        (HV_EFI_CPUID_LEAF1_GUEST_ECX_MASK &
                        (UINT32_C(1) << 31)) != 0,
                        "guest CPUID hides VMX/SMX but preserves hypervisor identity");
-    failures += expect(HV_EFI_PAGE_TABLE_PAGES ==
-                           HV_EFI_SCANNER_REQUIRED_PAGE_TABLE_PAGES &&
+    failures += expect(HV_EFI_PAGE_TABLE_PAGES == 20 &&
+                       HV_EFI_SCANNER_REQUIRED_PAGE_TABLE_PAGES == 8 &&
                        HV_EFI_MSR_BITMAP_PAGE == 3 &&
                        HV_EFI_IO_BITMAP_A_PAGE == 4 &&
                        HV_EFI_IO_BITMAP_B_PAGE == 5 &&
@@ -93,9 +102,9 @@ int main(int argc, char **argv)
     ioBitmapA[0] = 0;
     failures += expect(
                        HV_EFI_EPT_BASE_TABLE_PAGES == UINT32_C(514) &&
-                       HV_EFI_EPT_MAX_DENY_RANGES == UINT32_C(595) &&
-                       HV_EFI_EPT_MAX_SPLIT_PAGES == UINT32_C(784) &&
-                       HV_EFI_EPT_TABLE_PAGES == UINT32_C(1298) &&
+                       HV_EFI_EPT_MAX_DENY_RANGES == UINT32_C(605) &&
+                       HV_EFI_EPT_MAX_SPLIT_PAGES == UINT32_C(800) &&
+                       HV_EFI_EPT_TABLE_PAGES == UINT32_C(1314) &&
                        HvEfiProcessorRecordPageCount(
                            HV_EFI_MAX_SUPPORTED_PROCESSORS,
                            &recordPages) != 0 &&
@@ -349,8 +358,8 @@ int main(int argc, char **argv)
     resourceRecord.HostStackPhysical = UINT64_C(0x4000);
     resourceRecord.GuestStackPhysical = UINT64_C(0x8000);
     resourceRecord.PageTablePhysical = UINT64_C(0x9000);
-    resourceRecord.DescriptorStoragePhysical = UINT64_C(0x11000);
-    resourceRecord.EptPhysical = UINT64_C(0x20000);
+    resourceRecord.DescriptorStoragePhysical = UINT64_C(0x1d000);
+    resourceRecord.EptPhysical = UINT64_C(0x30000);
     resourceRecord.ShadowEptPhysical = UINT64_C(0x600000);
     resourceRecord.ShadowEptStatePhysical = UINT64_C(0xc00000);
     failures += expect(HvEfiProcessorResourceAddressesValid(
@@ -365,7 +374,7 @@ int main(int argc, char **argv)
                            &resourceRecord) == 0,
                        "BSP resource ownership requires EPT storage");
     resourceRecord.FirmwareStatus = 0;
-    resourceRecord.EptPhysical = UINT64_C(0x20000);
+    resourceRecord.EptPhysical = UINT64_C(0x30000);
     resourceRecord.VmcsPhysical = resourceRecord.PageTablePhysical;
     failures += expect(HvEfiProcessorResourceAddressesValid(
                            &resourceRecord) == 0,
@@ -1110,7 +1119,12 @@ int main(int argc, char **argv)
                                 RuntimeAnalysisEntry) == 1144 &&
                        offsetof(HV_EFI_CONTEXT,
                                 RuntimeAnalysisStatePhysical) == 1152 &&
-                       sizeof(HV_EFI_CONTEXT) == 1176,
+                       offsetof(HV_EFI_CONTEXT, GpuStatePhysical) == 1176 &&
+                       offsetof(HV_EFI_CONTEXT, GpuResidentEntry) == 1184 &&
+                       offsetof(HV_EFI_CONTEXT, GpuHostPat) == 1192 &&
+                       offsetof(HV_EFI_CONTEXT, GpuVmWcStatePhysical) == 1200 &&
+                       offsetof(HV_EFI_CONTEXT, GpuVmWcEntry) == 1208 &&
+                       sizeof(HV_EFI_CONTEXT) == 1216,
                        "AP activation, EPT audit, and guest transition state append without ABI drift");
     failures += expect(HV_EFI_RESIDENT_CODE_PAGES == 3 &&
                        HV_EFI_GUEST_TRANSITION_CODE_PAGES == 1,

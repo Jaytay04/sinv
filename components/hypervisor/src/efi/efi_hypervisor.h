@@ -39,7 +39,7 @@ extern "C" {
 #define HV_EFI_VMCS_PAGES UINT32_C(1)
 #define HV_EFI_HOST_STACK_PAGES UINT32_C(4)
 #define HV_EFI_GUEST_STACK_PAGES UINT32_C(1)
-#define HV_EFI_PAGE_TABLE_PAGES UINT32_C(8)
+#define HV_EFI_PAGE_TABLE_PAGES UINT32_C(20)
 #define HV_EFI_MSR_BITMAP_PAGE UINT32_C(3)
 #define HV_EFI_IO_BITMAP_A_PAGE UINT32_C(4)
 #define HV_EFI_IO_BITMAP_B_PAGE UINT32_C(5)
@@ -59,17 +59,18 @@ extern "C" {
  * regions.  This is a hard capacity bound, not a claim that every launch
  * consumes every split page. */
 #define HV_EFI_EPT_SPLITS_PER_PROCESSOR UINT32_C(12)
-#define HV_EFI_EPT_GLOBAL_SPLIT_RESERVE UINT32_C(16)
+#define HV_EFI_EPT_GLOBAL_SPLIT_RESERVE UINT32_C(32)
 #define HV_EFI_EPT_MAX_SPLIT_PAGES \
     (HV_EFI_MAX_SUPPORTED_PROCESSORS * \
          HV_EFI_EPT_SPLITS_PER_PROCESSOR + \
      HV_EFI_EPT_GLOBAL_SPLIT_RESERVE)
 #define HV_EFI_EPT_TABLE_PAGES \
     (HV_EFI_EPT_BASE_TABLE_PAGES + HV_EFI_EPT_MAX_SPLIT_PAGES)
-/* Six global runtime ranges, five fixed VT-d/ACPI ranges, and up to eight
- * VT-d unit MMIO ranges, plus nine private ranges per processor. */
+/* Six global runtime ranges, five fixed VT-d/ACPI ranges, up to eight VT-d
+ * MMIO ranges, ten GPU/test reserve ranges (mutually exclusive activation),
+ * and nine private ranges per processor. */
 #define HV_EFI_EPT_MAX_DENY_RANGES \
-    (UINT32_C(19) + UINT32_C(9) * HV_EFI_MAX_SUPPORTED_PROCESSORS)
+    (UINT32_C(29) + UINT32_C(9) * HV_EFI_MAX_SUPPORTED_PROCESSORS)
 #define HV_EFI_GUEST_DESCRIPTOR_STORAGE_PAGES UINT32_C(3)
 #define HV_EFI_HOST_DESCRIPTOR_STORAGE_PAGES UINT32_C(3)
 #define HV_EFI_DESCRIPTOR_STORAGE_PAGES \
@@ -776,6 +777,11 @@ typedef struct HV_EFI_CONTEXT {
     uint32_t ReservedRuntimeAnalysis;         /* 1164 */
     /* Ring-3 user-mode VMCALL state. */
         uint32_t UserCommandState;                /* 1168 */
+    uint64_t GpuStatePhysical;                    /* 1176 */
+    uint64_t GpuResidentEntry;                    /* 1184 */
+    uint64_t GpuHostPat;                          /* 1192 */
+    uint64_t GpuVmWcStatePhysical;                /* 1200; test image only */
+    uint64_t GpuVmWcEntry;                        /* 1208; test image only */
 } HV_EFI_CONTEXT;
 
 /* Source-compatible descriptive aliases for the guest descriptor fields. */

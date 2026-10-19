@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include "gpu_hal.h"
+#include "gpu_enforcement_model.h"
 
 /* Pre-launch model code and callbacks stay in ordinary EFI .text. */
 #if defined(_MSC_VER)
@@ -360,6 +361,7 @@ uint32_t HvGpuVmSelfTest(HV_GPU_VM_SELFTEST_EMIT emit)
         emit("GPU_HAL_MODEL:FAIL ownership-loss-cleanup"); return 0;
     }
     emit("GPU_HAL_MODEL:OWNERSHIP_LATCH_CLEANUP PASS");
+    if (HvGpuEnforcementModelTest(emit) != 1) return 0;
     emit("GPU_HAL_MODEL:ALL_PASS");
     return 1;
 }

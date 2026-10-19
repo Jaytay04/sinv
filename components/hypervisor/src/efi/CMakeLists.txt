@@ -1,7 +1,15 @@
 # Freestanding EFI payloads and portable preflight contracts.
 
 option(HYPERSINV_GPU_VM_SELFTEST
-    "Run synthetic GPU HAL checks before VMX in a disposable VMware VM only" OFF)
+    "Run GPU models and a root WC check in a disposable nested VMware VM only" OFF)
+option(HYPERSINV_GPU_DIAGNOSTIC_NATIVE
+    "Reserve a dedicated Intel diagnostic adapter until reset (explicit opt-in)" OFF)
+option(HYPERSINV_GPU_DIAGNOSTIC_OUTPUT_CONFIRMED
+    "Operator has physically verified Intel connector and attached diagnostic display" OFF)
+if(HYPERSINV_GPU_VM_SELFTEST AND HYPERSINV_GPU_DIAGNOSTIC_NATIVE)
+    message(FATAL_ERROR
+        "GPU VM self-test owns the CPU WC window; disable native activation in that image")
+endif()
 
 set(HYPERSINV_EFI_CRT "${HYPERSINV_UEFI_SUPPORT_DIR}/efi_crt.c")
 set(HYPERSINV_EFI_HEADER "${HYPERSINV_UEFI_SUPPORT_DIR}/Uefi.h")
@@ -68,12 +76,25 @@ else()
             overlay_render.c
             gpu_hal.c
             gpu_intel.c
+            gpu_native.c
+            gpu_boot.c
+            gpu_guest_filter.c
+            gpu_wc.c
             efi_hypervisor.asm
             "${HYPERSINV_EFI_CRT}")
         if(HYPERSINV_GPU_VM_SELFTEST)
-            target_sources(uefi_hypervisor PRIVATE gpu_vm_selftest.c)
+            target_sources(uefi_hypervisor PRIVATE gpu_vm_selftest.c
+                gpu_enforcement_model.c gpu_vm_wc.c)
             target_compile_definitions(uefi_hypervisor PRIVATE
                 HYPERSINV_GPU_VM_SELFTEST=1)
+        endif()
+        if(HYPERSINV_GPU_DIAGNOSTIC_NATIVE)
+            target_compile_definitions(uefi_hypervisor PRIVATE
+                HYPERSINV_GPU_DIAGNOSTIC_NATIVE=1)
+        endif()
+        if(HYPERSINV_GPU_DIAGNOSTIC_OUTPUT_CONFIRMED)
+            target_compile_definitions(uefi_hypervisor PRIVATE
+                HYPERSINV_GPU_DIAGNOSTIC_OUTPUT_CONFIRMED=1)
         endif()
         if(HYPERSINV_KERNEL_PROFILE_AVAILABLE)
             target_sources(uefi_hypervisor PRIVATE
@@ -115,12 +136,13 @@ else()
         # Retain the diagnostic entry point so the existing resident-image
         # audit covers its code and ROM even before a caller is integrated.
         target_link_options(uefi_hypervisor PRIVATE /INCLUDE:HvOverlayRender)
-        # Keep the gated HAL and every cleanup entry in the resident-image
-        # audit even though no hardware exclusion backend is installed yet.
+        # Keep the HAL and cleanup entries in the resident-image audit even
+        # when native activation is disabled in the default build.
         target_link_options(uefi_hypervisor PRIVATE
             /INCLUDE:HvGpuInitialize /INCLUDE:HvGpuRender
             /INCLUDE:HvGpuBeforeGuestResume /INCLUDE:HvGpuShutdown
             /INCLUDE:HvGpuIntelParsePci)
+        target_link_options(uefi_hypervisor PRIVATE /INCLUDE:HvGpuNativeResident)
         find_program(HYPERSINV_DUMPBIN_EXECUTABLE NAMES dumpbin.exe)
         find_program(HYPERSINV_POWERSHELL_EXECUTABLE
             NAMES powershell.exe pwsh.exe)
@@ -218,10 +240,17 @@ add_executable(uefi_hypervisor_static_contracts
     gpu_hal.c
     gpu_intel.c
     gpu_vm_selftest.c
+    gpu_enforcement_model.c
+    iommu_isolation.cpp
+    iommu_runtime.c
+    gpu_guest_filter.c
+    gpu_wc.c
+    tests/gpu_guest_filter_test.c
+    tests/gpu_wc_test.c
     overlay_render.c)
 target_include_directories(uefi_hypervisor_static_contracts PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}")
-target_compile_features(uefi_hypervisor_static_contracts PRIVATE c_std_11)
+target_compile_features(uefi_hypervisor_static_contracts PRIVATE c_std_11 cxx_std_17)
 if(MSVC)
     target_compile_options(uefi_hypervisor_static_contracts PRIVATE /W4 /WX /GS-)
 else()
@@ -235,6 +264,12 @@ add_test(NAME uefi_hypervisor_gpu_hal_tests
     COMMAND uefi_hypervisor_static_contracts --gpu-hal)
 add_test(NAME uefi_hypervisor_gpu_vm_model_tests
     COMMAND uefi_hypervisor_static_contracts --gpu-vm-model)
+add_test(NAME uefi_hypervisor_gpu_guest_filter_tests
+    COMMAND uefi_hypervisor_static_contracts --gpu-filter)
+add_test(NAME uefi_hypervisor_gpu_wc_tests
+    COMMAND uefi_hypervisor_static_contracts --gpu-wc)
+add_test(NAME uefi_hypervisor_gpu_enforcement_tests
+    COMMAND uefi_hypervisor_static_contracts --gpu-enforcement)
 
 add_executable(uefi_hypervisor_scanner_tests
     tests/test_scanner.cpp
@@ -500,6 +535,9 @@ add_test(NAME uefi_hypervisor_runtime_transport_tests
     COMMAND uefi_hypervisor_runtime_transport_tests)
 
 if(WIN32)
+    add_test(NAME uefi_hypervisor_resident_rva_table_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/Test-EfiResidentRvaTables.ps1")
     add_test(NAME uefi_hypervisor_gpu_preflight_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
             -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/Test-GpuDiagnosticPreflight.ps1"

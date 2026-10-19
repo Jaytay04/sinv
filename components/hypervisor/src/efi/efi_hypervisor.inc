@@ -1,6 +1,11 @@
 ; Numeric offsets for HV_EFI_CONTEXT. Keep synchronized with
 ; efi_hypervisor.h; C static assertions guard the most important members.
 CONTEXT_ENTRY_RSP              EQU 16
+CONTEXT_GPU_STATE_PA           EQU 1176
+CONTEXT_GPU_ENTRY              EQU 1184
+CONTEXT_GPU_HOST_PAT           EQU 1192
+CONTEXT_GPU_VM_WC_STATE_PA     EQU 1200
+CONTEXT_GPU_VM_WC_ENTRY        EQU 1208
 CONTEXT_INITIAL_RBX            EQU 24
 CONTEXT_INITIAL_RBP            EQU 32
 CONTEXT_INITIAL_RSI            EQU 40

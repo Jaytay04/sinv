@@ -67,7 +67,8 @@ try {
     Assert-True ($report.Nvidia.AssociatedMonitors.Count -eq 1) 'NVIDIA monitor should be associated by its parent instance ID.'
     Assert-True ($report.Nvidia.AssociatedMonitors[0].InstanceId -eq $nvidiaMonitor) 'Associated NVIDIA monitor ID should match.'
     Assert-True ($report.PhysicalOutputEvidence.ManualRoutingConfirmed -eq $false) 'PnP inventory must not claim physical connector routing proof.'
-    Assert-True ($report.Exclusion.Implemented -eq $false -and $report.Exclusion.CanAuthorizeActivation -eq $false) 'Fixture input must never authorize exclusion.'
+    Assert-True ($null -eq $report.Exclusion.Implemented -and $report.Exclusion.CanAuthorizeActivation -eq $false) 'Fixture input must never attest a running exclusion backend.'
+    Assert-True ($report.Exclusion.NativeBackendAvailableInSource -eq $true -and $report.Exclusion.BootEnforcementStatus -eq 'NotAttested') 'Source availability must be distinct from live enforcement.'
     Assert-True ($report.HostChangesPerformed -eq $false) 'The report must always say no host changes were performed.'
     Assert-True ($report.PSObject.Properties.Name -notcontains 'AuthoritativeReadExclusionProof') 'Untrusted authorization fields must not be copied into the report.'
     $caseCount++

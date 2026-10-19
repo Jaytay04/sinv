@@ -2061,7 +2061,6 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildLegacyIdentityDomain(
     uint32_t bus;
     uint32_t pdptIndex;
     uint32_t nextSplitPage = HV_EFI_IOMMU_LEGACY_BASE_PAGES;
-    uint64_t *pml4;
     uint64_t *pdpt;
     if (result != NULL) {
         HvZero(result, sizeof(*result));
@@ -2075,6 +2074,11 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildLegacyIdentityDomain(
         mappedRanges == NULL || mappedRangeCount == 0 ||
         (denyRangeCount != 0 && denyRanges == NULL) ||
         domainId == 0) {
+        return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+    }
+    if (storagePhysical >= limit || (uint64_t)storagePages >
+            (limit - storagePhysical) /
+                HV_EFI_IOMMU_RUNTIME_PAGE_SIZE) {
         return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
     }
     for (bus = 0; bus < mappedRangeCount; ++bus) {
@@ -2095,15 +2099,13 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildLegacyIdentityDomain(
     }
     HvZero(storage, (size_t)storagePages *
         (size_t)HV_EFI_IOMMU_RUNTIME_PAGE_SIZE);
-    pml4 = storage +
+    /* AW=1 is a 39-bit, three-level walk. The context points directly at
+     * this top-level page; page 257 remains reserved for buffer compatibility
+     * but is not an additional translation level. */
+    pdpt = storage +
         (size_t)(HV_EFI_IOMMU_LEGACY_ROOT_PAGES +
-                 HV_EFI_IOMMU_LEGACY_CONTEXT_PAGES) * 512;
-    pdpt = pml4 + 512;
-    pml4[0] = storagePhysical +
-        (uint64_t)(HV_EFI_IOMMU_LEGACY_ROOT_PAGES +
-                   HV_EFI_IOMMU_LEGACY_CONTEXT_PAGES +
-                   HV_EFI_IOMMU_SL_PML4_PAGES) *
-            HV_EFI_IOMMU_RUNTIME_PAGE_SIZE | UINT64_C(3);
+                 HV_EFI_IOMMU_LEGACY_CONTEXT_PAGES +
+                 HV_EFI_IOMMU_SL_PML4_PAGES) * 512;
 
     for (bus = 0; bus < 256; ++bus) {
         uint32_t deviceFunction;
@@ -2113,7 +2115,7 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildLegacyIdentityDomain(
         storage[bus * 2] = contextPhysical | UINT64_C(1);
         for (deviceFunction = 0; deviceFunction < 256; ++deviceFunction) {
             contexts[deviceFunction * 2] =
-                storagePhysical + UINT64_C(257) *
+                storagePhysical + UINT64_C(258) *
                     HV_EFI_IOMMU_RUNTIME_PAGE_SIZE | UINT64_C(1);
             contexts[deviceFunction * 2 + 1] =
                 ((uint64_t)domainId << 8) | UINT64_C(1);
@@ -2122,10 +2124,16 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildLegacyIdentityDomain(
 
     for (pdptIndex = 0; pdptIndex < 512; ++pdptIndex) {
         uint64_t *pd = storage +
-            (size_t)(259 + pdptIndex) * 512;
+            (size_t)(HV_EFI_IOMMU_LEGACY_ROOT_PAGES +
+                     HV_EFI_IOMMU_LEGACY_CONTEXT_PAGES +
+                     HV_EFI_IOMMU_SL_PML4_PAGES +
+                     HV_EFI_IOMMU_SL_PDPT_PAGES + pdptIndex) * 512;
         uint32_t pdIndex;
         pdpt[pdptIndex] = storagePhysical +
-            (uint64_t)(259 + pdptIndex) *
+            (uint64_t)(HV_EFI_IOMMU_LEGACY_ROOT_PAGES +
+                       HV_EFI_IOMMU_LEGACY_CONTEXT_PAGES +
+                       HV_EFI_IOMMU_SL_PML4_PAGES +
+                       HV_EFI_IOMMU_SL_PDPT_PAGES + pdptIndex) *
                 HV_EFI_IOMMU_RUNTIME_PAGE_SIZE | UINT64_C(3);
         for (pdIndex = 0; pdIndex < 512; ++pdIndex) {
             const uint64_t base =
@@ -2171,11 +2179,750 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildLegacyIdentityDomain(
     }
     result->RootTablePhysical = storagePhysical;
     result->SecondLevelRootPhysical = storagePhysical +
-        UINT64_C(257) * HV_EFI_IOMMU_RUNTIME_PAGE_SIZE;
+        UINT64_C(258) * HV_EFI_IOMMU_RUNTIME_PAGE_SIZE;
     result->PagesUsed = nextSplitPage;
     result->DomainId = domainId;
     return HV_EFI_IOMMU_RUNTIME_OK;
 }
+
+#define HV_ROOT_VTD_READ UINT64_C(1)
+#define HV_ROOT_VTD_WRITE UINT64_C(2)
+#define HV_ROOT_VTD_PRESENT_READ_WRITE (HV_ROOT_VTD_READ | HV_ROOT_VTD_WRITE)
+#define HV_ROOT_VTD_ADDRESS_MASK UINT64_C(0x0000007ffffff000)
+
+#if defined(_MSC_VER)
+#pragma code_seg(push, ".hvscan$m")
+#endif
+
+/* CAP.ND is bits 2:0 and encodes 2^(4 + 2*ND) domain identifiers.
+ * ND=7 is reserved. Keep this arithmetic-only helper resident-safe because
+ * the root-domain admission check also runs after boot services exit. */
+uint32_t HvEfiIommuDomainIdSupported(
+    uint64_t capability,
+    uint32_t domainId)
+{
+    const uint32_t nd = (uint32_t)(capability & UINT64_C(7));
+    uint32_t domainCount;
+    if (nd > 6 || domainId == 0 || domainId > UINT16_MAX) {
+        return 0;
+    }
+    domainCount = UINT32_C(1) << (4u + (2u * nd));
+    return domainId < domainCount;
+}
+
+/* Keep the resident audit closure self-contained in .hvscan. */
+static void HvRootZero(void *buffer, size_t size)
+{
+    volatile uint8_t *bytes = (volatile uint8_t *)buffer;
+    size_t index;
+    for (index = 0; index < size; ++index) {
+        bytes[index] = 0;
+    }
+}
+
+static int HvRootAddU64(uint64_t left, uint64_t right, uint64_t *result)
+{
+    if (result == NULL || left > UINT64_MAX - right) {
+        return 0;
+    }
+    *result = left + right;
+    return 1;
+}
+
+static int HvRootRangeEnd(
+    const HV_EFI_IOMMU_ROOT_DEVICE_RANGE *range,
+    uint64_t *end)
+{
+    return range != NULL && range->Size != 0 &&
+        (range->PhysicalBase & HV_EFI_IOMMU_RUNTIME_PAGE_MASK) == 0 &&
+        (range->Size & HV_EFI_IOMMU_RUNTIME_PAGE_MASK) == 0 &&
+        HvRootAddU64(range->PhysicalBase, range->Size, end) &&
+        *end <= (UINT64_C(1) << HV_EFI_IOMMU_ROOT_DEVICE_ADDRESS_BITS);
+}
+
+static int HvRootRangeOverlaps(
+    const HV_EFI_IOMMU_ROOT_DEVICE_RANGE *range,
+    uint64_t base,
+    uint64_t size)
+{
+    uint64_t rangeEnd;
+    uint64_t end;
+    return !HvRootRangeEnd(range, &rangeEnd) ||
+        !HvRootAddU64(base, size, &end) ||
+        (range->PhysicalBase < end && base < rangeEnd);
+}
+
+static int HvRootPlanPageMapped(
+    const HV_EFI_IOMMU_ROOT_DEVICE_PLAN *plan,
+    uint64_t page)
+{
+    uint32_t index;
+    for (index = 0; index < plan->MappingCount; ++index) {
+        const HV_EFI_IOMMU_ROOT_DEVICE_RANGE *range =
+            &plan->Mappings[index];
+        if (range->PhysicalBase <= page &&
+            page < range->PhysicalBase + range->Size) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int HvRootPlanOverlaps(
+    const HV_EFI_IOMMU_ROOT_DEVICE_PLAN *plan,
+    uint64_t base,
+    uint64_t size)
+{
+    uint32_t index;
+    for (index = 0; index < plan->MappingCount; ++index) {
+        if (HvRootRangeOverlaps(&plan->Mappings[index], base, size)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static HV_EFI_IOMMU_RUNTIME_STATUS HvRootValidatePlan(
+    const HV_EFI_IOMMU_ROOT_DEVICE_PLAN *plan)
+{
+    uint64_t framebufferBytes = 0;
+    uint64_t translationBytes = 0;
+    uint64_t mappedBytes = 0;
+    uint32_t framebufferCount = 0;
+    uint32_t translationCount = 0;
+    uint32_t index;
+    if (plan == NULL || plan->Segment != 0 || plan->Bus > UINT8_MAX ||
+        plan->Device > 31 || plan->Function > 7 ||
+        plan->DomainId == 0 ||
+        plan->DomainId > HV_EFI_IOMMU_MAX_DOMAIN_ID ||
+        plan->LegacyDomainId == 0 || plan->LegacyDomainId > UINT16_MAX ||
+        plan->DomainId == plan->LegacyDomainId || plan->MappingCount == 0 ||
+        plan->MappingCount > HV_EFI_IOMMU_ROOT_DEVICE_MAX_RANGES ||
+        plan->Reserved != 0) {
+        return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+    }
+    for (index = 0; index < plan->MappingCount; ++index) {
+        const HV_EFI_IOMMU_ROOT_DEVICE_RANGE *range =
+            &plan->Mappings[index];
+        uint64_t end;
+        uint64_t *categoryBytes;
+        if (!HvRootRangeEnd(range, &end) ||
+            range->Access != HV_EFI_IOMMU_ROOT_DEVICE_ACCESS_READ ||
+            (range->Kind !=
+                 HV_EFI_IOMMU_ROOT_DEVICE_RANGE_FRAMEBUFFER &&
+             range->Kind !=
+                 HV_EFI_IOMMU_ROOT_DEVICE_RANGE_TRANSLATION)) {
+            return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+        }
+        if (index != 0 &&
+            plan->Mappings[index - 1].PhysicalBase +
+                    plan->Mappings[index - 1].Size > range->PhysicalBase) {
+            return HV_EFI_IOMMU_RUNTIME_RANGE_OVERLAP;
+        }
+        if (range->Kind == HV_EFI_IOMMU_ROOT_DEVICE_RANGE_FRAMEBUFFER) {
+            ++framebufferCount;
+            categoryBytes = &framebufferBytes;
+        } else {
+            ++translationCount;
+            categoryBytes = &translationBytes;
+        }
+        if (!HvRootAddU64(*categoryBytes, range->Size, categoryBytes) ||
+            !HvRootAddU64(mappedBytes, range->Size, &mappedBytes)) {
+            return HV_EFI_IOMMU_RUNTIME_RANGE_OVERFLOW;
+        }
+    }
+    if (framebufferCount != 1 || translationCount == 0 ||
+        framebufferBytes == 0 ||
+        framebufferBytes >
+            HV_EFI_IOMMU_ROOT_DEVICE_MAX_FRAMEBUFFER_BYTES ||
+        translationBytes == 0 ||
+        translationBytes >
+            HV_EFI_IOMMU_ROOT_DEVICE_MAX_TRANSLATION_BYTES ||
+        mappedBytes > HV_EFI_IOMMU_ROOT_DEVICE_MAX_MAPPED_BYTES ||
+        plan->FramebufferBytes != framebufferBytes ||
+        plan->TranslationBytes != translationBytes ||
+        plan->MappedBytes != mappedBytes) {
+        return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+    }
+    return HV_EFI_IOMMU_RUNTIME_OK;
+}
+
+static int HvRootStorageRangesOverlap(
+    uint64_t firstBase,
+    uint32_t firstPages,
+    uint64_t secondBase,
+    uint32_t secondPages)
+{
+    const uint64_t firstSize =
+        (uint64_t)firstPages * HV_EFI_IOMMU_RUNTIME_PAGE_SIZE;
+    const uint64_t secondSize =
+        (uint64_t)secondPages * HV_EFI_IOMMU_RUNTIME_PAGE_SIZE;
+    uint64_t firstEnd;
+    uint64_t secondEnd;
+    return !HvRootAddU64(firstBase, firstSize, &firstEnd) ||
+        !HvRootAddU64(secondBase, secondSize, &secondEnd) ||
+        (firstBase < secondEnd && secondBase < firstEnd);
+}
+
+static HV_EFI_IOMMU_RUNTIME_STATUS HvRootValidateInputs(
+    const uint64_t *legacyStorage,
+    uint32_t legacyStoragePages,
+    uint64_t legacyStoragePhysical,
+    const HV_EFI_IOMMU_LEGACY_TABLE_RESULT *legacyResult,
+    const uint64_t *rootStorage,
+    uint32_t rootStoragePages,
+    uint64_t rootStoragePhysical,
+    const HV_EFI_IOMMU_ROOT_DEVICE_PLAN *rootPlan)
+{
+    uint64_t legacyStorageEnd;
+    uint64_t rootStorageEnd;
+    uint32_t index;
+    HV_EFI_IOMMU_RUNTIME_STATUS status = HvRootValidatePlan(rootPlan);
+    if (status != HV_EFI_IOMMU_RUNTIME_OK) {
+        return status;
+    }
+    if (legacyStorage == NULL || legacyResult == NULL ||
+        rootStorage == NULL || legacyStoragePhysical == 0 ||
+        rootStoragePhysical == 0 ||
+        (legacyStoragePhysical & HV_EFI_IOMMU_RUNTIME_PAGE_MASK) != 0 ||
+        (rootStoragePhysical & HV_EFI_IOMMU_RUNTIME_PAGE_MASK) != 0 ||
+        legacyStoragePages < HV_EFI_IOMMU_LEGACY_BASE_PAGES ||
+        legacyResult->PagesUsed < HV_EFI_IOMMU_LEGACY_BASE_PAGES ||
+        legacyResult->PagesUsed > legacyStoragePages ||
+        legacyResult->RootTablePhysical != legacyStoragePhysical ||
+        legacyResult->SecondLevelRootPhysical != legacyStoragePhysical +
+            (uint64_t)(HV_EFI_IOMMU_LEGACY_ROOT_PAGES +
+                       HV_EFI_IOMMU_LEGACY_CONTEXT_PAGES +
+                       HV_EFI_IOMMU_SL_PML4_PAGES) *
+                HV_EFI_IOMMU_RUNTIME_PAGE_SIZE ||
+        legacyResult->DomainId == 0 ||
+        legacyResult->DomainId != rootPlan->LegacyDomainId) {
+        return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+    }
+    if (rootStoragePages < 2 ||
+        rootStoragePages > HV_EFI_IOMMU_ROOT_DEVICE_TABLE_MAX_PAGES) {
+        return rootStoragePages >
+                HV_EFI_IOMMU_ROOT_DEVICE_TABLE_MAX_PAGES ?
+            HV_EFI_IOMMU_RUNTIME_CAPACITY :
+            HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+    }
+    if (!HvRootAddU64(legacyStoragePhysical,
+            (uint64_t)legacyStoragePages *
+                HV_EFI_IOMMU_RUNTIME_PAGE_SIZE,
+            &legacyStorageEnd) ||
+        !HvRootAddU64(rootStoragePhysical,
+            (uint64_t)rootStoragePages *
+                HV_EFI_IOMMU_RUNTIME_PAGE_SIZE,
+            &rootStorageEnd) ||
+        legacyStorageEnd >
+            (UINT64_C(1) << HV_EFI_IOMMU_ROOT_DEVICE_ADDRESS_BITS) ||
+        rootStorageEnd >
+            (UINT64_C(1) << HV_EFI_IOMMU_ROOT_DEVICE_ADDRESS_BITS)) {
+        return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+    }
+    if (HvRootStorageRangesOverlap(
+            legacyStoragePhysical, legacyStoragePages,
+            rootStoragePhysical, rootStoragePages)) {
+        return HV_EFI_IOMMU_RUNTIME_RANGE_OVERLAP;
+    }
+    for (index = 0; index < rootPlan->MappingCount; ++index) {
+        const HV_EFI_IOMMU_ROOT_DEVICE_RANGE *range =
+            &rootPlan->Mappings[index];
+        if (HvRootStorageRangesOverlap(
+                range->PhysicalBase,
+                (uint32_t)(range->Size /
+                           HV_EFI_IOMMU_RUNTIME_PAGE_SIZE),
+                legacyStoragePhysical, legacyStoragePages) ||
+            HvRootStorageRangesOverlap(
+                range->PhysicalBase,
+                (uint32_t)(range->Size /
+                           HV_EFI_IOMMU_RUNTIME_PAGE_SIZE),
+                rootStoragePhysical, rootStoragePages)) {
+            return HV_EFI_IOMMU_RUNTIME_RANGE_OVERLAP;
+        }
+    }
+    return HV_EFI_IOMMU_RUNTIME_OK;
+}
+
+static HV_EFI_IOMMU_RUNTIME_STATUS HvRootAuditLegacyContexts(
+    const uint64_t *legacyStorage,
+    uint64_t legacyStoragePhysical,
+    const HV_EFI_IOMMU_LEGACY_TABLE_RESULT *legacyResult,
+    uint64_t rootStoragePhysical,
+    const HV_EFI_IOMMU_ROOT_DEVICE_PLAN *rootPlan,
+    uint32_t rootInstalled)
+{
+    uint32_t bus;
+    const uint64_t legacyRootEntry =
+        legacyResult->SecondLevelRootPhysical | UINT64_C(1);
+    const uint64_t legacyDomainEntry =
+        ((uint64_t)legacyResult->DomainId << 8) | UINT64_C(1);
+    const uint64_t rootDomainEntry =
+        ((uint64_t)rootPlan->DomainId << 8) | UINT64_C(1);
+    for (bus = 0; bus < 256; ++bus) {
+        const uint64_t expectedContextPhysical = legacyStoragePhysical +
+            (uint64_t)(1 + bus) * HV_EFI_IOMMU_RUNTIME_PAGE_SIZE;
+        const uint64_t *contexts = legacyStorage + (size_t)(1 + bus) * 512;
+        uint32_t deviceFunction;
+        if (legacyStorage[bus * 2] !=
+                (expectedContextPhysical | UINT64_C(1)) ||
+            legacyStorage[bus * 2 + 1] != 0) {
+            return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+        }
+        for (deviceFunction = 0; deviceFunction < 256; ++deviceFunction) {
+            const uint32_t device = deviceFunction >> 3;
+            const uint32_t function = deviceFunction & 7;
+            const int target = rootPlan->Segment == 0 &&
+                bus == rootPlan->Bus && device == rootPlan->Device &&
+                function == rootPlan->Function;
+            uint64_t expectedRoot = legacyRootEntry;
+            uint64_t expectedDomain = legacyDomainEntry;
+            if (target && rootInstalled != 0) {
+                expectedRoot = rootStoragePhysical | UINT64_C(1);
+                expectedDomain = rootDomainEntry;
+            }
+            if (contexts[deviceFunction * 2] != expectedRoot ||
+                contexts[deviceFunction * 2 + 1] != expectedDomain) {
+                return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+            }
+        }
+    }
+    return HV_EFI_IOMMU_RUNTIME_OK;
+}
+
+static HV_EFI_IOMMU_RUNTIME_STATUS HvRootAuditLegacySecondLevelRoot(
+    const uint64_t *legacyStorage,
+    uint64_t legacyStoragePhysical)
+{
+    const uint64_t *reserved = legacyStorage +
+        (size_t)(HV_EFI_IOMMU_LEGACY_ROOT_PAGES +
+                 HV_EFI_IOMMU_LEGACY_CONTEXT_PAGES) * 512;
+    const uint64_t *root = legacyStorage +
+        (size_t)(HV_EFI_IOMMU_LEGACY_ROOT_PAGES +
+                 HV_EFI_IOMMU_LEGACY_CONTEXT_PAGES +
+                 HV_EFI_IOMMU_SL_PML4_PAGES) * 512;
+    uint32_t pdptIndex;
+    for (pdptIndex = 0; pdptIndex < 512; ++pdptIndex) {
+        if (reserved[pdptIndex] != 0) {
+            return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+        }
+    }
+    for (pdptIndex = 0; pdptIndex < 512; ++pdptIndex) {
+        const uint64_t expected = legacyStoragePhysical +
+            (uint64_t)(HV_EFI_IOMMU_LEGACY_ROOT_PAGES +
+                       HV_EFI_IOMMU_LEGACY_CONTEXT_PAGES +
+                       HV_EFI_IOMMU_SL_PML4_PAGES +
+                       HV_EFI_IOMMU_SL_PDPT_PAGES + pdptIndex) *
+                HV_EFI_IOMMU_RUNTIME_PAGE_SIZE | UINT64_C(3);
+        if (root[pdptIndex] != expected) {
+            return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+        }
+    }
+    return HV_EFI_IOMMU_RUNTIME_OK;
+}
+
+static HV_EFI_IOMMU_RUNTIME_STATUS HvRootLegacyPageUnmapped(
+    const uint64_t *legacyStorage,
+    uint32_t legacyStoragePages,
+    uint64_t legacyStoragePhysical,
+    const HV_EFI_IOMMU_LEGACY_TABLE_RESULT *legacyResult,
+    uint64_t page,
+    uint32_t *unmapped)
+{
+    const uint64_t *root;
+    const uint64_t *pd;
+    uint64_t entry;
+    uint64_t pageIndex;
+    uint32_t pdIndex;
+    if (unmapped == NULL || page >=
+            (UINT64_C(1) << HV_EFI_IOMMU_ROOT_DEVICE_ADDRESS_BITS) ||
+        (page & HV_EFI_IOMMU_RUNTIME_PAGE_MASK) != 0) {
+        return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+    }
+    *unmapped = 0;
+    /* AW=1 walks the PDPT at index 258, then one of the PDs from index 259. */
+    root = legacyStorage +
+        (size_t)(HV_EFI_IOMMU_LEGACY_ROOT_PAGES +
+                 HV_EFI_IOMMU_LEGACY_CONTEXT_PAGES +
+                 HV_EFI_IOMMU_SL_PML4_PAGES) * 512;
+    {
+        const uint32_t pdptIndex =
+            (uint32_t)((page >> 30) & UINT64_C(0x1ff));
+        const uint64_t expected = legacyStoragePhysical +
+            (uint64_t)(HV_EFI_IOMMU_LEGACY_ROOT_PAGES +
+                       HV_EFI_IOMMU_LEGACY_CONTEXT_PAGES +
+                       HV_EFI_IOMMU_SL_PML4_PAGES +
+                       HV_EFI_IOMMU_SL_PDPT_PAGES + pdptIndex) *
+                HV_EFI_IOMMU_RUNTIME_PAGE_SIZE | UINT64_C(3);
+        if (root[pdptIndex] != expected) {
+            return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+        }
+        pd = legacyStorage +
+            (size_t)(HV_EFI_IOMMU_LEGACY_ROOT_PAGES +
+                     HV_EFI_IOMMU_LEGACY_CONTEXT_PAGES +
+                     HV_EFI_IOMMU_SL_PML4_PAGES +
+                     HV_EFI_IOMMU_SL_PDPT_PAGES + pdptIndex) * 512;
+    }
+    pdIndex = (uint32_t)((page >> 21) & UINT64_C(0x1ff));
+    entry = pd[pdIndex];
+    if (entry == 0) {
+        *unmapped = 1;
+        return HV_EFI_IOMMU_RUNTIME_OK;
+    }
+    if ((entry & (UINT64_C(1) << 7)) != 0) {
+        return HV_EFI_IOMMU_RUNTIME_OK;
+    }
+    pageIndex = (entry & HV_ROOT_VTD_ADDRESS_MASK) - legacyStoragePhysical;
+    if ((entry & HV_ROOT_VTD_PRESENT_READ_WRITE) !=
+            HV_ROOT_VTD_PRESENT_READ_WRITE ||
+        (entry & UINT64_C(0xff8)) != 0 ||
+        pageIndex % HV_EFI_IOMMU_RUNTIME_PAGE_SIZE != 0 ||
+        pageIndex / HV_EFI_IOMMU_RUNTIME_PAGE_SIZE >= legacyResult->PagesUsed ||
+        pageIndex / HV_EFI_IOMMU_RUNTIME_PAGE_SIZE <
+            HV_EFI_IOMMU_LEGACY_BASE_PAGES ||
+        pageIndex / HV_EFI_IOMMU_RUNTIME_PAGE_SIZE >= legacyStoragePages) {
+        return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+    }
+    {
+        const uint64_t *pt = legacyStorage +
+            (size_t)(pageIndex / HV_EFI_IOMMU_RUNTIME_PAGE_SIZE) * 512;
+        const uint32_t ptIndex = (uint32_t)((page >> 12) & UINT64_C(0x1ff));
+        const uint64_t leaf = pt[ptIndex];
+        if ((leaf & HV_ROOT_VTD_READ) == 0) {
+            *unmapped = 1;
+        }
+    }
+    return HV_EFI_IOMMU_RUNTIME_OK;
+}
+
+static HV_EFI_IOMMU_RUNTIME_STATUS HvRootRequireLegacyUnmapped(
+    const uint64_t *legacyStorage,
+    uint32_t legacyStoragePages,
+    uint64_t legacyStoragePhysical,
+    const HV_EFI_IOMMU_LEGACY_TABLE_RESULT *legacyResult,
+    uint64_t base,
+    uint64_t size)
+{
+    uint64_t end;
+    uint64_t page;
+    if (size == 0 || (base & HV_EFI_IOMMU_RUNTIME_PAGE_MASK) != 0 ||
+        (size & HV_EFI_IOMMU_RUNTIME_PAGE_MASK) != 0 ||
+        !HvRootAddU64(base, size, &end)) {
+        return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+    }
+    for (page = base; page < end;
+         page += HV_EFI_IOMMU_RUNTIME_PAGE_SIZE) {
+        uint32_t unmapped;
+        HV_EFI_IOMMU_RUNTIME_STATUS status = HvRootLegacyPageUnmapped(
+            legacyStorage, legacyStoragePages, legacyStoragePhysical,
+            legacyResult, page, &unmapped);
+        if (status != HV_EFI_IOMMU_RUNTIME_OK) {
+            return status;
+        }
+        if (unmapped == 0) {
+            return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+        }
+    }
+    return HV_EFI_IOMMU_RUNTIME_OK;
+}
+
+static HV_EFI_IOMMU_RUNTIME_STATUS HvRootAuditSecondLevel(
+    const uint64_t *rootStorage,
+    uint32_t rootStoragePages,
+    uint64_t rootStoragePhysical,
+    const HV_EFI_IOMMU_ROOT_DEVICE_PLAN *rootPlan,
+    const HV_EFI_IOMMU_ROOT_DEVICE_TABLE_RESULT *result)
+{
+    uint32_t nextPage = 1;
+    uint32_t mappedPages = 0;
+    uint32_t pdptIndex;
+    const uint64_t *root = rootStorage;
+    for (pdptIndex = 0; pdptIndex < 512; ++pdptIndex) {
+        const uint64_t oneGiBBase = (uint64_t)pdptIndex << 30;
+        const uint64_t oneGiBSize = UINT64_C(1) << 30;
+        if (!HvRootPlanOverlaps(rootPlan, oneGiBBase, oneGiBSize)) {
+            if (root[pdptIndex] != 0) {
+                return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+            }
+            continue;
+        }
+        if (nextPage >= rootStoragePages ||
+            root[pdptIndex] != (rootStoragePhysical +
+                    (uint64_t)nextPage *
+                        HV_EFI_IOMMU_RUNTIME_PAGE_SIZE |
+                    HV_ROOT_VTD_PRESENT_READ_WRITE)) {
+            return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+        }
+        {
+            const uint64_t *pd = rootStorage + (size_t)nextPage * 512;
+            uint32_t pdIndex;
+            ++nextPage;
+            for (pdIndex = 0; pdIndex < 512; ++pdIndex) {
+                const uint64_t twoMiBBase = oneGiBBase +
+                    ((uint64_t)pdIndex << 21);
+                const uint64_t twoMiBSize = UINT64_C(1) << 21;
+                if (!HvRootPlanOverlaps(
+                        rootPlan, twoMiBBase, twoMiBSize)) {
+                    if (pd[pdIndex] != 0) {
+                        return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+                    }
+                    continue;
+                }
+                if (nextPage >= rootStoragePages ||
+                    pd[pdIndex] != (rootStoragePhysical +
+                            (uint64_t)nextPage *
+                                HV_EFI_IOMMU_RUNTIME_PAGE_SIZE |
+                            HV_ROOT_VTD_PRESENT_READ_WRITE)) {
+                    return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+                }
+                {
+                    const uint64_t *pt = rootStorage +
+                        (size_t)nextPage * 512;
+                    uint32_t ptIndex;
+                    ++nextPage;
+                    for (ptIndex = 0; ptIndex < 512; ++ptIndex) {
+                        const uint64_t page = twoMiBBase +
+                            (uint64_t)ptIndex *
+                                HV_EFI_IOMMU_RUNTIME_PAGE_SIZE;
+                        const uint64_t expected =
+                            HvRootPlanPageMapped(rootPlan, page) ?
+                                page | HV_ROOT_VTD_READ : 0;
+                        if (pt[ptIndex] != expected) {
+                            return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+                        }
+                        if (expected != 0) {
+                            ++mappedPages;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if (nextPage != result->PagesUsed ||
+        mappedPages != result->MappedPageCount ||
+        nextPage > rootStoragePages) {
+        return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+    }
+    for (; nextPage < rootStoragePages; ++nextPage) {
+        uint32_t word;
+        const uint64_t *page = rootStorage + (size_t)nextPage * 512;
+        for (word = 0; word < 512; ++word) {
+            if (page[word] != 0) {
+                return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+            }
+        }
+    }
+    return HV_EFI_IOMMU_RUNTIME_OK;
+}
+
+HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuAuditRootDeviceDomain(
+    const uint64_t *legacyStorage,
+    uint32_t legacyStoragePages,
+    uint64_t legacyStoragePhysical,
+    const HV_EFI_IOMMU_LEGACY_TABLE_RESULT *legacyResult,
+    const uint64_t *rootStorage,
+    uint32_t rootStoragePages,
+    uint64_t rootStoragePhysical,
+    const HV_EFI_IOMMU_ROOT_DEVICE_PLAN *rootPlan,
+    const HV_EFI_IOMMU_ROOT_DEVICE_TABLE_RESULT *result)
+{
+    uint32_t index;
+    uint64_t legacyBytes;
+    uint64_t rootBytes;
+    HV_EFI_IOMMU_RUNTIME_STATUS status;
+    if (result == NULL) {
+        return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+    }
+    status = HvRootValidateInputs(
+            legacyStorage, legacyStoragePages, legacyStoragePhysical,
+            legacyResult, rootStorage, rootStoragePages,
+            rootStoragePhysical, rootPlan);
+    if (status != HV_EFI_IOMMU_RUNTIME_OK) {
+        return status;
+    }
+    if (
+        result->RootPhysical != rootStoragePhysical ||
+        result->DeviceIndex != rootPlan->DeviceIndex ||
+        result->Segment != rootPlan->Segment ||
+        result->Bus != rootPlan->Bus ||
+        result->Device != rootPlan->Device ||
+        result->Function != rootPlan->Function ||
+        result->DomainId != rootPlan->DomainId ||
+        result->LegacyDomainId != rootPlan->LegacyDomainId ||
+        result->PagesUsed < 3 || result->PagesUsed > rootStoragePages) {
+        return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+    }
+    legacyBytes = (uint64_t)legacyStoragePages *
+        HV_EFI_IOMMU_RUNTIME_PAGE_SIZE;
+    rootBytes = (uint64_t)rootStoragePages *
+        HV_EFI_IOMMU_RUNTIME_PAGE_SIZE;
+    status = HvRootAuditLegacyContexts(
+        legacyStorage, legacyStoragePhysical, legacyResult,
+        rootStoragePhysical, rootPlan, 1);
+    if (status != HV_EFI_IOMMU_RUNTIME_OK) {
+        return status;
+    }
+    status = HvRootAuditLegacySecondLevelRoot(
+        legacyStorage, legacyStoragePhysical);
+    if (status != HV_EFI_IOMMU_RUNTIME_OK) {
+        return status;
+    }
+    status = HvRootAuditSecondLevel(
+        rootStorage, rootStoragePages, rootStoragePhysical,
+        rootPlan, result);
+    if (status != HV_EFI_IOMMU_RUNTIME_OK) {
+        return status;
+    }
+    status = HvRootRequireLegacyUnmapped(
+        legacyStorage, legacyStoragePages, legacyStoragePhysical,
+        legacyResult, legacyStoragePhysical, legacyBytes);
+    if (status != HV_EFI_IOMMU_RUNTIME_OK) {
+        return status;
+    }
+    status = HvRootRequireLegacyUnmapped(
+        legacyStorage, legacyStoragePages, legacyStoragePhysical,
+        legacyResult, rootStoragePhysical, rootBytes);
+    if (status != HV_EFI_IOMMU_RUNTIME_OK) {
+        return status;
+    }
+    for (index = 0; index < rootPlan->MappingCount; ++index) {
+        status = HvRootRequireLegacyUnmapped(
+            legacyStorage, legacyStoragePages, legacyStoragePhysical,
+            legacyResult, rootPlan->Mappings[index].PhysicalBase,
+            rootPlan->Mappings[index].Size);
+        if (status != HV_EFI_IOMMU_RUNTIME_OK) {
+            return status;
+        }
+    }
+    return HV_EFI_IOMMU_RUNTIME_OK;
+}
+
+HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildRootDeviceDomain(
+    uint64_t *legacyStorage,
+    uint32_t legacyStoragePages,
+    uint64_t legacyStoragePhysical,
+    const HV_EFI_IOMMU_LEGACY_TABLE_RESULT *legacyResult,
+    uint64_t *rootStorage,
+    uint32_t rootStoragePages,
+    uint64_t rootStoragePhysical,
+    const HV_EFI_IOMMU_ROOT_DEVICE_PLAN *rootPlan,
+    HV_EFI_IOMMU_ROOT_DEVICE_TABLE_RESULT *result)
+{
+    uint64_t *root;
+    uint64_t *targetContext;
+    uint64_t previousTargetLow;
+    uint64_t previousTargetHigh;
+    uint32_t nextPage = 1;
+    uint32_t mappedPages = 0;
+    uint32_t pdptIndex;
+    HV_EFI_IOMMU_RUNTIME_STATUS status;
+    if (result != NULL) {
+        HvRootZero(result, sizeof(*result));
+    }
+    status = HvRootValidateInputs(
+        legacyStorage, legacyStoragePages, legacyStoragePhysical,
+        legacyResult, rootStorage, rootStoragePages, rootStoragePhysical,
+        rootPlan);
+    if (status != HV_EFI_IOMMU_RUNTIME_OK || result == NULL) {
+        return status != HV_EFI_IOMMU_RUNTIME_OK ? status :
+            HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+    }
+    status = HvRootAuditLegacyContexts(
+        legacyStorage, legacyStoragePhysical, legacyResult,
+        rootStoragePhysical, rootPlan, 0);
+    if (status != HV_EFI_IOMMU_RUNTIME_OK) {
+        return status;
+    }
+    HvRootZero(rootStorage, (size_t)rootStoragePages *
+        (size_t)HV_EFI_IOMMU_RUNTIME_PAGE_SIZE);
+    root = rootStorage;
+    for (pdptIndex = 0; pdptIndex < 512; ++pdptIndex) {
+        const uint64_t oneGiBBase = (uint64_t)pdptIndex << 30;
+        if (!HvRootPlanOverlaps(
+                rootPlan, oneGiBBase, UINT64_C(1) << 30)) {
+            continue;
+        }
+        if (nextPage >= rootStoragePages) {
+            status = HV_EFI_IOMMU_RUNTIME_CAPACITY;
+            goto fail;
+        }
+        root[pdptIndex] = rootStoragePhysical +
+            (uint64_t)nextPage * HV_EFI_IOMMU_RUNTIME_PAGE_SIZE |
+            HV_ROOT_VTD_PRESENT_READ_WRITE;
+        {
+            uint64_t *pd = rootStorage + (size_t)nextPage * 512;
+            uint32_t pdIndex;
+            ++nextPage;
+            for (pdIndex = 0; pdIndex < 512; ++pdIndex) {
+                const uint64_t twoMiBBase = oneGiBBase +
+                    ((uint64_t)pdIndex << 21);
+                if (!HvRootPlanOverlaps(
+                        rootPlan, twoMiBBase, UINT64_C(1) << 21)) {
+                    continue;
+                }
+                if (nextPage >= rootStoragePages) {
+                    status = HV_EFI_IOMMU_RUNTIME_CAPACITY;
+                    goto fail;
+                }
+                pd[pdIndex] = rootStoragePhysical +
+                    (uint64_t)nextPage * HV_EFI_IOMMU_RUNTIME_PAGE_SIZE |
+                    HV_ROOT_VTD_PRESENT_READ_WRITE;
+                {
+                    uint64_t *pt = rootStorage + (size_t)nextPage * 512;
+                    uint32_t ptIndex;
+                    ++nextPage;
+                    for (ptIndex = 0; ptIndex < 512; ++ptIndex) {
+                        const uint64_t page = twoMiBBase +
+                            (uint64_t)ptIndex *
+                                HV_EFI_IOMMU_RUNTIME_PAGE_SIZE;
+                        if (HvRootPlanPageMapped(rootPlan, page)) {
+                            pt[ptIndex] = page | HV_ROOT_VTD_READ;
+                            ++mappedPages;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    result->RootPhysical = rootStoragePhysical;
+    result->PagesUsed = nextPage;
+    result->MappedPageCount = mappedPages;
+    result->DeviceIndex = rootPlan->DeviceIndex;
+    result->Segment = rootPlan->Segment;
+    result->Bus = rootPlan->Bus;
+    result->Device = rootPlan->Device;
+    result->Function = rootPlan->Function;
+    result->DomainId = rootPlan->DomainId;
+    result->LegacyDomainId = rootPlan->LegacyDomainId;
+    targetContext = legacyStorage +
+        (size_t)(1 + rootPlan->Bus) * 512 +
+        (size_t)(rootPlan->Device * 8 + rootPlan->Function) * 2;
+    previousTargetLow = targetContext[0];
+    previousTargetHigh = targetContext[1];
+    targetContext[0] &= ~UINT64_C(1);
+    targetContext[1] = ((uint64_t)rootPlan->DomainId << 8) | UINT64_C(1);
+    targetContext[0] = rootStoragePhysical | UINT64_C(1);
+    status = HvEfiIommuAuditRootDeviceDomain(
+        legacyStorage, legacyStoragePages, legacyStoragePhysical,
+        legacyResult, rootStorage, rootStoragePages, rootStoragePhysical,
+        rootPlan, result);
+    if (status != HV_EFI_IOMMU_RUNTIME_OK) {
+        targetContext[0] = previousTargetLow;
+        targetContext[1] = previousTargetHigh;
+        goto fail;
+    }
+    return HV_EFI_IOMMU_RUNTIME_OK;
+
+fail:
+    HvRootZero(rootStorage, (size_t)rootStoragePages *
+        (size_t)HV_EFI_IOMMU_RUNTIME_PAGE_SIZE);
+    HvRootZero(result, sizeof(*result));
+    return status;
+}
+
+#if defined(_MSC_VER)
+#pragma code_seg(pop)
+#endif
 
 HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuParseMcfg(
     const HV_EFI_IOMMU_PHYSICAL_VIEW *view,

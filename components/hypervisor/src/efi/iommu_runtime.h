@@ -11,6 +11,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "iommu_isolation.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -67,14 +69,20 @@ extern "C" {
 
 #define HV_EFI_IOMMU_LEGACY_ROOT_PAGES UINT32_C(1)
 #define HV_EFI_IOMMU_LEGACY_CONTEXT_PAGES UINT32_C(256)
+/* The reserved PML4 slot preserves storage sizing; AW=1 uses a 3-level walk. */
 #define HV_EFI_IOMMU_SL_PML4_PAGES UINT32_C(1)
 #define HV_EFI_IOMMU_SL_PDPT_PAGES UINT32_C(1)
 #define HV_EFI_IOMMU_SL_PD_PAGES UINT32_C(512)
+/* The context points at the PDPT at page 258; there is no active PML4 level. */
 #define HV_EFI_IOMMU_LEGACY_BASE_PAGES \
     (HV_EFI_IOMMU_LEGACY_ROOT_PAGES + \
      HV_EFI_IOMMU_LEGACY_CONTEXT_PAGES + \
      HV_EFI_IOMMU_SL_PML4_PAGES + HV_EFI_IOMMU_SL_PDPT_PAGES + \
      HV_EFI_IOMMU_SL_PD_PAGES)
+
+/* Sparse 39-bit, 4-KiB-only root-device second-level tables. */
+#define HV_EFI_IOMMU_ROOT_DEVICE_TABLE_MAX_PAGES UINT32_C(32)
+#define HV_EFI_IOMMU_ROOT_DEVICE_ADDRESS_BITS UINT32_C(39)
 
 typedef enum HV_EFI_IOMMU_RUNTIME_STATUS {
     HV_EFI_IOMMU_RUNTIME_OK = 0,
@@ -196,6 +204,19 @@ typedef struct HV_EFI_IOMMU_LEGACY_TABLE_RESULT {
     uint16_t Reserved;
 } HV_EFI_IOMMU_LEGACY_TABLE_RESULT;
 
+typedef struct HV_EFI_IOMMU_ROOT_DEVICE_TABLE_RESULT {
+    uint64_t RootPhysical;
+    uint32_t PagesUsed;
+    uint32_t MappedPageCount;
+    uint32_t DeviceIndex;
+    uint32_t Segment;
+    uint32_t Bus;
+    uint32_t Device;
+    uint32_t Function;
+    uint32_t DomainId;
+    uint32_t LegacyDomainId;
+} HV_EFI_IOMMU_ROOT_DEVICE_TABLE_RESULT;
+
 typedef struct HV_EFI_IOMMU_MCFG_SEGMENT {
     uint64_t EcamBase;
     uint16_t Segment;
@@ -228,7 +249,11 @@ typedef struct HV_EFI_IOMMU_PCI_CALLBACKS {
 #define HV_EFI_IOMMU_PROTECTED_MMIO UINT32_C(2)
 #define HV_EFI_IOMMU_PROTECTED_REMAP_TABLE UINT32_C(3)
 #define HV_EFI_IOMMU_MAPPING_RAM UINT32_C(4)
-#define HV_EFI_IOMMU_MAPPING_RMRR UINT32_C(5)
+#define HV_EFI_IOMMU_RUNTIME_MAPPING_RMRR UINT32_C(5)
+#if defined(HV_EFI_IOMMU_MAPPING_RMRR)
+#undef HV_EFI_IOMMU_MAPPING_RMRR
+#endif
+#define HV_EFI_IOMMU_MAPPING_RMRR HV_EFI_IOMMU_RUNTIME_MAPPING_RMRR
 
 typedef struct HV_EFI_IOMMU_DMAR_UNIT {
     uint64_t RegisterBase;
@@ -400,6 +425,11 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuParseDmar(
     const HV_EFI_IOMMU_DMAR_STORAGE *storage,
     HV_EFI_IOMMU_DMAR_INFO *info);
 
+/* Returns nonzero when domainId is representable by CAP.ND and is nonzero. */
+uint32_t HvEfiIommuDomainIdSupported(
+    uint64_t capability,
+    uint32_t domainId);
+
 HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildProgrammingPlan(
     const HV_EFI_IOMMU_DMAR_INFO *dmar,
     const HV_EFI_IOMMU_UNIT_CONFIGURATION *configurations,
@@ -500,6 +530,36 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildLegacyIdentityDomain(
     uint32_t denyRangeCount,
     uint16_t domainId,
     HV_EFI_IOMMU_LEGACY_TABLE_RESULT *result);
+
+/*
+ * Builds a separate sparse 4-KiB second-level domain and replaces exactly
+ * the target context entry in the existing legacy root/context tables.  Call
+ * after HvEfiIommuBuildLegacyIdentityDomain and before
+ * HvEfiIommuInstallRuntimeIsolation.  The same runtime installer performs
+ * the hardware install and context/IOTLB invalidations for the shared root.
+ */
+HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildRootDeviceDomain(
+    uint64_t *legacyStorage,
+    uint32_t legacyStoragePages,
+    uint64_t legacyStoragePhysical,
+    const HV_EFI_IOMMU_LEGACY_TABLE_RESULT *legacyResult,
+    uint64_t *rootStorage,
+    uint32_t rootStoragePages,
+    uint64_t rootStoragePhysical,
+    const HV_EFI_IOMMU_ROOT_DEVICE_PLAN *rootPlan,
+    HV_EFI_IOMMU_ROOT_DEVICE_TABLE_RESULT *result);
+
+/* Audits real context, legacy-deny, and root-domain table entries. */
+HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuAuditRootDeviceDomain(
+    const uint64_t *legacyStorage,
+    uint32_t legacyStoragePages,
+    uint64_t legacyStoragePhysical,
+    const HV_EFI_IOMMU_LEGACY_TABLE_RESULT *legacyResult,
+    const uint64_t *rootStorage,
+    uint32_t rootStoragePages,
+    uint64_t rootStoragePhysical,
+    const HV_EFI_IOMMU_ROOT_DEVICE_PLAN *rootPlan,
+    const HV_EFI_IOMMU_ROOT_DEVICE_TABLE_RESULT *result);
 
 HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuParseMcfg(
     const HV_EFI_IOMMU_PHYSICAL_VIEW *view,

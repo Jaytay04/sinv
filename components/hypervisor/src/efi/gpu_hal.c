@@ -174,8 +174,7 @@ HV_GPU_STATUS HvGpuInitialize(HV_GPU_STATE *state,
         return HV_GPU_NOT_SUPPORTED;
     }
     if (state->CpuMappingActive != 0) return HV_GPU_INVALID_ARGUMENT;
-    /* No provider is installed in this payload. This is the production
-     * outcome until physical-output and full-adapter isolation gates close. */
+    /* An absent boot backend never falls back to a guest-managed surface. */
     if (!BackendValid(backend)) {
         state->Phase = HV_GPU_OWNERSHIP_LOST;
         return HV_GPU_NOT_SUPPORTED;

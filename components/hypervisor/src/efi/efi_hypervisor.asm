@@ -758,6 +758,20 @@ ResidentRdmsrZero:
 ResidentWrmsr:
     ; Phase 3: MSR write normalization
     mov eax, dword ptr [r11 + CONTEXT_GUEST_RCX]
+    cmp qword ptr [r11 + CONTEXT_GPU_STATE_PA], 0
+    je ResidentWrmsrGpuChecked
+    cmp eax, 200h
+    jb ResidentWrmsrGpuChecked
+    cmp eax, 2FFh
+    ja ResidentWrmsrGpuChecked
+    cmp eax, 277h                    ; guest PAT is VMCS save/load isolated
+    je ResidentWrmsrGpuChecked
+    mov edx, 4                      ; latch/stop before a physical MTRR change
+    xor r8d, r8d
+    xor r9d, r9d
+    call ResidentCallGpu
+    jmp ResidentUnsupportedMsr
+ResidentWrmsrGpuChecked:
 
     ; Forward VMware synthetic writes as well as reads.
     cmp eax, HYPERV_MSR_START
@@ -1166,6 +1180,19 @@ ResidentEptViolation:
     mov ecx, VMCS_GUEST_PHYSICAL_ADDRESS
     vmread r8, rcx
     jbe ResidentFatal
+    cmp qword ptr [r11 + CONTEXT_GPU_STATE_PA], 0
+    je ResidentEptGpuChecked
+    mov edx, 2
+    xor r9d, r9d
+    call ResidentCallGpu
+    cmp eax, 3
+    je ResidentUnsupportedMsr
+    cmp eax, 2
+    jne ResidentFatal
+    mov ecx, VMCS_GUEST_PHYSICAL_ADDRESS
+    vmread r8, rcx
+    jbe ResidentFatal
+ResidentEptGpuChecked:
     cmp dword ptr [r11 + CONTEXT_SHADOW_ACTIVE], 1
     jne ResidentEptViolationFatal
     ; Both views map the same HPA. Retry under identity permissions without
@@ -1213,6 +1240,26 @@ ResidentEptGpaHexWrite:
     jmp ResidentReportFatal
 
 ResidentIoInstruction:
+    cmp qword ptr [r11 + CONTEXT_GPU_STATE_PA], 0
+    je ResidentIoVmware
+    mov ecx, VMCS_VM_EXIT_QUALIFICATION
+    vmread r8, rcx
+    jbe ResidentFatal
+    mov ecx, VMCS_GUEST_CS_ACCESS
+    vmread r9, rcx
+    jbe ResidentFatal
+    shr r9d, 13
+    and r9d, 1
+    mov edx, 1
+    call ResidentCallGpu
+    cmp eax, 1
+    je ResidentMsrAdvance
+    cmp eax, 2
+    je ResidentIoVmware
+    cmp eax, 3
+    je ResidentUnsupportedMsr
+    jmp ResidentFatal
+ResidentIoVmware:
     ; VMware Tools probes port 5658h from CPL3 and relies on a hypervisor to
     ; intercept the otherwise privileged IN instruction.  The low-bandwidth
     ; backdoor is not an ordinary one-register IN: EAX, EBX, ECX, EDX, ESI,
@@ -1448,6 +1495,18 @@ ResidentPrepareNativeDetach:
     mov rax, qword ptr [r11 + CONTEXT_GUEST_R12]
     cmp rax, qword ptr [r11 + CONTEXT_RUNTIME_GENERATION]
     jne ResidentFatal
+
+    ; A diagnostic adapter is bound until platform reset. Never pivot into
+    ; the existing VMX-off/IOMMU-release path while scanout retains its pins.
+    cmp qword ptr [r11 + CONTEXT_GPU_STATE_PA], 0
+    je ResidentDetachGpuChecked
+    xor edx, edx
+    xor r8d, r8d
+    xor r9d, r9d
+    call ResidentCallGpu
+    mov qword ptr [r11 + CONTEXT_GUEST_RAX], 1
+    jmp ResidentMsrAdvance
+ResidentDetachGpuChecked:
 
     ; Validate the broker's root entry and stack as canonical kernel virtual
     ; addresses.  Ring-0 ownership and the authenticated token are the trust
@@ -2159,6 +2218,27 @@ ResidentBootstrapVmcall:
     jne ResidentFatal
     cmp dword ptr [r11 + CONTEXT_STATE], 1
     jne ResidentFatal
+    cmp qword ptr [r11 + CONTEXT_GPU_STATE_PA], 0
+    je ResidentBootstrapGpuDone
+    mov eax, dword ptr [r11 + CONTEXT_CURRENT_PROCESSOR_NUMBER]
+    cmp eax, dword ptr [r11 + CONTEXT_BSP_PROCESSOR_NUMBER]
+    jne ResidentBootstrapGpuDone
+    mov edx, 3
+    xor r8d, r8d
+    xor r9d, r9d
+    call ResidentCallGpu
+    ; A rejected validation leaves scanout pinned and rendering stopped.
+    ; It never causes re-arming or a guest-device hand-back.
+ResidentBootstrapGpuDone:
+    cmp qword ptr [r11 + CONTEXT_GPU_VM_WC_STATE_PA], 0
+    je ResidentBootstrapWcTestDone
+    mov edx, 5
+    xor r8d, r8d
+    xor r9d, r9d
+    call ResidentCallGpu
+    test eax, eax
+    jz ResidentFatal
+ResidentBootstrapWcTestDone:
     mov dword ptr [r11 + CONTEXT_READY_SEEN], 1
     mov dword ptr [r11 + CONTEXT_STATE], HV_EFI_HEALTH_READY OR HV_EFI_HEALTH_PERSISTENT
 
@@ -2224,6 +2304,13 @@ ResidentEntryControlsReady:
     vmwrite rcx, r10
     jbe ResidentFatal
 ResidentRestoreAndResume:
+    cmp qword ptr [r11 + CONTEXT_GPU_STATE_PA], 0
+    je ResidentGpuCleanupDone
+    xor edx, edx
+    xor r8d, r8d
+    xor r9d, r9d
+    call ResidentCallGpu
+ResidentGpuCleanupDone:
     mov rax, qword ptr [r11 + CONTEXT_GUEST_RAX]
     mov rcx, qword ptr [r11 + CONTEXT_GUEST_RCX]
     mov rdx, qword ptr [r11 + CONTEXT_GUEST_RDX]
@@ -2248,6 +2335,40 @@ ResidentRestoreAndResume:
     jc ResidentResumeInvalid
     jz ResidentResumeValid
     jmp ResidentFatalAfterRestore
+
+; Existing exit/resume path calls the relocated HAL adapter through its
+; private context. Preserve the guest x87/SSE state and use masked exceptions.
+; The resident C target uses legacy SSE2 only; it does not touch AVX upper state.
+ResidentCallGpu:
+    push rbp
+    mov rbp, rsp
+    and rsp, -16
+    sub rsp, 240h
+    mov qword ptr [rsp + 230h], r11
+    fxsave64 [rsp + 20h]
+    fninit
+    mov dword ptr [rsp + 220h], 1F80h
+    ldmxcsr dword ptr [rsp + 220h]
+    mov rcx, r11
+    mov rax, qword ptr [r11 + CONTEXT_GPU_ENTRY]
+    cmp edx, 5
+    jne ResidentGpuEntrySelected
+    mov rax, qword ptr [r11 + CONTEXT_GPU_VM_WC_ENTRY]
+ResidentGpuEntrySelected:
+    test rax, rax
+    jz ResidentFatal
+    cmp rax, qword ptr [r11 + CONTEXT_RUNTIME_SCANNER_CODE_BASE]
+    jb ResidentFatal
+    mov r10, qword ptr [r11 + CONTEXT_RUNTIME_SCANNER_CODE_BASE]
+    add r10, qword ptr [r11 + CONTEXT_RUNTIME_SCANNER_CODE_SIZE]
+    cmp rax, r10
+    jae ResidentFatal
+    call rax
+    fxrstor64 [rsp + 20h]
+    mov r11, qword ptr [rsp + 230h]
+    mov rsp, rbp
+    pop rbp
+    ret
 
 ResidentResumeInvalid:
     mov r10, qword ptr [rsp + HOST_CONTEXT_SLOT]

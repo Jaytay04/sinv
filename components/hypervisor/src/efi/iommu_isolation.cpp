@@ -593,6 +593,141 @@ uint32_t ExpectedAssignmentFlags(
     return flags;
 }
 
+bool RootRangeCoveredByDenyInventory(
+    const HV_EFI_IOMMU_PLAN *identityPlan,
+    const HV_EFI_IOMMU_ROOT_DEVICE_RANGE *range)
+{
+    uint64_t cursor = range->PhysicalBase;
+    const uint64_t end = range->PhysicalBase + range->Size;
+    for (uint32_t index = 0;
+         index < identityPlan->HypervisorDenyRangeCount && cursor < end;
+         ++index) {
+        const HV_EFI_IOMMU_RANGE *deny =
+            &identityPlan->HypervisorDenyRanges[index];
+        const uint64_t denyEnd = RangeEnd(deny);
+        if (denyEnd <= cursor) {
+            continue;
+        }
+        if (deny->PhysicalBase > cursor) {
+            return false;
+        }
+        cursor = denyEnd < end ? denyEnd : end;
+    }
+    return cursor == end;
+}
+
+HV_EFI_IOMMU_STATUS ValidateRootDevicePlanFields(
+    const HV_EFI_IOMMU_PLAN *identityPlan,
+    const HV_EFI_IOMMU_ROOT_DEVICE_PLAN *rootPlan)
+{
+    uint32_t framebufferCount = 0;
+    uint32_t translationCount = 0;
+    uint64_t framebufferBytes = 0;
+    uint64_t translationBytes = 0;
+    uint64_t mappedBytes = 0;
+    const uint64_t rootAddressLimit = UINT64_C(1) << 39;
+    if (identityPlan == nullptr || rootPlan == nullptr ||
+        identityPlan->Devices == nullptr ||
+        identityPlan->Units == nullptr ||
+        identityPlan->Assignments == nullptr ||
+        rootPlan->DeviceIndex >= identityPlan->DeviceCount ||
+        rootPlan->DomainId == 0 ||
+        rootPlan->DomainId > HV_EFI_IOMMU_MAX_DOMAIN_ID ||
+        rootPlan->MappingCount == 0 ||
+        rootPlan->MappingCount > HV_EFI_IOMMU_ROOT_DEVICE_MAX_RANGES ||
+        rootPlan->Reserved != 0) {
+        return HV_EFI_IOMMU_INVALID_ARGUMENT;
+    }
+    const HV_EFI_IOMMU_DEVICE *device =
+        &identityPlan->Devices[rootPlan->DeviceIndex];
+    const HV_EFI_IOMMU_DOMAIN_ASSIGNMENT *assignment =
+        &identityPlan->Assignments[rootPlan->DeviceIndex];
+    if (device->Segment != 0 || rootPlan->Segment != 0 ||
+        device->Bus != rootPlan->Bus ||
+        device->Device != rootPlan->Device ||
+        device->Function != rootPlan->Function ||
+        device->Kind != HV_EFI_IOMMU_DEVICE_INTEGRATED ||
+        device->DmaCapable == 0 ||
+        device->RemappingUnitIndex != rootPlan->RemappingUnitIndex ||
+        assignment->DeviceIndex != rootPlan->DeviceIndex ||
+        rootPlan->LegacyDomainId == 0 ||
+        rootPlan->LegacyDomainId > UINT16_MAX ||
+        rootPlan->LegacyDomainId == rootPlan->DomainId ||
+        identityPlan->Units[rootPlan->RemappingUnitIndex].Segment != 0 ||
+        identityPlan->Units[rootPlan->RemappingUnitIndex]
+                .FourKilobytePagesSupported == 0) {
+        return HV_EFI_IOMMU_SCOPE_MISMATCH;
+    }
+    for (uint32_t index = 0; index < identityPlan->AssignmentCount; ++index) {
+        if (identityPlan->Assignments[index].DomainId == rootPlan->DomainId) {
+            return HV_EFI_IOMMU_SCOPE_MISMATCH;
+        }
+    }
+    for (uint32_t index = 0; index < rootPlan->MappingCount; ++index) {
+        const HV_EFI_IOMMU_ROOT_DEVICE_RANGE *range =
+            &rootPlan->Mappings[index];
+        const HV_EFI_IOMMU_RANGE bounds = {
+            range->PhysicalBase, range->Size
+        };
+        if ((range->Kind != HV_EFI_IOMMU_ROOT_DEVICE_RANGE_FRAMEBUFFER &&
+             range->Kind != HV_EFI_IOMMU_ROOT_DEVICE_RANGE_TRANSLATION) ||
+            range->Access != HV_EFI_IOMMU_ROOT_DEVICE_ACCESS_READ) {
+            return HV_EFI_IOMMU_INVALID_ARGUMENT;
+        }
+        if (ValidateRange(&bounds, rootAddressLimit) != HV_EFI_IOMMU_OK) {
+            return HV_EFI_IOMMU_RANGE_OVERFLOW;
+        }
+        if (index != 0 &&
+            rootPlan->Mappings[index - 1].PhysicalBase +
+                    rootPlan->Mappings[index - 1].Size >
+                range->PhysicalBase) {
+            return HV_EFI_IOMMU_RANGE_OVERLAP;
+        }
+        if (!RootRangeCoveredByDenyInventory(identityPlan, range)) {
+            return HV_EFI_IOMMU_DENY_VIOLATION;
+        }
+        for (uint32_t mappingIndex = 0;
+             mappingIndex < identityPlan->MappingCount; ++mappingIndex) {
+            const HV_EFI_IOMMU_IDENTITY_MAPPING *mapping =
+                &identityPlan->Mappings[mappingIndex];
+            if (RangesIntersect(range->PhysicalBase, range->Size,
+                                mapping->PhysicalBase, mapping->Size)) {
+                return HV_EFI_IOMMU_DENY_VIOLATION;
+            }
+        }
+        if (range->Kind == HV_EFI_IOMMU_ROOT_DEVICE_RANGE_FRAMEBUFFER) {
+            ++framebufferCount;
+            if (!AddChecked(framebufferBytes, range->Size,
+                            &framebufferBytes)) {
+                return HV_EFI_IOMMU_RANGE_OVERFLOW;
+            }
+        } else {
+            ++translationCount;
+            if (!AddChecked(translationBytes, range->Size,
+                            &translationBytes)) {
+                return HV_EFI_IOMMU_RANGE_OVERFLOW;
+            }
+        }
+        if (!AddChecked(mappedBytes, range->Size, &mappedBytes)) {
+            return HV_EFI_IOMMU_RANGE_OVERFLOW;
+        }
+    }
+    if (framebufferCount != 1 || translationCount == 0 ||
+        framebufferBytes == 0 ||
+        framebufferBytes >
+            HV_EFI_IOMMU_ROOT_DEVICE_MAX_FRAMEBUFFER_BYTES ||
+        translationBytes == 0 ||
+        translationBytes >
+            HV_EFI_IOMMU_ROOT_DEVICE_MAX_TRANSLATION_BYTES ||
+        mappedBytes > HV_EFI_IOMMU_ROOT_DEVICE_MAX_MAPPED_BYTES ||
+        rootPlan->FramebufferBytes != framebufferBytes ||
+        rootPlan->TranslationBytes != translationBytes ||
+        rootPlan->MappedBytes != mappedBytes) {
+        return HV_EFI_IOMMU_INVARIANT;
+    }
+    return HV_EFI_IOMMU_OK;
+}
+
 } // namespace
 
 extern "C" HV_EFI_IOMMU_STATUS HvEfiIommuBuildIdentityPlan(
@@ -713,7 +848,7 @@ extern "C" HV_EFI_IOMMU_STATUS HvEfiIommuBuildIdentityPlan(
                     rmrr->PhysicalBase,
                     rmrr->Size,
                     domainId,
-                    HV_EFI_IOMMU_MAPPING_RMRR
+                    HV_EFI_IOMMU_PLAN_MAPPING_RMRR
                 };
             }
         }
@@ -847,7 +982,7 @@ extern "C" HV_EFI_IOMMU_STATUS HvEfiIommuValidateIdentityPlan(
             mapping->DomainId > plan->DeviceCount ||
             mapping->Flags == 0 ||
             (mapping->Flags & ~(HV_EFI_IOMMU_MAPPING_GUEST_RAM |
-                                HV_EFI_IOMMU_MAPPING_RMRR)) != 0 ||
+                                HV_EFI_IOMMU_PLAN_MAPPING_RMRR)) != 0 ||
             !MappingAuthorized(plan, mapping)) {
             return HV_EFI_IOMMU_INVARIANT;
         }
@@ -948,4 +1083,105 @@ extern "C" HV_EFI_IOMMU_STATUS HvEfiIommuPlanMappingAt(
         }
     }
     return HV_EFI_IOMMU_OK;
+}
+
+extern "C" HV_EFI_IOMMU_STATUS HvEfiIommuBuildRootDevicePlan(
+    const HV_EFI_IOMMU_PLAN *identityPlan,
+    uint32_t deviceIndex,
+    uint32_t legacyDomainId,
+    uint32_t domainId,
+    const HV_EFI_IOMMU_ROOT_DEVICE_RANGE *ranges,
+    uint32_t rangeCount,
+    HV_EFI_IOMMU_ROOT_DEVICE_PLAN *rootPlan)
+{
+    HV_EFI_IOMMU_STATUS status;
+    if (rootPlan == nullptr) {
+        return HV_EFI_IOMMU_INVALID_ARGUMENT;
+    }
+    ZeroBytes(rootPlan, sizeof(*rootPlan));
+    if (identityPlan == nullptr || ranges == nullptr ||
+        rangeCount == 0 ||
+        rangeCount > HV_EFI_IOMMU_ROOT_DEVICE_MAX_RANGES ||
+        legacyDomainId == 0 || legacyDomainId > UINT16_MAX ||
+        domainId == 0 ||
+        domainId > HV_EFI_IOMMU_MAX_DOMAIN_ID) {
+        return HV_EFI_IOMMU_INVALID_ARGUMENT;
+    }
+    status = HvEfiIommuValidateIdentityPlan(identityPlan, nullptr, nullptr);
+    if (status != HV_EFI_IOMMU_OK) {
+        return status;
+    }
+    if (deviceIndex >= identityPlan->DeviceCount) {
+        return HV_EFI_IOMMU_INVALID_ARGUMENT;
+    }
+    const HV_EFI_IOMMU_DOMAIN_ASSIGNMENT *assignment =
+        &identityPlan->Assignments[deviceIndex];
+    rootPlan->DeviceIndex = deviceIndex;
+    rootPlan->Segment = identityPlan->Devices[deviceIndex].Segment;
+    rootPlan->Bus = identityPlan->Devices[deviceIndex].Bus;
+    rootPlan->Device = identityPlan->Devices[deviceIndex].Device;
+    rootPlan->Function = identityPlan->Devices[deviceIndex].Function;
+    rootPlan->RemappingUnitIndex = assignment->RemappingUnitIndex;
+    rootPlan->LegacyDomainId = legacyDomainId;
+    rootPlan->DomainId = domainId;
+    rootPlan->MappingCount = rangeCount;
+    for (uint32_t index = 0; index < rangeCount; ++index) {
+        rootPlan->Mappings[index] = ranges[index];
+    }
+    for (uint32_t index = 1; index < rangeCount; ++index) {
+        const HV_EFI_IOMMU_ROOT_DEVICE_RANGE value =
+            rootPlan->Mappings[index];
+        uint32_t position = index;
+        while (position != 0 &&
+               rootPlan->Mappings[position - 1].PhysicalBase >
+                   value.PhysicalBase) {
+            rootPlan->Mappings[position] =
+                rootPlan->Mappings[position - 1];
+            --position;
+        }
+        rootPlan->Mappings[position] = value;
+    }
+    for (uint32_t index = 0; index < rangeCount; ++index) {
+        const HV_EFI_IOMMU_ROOT_DEVICE_RANGE *range =
+            &rootPlan->Mappings[index];
+        if (range->Kind ==
+            HV_EFI_IOMMU_ROOT_DEVICE_RANGE_FRAMEBUFFER) {
+            if (!AddChecked(rootPlan->FramebufferBytes,
+                            range->Size,
+                            &rootPlan->FramebufferBytes)) {
+                ZeroBytes(rootPlan, sizeof(*rootPlan));
+                return HV_EFI_IOMMU_RANGE_OVERFLOW;
+            }
+        } else if (range->Kind ==
+                   HV_EFI_IOMMU_ROOT_DEVICE_RANGE_TRANSLATION) {
+            if (!AddChecked(rootPlan->TranslationBytes,
+                            range->Size,
+                            &rootPlan->TranslationBytes)) {
+                ZeroBytes(rootPlan, sizeof(*rootPlan));
+                return HV_EFI_IOMMU_RANGE_OVERFLOW;
+            }
+        }
+        if (!AddChecked(rootPlan->MappedBytes, range->Size,
+                        &rootPlan->MappedBytes)) {
+            ZeroBytes(rootPlan, sizeof(*rootPlan));
+            return HV_EFI_IOMMU_RANGE_OVERFLOW;
+        }
+    }
+    status = ValidateRootDevicePlanFields(identityPlan, rootPlan);
+    if (status != HV_EFI_IOMMU_OK) {
+        ZeroBytes(rootPlan, sizeof(*rootPlan));
+    }
+    return status;
+}
+
+extern "C" HV_EFI_IOMMU_STATUS HvEfiIommuValidateRootDevicePlan(
+    const HV_EFI_IOMMU_PLAN *identityPlan,
+    const HV_EFI_IOMMU_ROOT_DEVICE_PLAN *rootPlan)
+{
+    const HV_EFI_IOMMU_STATUS identityStatus =
+        HvEfiIommuValidateIdentityPlan(identityPlan, nullptr, nullptr);
+    if (identityStatus != HV_EFI_IOMMU_OK) {
+        return identityStatus;
+    }
+    return ValidateRootDevicePlanFields(identityPlan, rootPlan);
 }

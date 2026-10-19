@@ -17,13 +17,20 @@ extern "C" {
  *    MMIO/apertures, GGTT/command submission, DMA, resets and power control.
  *    Windows uses a different adapter. Disabling/unbinding its WDDM driver,
  *    an idle plane, and register polling do not establish this isolation.
- *    This EFI payload currently has NO such exclusion/activation provider.
- *    A null backend therefore returns HV_GPU_NOT_SUPPORTED; no host setting,
- *    display register, PCI BAR or GGTT entry is changed by this module.
- * 3. A future provider allocates/pins private contiguous pages before EBS,
+ *    The native boot backend enforces this boundary with PCI filtering,
+ *    protected EPT views and a separate read-only scanout DMA domain.
+ *    A null backend returns HV_GPU_NOT_SUPPORTED.
+ * 3. The boot provider allocates/pins private contiguous pages before EBS,
  *    establishes scanout-read DMA access without exposing other private RAM,
  *    reserves GGTT entries, configures an uncompressed linear XRGB plane,
  *    arms PLANE_SURF and waits for PLANE_SURFLIVE. Only then initialize HAL.
+ *
+ * Firmware/SMM are TRUSTED platform prerequisites, outside this guest-only
+ * exclusion boundary. They must not reprogram the plane/GGTT or write/DMA
+ * into its surface, or change physical PAT/MTRR cache policy during rendering.
+ * A firmware violation can silently break ownership or cache safety: the
+ * latch does not detect transient writes or DMA that leave registers intact.
+ * Matching register readback cannot establish that this assumption holds.
  *
  * Linear is a pixel layout, NOT a GGTT bypass. This diagnostic contract uses
  * a known contiguous physical allocation and explicit GGTT PTE validation;
@@ -39,9 +46,9 @@ extern "C" {
  * framebuffer, and callbacks must not re-enter this serialized HAL.
  * Serialize calls on the owning CPU. Before entering resident HAL code the
  * caller must preserve guest SIMD/FPU state and mask FP exceptions, as for
- * HvOverlayRender itself. This gated delivery installs no VM-exit render pump.
- * A future adapter must also call HvGpuBeforeGuestResume from its EXISTING
- * resume/teardown path. Render always drains/unmaps before returning normally.
+ * HvOverlayRender itself. Native boot renders the diagnostic pattern from
+ * the existing bootstrap exit and calls HvGpuBeforeGuestResume from the
+ * existing resume path. Render drains/unmaps before returning normally.
  * Root stores do not cause nested VM-exits; root faults use existing policy.
  */
 
@@ -107,7 +114,7 @@ typedef struct HV_GPU_EXTENT {
     uint32_t PageCount;
 } HV_GPU_EXTENT;
 
-#define HV_GPU_EXCLUSION_VERSION UINT32_C(1)
+#define HV_GPU_EXCLUSION_VERSION UINT32_C(2)
 #define HV_GPU_EXCLUSION_BOOT_VPCI_EPT_VTD UINT32_C(1)
 #define HV_GPU_EXCLUDE_PCI_ENUMERATION UINT32_C(0x001)
 #define HV_GPU_EXCLUDE_CONFIG_ACCESS UINT32_C(0x002)
@@ -118,13 +125,18 @@ typedef struct HV_GPU_EXTENT {
 #define HV_GPU_EXCLUDE_PRIVATE_STATE UINT32_C(0x040)
 #define HV_GPU_EXCLUDE_FRAMEBUFFER UINT32_C(0x080)
 #define HV_GPU_EXCLUDE_ALL_CPUS UINT32_C(0x100)
-#define HV_GPU_EXCLUDE_FIRMWARE_WRITERS UINT32_C(0x200)
+/* Legacy name retained for source compatibility. Version 2 means guest
+ * control paths are excluded; it does NOT attest isolation from SMM. */
+#define HV_GPU_EXCLUDE_GUEST_CONTROL_PATHS UINT32_C(0x200)
+#define HV_GPU_EXCLUDE_FIRMWARE_WRITERS HV_GPU_EXCLUDE_GUEST_CONTROL_PATHS
 #define HV_GPU_EXCLUSION_REQUIRED UINT32_C(0x3ff)
 
 /* Readback of an already-installed boot exclusion policy. This is NOT an
  * activation request, credential, JSON configuration, or substitute for the
  * enforcement provider. Only trusted resident platform code can supply it,
  * after querying installed PCI filters, EPT and VT-d protection on every CPU.
+ * Version 2 explicitly trusts firmware/SMM; the record attests guest control
+ * exclusion only. It cannot prove or detect every firmware ownership breach.
  * SessionId is generated once before guest launch and cannot change while
  * scanout remains active. Adapter/allocation binding prevents reuse of an
  * unrelated reservation. Tests explicitly simulate this readback in RAM.

@@ -9,6 +9,13 @@
 #include "runtime_shadow.h"
 #include "scanner.h"
 #include "shadow_ept.h"
+#include "gpu_native.h"
+#include "gpu_boot.h"
+#include <intrin.h>
+#pragma intrinsic(__wbinvd)
+#if defined(HYPERSINV_GPU_VM_SELFTEST)
+#include "gpu_vm_wc.h"
+#endif
 
 #define HV_EFI_MEMORY_MAP_SLACK_DESCRIPTORS ((UINTN)8)
 #define HV_EFI_MEMORY_MAP_MAX_ATTEMPTS UINT32_C(4)
@@ -1034,6 +1041,8 @@ static EFI_STATUS HvEfiAllocateProcessorRecordResources(
     processorContext->AcpiShadowPhysical = rootContext->AcpiShadowPhysical;
     processorContext->AcpiGuestRsdpPage = rootContext->AcpiGuestRsdpPage;
     processorContext->AcpiGuestXsdtPage = rootContext->AcpiGuestXsdtPage;
+    processorContext->GpuStatePhysical = rootContext->GpuStatePhysical;
+    processorContext->GpuResidentEntry = rootContext->GpuResidentEntry;
     processorContext->RuntimeScannerCodeBase =
         rootContext->RuntimeScannerCodeBase;
     processorContext->RuntimeScannerCodeSize =
@@ -1396,6 +1405,12 @@ static int HvEfiPrepareControlRegisters(HV_EFI_CONTEXT *context,
         return 0;
     }
     context->HostCr4 |= UINT64_C(1) << 13;
+    if (context->GpuStatePhysical != 0 || context->GpuVmWcStatePhysical != 0) {
+        const uint64_t simdBits = (UINT64_C(1) << 9) | (UINT64_C(1) << 10);
+        if ((context->HostCr4 | simdBits) & ~cr4Fixed1) return 0;
+        context->HostCr4 |= simdBits;
+        context->HostCr0 &= ~UINT64_C(12); /* root EM/TS clear; guest unchanged */
+    }
 
     pinCapabilities = HvEfiReadMsr(trueControls ?
         HV_EFI_IA32_VMX_TRUE_PINBASED_CTLS : HV_EFI_IA32_VMX_PINBASED_CTLS);
@@ -1639,7 +1654,8 @@ static int HvEfiPrepareHostState(const HV_EFI_CONTEXT *context)
                         context->SysenterEip) &&
         HvEfiWriteField(HV_EFI_VMCS_HOST_RSP, context->HostStackTop) &&
         HvEfiWriteField(HV_EFI_VMCS_HOST_RIP, context->ResidentHostRip) &&
-        HvEfiWriteField(HV_EFI_VMCS_HOST_PAT, context->Pat) &&
+        HvEfiWriteField(HV_EFI_VMCS_HOST_PAT,
+            context->GpuHostPat != 0 ? context->GpuHostPat : context->Pat) &&
         HvEfiWriteField(HV_EFI_VMCS_HOST_EFER,
                         context->Efer | HV_EFI_EFER_NXE) &&
         HvEfiWriteField(HV_EFI_VMCS_HOST_SYSENTER_CS,
@@ -2159,6 +2175,247 @@ static int HvEfiDmaMappableMemoryType(uint32_t type)
         type == EfiACPIMemoryNVS || type == EfiPersistentMemory;
 }
 
+/* Only exact endpoint scopes are admitted for the dedicated profile. A
+ * bridge/alias topology needs explicit expansion before it can be assigned. */
+static int HvEfiGpuScopeBdf(const HV_EFI_PHYSICAL_IOMMU_STATE *state,
+                             const HV_EFI_IOMMU_DMAR_SCOPE *scope,
+                             uint32_t *bus, uint32_t *device, uint32_t *function)
+{
+    const HV_EFI_IOMMU_DEVICE_PATH_ELEMENT *path;
+    if (scope->Segment != 0 || scope->Type != HV_EFI_IOMMU_SCOPE_PCI_ENDPOINT ||
+        scope->PathElementCount != 1 ||
+        scope->FirstPathElement >= state->Dmar.PathElementCount) return 0;
+    path = &state->Dmar.PathElements[scope->FirstPathElement];
+    *bus = scope->StartBus;
+    *device = path->Device;
+    *function = path->Function;
+    return 1;
+}
+
+static int HvEfiGpuRmrrOwner(const HV_EFI_PHYSICAL_IOMMU_STATE *state,
+                              const HV_EFI_IOMMU_DMAR_RMRR *rmrr)
+{
+    uint32_t i, gpu = 0, other = 0;
+    for (i = 0; i < rmrr->ScopeCount; ++i) {
+        uint32_t bus, device, function;
+        const uint32_t index = rmrr->FirstScope + i;
+        if (index >= state->Dmar.ScopeCount ||
+            !HvEfiGpuScopeBdf(state, &state->Dmar.Scopes[index],
+                              &bus, &device, &function)) return -1;
+        if (bus == 0 && device == 2 && function == 0) ++gpu;
+        else ++other;
+    }
+    return gpu != 0 ? (other != 0 ? -1 : 1) : 0;
+}
+
+static EFI_STATUS HvEfiGpuBuildDmaDomain(
+    HV_EFI_CONTEXT *context, HV_EFI_PHYSICAL_IOMMU_STATE *state,
+    const HV_EFI_IOMMU_PROTECTED_RANGE *mapped, uint32_t mappedCount,
+    const HV_EFI_IOMMU_PROTECTED_RANGE *denied, uint32_t deniedCount)
+{
+    HV_GPU_NATIVE_STATE *gpu = (HV_GPU_NATIVE_STATE *)(uintptr_t)
+        context->GpuStatePhysical;
+    HV_EFI_IOMMU_UNIT units[HV_GPU_NATIVE_MAX_UNITS];
+    HV_EFI_IOMMU_DEVICE *devices = NULL;
+    HV_EFI_IOMMU_RANGE *guest = NULL, *deny = NULL, *normalGuest = NULL,
+        *normalDeny = NULL;
+    HV_EFI_IOMMU_RMRR *rmrrs = NULL;
+    HV_EFI_IOMMU_DOMAIN_ASSIGNMENT *assignments = NULL;
+    HV_EFI_IOMMU_IDENTITY_MAPPING *mappings = NULL;
+    HV_EFI_IOMMU_TOPOLOGY topology;
+    HV_EFI_IOMMU_PLAN_STORAGE storage;
+    HV_EFI_IOMMU_PLAN plan;
+    HV_EFI_IOMMU_ROOT_DEVICE_RANGE rootRanges[2];
+    uint32_t i, deviceCount = 0, guestCount = 0, rmrrCount = 0;
+    uint32_t gpuIndex = UINT32_MAX;
+    uint64_t mappingCapacity;
+    EFI_STATUS status = EFI_OUT_OF_RESOURCES;
+#define GPU_POOL(pointer, count) \
+    do { if (EFI_ERROR(gBS->AllocatePool(EfiLoaderData, \
+        (UINTN)(count) * sizeof(*(pointer)), (void **)&(pointer)))) \
+        goto cleanup; } while (0)
+    if (gpu == NULL || deniedCount > HV_EFI_EPT_MAX_DENY_RANGES ||
+        state->McfgCount != 1 ||
+        state->Mcfg[0].Segment != 0 || state->Mcfg[0].StartBus != 0 ||
+        state->Dmar.UnitCount > HV_GPU_NATIVE_MAX_UNITS) return EFI_UNSUPPORTED;
+    GPU_POOL(devices, HV_EFI_PHYSICAL_IOMMU_MAX_PCI_STATES);
+    GPU_POOL(guest, mappedCount);
+    GPU_POOL(deny, deniedCount);
+    GPU_POOL(normalGuest, mappedCount);
+    GPU_POOL(normalDeny, deniedCount);
+    GPU_POOL(rmrrs, state->Dmar.ScopeCount + 1);
+    GPU_POOL(assignments, HV_EFI_PHYSICAL_IOMMU_MAX_PCI_STATES);
+    HvEfiZero(&topology, sizeof(topology));
+    HvEfiZero(&storage, sizeof(storage));
+    HvEfiZero(units, sizeof(units));
+    for (i = 0; i < state->Dmar.UnitCount; ++i) {
+        const HV_EFI_IOMMU_DMAR_UNIT *unit = &state->Dmar.Units[i];
+        const uint64_t cap = *(volatile uint64_t *)(uintptr_t)(unit->RegisterBase + 8);
+        const uint64_t ecap = *(volatile uint64_t *)(uintptr_t)(unit->RegisterBase + 16);
+        uint32_t scope;
+        if (unit->Segment != 0 || ((cap >> 8) & 2) == 0) {
+            status = EFI_UNSUPPORTED; goto cleanup;
+        }
+        for (scope = 0; scope < unit->ScopeCount; ++scope) {
+            const HV_EFI_IOMMU_DMAR_SCOPE *s =
+                &state->Dmar.Scopes[unit->FirstScope + scope];
+            if (s->Type == HV_EFI_IOMMU_SCOPE_PCI_SUB_HIERARCHY ||
+                (s->Type == HV_EFI_IOMMU_SCOPE_PCI_ENDPOINT &&
+                 s->PathElementCount != 1)) {
+                status = EFI_UNSUPPORTED; goto cleanup;
+            }
+        }
+        units[i].RegisterBase = unit->RegisterBase;
+        units[i].Segment = 0;
+        units[i].IncludeAll = (unit->Flags & HV_EFI_IOMMU_DRHD_INCLUDE_ALL) != 0;
+        units[i].TranslationSupported = 1;
+        units[i].FourKilobytePagesSupported = 1;
+        units[i].AddressWidthBits = 39;
+        units[i].QueuedInvalidationSupported = (uint32_t)((ecap >> 1) & 1);
+        units[i].InterruptRemappingSupported = (uint32_t)((ecap >> 3) & 1);
+        units[i].ExtendedInterruptModeSupported = (uint32_t)((ecap >> 4) & 1);
+    }
+    for (i = 0; i < ((uint32_t)state->Mcfg[0].EndBus + 1) * 256; ++i) {
+        const uint32_t bus = i >> 8, device = (i >> 3) & 31, function = i & 7;
+        const uint64_t address = state->Mcfg[0].EcamBase + ((uint64_t)i << 12);
+        uint32_t unitIndex, selected = UINT32_MAX, fallback = UINT32_MAX;
+        if (*(volatile uint16_t *)(uintptr_t)address == UINT16_MAX) continue;
+        if (deviceCount == HV_EFI_PHYSICAL_IOMMU_MAX_PCI_STATES) {
+            status = EFI_OUT_OF_RESOURCES; goto cleanup;
+        }
+        for (unitIndex = 0; unitIndex < state->Dmar.UnitCount; ++unitIndex) {
+            const HV_EFI_IOMMU_DMAR_UNIT *unit = &state->Dmar.Units[unitIndex];
+            uint32_t scope;
+            if (units[unitIndex].IncludeAll != 0) fallback = unitIndex;
+            for (scope = 0; scope < unit->ScopeCount; ++scope) {
+                uint32_t sb, sd, sf;
+                if (HvEfiGpuScopeBdf(state,
+                        &state->Dmar.Scopes[unit->FirstScope + scope],
+                        &sb, &sd, &sf) && sb == bus && sd == device && sf == function) {
+                    if (selected != UINT32_MAX && selected != unitIndex) {
+                        status = EFI_UNSUPPORTED; goto cleanup;
+                    }
+                    selected = unitIndex;
+                }
+            }
+        }
+        if (selected == UINT32_MAX) selected = fallback;
+        if (selected == UINT32_MAX) { status = EFI_UNSUPPORTED; goto cleanup; }
+        devices[deviceCount].Segment = 0;
+        devices[deviceCount].Bus = bus;
+        devices[deviceCount].Device = device;
+        devices[deviceCount].Function = function;
+        devices[deviceCount].Kind = bus == 0 && device == 2 && function == 0 ?
+            HV_EFI_IOMMU_DEVICE_INTEGRATED : HV_EFI_IOMMU_DEVICE_DISCRETE;
+        devices[deviceCount].DmaCapable = 1;
+        devices[deviceCount].RequiresInterruptRemapping = 0;
+        devices[deviceCount].RemappingUnitIndex = selected;
+        if (bus == 0 && device == 2 && function == 0) gpuIndex = deviceCount;
+        ++deviceCount;
+    }
+    if (gpuIndex == UINT32_MAX) { status = EFI_UNSUPPORTED; goto cleanup; }
+    /* Keep the root requester at index zero in the boot-only topology. */
+    { HV_EFI_IOMMU_DEVICE swap = devices[0]; devices[0] = devices[gpuIndex];
+      devices[gpuIndex] = swap; }
+    for (i = 0; i < mappedCount; ++i) {
+        if (mapped[i].Kind != HV_EFI_IOMMU_MAPPING_RAM) continue;
+        guest[guestCount].PhysicalBase = mapped[i].PhysicalBase;
+        guest[guestCount++].Size = mapped[i].Size;
+    }
+    for (i = 0; i < deniedCount; ++i) {
+        deny[i].PhysicalBase = denied[i].PhysicalBase;
+        deny[i].Size = denied[i].Size;
+        gpu->PrivateRanges[i].PhysicalBase = denied[i].PhysicalBase;
+        gpu->PrivateRanges[i].Size = denied[i].Size;
+    }
+    gpu->PrivateRangeCount = deniedCount;
+    for (i = 0; i < state->Dmar.RmrrCount; ++i) {
+        const HV_EFI_IOMMU_DMAR_RMRR *rmrr = &state->Dmar.Rmrrs[i];
+        uint32_t scope;
+        const int rootOwner = HvEfiGpuRmrrOwner(state, rmrr);
+        if (rootOwner < 0) { status = EFI_UNSUPPORTED; goto cleanup; }
+        if (rootOwner == 1) continue;
+        for (scope = 0; scope < rmrr->ScopeCount; ++scope) {
+            uint32_t bus, device, function, d;
+            if (!HvEfiGpuScopeBdf(state,
+                    &state->Dmar.Scopes[rmrr->FirstScope + scope],
+                    &bus, &device, &function)) {
+                status = EFI_UNSUPPORTED; goto cleanup;
+            }
+            for (d = 1; d < deviceCount; ++d) {
+                if (devices[d].Bus == bus && devices[d].Device == device &&
+                    devices[d].Function == function) break;
+            }
+            if (d == deviceCount) { status = EFI_UNSUPPORTED; goto cleanup; }
+            rmrrs[rmrrCount].PhysicalBase = rmrr->PhysicalBase;
+            rmrrs[rmrrCount].Size = rmrr->Size;
+            rmrrs[rmrrCount].DeviceIndex = d;
+            rmrrs[rmrrCount++].Reserved = 0;
+        }
+    }
+    mappingCapacity = ((uint64_t)guestCount + deniedCount + 1) * deviceCount + rmrrCount;
+    if (mappingCapacity == 0 || mappingCapacity > UINT32_MAX) goto cleanup;
+    GPU_POOL(mappings, mappingCapacity);
+    topology.Platform.DmarPresent = 1;
+    topology.Platform.DeviceEnumerationComplete = 1;
+    topology.Platform.DmaAddressBits = 39;
+    topology.Units = units; topology.UnitCount = state->Dmar.UnitCount;
+    topology.Devices = devices; topology.DeviceCount = deviceCount;
+    topology.GuestRamRanges = guest; topology.GuestRamRangeCount = guestCount;
+    topology.HypervisorDenyRanges = deny; topology.HypervisorDenyRangeCount = deniedCount;
+    topology.RmrrRanges = rmrrs; topology.RmrrRangeCount = rmrrCount;
+    storage.NormalizedGuestRamRanges = normalGuest; storage.NormalizedGuestRamCapacity = mappedCount;
+    storage.NormalizedDenyRanges = normalDeny; storage.NormalizedDenyCapacity = deniedCount;
+    storage.Assignments = assignments; storage.AssignmentCapacity = deviceCount;
+    storage.Mappings = mappings; storage.MappingCapacity = (uint32_t)mappingCapacity;
+    rootRanges[0].PhysicalBase = gpu->FramebufferPhysical;
+    rootRanges[0].Size = gpu->FramebufferBytes;
+    rootRanges[0].Kind = HV_EFI_IOMMU_ROOT_DEVICE_RANGE_FRAMEBUFFER;
+    rootRanges[0].Access = HV_EFI_IOMMU_ROOT_DEVICE_ACCESS_READ;
+    rootRanges[1].PhysicalBase = gpu->GgttPhysical;
+    rootRanges[1].Size = gpu->GgttBytes;
+    rootRanges[1].Kind = HV_EFI_IOMMU_ROOT_DEVICE_RANGE_TRANSLATION;
+    rootRanges[1].Access = HV_EFI_IOMMU_ROOT_DEVICE_ACCESS_READ;
+    status = EFI_UNSUPPORTED;
+    if (HvEfiIommuBuildIdentityPlan(&topology, &storage, &plan) != HV_EFI_IOMMU_OK ||
+        HvEfiIommuBuildRootDevicePlan(&plan, 0, state->Tables.DomainId,
+            deviceCount + 1,
+            rootRanges, 2, &gpu->DmaPlan) != HV_EFI_IOMMU_OK)
+        goto cleanup;
+    /* Planner DIDs 1..DeviceCount are reserved. Select their first unused
+     * sibling, then verify that every unit sharing these context tables can
+     * represent it. CAP.ND need not support all 65536 possible domain IDs. */
+    for (i = 0; i < state->Dmar.UnitCount; ++i) {
+        const uint64_t cap = *(volatile uint64_t *)(uintptr_t)
+            (state->Dmar.Units[i].RegisterBase + 8);
+        if (!HvEfiIommuDomainIdSupported(cap, gpu->DmaPlan.DomainId))
+            goto cleanup;
+    }
+    HvEfiCopy(&gpu->LegacyTables, &state->Tables, sizeof(state->Tables));
+    gpu->LegacyTablesPhysical = context->PhysicalIommuTablePhysical;
+    gpu->LegacyTablePages = context->PhysicalIommuTablePages;
+    if (HvEfiIommuBuildRootDeviceDomain(
+            (uint64_t *)(uintptr_t)context->PhysicalIommuTablePhysical,
+            context->PhysicalIommuTablePages, context->PhysicalIommuTablePhysical,
+            &state->Tables, (uint64_t *)(uintptr_t)gpu->DmaTablesPhysical,
+            HV_GPU_NATIVE_DMA_PAGES, gpu->DmaTablesPhysical, &gpu->DmaPlan,
+            &gpu->DmaTables) != HV_EFI_IOMMU_RUNTIME_OK) goto cleanup;
+    gpu->UnitCount = state->Dmar.UnitCount;
+    for (i = 0; i < gpu->UnitCount; ++i) gpu->UnitBases[i] = state->Dmar.Units[i].RegisterBase;
+    status = EFI_SUCCESS;
+cleanup:
+    if (mappings) gBS->FreePool(mappings);
+    if (assignments) gBS->FreePool(assignments);
+    if (rmrrs) gBS->FreePool(rmrrs);
+    if (normalDeny) gBS->FreePool(normalDeny);
+    if (normalGuest) gBS->FreePool(normalGuest);
+    if (deny) gBS->FreePool(deny);
+    if (guest) gBS->FreePool(guest);
+    if (devices) gBS->FreePool(devices);
+    return status;
+#undef GPU_POOL
+}
+
 static EFI_STATUS HvEfiPreparePhysicalIommu(
     HV_EFI_CONTEXT *context,
     const EFI_MEMORY_DESCRIPTOR *memoryMap,
@@ -2236,6 +2493,14 @@ static EFI_STATUS HvEfiPreparePhysicalIommu(
         ++mappedCount;
     }
     for (index = 0; index < state->Dmar.RmrrCount; ++index) {
+        if (context->GpuStatePhysical != 0) {
+            const int owner = HvEfiGpuRmrrOwner(state, &state->Dmar.Rmrrs[index]);
+            if (owner < 0) {
+                iommuStatus = HV_EFI_IOMMU_RUNTIME_UNSUPPORTED_SCOPE;
+                goto cleanup;
+            }
+            if (owner == 1) continue;
+        }
         mapped[mappedCount].PhysicalBase =
             state->Dmar.Rmrrs[index].PhysicalBase;
         mapped[mappedCount].Size = state->Dmar.Rmrrs[index].Size;
@@ -2255,6 +2520,12 @@ static EFI_STATUS HvEfiPreparePhysicalIommu(
         context->PhysicalIommuTablePhysical,
         mapped, mappedCount, denied, eptDenyRangeCount, 1, &state->Tables);
     if (iommuStatus != HV_EFI_IOMMU_RUNTIME_OK) {
+        goto cleanup;
+    }
+    if (context->GpuStatePhysical != 0 &&
+        EFI_ERROR(HvEfiGpuBuildDmaDomain(context, state, mapped, mappedCount,
+                                        denied, eptDenyRangeCount))) {
+        iommuStatus = HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
         goto cleanup;
     }
     callbacks.Context = state;
@@ -2489,6 +2760,41 @@ static int HvEfiBuildEptDenyInventory(
                 return 0;
             }
         }
+    }
+    if (context->GpuStatePhysical != 0) {
+        const HV_GPU_NATIVE_STATE *gpu = (const HV_GPU_NATIVE_STATE *)(uintptr_t)
+            context->GpuStatePhysical;
+        const uint64_t hostBridge = gpu->Filter.EcamPage -
+            ((uint64_t)gpu->Filter.Bus << 20) -
+            ((uint64_t)gpu->Filter.Device << 15) -
+            ((uint64_t)gpu->Filter.Function << 12);
+        if (gpu->Marker != HV_GPU_NATIVE_MARKER ||
+            !HvEfiAppendEptDenyRange(ranges, capacity, &count,
+                gpu->SelfPhysical, gpu->SelfPages) ||
+            !HvEfiAppendEptDenyRange(ranges, capacity, &count,
+                gpu->FramebufferPhysical, (uint32_t)(gpu->FramebufferBytes / 4096)) ||
+            !HvEfiAppendEptDenyRange(ranges, capacity, &count,
+                gpu->AbsentConfigPhysical, 1) ||
+            !HvEfiAppendEptDenyRange(ranges, capacity, &count,
+                gpu->DmaTablesPhysical, HV_GPU_NATIVE_DMA_PAGES) ||
+            !HvEfiAppendEptDenyRange(ranges, capacity, &count,
+                gpu->GgttPhysical, (uint32_t)(gpu->GgttBytes / 4096)) ||
+            !HvEfiAppendEptDenyRange(ranges, capacity, &count,
+                gpu->Filter.Bar0.Base, (uint32_t)(gpu->Filter.Bar0.Bytes / 4096)) ||
+            !HvEfiAppendEptDenyRange(ranges, capacity, &count,
+                gpu->Filter.Bar2.Base, (uint32_t)(gpu->Filter.Bar2.Bytes / 4096)) ||
+            !HvEfiAppendEptDenyRange(ranges, capacity, &count,
+                gpu->Filter.EcamPage, 1) ||
+            !HvEfiAppendEptDenyRange(ranges, capacity, &count, hostBridge, 1))
+            return 0;
+    }
+    if (context->GpuVmWcStatePhysical != 0) {
+        const HV_GPU_NATIVE_STATE *test = (const HV_GPU_NATIVE_STATE *)(uintptr_t)
+            context->GpuVmWcStatePhysical;
+        if (!HvEfiAppendEptDenyRange(ranges, capacity, &count,
+                test->SelfPhysical, test->SelfPages) ||
+            !HvEfiAppendEptDenyRange(ranges, capacity, &count,
+                test->FramebufferPhysical, 1)) return 0;
     }
     for (index = 1; index < count; ++index) {
         HV_EFI_EPT_DENY_RANGE value = ranges[index];
@@ -2764,6 +3070,8 @@ static void EFIAPI HvEfiApPrepareProcessorState(void *procedureArgument)
         rootContext->RuntimeScannerRamRangePages;
     processorContext->RuntimeScannerRamRangeCount =
         rootContext->RuntimeScannerRamRangeCount;
+    processorContext->GpuStatePhysical = rootContext->GpuStatePhysical;
+    processorContext->GpuResidentEntry = rootContext->GpuResidentEntry;
     processorVmxBasic = HvEfiReadMsr(HV_EFI_IA32_VMX_BASIC);
     if (!HvEfiValidateVmxBasic(processorVmxBasic)) {
         HvEfiRecordApPreparationFailure(
@@ -2839,6 +3147,13 @@ static void EFIAPI HvEfiApPrepareProcessorState(void *procedureArgument)
     }
     processorContext->EptVpidCapabilities = eptVpidCapabilities;
     processorContext->ApStartupCapabilitiesReady = 1;
+    if (processorContext->GpuStatePhysical != 0 &&
+        !HvGpuNativePrepareCpu((HV_GPU_NATIVE_STATE *)(uintptr_t)
+            processorContext->GpuStatePhysical, processorContext)) {
+        HvEfiRecordApPreparationFailure(preparation,
+            HV_EFI_PROCESSOR_PREPARATION_FAILURE_MEMORY_POLICY);
+        return;
+    }
     if (!HvEfiBuildProtectedEptIdentityHierarchy(
             (uint64_t *)(uintptr_t)processorContext->EptPhysical,
             HV_EFI_EPT_TABLE_PAGES, processorContext->EptPhysical,
@@ -2860,6 +3175,9 @@ static void EFIAPI HvEfiApPrepareProcessorState(void *procedureArgument)
             preparation->EptWriteBackLeafCount,
             processorContext->EptSplitPageCount,
             processorContext->EptDeniedPageCount) ||
+        (processorContext->GpuStatePhysical != 0 &&
+         !HvGpuNativeInstallCpu((HV_GPU_NATIVE_STATE *)(uintptr_t)
+             processorContext->GpuStatePhysical, processorContext)) ||
         !HvEfiInstallPhysicalAcpiShadow(processorContext) ||
         !HvEfiBuildEptPointer(processorContext->ShadowEptPhysical,
                               eptVpidCapabilities,
@@ -2915,6 +3233,13 @@ static EFI_STATUS HvEfiPrepareApProcessorStates(HV_EFI_CONTEXT *context)
     if (context == NULL) {
         return EFI_INVALID_PARAMETER;
     }
+    if (context->GpuStatePhysical != 0 &&
+        !HvGpuNativePrepareCpu((HV_GPU_NATIVE_STATE *)(uintptr_t)
+            context->GpuStatePhysical, context)) return EFI_UNSUPPORTED;
+#if defined(HYPERSINV_GPU_VM_SELFTEST)
+    if (context->GpuVmWcStatePhysical != 0 && !HvGpuVmWcPrepareCpu(context))
+        return EFI_UNSUPPORTED;
+#endif
     context->ProcessorPreparationStatus =
         HV_EFI_PROCESSOR_PREPARATION_UNAVAILABLE;
     context->ProcessorPreparationFailure =
@@ -3035,6 +3360,9 @@ static EFI_STATUS HvEfiPrepareApProcessorStates(HV_EFI_CONTEXT *context)
             context->EptPointer, writeBackLeafCount,
             context->EptSplitPageCount,
             context->EptDeniedPageCount) ||
+        (context->GpuStatePhysical != 0 &&
+         !HvGpuNativeInstallCpu((HV_GPU_NATIVE_STATE *)(uintptr_t)
+             context->GpuStatePhysical, context)) ||
         !HvEfiInstallPhysicalAcpiShadow(context) ||
         !HvEfiBuildEptPointer(context->ShadowEptPhysical,
                               eptVpidCapabilities,
@@ -3288,6 +3616,11 @@ static void EFIAPI HvEfiApActivateProcessor(void *procedureArgument)
 
     HvEfiWriteCr0(processorContext->HostCr0);
     HvEfiWriteCr4(processorContext->HostCr4);
+    if (processorContext->GpuStatePhysical != 0) {
+        /* All CPUs finish boot-time WB writes before using the alias-free
+         * private WC mapping. No framebuffer stores occur after arming. */
+        __wbinvd();
+    }
     if (HvEfiVmxOn(&processorContext->VmxonPhysical) != 0) {
         HvEfiRecordApActivationFailure(
             activation, HV_EFI_AP_ACTIVATION_FAILURE_VMXON);
@@ -3498,6 +3831,15 @@ static EFI_STATUS HvEfiFailAndFree(HV_EFI_CONTEXT *context,
                                    int vmxonActive,
                                    EFI_STATUS status)
 {
+    if (context != NULL && context->GpuStatePhysical != 0 &&
+        context->PhysicalIommuStatePhysical != 0 &&
+        ((const HV_EFI_PHYSICAL_IOMMU_STATE *)(uintptr_t)
+            context->PhysicalIommuStatePhysical)->Enabled != 0)
+        HvEfiFailStop();
+    if (context != NULL) HvGpuBootReleaseBeforeLaunch(context);
+#if defined(HYPERSINV_GPU_VM_SELFTEST)
+    if (context != NULL) HvGpuVmWcFree(context, gBS);
+#endif
     if (vmxonActive) {
         HvEfiVmxOff();
         if (context != NULL) {
@@ -3986,6 +4328,40 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
     *(uint32_t *)(uintptr_t)vmxonPa = revision;
     *(uint32_t *)(uintptr_t)vmcsPa = revision;
 
+    if (context->DmaIsolationMode == HV_EFI_DMA_ISOLATION_VTD_MEDIATED) {
+        const HV_EFI_PHYSICAL_IOMMU_STATE *iommu =
+            (const HV_EFI_PHYSICAL_IOMMU_STATE *)(uintptr_t)
+                context->PhysicalIommuStatePhysical;
+        uint32_t segment;
+        for (segment = 0; segment < iommu->McfgCount; ++segment) {
+            if (iommu->Mcfg[segment].Segment != 0 ||
+                iommu->Mcfg[segment].StartBus != 0) continue;
+            status = HvGpuBootPrepare(context, systemTable,
+                iommu->Mcfg[segment].EcamBase,
+                (uint64_t)(iommu->Mcfg[segment].EndBus + 1) << 20);
+            if (EFI_ERROR(status) && status != EFI_UNSUPPORTED)
+                return HvEfiFailAndFree(context, contextPa, codePa,
+                    vmxonPa, vmcsPa, hostStackPa, guestStackPa, pageTablePa,
+                    descriptorPa, 0, status);
+            break;
+        }
+        if (context->GpuStatePhysical != 0) {
+            context->GpuResidentEntry = context->RuntimeScannerCodeBase +
+                ((uintptr_t)HvGpuNativeResident -
+                 (uintptr_t)HvEfiRuntimeScannerResidentStart);
+            context->RuntimeCapabilities &= ~(HV_EFI_RUNTIME_CAP_SHUTDOWN |
+                HV_EFI_RUNTIME_CAP_SUSPEND_PREPARE);
+        }
+    }
+#if defined(HYPERSINV_GPU_VM_SELFTEST)
+    status = HvGpuVmWcAllocate(context, gBS);
+    if (EFI_ERROR(status)) return HvEfiFailAndFree(context, contextPa,
+        codePa, vmxonPa, vmcsPa, hostStackPa, guestStackPa, pageTablePa,
+        descriptorPa, 0, status);
+    context->GpuVmWcEntry = context->RuntimeScannerCodeBase +
+        ((uintptr_t)HvGpuVmWcResident - (uintptr_t)HvEfiRuntimeScannerResidentStart);
+#endif
+
     status = HvEfiAllocateApProcessorResources(context, revision);
     HvEfiReportProcessorResources(context);
     if (EFI_ERROR(status)) {
@@ -4015,6 +4391,13 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
                                 descriptorPa, 0, status);
     }
 
+    if (context->GpuStatePhysical != 0 && EFI_ERROR(HvGpuBootArm(context))) {
+        /* Device DMA may reference the reservation once arming begins.
+         * No generic cleanup, native detach or firmware hand-back is safe. */
+        HvEfiDebugPrintAscii("uefi hypervisor: GPU arm: FAIL STOP\n");
+        HvEfiFailStop();
+    }
+
     status = HvEfiActivateApProcessors(context);
     HvEfiReportApActivation(context);
     if (EFI_ERROR(status)) {
@@ -4026,6 +4409,8 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
     /* Enable VMX only after all software preflight checks pass. */
     HvEfiWriteCr0(context->HostCr0);
     HvEfiWriteCr4(context->HostCr4);
+    if (context->GpuStatePhysical != 0 || context->GpuVmWcStatePhysical != 0)
+        __wbinvd();
     status = (HvEfiVmxOn(&context->VmxonPhysical) == 0) ?
         EFI_SUCCESS : EFI_DEVICE_ERROR;
     if (EFI_ERROR(status)) {

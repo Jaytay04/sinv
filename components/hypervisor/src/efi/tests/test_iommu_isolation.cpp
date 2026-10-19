@@ -126,7 +126,7 @@ int TestIdentityPlanAndIsolation()
     TEST_ASSERT(HvEfiIommuPlanMappingAt(
                     &fixture.Plan, 1, UINT64_C(0x1200000), &result) ==
                     HV_EFI_IOMMU_OK && result.Mapped == 1 &&
-                (result.Flags & HV_EFI_IOMMU_MAPPING_RMRR) != 0,
+                (result.Flags & HV_EFI_IOMMU_PLAN_MAPPING_RMRR) != 0,
                 "scoped RMRR is mapped only into its integrated-device domain");
     TEST_ASSERT(HvEfiIommuPlanMappingAt(
                     &fixture.Plan, 0, UINT64_C(0x1200000), &result) ==
@@ -289,6 +289,145 @@ int TestAuditRejectsTampering()
     return 0;
 }
 
+int TestRootDeviceDomainPlan()
+{
+    Fixture fixture;
+    HV_EFI_IOMMU_ROOT_DEVICE_RANGE ranges[2] = {
+        { UINT64_C(0x500000), UINT64_C(0x1000),
+          HV_EFI_IOMMU_ROOT_DEVICE_RANGE_TRANSLATION,
+          HV_EFI_IOMMU_ROOT_DEVICE_ACCESS_READ },
+        { UINT64_C(0x400000), UINT64_C(0x2000),
+          HV_EFI_IOMMU_ROOT_DEVICE_RANGE_FRAMEBUFFER,
+          HV_EFI_IOMMU_ROOT_DEVICE_ACCESS_READ }
+    };
+    HV_EFI_IOMMU_ROOT_DEVICE_PLAN rootPlan = {};
+    Initialize(&fixture);
+    fixture.Deny[1] = { UINT64_C(0x400000), UINT64_C(0x2000) };
+    fixture.Deny[2] = { UINT64_C(0x500000), UINT64_C(0x1000) };
+    fixture.Topology.HypervisorDenyRangeCount = 3;
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_OK,
+                "root-owned pages are denied from ordinary device domains");
+    TEST_ASSERT(HvEfiIommuBuildRootDevicePlan(
+                    &fixture.Plan, 1, 1, 4, ranges, 2, &rootPlan) ==
+                    HV_EFI_IOMMU_OK &&
+                rootPlan.DeviceIndex == 1 && rootPlan.Segment == 0 &&
+                rootPlan.Bus == 0 && rootPlan.Device == 2 &&
+                rootPlan.Function == 0 && rootPlan.DomainId == 4 &&
+                rootPlan.LegacyDomainId == 1 &&
+                rootPlan.MappingCount == 2 &&
+                rootPlan.FramebufferBytes == UINT64_C(0x2000) &&
+                rootPlan.TranslationBytes == UINT64_C(0x1000) &&
+                rootPlan.MappedBytes == UINT64_C(0x3000) &&
+                rootPlan.Mappings[0].Kind ==
+                    HV_EFI_IOMMU_ROOT_DEVICE_RANGE_FRAMEBUFFER &&
+                rootPlan.Mappings[0].PhysicalBase == UINT64_C(0x400000) &&
+                rootPlan.Mappings[1].Kind ==
+                    HV_EFI_IOMMU_ROOT_DEVICE_RANGE_TRANSLATION,
+                "root domain is separate, bounded, sorted, and read-only");
+    TEST_ASSERT(HvEfiIommuValidateRootDevicePlan(
+                    &fixture.Plan, &rootPlan) == HV_EFI_IOMMU_OK,
+                "root-domain plan independently validates against deny inventory");
+    for (uint32_t rangeIndex = 0;
+         rangeIndex < rootPlan.MappingCount; ++rangeIndex) {
+        for (uint64_t page = rootPlan.Mappings[rangeIndex].PhysicalBase;
+             page < rootPlan.Mappings[rangeIndex].PhysicalBase +
+                        rootPlan.Mappings[rangeIndex].Size;
+             page += HV_EFI_IOMMU_PAGE_SIZE) {
+            for (uint32_t deviceIndex = 0;
+                 deviceIndex < fixture.Plan.DeviceCount; ++deviceIndex) {
+                HV_EFI_IOMMU_MAPPING_RESULT mapping = {};
+                TEST_ASSERT(HvEfiIommuPlanMappingAt(
+                                &fixture.Plan, deviceIndex, page, &mapping) ==
+                                HV_EFI_IOMMU_OK && mapping.Mapped == 0,
+                            "root framebuffer and GGTT pages are absent from every legacy requester");
+            }
+        }
+    }
+
+    rootPlan.Mappings[0].Access |=
+        HV_EFI_IOMMU_ROOT_DEVICE_ACCESS_WRITE;
+    TEST_ASSERT(HvEfiIommuValidateRootDevicePlan(
+                    &fixture.Plan, &rootPlan) ==
+                    HV_EFI_IOMMU_INVALID_ARGUMENT,
+                "root GPU cannot write its private mapping resources");
+    TEST_ASSERT(HvEfiIommuBuildRootDevicePlan(
+                    &fixture.Plan, 1, 1, 2, ranges, 2, &rootPlan) ==
+                    HV_EFI_IOMMU_SCOPE_MISMATCH,
+                "root domain ID cannot alias an ordinary requester domain");
+
+    Initialize(&fixture);
+    {
+        HV_EFI_IOMMU_ROOT_DEVICE_RANGE adjacent[2] = {
+            { UINT64_C(0x400000), UINT64_C(8) * 1024 * 1024,
+              HV_EFI_IOMMU_ROOT_DEVICE_RANGE_FRAMEBUFFER,
+              HV_EFI_IOMMU_ROOT_DEVICE_ACCESS_READ },
+            { UINT64_C(0xc00000), UINT64_C(0x1000),
+              HV_EFI_IOMMU_ROOT_DEVICE_RANGE_TRANSLATION,
+              HV_EFI_IOMMU_ROOT_DEVICE_ACCESS_READ }
+        };
+        fixture.Deny[1] = { UINT64_C(0x400000),
+                             UINT64_C(8) * 1024 * 1024 };
+        fixture.Deny[2] = { UINT64_C(0xc00000), UINT64_C(0x1000) };
+        fixture.Topology.HypervisorDenyRangeCount = 3;
+        TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                        &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                        HV_EFI_IOMMU_OK &&
+                    HvEfiIommuBuildRootDevicePlan(
+                        &fixture.Plan, 1, 1, 4, adjacent, 2, &rootPlan) ==
+                        HV_EFI_IOMMU_OK,
+                    "adjacent framebuffer and translation ranges fit exact bounds");
+    }
+
+    Initialize(&fixture);
+    {
+        HV_EFI_IOMMU_ROOT_DEVICE_RANGE oversized[2] = {
+            { UINT64_C(0x400000), UINT64_C(9) * 1024 * 1024,
+              HV_EFI_IOMMU_ROOT_DEVICE_RANGE_FRAMEBUFFER,
+              HV_EFI_IOMMU_ROOT_DEVICE_ACCESS_READ },
+            { UINT64_C(0xd00000), UINT64_C(0x1000),
+              HV_EFI_IOMMU_ROOT_DEVICE_RANGE_TRANSLATION,
+              HV_EFI_IOMMU_ROOT_DEVICE_ACCESS_READ }
+        };
+        fixture.Deny[1] = { UINT64_C(0x400000),
+                             UINT64_C(9) * 1024 * 1024 };
+        fixture.Deny[2] = { UINT64_C(0xd00000), UINT64_C(0x1000) };
+        fixture.Topology.HypervisorDenyRangeCount = 3;
+        TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                        &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                        HV_EFI_IOMMU_OK,
+                    "oversized test ranges are still reserved from guests");
+        TEST_ASSERT(HvEfiIommuBuildRootDevicePlan(
+                        &fixture.Plan, 1, 1, 4, oversized, 2, &rootPlan) ==
+                        HV_EFI_IOMMU_INVARIANT,
+                    "root framebuffer allocation cannot exceed eight MiB");
+    }
+
+    Initialize(&fixture);
+    fixture.Devices[1].Kind = HV_EFI_IOMMU_DEVICE_DISCRETE;
+    fixture.Deny[1] = { UINT64_C(0x400000), UINT64_C(0x2000) };
+    fixture.Deny[2] = { UINT64_C(0x500000), UINT64_C(0x1000) };
+    fixture.Topology.HypervisorDenyRangeCount = 3;
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_OK &&
+                HvEfiIommuBuildRootDevicePlan(
+                    &fixture.Plan, 1, 1, 4, ranges, 2, &rootPlan) ==
+                    HV_EFI_IOMMU_SCOPE_MISMATCH,
+                "only the exact integrated requester can receive the root domain");
+
+    Initialize(&fixture);
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_OK &&
+                HvEfiIommuBuildRootDevicePlan(
+                    &fixture.Plan, 1, 1, 4, ranges, 2, &rootPlan) ==
+                    HV_EFI_IOMMU_DENY_VIOLATION,
+                "root-domain plan fails if framebuffer and GGTT are not reserved");
+    return 0;
+}
+
 static_assert(sizeof(HV_EFI_IOMMU_PLATFORM) == 32, "platform ABI");
 static_assert(sizeof(HV_EFI_IOMMU_UNIT) == 40, "unit ABI");
 static_assert(sizeof(HV_EFI_IOMMU_DEVICE) == 32, "device ABI");
@@ -306,7 +445,8 @@ int main()
     if (TestIdentityPlanAndIsolation() != 0 ||
         TestAdmissionFailures() != 0 ||
         TestRangeScopeAndCapacityFailures() != 0 ||
-        TestAuditRejectsTampering() != 0) {
+        TestAuditRejectsTampering() != 0 ||
+        TestRootDeviceDomainPlan() != 0) {
         return 1;
     }
     fprintf(stdout, "IOMMU isolation tests: PASS\n");

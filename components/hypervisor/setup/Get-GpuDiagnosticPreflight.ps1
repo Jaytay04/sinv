@@ -197,7 +197,7 @@ function New-PreflightReport {
     }
 
     [pscustomobject]@{
-        SchemaVersion = 1
+        SchemaVersion = 2
         InventorySource = $Source
         InventoryComplete = $complete
         HostInventory = [pscustomobject]@{
@@ -216,9 +216,14 @@ function New-PreflightReport {
         }
         Exclusion = [pscustomobject]@{
             Mechanism = 'boot-vpci-ept-vtd'
-            Implemented = $false
+            Implemented = $null
+            NativeBackendAvailableInSource = $true
+            RequiredBuildOption = 'HYPERSINV_GPU_DIAGNOSTIC_NATIVE=ON'
+            RequiredPhysicalOutputDeclaration = 'HYPERSINV_GPU_DIAGNOSTIC_OUTPUT_CONFIRMED=ON after physical verification'
+            BootEnforcementStatus = 'NotAttested'
             CanAuthorizeActivation = $false
-            Reason = 'This inventory tool does not establish guest exclusion or change host configuration.'
+            Reason = 'PnP inventory cannot attest the running EFI build, installed PCI/EPT filters, GPU VT-d domain, or WC mapping. Native activation requires a dedicated diagnostic boot; a disabled or absent PnP device is insufficient.'
+            FirmwareSmmTrust = 'Required platform assumption; firmware writes can violate ownership without detection.'
         }
         HostChangesPerformed = $false
         Errors = @($errors)
