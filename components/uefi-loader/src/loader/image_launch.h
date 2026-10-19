@@ -18,9 +18,12 @@ typedef enum {
 
 /*
  * Read Path from ParentImageHandle's volume, create a child image from those
- * exact bytes, and call StartImage. A returning child is unloaded. This module
- * deliberately never calls ExitBootServices; the real boot manager owns that
- * transition.
+ * exact bytes, use shim verification when Secure Boot is enforcing, and call
+ * StartImage. A returning child is unloaded. This module deliberately
+ * never calls ExitBootServices; the real boot manager owns that transition.
+ * When non-NULL, ChildStatus receives EFI_INVALID_PARAMETER for invalid
+ * inputs or the raw EFI_STATUS from a failing read, device-path, image load,
+ * or child start operation.
  */
 image_launch_status_t image_launch_start(
     EFI_HANDLE ParentImageHandle, const CHAR16 *Path,

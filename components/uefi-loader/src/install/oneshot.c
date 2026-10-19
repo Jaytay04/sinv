@@ -36,6 +36,28 @@ typedef struct {
 } oneshot_paths_t;
 
 typedef struct {
+    wchar_t root[MAX_PATH];
+    wchar_t efi_directory[MAX_PATH];
+    wchar_t directory[MAX_PATH];
+    wchar_t shim[MAX_PATH];
+    wchar_t loader[MAX_PATH];
+    wchar_t image[MAX_PATH];
+    wchar_t mok_manager[MAX_PATH];
+    wchar_t certificate[MAX_PATH];
+    wchar_t manifest[MAX_PATH];
+} shim_inventory_paths_t;
+
+typedef struct {
+    wchar_t root[MAX_PATH];
+    wchar_t efi_directory[MAX_PATH];
+    wchar_t directory[MAX_PATH];
+    wchar_t loader[MAX_PATH];
+    wchar_t image[MAX_PATH];
+    wchar_t manifest[MAX_PATH];
+    wchar_t payload[MAX_PATH];
+} inventory_paths_t;
+
+typedef struct {
     int valid;
     DWORD volume_serial;
     DWORD file_index_high;
@@ -305,6 +327,54 @@ static int make_paths(const ib_oneshot_request_t *request, oneshot_paths_t *path
     return 1;
 }
 
+static int make_inventory_paths(const ib_oneshot_request_t *request,
+                                inventory_paths_t *paths,
+                                wchar_t *error, size_t error_count)
+{
+    if (!resolve_root(request, paths->root, error, error_count) ||
+        !join_path(paths->efi_directory, MAX_PATH, paths->root, L"EFI") ||
+        !join_path(paths->directory, MAX_PATH, paths->root,
+                   L"EFI\\HypersinvInventory") ||
+        !join_path(paths->loader, MAX_PATH, paths->root,
+                   L"EFI\\HypersinvInventory\\loader.efi") ||
+        !join_path(paths->image, MAX_PATH, paths->root,
+                   L"EFI\\HypersinvInventory\\inventory.efi") ||
+        !join_path(paths->manifest, MAX_PATH, paths->root,
+                   L"EFI\\HypersinvInventory\\manifest.sha256") ||
+        !join_path(paths->payload, MAX_PATH, paths->root,
+                   L"EFI\\HypersinvInventory\\payload.efi")) {
+        set_error(error, error_count, L"inventory paths exceed MAX_PATH");
+        return 0;
+    }
+    return 1;
+}
+
+static int make_shim_inventory_paths(const ib_oneshot_request_t *request,
+                                     shim_inventory_paths_t *paths,
+                                     wchar_t *error, size_t error_count)
+{
+    if (!resolve_root(request, paths->root, error, error_count) ||
+        !join_path(paths->efi_directory, MAX_PATH, paths->root, L"EFI") ||
+        !join_path(paths->directory, MAX_PATH, paths->root,
+                   L"EFI\\HypersinvShimInventory") ||
+        !join_path(paths->shim, MAX_PATH, paths->root,
+                   L"EFI\\HypersinvShimInventory\\shimx64.efi") ||
+        !join_path(paths->loader, MAX_PATH, paths->root,
+                   L"EFI\\HypersinvShimInventory\\grubx64.efi") ||
+        !join_path(paths->image, MAX_PATH, paths->root,
+                   L"EFI\\HypersinvShimInventory\\inventory.efi") ||
+        !join_path(paths->mok_manager, MAX_PATH, paths->root,
+                   L"EFI\\HypersinvShimInventory\\mmx64.efi") ||
+        !join_path(paths->certificate, MAX_PATH, paths->root,
+                   L"EFI\\HypersinvShimInventory\\MOK.cer") ||
+        !join_path(paths->manifest, MAX_PATH, paths->root,
+                   L"EFI\\HypersinvShimInventory\\manifest.sha256")) {
+        set_error(error, error_count, L"shim inventory paths exceed MAX_PATH");
+        return 0;
+    }
+    return 1;
+}
+
 static int ordinary_file(const wchar_t *path)
 {
     DWORD attributes = GetFileAttributesW(path);
@@ -450,6 +520,290 @@ static int manifest_contains(const wchar_t *manifest_path, const char *name,
     return found;
 }
 
+static int inventory_manifest_matches(const wchar_t *manifest_path,
+                                      unsigned long long loader_size,
+                                      const unsigned char loader_digest[32],
+                                      unsigned long long image_size,
+                                      const unsigned char image_digest[32])
+{
+    HANDLE file;
+    LARGE_INTEGER file_size;
+    char *contents = NULL;
+    char expected[512];
+    char loader_hex[65];
+    char image_hex[65];
+    DWORD read = 0u;
+    int expected_size;
+    int matches = 0;
+
+    file = CreateFileW(manifest_path, GENERIC_READ, FILE_SHARE_READ, NULL,
+                       OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (file == INVALID_HANDLE_VALUE || !GetFileSizeEx(file, &file_size) ||
+        file_size.QuadPart <= 0 || file_size.QuadPart >= IB_MANIFEST_MAX ||
+        file_size.QuadPart > MAXDWORD) {
+        if (file != INVALID_HANDLE_VALUE) CloseHandle(file);
+        return 0;
+    }
+    contents = (char *)malloc((size_t)file_size.QuadPart);
+    if (contents == NULL) { CloseHandle(file); return 0; }
+
+    hex_digest(loader_digest, loader_hex);
+    hex_digest(image_digest, image_hex);
+    expected_size = sprintf_s(expected, sizeof(expected),
+        "schema=1\r\nloader.efi size=%llu sha256=%s\r\n"
+        "inventory.efi size=%llu sha256=%s\r\n",
+        loader_size, loader_hex, image_size, image_hex);
+    if (expected_size > 0 &&
+        ReadFile(file, contents, (DWORD)file_size.QuadPart, &read, NULL) &&
+        read == (DWORD)file_size.QuadPart &&
+        (size_t)expected_size == (size_t)file_size.QuadPart &&
+        memcmp(contents, expected, (size_t)expected_size) == 0) {
+        matches = 1;
+    }
+    SecureZeroMemory(contents, (size_t)file_size.QuadPart);
+    free(contents);
+    CloseHandle(file);
+    return matches;
+}
+
+static int exact_shim_inventory_files(const shim_inventory_paths_t *paths)
+{
+    static const wchar_t *const allowed[] = {
+        L"shimx64.efi", L"grubx64.efi", L"inventory.efi", L"mmx64.efi",
+        L"MOK.cer", L"manifest.sha256"
+    };
+    wchar_t pattern[MAX_PATH];
+    WIN32_FIND_DATAW entry;
+    HANDLE search;
+    unsigned int seen = 0u;
+    unsigned int count = 0u;
+    DWORD last_error;
+    size_t i;
+
+    if (paths == NULL ||
+        swprintf_s(pattern, _countof(pattern), L"%ls\\*", paths->directory) < 0) {
+        return 0;
+    }
+    search = FindFirstFileW(pattern, &entry);
+    if (search == INVALID_HANDLE_VALUE) return 0;
+    do {
+        unsigned int bit;
+        if (wcscmp(entry.cFileName, L".") == 0 ||
+            wcscmp(entry.cFileName, L"..") == 0) continue;
+        if ((entry.dwFileAttributes &
+             (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) != 0u) {
+            FindClose(search);
+            return 0;
+        }
+        for (i = 0u; i < _countof(allowed); ++i) {
+            if (wcscmp(entry.cFileName, allowed[i]) == 0) break;
+        }
+        if (i == _countof(allowed)) {
+            FindClose(search);
+            return 0;
+        }
+        bit = 1u << (unsigned int)i;
+        if ((seen & bit) != 0u) {
+            FindClose(search);
+            return 0;
+        }
+        seen |= bit;
+        ++count;
+    } while (FindNextFileW(search, &entry));
+    last_error = GetLastError();
+    FindClose(search);
+    return last_error == ERROR_NO_MORE_FILES && count == _countof(allowed) &&
+           seen == ((1u << _countof(allowed)) - 1u);
+}
+
+static int shim_inventory_manifest_matches(const wchar_t *manifest_path,
+                                           const unsigned long long sizes[5],
+                                           const unsigned char digests[5][32])
+{
+    static const char *const names[5] = {
+        "shimx64.efi", "grubx64.efi", "inventory.efi", "mmx64.efi", "MOK.cer"
+    };
+    HANDLE file;
+    LARGE_INTEGER file_size;
+    char expected[1024];
+    char *contents = NULL;
+    size_t used = 0u;
+    size_t i;
+    DWORD read = 0u;
+    int matches = 0;
+
+    file = CreateFileW(manifest_path, GENERIC_READ, FILE_SHARE_READ, NULL,
+                       OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (file == INVALID_HANDLE_VALUE || !GetFileSizeEx(file, &file_size) ||
+        file_size.QuadPart <= 0 || file_size.QuadPart >= IB_MANIFEST_MAX ||
+        file_size.QuadPart > MAXDWORD) {
+        if (file != INVALID_HANDLE_VALUE) CloseHandle(file);
+        return 0;
+    }
+    contents = (char *)malloc((size_t)file_size.QuadPart);
+    if (contents == NULL) {
+        CloseHandle(file);
+        return 0;
+    }
+    if (sprintf_s(expected, sizeof(expected), "schema=1\r\n") < 0) goto done;
+    used = strlen(expected);
+    for (i = 0u; i < 5u; ++i) {
+        char digest_hex[65];
+        int printed;
+        hex_digest(digests[i], digest_hex);
+        printed = sprintf_s(expected + used, sizeof(expected) - used,
+                            "%s size=%llu sha256=%s\r\n",
+                            names[i], sizes[i], digest_hex);
+        if (printed < 0 || (size_t)printed >= sizeof(expected) - used) goto done;
+        used += (size_t)printed;
+    }
+    if (ReadFile(file, contents, (DWORD)file_size.QuadPart, &read, NULL) &&
+        read == (DWORD)file_size.QuadPart && (size_t)file_size.QuadPart == used &&
+        memcmp(contents, expected, used) == 0) {
+        matches = 1;
+    }
+done:
+    SecureZeroMemory(contents, (size_t)file_size.QuadPart);
+    free(contents);
+    CloseHandle(file);
+    return matches;
+}
+
+static int shim_inventory_measure_file(const ib_oneshot_request_t *request,
+                                       const wchar_t *path,
+                                       unsigned long long *size,
+                                       unsigned char digest[32])
+{
+    if (request->measure_file_for_test != NULL) {
+        return request->measure_file_for_test(path, size, digest,
+                                               request->measure_context);
+    }
+    return hash_file(path, size, digest);
+}
+
+static int shim_inventory_preflight(const shim_inventory_paths_t *paths,
+                                    const ib_oneshot_request_t *request,
+                                    wchar_t *error, size_t error_count)
+{
+    static const unsigned char expected_shim[32] = {
+        0x6fu, 0xe6u, 0xe1u, 0xbcu, 0xbeu, 0x6cu, 0xf6u, 0xbau,
+        0xecu, 0x8eu, 0x05u, 0x6du, 0x40u, 0x36u, 0x1cu, 0xa1u,
+        0xaau, 0x71u, 0x5cu, 0xc0u, 0x4du, 0xdcu, 0xc2u, 0x85u,
+        0x53u, 0x51u, 0xdeu, 0x06u, 0x0bu, 0x84u, 0x35u, 0x0bu
+    };
+    static const unsigned char expected_mok_manager[32] = {
+        0xd2u, 0xfau, 0x8eu, 0x52u, 0xfdu, 0xdcu, 0x99u, 0xdau,
+        0xd9u, 0x4au, 0x00u, 0x09u, 0xfeu, 0xe2u, 0x3cu, 0xb2u,
+        0x47u, 0x8cu, 0x28u, 0x37u, 0x3bu, 0x77u, 0x7du, 0x50u,
+        0xb2u, 0xf7u, 0x84u, 0xebu, 0x4eu, 0x96u, 0xf8u, 0x8eu
+    };
+    const wchar_t *file_paths[5];
+    unsigned long long sizes[5];
+    unsigned char digests[5][32];
+    size_t i;
+
+    if (paths == NULL || request == NULL ||
+        !ordinary_directory(paths->efi_directory) ||
+        !ordinary_directory(paths->directory) || !exact_shim_inventory_files(paths)) {
+        set_error(error, error_count,
+                  L"shim inventory directory must contain exactly the five EFI/MOK files and manifest");
+        return 0;
+    }
+    file_paths[0] = paths->shim;
+    file_paths[1] = paths->loader;
+    file_paths[2] = paths->image;
+    file_paths[3] = paths->mok_manager;
+    file_paths[4] = paths->certificate;
+    for (i = 0u; i < _countof(file_paths); ++i) {
+        if (!ordinary_file(file_paths[i]) ||
+            !shim_inventory_measure_file(request, file_paths[i], &sizes[i], digests[i])) {
+            set_error(error, error_count, L"shim inventory input %u is missing, unsafe, or unreadable",
+                      (unsigned int)i + 1u);
+            return 0;
+        }
+    }
+    if (!shim_inventory_manifest_matches(paths->manifest, sizes, digests)) {
+        set_error(error, error_count,
+                  L"shim inventory files do not match the exact schema=1 SHA256 manifest");
+        return 0;
+    }
+    if (memcmp(digests[0], expected_shim, sizeof(expected_shim)) != 0) {
+        set_error(error, error_count, L"shimx64.efi does not match the pinned signed shim image");
+        return 0;
+    }
+    if (memcmp(digests[3], expected_mok_manager, sizeof(expected_mok_manager)) != 0) {
+        set_error(error, error_count, L"mmx64.efi does not match the pinned MokManager image");
+        return 0;
+    }
+    if (request->verify_signature == NULL) {
+        set_error(error, error_count,
+                  L"shim inventory preflight requires the MOK Authenticode verifier");
+        return 0;
+    }
+    if (error != NULL && error_count != 0u) error[0] = L'\0';
+    if (!request->verify_signature(paths->loader, paths->certificate,
+                                   request->verify_context, error, error_count)) {
+        if (error == NULL || error[0] == L'\0') {
+            set_error(error, error_count, L"grubx64.efi does not have a valid signature from MOK.cer");
+        }
+        return 0;
+    }
+    if (error != NULL && error_count != 0u) error[0] = L'\0';
+    if (!request->verify_signature(paths->image, paths->certificate,
+                                   request->verify_context, error, error_count)) {
+        if (error == NULL || error[0] == L'\0') {
+            set_error(error, error_count, L"inventory.efi does not have a valid signature from MOK.cer");
+        }
+        return 0;
+    }
+    return 1;
+}
+
+static int inventory_preflight(const inventory_paths_t *paths,
+                               wchar_t *error, size_t error_count)
+{
+    unsigned char loader_digest[32];
+    unsigned char image_digest[32];
+    unsigned long long loader_size;
+    unsigned long long image_size;
+
+    if (paths == NULL || !ordinary_directory(paths->efi_directory) ||
+        !ordinary_directory(paths->directory)) {
+        set_error(error, error_count,
+                  L"inventory EFI\\HypersinvInventory directory is missing or unsafe");
+        return 0;
+    }
+    if (!ordinary_file(paths->loader)) {
+        set_error(error, error_count, L"inventory loader.efi is missing or unsafe");
+        return 0;
+    }
+    if (!ordinary_file(paths->image)) {
+        set_error(error, error_count, L"inventory inventory.efi is missing or unsafe");
+        return 0;
+    }
+    if (!ordinary_file(paths->manifest)) {
+        set_error(error, error_count, L"inventory manifest.sha256 is missing or unsafe");
+        return 0;
+    }
+    if (!absent(paths->payload)) {
+        set_error(error, error_count,
+                  L"unexpected payload.efi exists in EFI\\HypersinvInventory");
+        return 0;
+    }
+    if (!hash_file(paths->loader, &loader_size, loader_digest) ||
+        !hash_file(paths->image, &image_size, image_digest)) {
+        set_error(error, error_count, L"inventory loader.efi or inventory.efi cannot be read");
+        return 0;
+    }
+    if (!inventory_manifest_matches(paths->manifest, loader_size, loader_digest,
+                                    image_size, image_digest)) {
+        set_error(error, error_count,
+                  L"inventory files do not match the schema=1 SHA256 manifest");
+        return 0;
+    }
+    return 1;
+}
+
 static int copy_verified(const wchar_t *source, const wchar_t *destination,
                          const unsigned char expected[32], owned_file_t *ownership)
 {
@@ -557,9 +911,42 @@ static int preflight(const oneshot_paths_t *paths, unsigned char original[32],
     return 1;
 }
 
-int ib_oneshot_validate_staged(const ib_oneshot_request_t *request,
-                               wchar_t *error, size_t error_count)
+int ib_oneshot_validate_staged_profile(const ib_oneshot_request_t *request,
+                                      ib_oneshot_profile_t profile,
+                                      wchar_t *error, size_t error_count)
 {
+    if (profile == IB_ONESHOT_PROFILE_INVENTORY) {
+        inventory_paths_t inventory_paths;
+        oneshot_lock_t lock;
+        int valid;
+        ZeroMemory(&inventory_paths, sizeof(inventory_paths));
+        ZeroMemory(&lock, sizeof(lock));
+        if (!make_inventory_paths(request, &inventory_paths, error, error_count) ||
+            !acquire_lock(inventory_paths.root, &lock, error, error_count)) {
+            return 0;
+        }
+        valid = inventory_preflight(&inventory_paths, error, error_count);
+        release_lock(&lock);
+        return valid;
+    }
+    if (profile == IB_ONESHOT_PROFILE_SHIM_INVENTORY) {
+        shim_inventory_paths_t shim_paths;
+        oneshot_lock_t lock;
+        int valid;
+        ZeroMemory(&shim_paths, sizeof(shim_paths));
+        ZeroMemory(&lock, sizeof(lock));
+        if (!make_shim_inventory_paths(request, &shim_paths, error, error_count) ||
+            !acquire_lock(shim_paths.root, &lock, error, error_count)) {
+            return 0;
+        }
+        valid = shim_inventory_preflight(&shim_paths, request, error, error_count);
+        release_lock(&lock);
+        return valid;
+    }
+    if (profile != IB_ONESHOT_PROFILE_LEGACY) {
+        set_error(error, error_count, L"one-shot profile is invalid");
+        return 0;
+    }
     oneshot_paths_t paths;
     oneshot_lock_t lock;
     unsigned char shim[32], loader[32];
@@ -583,6 +970,28 @@ int ib_oneshot_validate_staged(const ib_oneshot_request_t *request,
     }
     release_lock(&lock);
     return valid;
+}
+
+int ib_oneshot_profile_supports_mode(ib_oneshot_profile_t profile,
+                                     const wchar_t *mode)
+{
+    if (mode == NULL) return 0;
+    if (profile == IB_ONESHOT_PROFILE_LEGACY) {
+        return wcscmp(mode, L"replace") == 0 || wcscmp(mode, L"verify") == 0 ||
+               wcscmp(mode, L"bootnext") == 0 || wcscmp(mode, L"off") == 0;
+    }
+    if (profile == IB_ONESHOT_PROFILE_INVENTORY ||
+        profile == IB_ONESHOT_PROFILE_SHIM_INVENTORY) {
+        return wcscmp(mode, L"bootnext") == 0 || wcscmp(mode, L"off") == 0;
+    }
+    return 0;
+}
+
+int ib_oneshot_validate_staged(const ib_oneshot_request_t *request,
+                               wchar_t *error, size_t error_count)
+{
+    return ib_oneshot_validate_staged_profile(request, IB_ONESHOT_PROFILE_LEGACY,
+                                              error, error_count);
 }
 
 static int owned_file_matches(const wchar_t *path, const owned_file_t *ownership,

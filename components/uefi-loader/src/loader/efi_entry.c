@@ -11,10 +11,15 @@
 #include "replay.h"
 #include "replay_uefi.h"
 #include "sha256.h"
+#include "shim_inventory.h"
 #include "tcg2.h"
 
 #ifndef IB_PAYLOAD_REPLAY_INDEPENDENT
 #define IB_PAYLOAD_REPLAY_INDEPENDENT 0
+#endif
+
+#ifndef IB_QEMU_DEBUG_PORTS
+#define IB_QEMU_DEBUG_PORTS 0
 #endif
 
 #if defined(_MSC_VER) && (defined(_M_IX86) || defined(_M_X64))
@@ -36,6 +41,7 @@ static const CHAR16 g_reference_path[] = L"\\EFI\\insecure-boot\\tcglog.ib";
 static const CHAR16 g_divergence_path[] = L"\\EFI\\insecure-boot\\divergence.ib";
 static const CHAR16 g_status_path[] = L"\\EFI\\insecure-boot\\handoff-status.txt";
 static const CHAR16 g_payload_path[] = L"\\EFI\\insecure-boot\\payload.efi";
+static const CHAR16 g_inventory_path[] = L"\\EFI\\insecure-boot\\inventory.efi";
 static const CHAR16 g_boot_manager_path[] = L"\\EFI\\Microsoft\\Boot\\bootmgfw.efi";
 static const CHAR16 g_backup_path[] = L"\\EFI\\Microsoft\\Boot\\bootmgfw.efi.bak";
 static const CHAR16 g_temp_path[] = L"\\EFI\\Microsoft\\Boot\\bootmgfw.efi.ibnew";
@@ -52,7 +58,7 @@ static const UINT32 g_alg_bits[4] = {
 
 static void debugcon_print(const CHAR16 *text)
 {
-#if IB_QEMU_DEBUGCON_AVAILABLE
+#if IB_QEMU_DEBUGCON_AVAILABLE && IB_QEMU_DEBUG_PORTS
     while (text != NULL && *text != 0) {
         CHAR16 character = *text++;
         if (character <= 0x7fu) {
@@ -342,6 +348,26 @@ static EFI_STATUS restore_and_handoff(EFI_HANDLE image_handle,
                      sizeof(status_payload_failed) - 1u);
     }
 
+{
+    EFI_STATUS inventory_status;
+    EFI_STATUS inventory_child_status;
+    image_launch_status_t inventory_launch;
+
+    /* Optional, read-only hardware-inventory payload. Its presence never
+     * changes the loader verdict; a failure is console-only. */
+    inventory_status = efi_file_exists(image_handle, g_inventory_path);
+    if (inventory_status == EFI_SUCCESS) {
+        inventory_launch = image_launch_start(
+            image_handle, g_inventory_path, &inventory_child_status);
+        if (inventory_launch == IMAGE_LAUNCH_OK) {
+            con_print(L"inventory collector: PASS\r\n");
+        } else {
+            con_print(L"inventory collector: FAIL (non-fatal; \r\n"
+                      L"continuing Windows handoff)\r\n");
+        }
+    }
+}
+
     launch = image_launch_start(image_handle, g_boot_manager_path,
                                 &child_status);
     if (launch != IMAGE_LAUNCH_OK) {
@@ -383,9 +409,32 @@ EFI_STATUS EFIAPI EfiMain(EFI_HANDLE image_handle,
     EFI_STATUS status;
     const CHAR16 *replay_boot_manager_path = g_backup_path;
     int replay_succeeded = 0;
+    EFI_GUID loaded_image_guid = EFI_LOADED_IMAGE_PROTOCOL_GUID;
+    EFI_LOADED_IMAGE_PROTOCOL *loaded_image = NULL;
+    BOOLEAN diagnostic_handled = FALSE;
 
+    /* Classify the loaded image path before any output or production work.
+     * shim may reuse its own image handle while loading the second stage, so
+     * the current image's FilePath is the only identity used here. */
+    if (image_handle == NULL || system_table == NULL ||
+        system_table->BootServices == NULL ||
+        system_table->BootServices->HandleProtocol == NULL) {
+        return EFI_ACCESS_DENIED;
+    }
     gST = system_table;
     gBS = system_table->BootServices;
+    status = gBS->HandleProtocol(image_handle, &loaded_image_guid,
+                                 (VOID **)&loaded_image);
+    if (EFI_ERROR(status) || loaded_image == NULL) {
+        return EFI_ACCESS_DENIED;
+    }
+    status = shim_inventory_route(image_handle, system_table,
+                                  loaded_image->FilePath,
+                                  &diagnostic_handled);
+    if (diagnostic_handled || EFI_ERROR(status)) {
+        return status;
+    }
+
     con_print(L"\r\nloader.efi - insecure-boot-toolkit (P5)\r\n");
     con_print(L"loader production handoff: START\r\n");
 

@@ -16,6 +16,13 @@ typedef struct {
     variable_t bootnext;
     variable_t entries[4];
     int fail_bootnext_write;
+    int race_bootnext_write;
+    int populate_candidate_after_scan;
+    int populate_bootnext_after_scan;
+    int fail_bootnext_read_after_scan;
+    int bootnext_read_error;
+    int fail_next_bootnext_read;
+    int fail_bootnext_readback_once;
     int fail_entry_delete;
     int fail_bootnext_delete;
     int mismatch_entry_readback;
@@ -26,6 +33,7 @@ typedef struct {
     int write_sequence;
     int entry_write_sequence;
     int bootnext_write_sequence;
+    int entry_create_count;
     int delete_count;
     int delete_kind[8];
 } fake_vars_t;
@@ -44,8 +52,36 @@ static int fake_read(const wchar_t *name, unsigned char *data, size_t *size,
     fake_vars_t *vars = (fake_vars_t *)context;
     variable_t *variable;
     int index;
-    if (wcscmp(name, L"BootNext") == 0) variable = &vars->bootnext;
-    else { index = entry_index(name); if (index < 0) { *size = 0u; return 0; } variable = &vars->entries[index]; }
+    if (wcscmp(name, L"BootNext") == 0) {
+        if (vars->fail_next_bootnext_read) {
+            vars->fail_next_bootnext_read = 0;
+            return -1;
+        }
+        if (vars->bootnext_read_error) return -1;
+        variable = &vars->bootnext;
+    } else {
+        if (wcscmp(name, L"BootFFFF") == 0) {
+            if (vars->populate_candidate_after_scan) {
+                vars->entries[0].present = 1;
+                vars->entries[0].size = 1u;
+                vars->entries[0].attributes = IB_BOOTNEXT_VARIABLE_ATTRIBUTES;
+                vars->entries[0].data[0] = 0xb6u;
+            }
+            if (vars->populate_bootnext_after_scan) {
+                vars->bootnext.present = 1;
+                vars->bootnext.size = 2u;
+                vars->bootnext.attributes = IB_BOOTNEXT_VARIABLE_ATTRIBUTES;
+                vars->bootnext.data[0] = 0x44u;
+                vars->bootnext.data[1] = 0x33u;
+            }
+            if (vars->fail_bootnext_read_after_scan) vars->bootnext_read_error = 1;
+            *size = 0u;
+            return 0;
+        }
+        index = entry_index(name);
+        if (index < 0) { *size = 0u; return 0; }
+        variable = &vars->entries[index];
+    }
     if (!variable->present) { *size = 0u; return 0; }
     if (*size < variable->size) return -1;
     memcpy(data, variable->data, variable->size); *size = variable->size;
@@ -74,9 +110,24 @@ static int fake_write(const wchar_t *name, const unsigned char *data, size_t siz
         if (size == 0u && vars->fail_bootnext_delete) return 0;
         if (size != 0u) vars->bootnext_write_sequence = vars->write_sequence;
         variable = &vars->bootnext;
+        if (size != 0u && vars->race_bootnext_write) {
+            variable->present = 1;
+            variable->size = 2u;
+            variable->attributes = attributes;
+            variable->data[0] = 0xfeu;
+            variable->data[1] = 0xcau;
+            return 1;
+        }
+        if (size != 0u && vars->fail_bootnext_readback_once) {
+            vars->fail_bootnext_readback_once = 0;
+            vars->fail_next_bootnext_read = 1;
+        }
     } else { index = entry_index(name); if (index < 0) return 0;
         if (size == 0u && vars->fail_entry_delete) return 0;
-        if (size != 0u) vars->entry_write_sequence = vars->write_sequence;
+        if (size != 0u) {
+            vars->entry_write_sequence = vars->write_sequence;
+            ++vars->entry_create_count;
+        }
         variable = &vars->entries[index]; }
     if (size == 0u) {
         if (vars->delete_count < (int)(sizeof(vars->delete_kind) / sizeof(vars->delete_kind[0]))) {
@@ -108,6 +159,47 @@ static ib_bootnext_request_t request_for(fake_vars_t *vars,
     request.partition = p; request.ops = ops; return request;
 }
 
+static void seed_owned_entry(fake_vars_t *vars, unsigned int index,
+                             const ib_bootnext_partition_t *p,
+                             ib_bootnext_profile_t profile,
+                             unsigned long attributes)
+{
+    size_t size;
+    CHECK(index < 4u);
+    if (index >= 4u) return;
+    size = sizeof(vars->entries[index].data);
+    CHECK(ib_bootnext_serialize_profile(p, profile, vars->entries[index].data,
+                                        &size));
+    vars->entries[index].present = 1;
+    vars->entries[index].size = size;
+    vars->entries[index].attributes = attributes;
+}
+
+static void seed_unrelated_entry(fake_vars_t *vars, unsigned int index,
+                                 unsigned char marker)
+{
+    CHECK(index < 4u);
+    vars->entries[index].present = 1;
+    vars->entries[index].size = 1u;
+    vars->entries[index].attributes = IB_BOOTNEXT_VARIABLE_ATTRIBUTES;
+    vars->entries[index].data[0] = marker;
+}
+
+static int contains_utf16_ascii(const unsigned char *data, size_t size,
+                                const char *text)
+{
+    size_t i, j, length = strlen(text);
+    if (length == 0u || size < length * 2u) return 0;
+    for (i = 0u; i + length * 2u <= size; ++i) {
+        for (j = 0u; j < length; ++j) {
+            if (data[i + j * 2u] != (unsigned char)text[j] ||
+                data[i + j * 2u + 1u] != 0u) break;
+        }
+        if (j == length) return 1;
+    }
+    return 0;
+}
+
 static void serialization_bytes(void)
 {
     ib_bootnext_partition_t p = partition(0x10u);
@@ -124,6 +216,107 @@ static void serialization_bytes(void)
     CHECK(bytes[96] == '\\' && bytes[97] == 0u && bytes[98] == 'E' && bytes[99] == 0u);
     CHECK(ib_bootnext_is_owned(bytes, size, &p));
     bytes[size - 1u] ^= 1u; CHECK(!ib_bootnext_is_owned(bytes, size, &p));
+
+    size = sizeof(bytes);
+    CHECK(ib_bootnext_serialize_profile(&p, IB_BOOTNEXT_PROFILE_INVENTORY,
+                                        bytes, &size));
+    CHECK(contains_utf16_ascii(bytes, size, "Hypersinv EFI Inventory"));
+    CHECK(contains_utf16_ascii(bytes, size,
+                               "\\EFI\\HypersinvInventory\\loader.efi"));
+    CHECK(ib_bootnext_is_owned_profile(bytes, size, &p,
+                                       IB_BOOTNEXT_PROFILE_INVENTORY));
+    CHECK(!ib_bootnext_is_owned(bytes, size, &p));
+}
+
+static void profiles_cannot_delete_each_others_entries(void)
+{
+    fake_vars_t vars; ib_bootnext_variable_ops_t ops; ib_bootnext_request_t request;
+    unsigned short number = 0u; wchar_t error[256] = L"";
+
+    memset(&vars, 0, sizeof(vars));
+    request = request_for(&vars, &ops, partition(0x31u));
+    CHECK(ib_bootnext_set_profile(&request, IB_BOOTNEXT_PROFILE_INVENTORY,
+                                  &number, error, 256u));
+    CHECK(!ib_bootnext_clear_owned(&request, error, 256u));
+    CHECK(vars.bootnext.present && vars.entries[number].present);
+    CHECK(ib_bootnext_clear_owned_profile(&request, IB_BOOTNEXT_PROFILE_INVENTORY,
+                                          error, 256u));
+    CHECK(!vars.bootnext.present && !vars.entries[number].present);
+
+    memset(&vars, 0, sizeof(vars));
+    request = request_for(&vars, &ops, partition(0x33u));
+    CHECK(ib_bootnext_set_profile(&request, IB_BOOTNEXT_PROFILE_INVENTORY,
+                                  &number, error, 256u));
+    memset(&vars.bootnext, 0, sizeof(vars.bootnext));
+    CHECK(!ib_bootnext_clear_owned(&request, error, 256u));
+    CHECK(vars.entries[number].present);
+    CHECK(ib_bootnext_clear_owned_profile(&request, IB_BOOTNEXT_PROFILE_INVENTORY,
+                                          error, 256u));
+    CHECK(!vars.entries[number].present);
+
+    memset(&vars, 0, sizeof(vars));
+    request = request_for(&vars, &ops, partition(0x32u));
+    CHECK(ib_bootnext_set(&request, &number, error, 256u));
+    CHECK(!ib_bootnext_clear_owned_profile(&request, IB_BOOTNEXT_PROFILE_INVENTORY,
+                                           error, 256u));
+    CHECK(vars.bootnext.present && vars.entries[number].present);
+    CHECK(ib_bootnext_clear_owned(&request, error, 256u));
+    CHECK(!vars.bootnext.present && !vars.entries[number].present);
+
+    memset(&vars, 0, sizeof(vars));
+    request = request_for(&vars, &ops, partition(0x34u));
+    CHECK(ib_bootnext_set(&request, &number, error, 256u));
+    memset(&vars.bootnext, 0, sizeof(vars.bootnext));
+    CHECK(!ib_bootnext_clear_owned_profile(&request, IB_BOOTNEXT_PROFILE_INVENTORY,
+                                           error, 256u));
+    CHECK(vars.entries[number].present);
+    CHECK(ib_bootnext_clear_owned(&request, error, 256u));
+    CHECK(!vars.entries[number].present);
+}
+
+static void shim_inventory_profile_uses_its_owned_boot_path(void)
+{
+    fake_vars_t vars; ib_bootnext_variable_ops_t ops; ib_bootnext_request_t request;
+    ib_bootnext_partition_t p = partition(0x41u);
+    unsigned char bytes[512]; size_t size = sizeof(bytes);
+    unsigned short number = 0u; wchar_t error[256] = L"";
+
+    CHECK(ib_bootnext_serialize_profile(&p, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY,
+                                        bytes, &size));
+    CHECK(contains_utf16_ascii(bytes, size, "Hypersinv Shim Inventory"));
+    CHECK(contains_utf16_ascii(bytes, size,
+          "\\EFI\\HypersinvShimInventory\\shimx64.efi"));
+    CHECK(ib_bootnext_is_owned_profile(bytes, size, &p,
+                                       IB_BOOTNEXT_PROFILE_SHIM_INVENTORY));
+    CHECK(!ib_bootnext_is_owned_profile(bytes, size, &p,
+                                        IB_BOOTNEXT_PROFILE_INVENTORY));
+    CHECK(!ib_bootnext_is_owned(bytes, size, &p));
+
+    memset(&vars, 0, sizeof(vars));
+    request = request_for(&vars, &ops, p);
+    CHECK(ib_bootnext_set_profile(&request, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY,
+                                  &number, error, sizeof(error) / sizeof(error[0])));
+    CHECK(vars.bootnext.present && vars.entries[number].present);
+    CHECK(vars.bootorder_writes == 0);
+    CHECK(!ib_bootnext_clear_owned_profile(&request,
+          IB_BOOTNEXT_PROFILE_INVENTORY, error, sizeof(error) / sizeof(error[0])));
+    CHECK(vars.bootnext.present && vars.entries[number].present);
+    CHECK(ib_bootnext_clear_owned_profile(&request,
+          IB_BOOTNEXT_PROFILE_SHIM_INVENTORY, error, sizeof(error) / sizeof(error[0])));
+    CHECK(!vars.bootnext.present && !vars.entries[number].present);
+    CHECK(vars.bootorder_writes == 0);
+
+    memset(&vars, 0, sizeof(vars));
+    vars.bootnext.present = 1;
+    vars.bootnext.size = 2u;
+    vars.bootnext.attributes = IB_BOOTNEXT_VARIABLE_ATTRIBUTES;
+    vars.bootnext.data[0] = 7u;
+    vars.bootnext.data[1] = 0u;
+    request = request_for(&vars, &ops, p);
+    CHECK(!ib_bootnext_set_profile(&request, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY,
+                                   &number, error, sizeof(error) / sizeof(error[0])));
+    CHECK(vars.bootnext.present && vars.bootnext.data[0] == 7u);
+    CHECK(!vars.entries[0].present && vars.bootorder_writes == 0);
 }
 
 static void set_preserves_existing_and_order(void)
@@ -151,6 +344,181 @@ static void failed_set_cleans_entry(void)
     request = request_for(&vars, &ops, partition(2u));
     CHECK(!ib_bootnext_set(&request, &number, error, 256u));
     CHECK(!vars.entries[0].present && !vars.bootnext.present);
+}
+
+static void set_reuses_the_sole_stale_owned_entry(void)
+{
+    fake_vars_t vars; ib_bootnext_variable_ops_t ops; ib_bootnext_request_t request;
+    ib_bootnext_partition_t p = partition(0x61u);
+    unsigned short number = 99u; wchar_t error[256] = L"";
+    memset(&vars, 0, sizeof(vars));
+    seed_owned_entry(&vars, 2u, &p, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY,
+                     IB_BOOTNEXT_VARIABLE_ATTRIBUTES);
+    request = request_for(&vars, &ops, p);
+    CHECK(ib_bootnext_set_profile(&request, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY,
+                                  &number, error, 256u));
+    CHECK(number == 2u);
+    CHECK(vars.entries[2].present);
+    CHECK(vars.entry_create_count == 0 && vars.entry_write_sequence == 0);
+    CHECK(vars.bootnext.present && vars.bootnext.size == 2u &&
+          vars.bootnext.data[0] == 2u && vars.bootnext.data[1] == 0u);
+    CHECK(vars.bootorder_writes == 0);
+}
+
+static void set_rejects_multiple_stale_owned_entries_without_writes(void)
+{
+    fake_vars_t vars; ib_bootnext_variable_ops_t ops; ib_bootnext_request_t request;
+    ib_bootnext_partition_t p = partition(0x62u);
+    unsigned short number; wchar_t error[256] = L"";
+    memset(&vars, 0, sizeof(vars));
+    seed_owned_entry(&vars, 0u, &p, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY,
+                     IB_BOOTNEXT_VARIABLE_ATTRIBUTES);
+    seed_owned_entry(&vars, 2u, &p, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY,
+                     IB_BOOTNEXT_VARIABLE_ATTRIBUTES);
+    request = request_for(&vars, &ops, p);
+    CHECK(!ib_bootnext_set_profile(&request, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY,
+                                   &number, error, 256u));
+    CHECK(vars.write_sequence == 0 && vars.delete_count == 0);
+    CHECK(!vars.bootnext.present && vars.entries[0].present && vars.entries[2].present);
+}
+
+static void set_rejects_stale_owned_entry_with_wrong_attributes(void)
+{
+    fake_vars_t vars; ib_bootnext_variable_ops_t ops; ib_bootnext_request_t request;
+    ib_bootnext_partition_t p = partition(0x63u);
+    unsigned short number; wchar_t error[256] = L"";
+    memset(&vars, 0, sizeof(vars));
+    seed_owned_entry(&vars, 2u, &p, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY,
+                     IB_BOOTNEXT_VARIABLE_ATTRIBUTES ^ 0x100u);
+    request = request_for(&vars, &ops, p);
+    CHECK(!ib_bootnext_set_profile(&request, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY,
+                                   &number, error, 256u));
+    CHECK(vars.write_sequence == 0 && vars.delete_count == 0);
+    CHECK(!vars.bootnext.present && vars.entries[2].present);
+}
+
+static void set_rereads_scan_candidates_before_writing(void)
+{
+    fake_vars_t vars; ib_bootnext_variable_ops_t ops; ib_bootnext_request_t request;
+    ib_bootnext_partition_t p = partition(0x66u);
+    unsigned short number; wchar_t error[256] = L"";
+    memset(&vars, 0, sizeof(vars));
+    vars.populate_candidate_after_scan = 1;
+    request = request_for(&vars, &ops, p);
+    CHECK(!ib_bootnext_set_profile(&request, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY,
+                                   &number, error, 256u));
+    CHECK(vars.write_sequence == 0 && vars.delete_count == 0);
+    CHECK(!vars.bootnext.present && vars.entries[0].present &&
+          vars.entries[0].data[0] == 0xb6u);
+}
+
+static void set_rereads_bootnext_after_scan_before_mutation(void)
+{
+    fake_vars_t vars; ib_bootnext_variable_ops_t ops; ib_bootnext_request_t request;
+    ib_bootnext_partition_t p = partition(0x67u);
+    unsigned short number; wchar_t error[256] = L"";
+
+    memset(&vars, 0, sizeof(vars));
+    vars.populate_bootnext_after_scan = 1;
+    request = request_for(&vars, &ops, p);
+    CHECK(!ib_bootnext_set_profile(&request, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY,
+                                   &number, error, 256u));
+    CHECK(vars.write_sequence == 0 && vars.delete_count == 0);
+    CHECK(vars.bootnext.present && vars.bootnext.data[0] == 0x44u &&
+          !vars.entries[0].present);
+
+    memset(&vars, 0, sizeof(vars));
+    seed_owned_entry(&vars, 0u, &p, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY,
+                     IB_BOOTNEXT_VARIABLE_ATTRIBUTES);
+    vars.fail_bootnext_read_after_scan = 1;
+    request = request_for(&vars, &ops, p);
+    CHECK(!ib_bootnext_set_profile(&request, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY,
+                                   &number, error, 256u));
+    CHECK(vars.write_sequence == 0 && vars.delete_count == 0);
+    CHECK(!vars.bootnext.present && vars.entries[0].present);
+    CHECK(ib_bootnext_is_owned_profile(vars.entries[0].data, vars.entries[0].size,
+                                       &p, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY));
+}
+
+static void set_does_not_reuse_same_path_for_another_partition(void)
+{
+    fake_vars_t vars; ib_bootnext_variable_ops_t ops; ib_bootnext_request_t request;
+    ib_bootnext_partition_t wanted = partition(0x64u);
+    ib_bootnext_partition_t foreign = partition(0x74u);
+    unsigned short number = 99u; wchar_t error[256] = L"";
+    memset(&vars, 0, sizeof(vars));
+    seed_owned_entry(&vars, 0u, &foreign, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY,
+                     IB_BOOTNEXT_VARIABLE_ATTRIBUTES);
+    request = request_for(&vars, &ops, wanted);
+    CHECK(ib_bootnext_set_profile(&request, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY,
+                                  &number, error, 256u));
+    CHECK(number == 1u);
+    CHECK(vars.entries[0].present && vars.entries[0].size == vars.entries[1].size);
+    CHECK(contains_utf16_ascii(vars.entries[0].data, vars.entries[0].size,
+                               "Hypersinv Shim Inventory"));
+    CHECK(contains_utf16_ascii(vars.entries[0].data, vars.entries[0].size,
+          "\\EFI\\HypersinvShimInventory\\shimx64.efi"));
+    CHECK(!ib_bootnext_is_owned_profile(vars.entries[0].data, vars.entries[0].size,
+                                        &wanted, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY));
+    CHECK(ib_bootnext_is_owned_profile(vars.entries[1].data, vars.entries[1].size,
+                                       &wanted, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY));
+    CHECK(vars.entry_create_count == 1);
+}
+
+static void failed_or_raced_bootnext_preserves_reused_and_unrelated_entries(void)
+{
+    fake_vars_t vars; ib_bootnext_variable_ops_t ops; ib_bootnext_request_t request;
+    ib_bootnext_partition_t p = partition(0x65u);
+    unsigned short number; wchar_t error[256] = L"";
+
+    memset(&vars, 0, sizeof(vars));
+    seed_owned_entry(&vars, 0u, &p, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY,
+                     IB_BOOTNEXT_VARIABLE_ATTRIBUTES);
+    seed_unrelated_entry(&vars, 1u, 0xa5u);
+    vars.fail_bootnext_write = 1;
+    request = request_for(&vars, &ops, p);
+    CHECK(!ib_bootnext_set_profile(&request, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY,
+                                   &number, error, 256u));
+    CHECK(!vars.bootnext.present && vars.entries[0].present && vars.entries[1].present);
+    CHECK(ib_bootnext_is_owned_profile(vars.entries[0].data, vars.entries[0].size,
+                                       &p, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY));
+    CHECK(vars.entries[1].data[0] == 0xa5u && vars.delete_count == 0);
+
+    memset(&vars, 0, sizeof(vars));
+    seed_owned_entry(&vars, 0u, &p, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY,
+                     IB_BOOTNEXT_VARIABLE_ATTRIBUTES);
+    seed_unrelated_entry(&vars, 1u, 0x5au);
+    vars.race_bootnext_write = 1;
+    request = request_for(&vars, &ops, p);
+    CHECK(!ib_bootnext_set_profile(&request, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY,
+                                   &number, error, 256u));
+    CHECK(vars.bootnext.present && vars.bootnext.size == 2u &&
+          vars.bootnext.data[0] == 0xfeu && vars.bootnext.data[1] == 0xcau);
+    CHECK(vars.entries[0].present && vars.entries[1].present);
+    CHECK(ib_bootnext_is_owned_profile(vars.entries[0].data, vars.entries[0].size,
+                                       &p, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY));
+    CHECK(vars.entries[1].data[0] == 0x5au && vars.delete_count == 0);
+}
+
+static void readback_failure_deletes_only_attempted_bootnext_on_reuse(void)
+{
+    fake_vars_t vars; ib_bootnext_variable_ops_t ops; ib_bootnext_request_t request;
+    ib_bootnext_partition_t p = partition(0x68u);
+    unsigned short number; wchar_t error[256] = L"";
+    memset(&vars, 0, sizeof(vars));
+    seed_owned_entry(&vars, 0u, &p, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY,
+                     IB_BOOTNEXT_VARIABLE_ATTRIBUTES);
+    seed_unrelated_entry(&vars, 1u, 0x7cu);
+    vars.fail_bootnext_readback_once = 1;
+    request = request_for(&vars, &ops, p);
+    CHECK(!ib_bootnext_set_profile(&request, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY,
+                                   &number, error, 256u));
+    CHECK(!vars.bootnext.present && vars.entries[0].present && vars.entries[1].present);
+    CHECK(ib_bootnext_is_owned_profile(vars.entries[0].data, vars.entries[0].size,
+                                       &p, IB_BOOTNEXT_PROFILE_SHIM_INVENTORY));
+    CHECK(vars.entries[1].data[0] == 0x7cu);
+    CHECK(vars.delete_count == 1 && vars.delete_kind[0] == 2);
+    CHECK(vars.entry_create_count == 0);
 }
 
 static void set_readback_mismatch_is_fail_closed(void)
@@ -249,8 +617,18 @@ int main(void)
 {
     serialization_bytes(); set_preserves_existing_and_order();
     failed_set_cleans_entry(); set_readback_mismatch_is_fail_closed();
+    set_reuses_the_sole_stale_owned_entry();
+    set_rejects_multiple_stale_owned_entries_without_writes();
+    set_rejects_stale_owned_entry_with_wrong_attributes();
+    set_rereads_scan_candidates_before_writing();
+    set_rereads_bootnext_after_scan_before_mutation();
+    set_does_not_reuse_same_path_for_another_partition();
+    failed_or_raced_bootnext_preserves_reused_and_unrelated_entries();
+    readback_failure_deletes_only_attempted_bootnext_on_reuse();
     bootnext_readback_mismatch_does_not_delete_entry(); clear_is_ownership_safe();
     clear_uses_recoverable_entry_first_order(); clear_leaves_unrelated_entries_alone();
+    profiles_cannot_delete_each_others_entries();
+    shim_inventory_profile_uses_its_owned_boot_path();
     if (g_failures != 0) { fprintf(stderr, "%d BootNext tests failed\n", g_failures); return 1; }
     puts("install BootNext tests passed"); return 0;
 }

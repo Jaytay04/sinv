@@ -1,7 +1,10 @@
 ﻿# UEFILoader + EFI Hypervisor - BARE-METAL (primary host) build / boot / test
 
+> Collector-only physical-host testing now uses [EFI_INVENTORY_PATH_B.md](EFI_INVENTORY_PATH_B.md). The commands below describe the separate full hypervisor chain and have not been validated as a physical-host procedure. The repository vendors a Microsoft-signed shim; its MOK chain is now used by the diagnostic guide. Windows certificate-store imports or testsigning alone do not establish firmware Secure Boot trust. The inventory-only authorization does not cover VMX or driver execution; follow AGENTS.md for those tests.
+
+
 Everything below is the primary host (your PC), not a VM. Intel x86-64,
-UEFI, Secure Boot may stay on (public-only test cert, testsigning window).
+UEFI. Keeping Secure Boot enabled requires a verified firmware-trusted EFI chain; Windows certificate-store imports and testsigning alone do not establish that trust. The current collector-only Path B uses the signed shim/MOK chain and keeps Secure Boot enabled.
 Every command is run from the repo root. Footprint: one armed single-shot
 firmware BootNext entry, one ESP staging folder (\EFI\insecure-boot\), bcd
 flags, two trust entries, one companion driver/service - all removed in
@@ -43,6 +46,7 @@ ctest --test-dir $B\uefi-loader --build-config Release --output-on-failure
 #   payload        $HH\uefi_hypervisor.efi (+3 probe .efi)
 #   companion      $CD\hvr1_efi_runtime_companion.sys + hvr1_runtime_service.exe
 #   boot chain     $UL\loader.efi, $UL\shimx64.efi, $UL\ib-install.exe, $UL\ib-tcg-dump.exe
+#   inventory      .codex-build\efi_inventory\efi\inventory.efi (optional second payload)
 #   game modules   $EP\hypersinv_pub.exe (+ esp_analysis / hardened_esp archives)
 ```
 
@@ -70,6 +74,9 @@ bcdedit /bootdebug "{current}" off
 # 3) BOOT: stage the ESP, then arm the one-shot firmware boot
 #    (reboot into it; payload is non-persistent, BootOrder untouched):
 & $UL\ib-install.exe stage --signer-cert $cer --shim "$UL\shimx64.efi" --loader "$UL\loader.efi" --log .\divergence.ib --payload "$HH\uefi_hypervisor.efi" --esp-volume auto
+#    Optional: also place .codex-build\efi_inventory\efi\inventory.efi into ESP\EFI\insecure-boot\
+#    so loader.efi runs the variable inventory (prints "inventory collector: PASS";
+#    report -> ESP\EFI\insecure-boot\HypersinvEfiInventory.txt; see tools/efi_inventory/LOADER_PAYLOAD_HANDOFF.md).
 & $UL\ib-install.exe oneshot --mode bootnext --esp-volume auto
 #   -> prints: BootNext set to owned Boot%04X; BootOrder was not changed.
 

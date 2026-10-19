@@ -25,6 +25,7 @@ static void usage(void)
         L"  ib-install stage --signer-cert DER --shim PATH --loader PATH "
         L"--log PATH --payload PATH [--esp-volume auto|VOLUME | --test-root DIR]\n"
         L"  ib-install oneshot --mode replace|verify|bootnext|off "
+        L"[--profile legacy|inventory|shim-inventory] "
         L"[--esp-volume auto|VOLUME | --test-root DIR] "
         L"[--partition-number N --partition-start N --partition-size N "
         L"--partition-guid GUID]\n"
@@ -44,6 +45,16 @@ static const wchar_t *option_value(int argc, wchar_t **argv, const wchar_t *name
         }
     }
     return found;
+}
+
+static size_t option_count(int argc, wchar_t **argv, const wchar_t *name)
+{
+    int i;
+    size_t count = 0u;
+    for (i = 2; i < argc; i += 2) {
+        if (wcscmp(argv[i], name) == 0) ++count;
+    }
+    return count;
 }
 
 static int only_known_options(int argc, wchar_t **argv,
@@ -251,7 +262,7 @@ static int synthetic_partition(int argc, wchar_t **argv,
 static int run_oneshot(int argc, wchar_t **argv)
 {
     static const wchar_t *known[] = {
-        L"--mode", L"--esp-volume", L"--test-root", L"--partition-number",
+        L"--mode", L"--profile", L"--esp-volume", L"--test-root", L"--partition-number",
         L"--partition-start", L"--partition-size", L"--partition-guid"
     };
     ib_oneshot_request_t request;
@@ -259,9 +270,37 @@ static int run_oneshot(int argc, wchar_t **argv)
     wchar_t error[512] = L"";
     const wchar_t *mode;
     const wchar_t *esp;
+    const wchar_t *profile_text;
+    ib_oneshot_profile_t profile = IB_ONESHOT_PROFILE_LEGACY;
+    ib_bootnext_profile_t boot_profile = IB_BOOTNEXT_PROFILE_LEGACY;
     if (!only_known_options(argc, argv, known, _countof(known))) { usage(); return 2; }
+    if (option_count(argc, argv, L"--profile") > 1u) {
+        fwprintf(stderr, L"one-shot failed: --profile may be specified only once\n");
+        return 2;
+    }
     ZeroMemory(&request, sizeof(request));
+    request.verify_signature = verify_for_sign;
     mode = option_value(argc, argv, L"--mode");
+    profile_text = option_value(argc, argv, L"--profile");
+    if (profile_text != NULL) {
+        if (wcscmp(profile_text, L"legacy") == 0) {
+            profile = IB_ONESHOT_PROFILE_LEGACY;
+        } else if (wcscmp(profile_text, L"inventory") == 0) {
+            profile = IB_ONESHOT_PROFILE_INVENTORY;
+            boot_profile = IB_BOOTNEXT_PROFILE_INVENTORY;
+        } else if (wcscmp(profile_text, L"shim-inventory") == 0) {
+            profile = IB_ONESHOT_PROFILE_SHIM_INVENTORY;
+            boot_profile = IB_BOOTNEXT_PROFILE_SHIM_INVENTORY;
+        } else {
+            fwprintf(stderr, L"one-shot failed: unknown profile %ls\n", profile_text);
+            return 2;
+        }
+    }
+    if (profile != IB_ONESHOT_PROFILE_LEGACY && mode != NULL &&
+        !ib_oneshot_profile_supports_mode(profile, mode)) {
+        fwprintf(stderr, L"one-shot failed: this profile supports only bootnext and off\n");
+        return 2;
+    }
     request.test_root = option_value(argc, argv, L"--test-root");
     esp = option_value(argc, argv, L"--esp-volume");
     if (esp != NULL && wcscmp(esp, L"auto") == 0) {
@@ -300,7 +339,8 @@ static int run_oneshot(int argc, wchar_t **argv)
             return 1;
         }
         if (wcscmp(mode, L"bootnext") == 0 &&
-            !ib_oneshot_validate_staged(&request, error, _countof(error))) {
+            !ib_oneshot_validate_staged_profile(&request, profile,
+                                                error, _countof(error))) {
             fwprintf(stderr, L"BootNext preflight failed: %ls\n", error);
             return 1;
         }
@@ -311,12 +351,14 @@ static int run_oneshot(int argc, wchar_t **argv)
         }
         ib_bootnext_default_ops(&ops); boot_request.partition = partition; boot_request.ops = &ops;
         if (wcscmp(mode, L"bootnext") == 0) {
-            if (!ib_bootnext_set(&boot_request, &number, error, _countof(error))) {
+            if (!ib_bootnext_set_profile(&boot_request, boot_profile, &number,
+                                         error, _countof(error))) {
                 fwprintf(stderr, L"BootNext failed: %ls\n", error); return 1;
             }
             wprintf(L"BootNext set to owned Boot%04X; BootOrder was not changed.\n", number);
         } else {
-            if (!ib_bootnext_clear_owned(&boot_request, error, _countof(error))) {
+            if (!ib_bootnext_clear_owned_profile(&boot_request, boot_profile,
+                                                 error, _countof(error))) {
                 fwprintf(stderr, L"BootNext cleanup failed: %ls\n", error); return 1;
             }
             wprintf(L"Owned BootNext/Boot#### state cleared; BootOrder was not changed.\n");
