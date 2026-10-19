@@ -113,88 +113,98 @@ bool ShouldRenderEntity(float worldX, float worldY, float worldZ, const float* c
 bool IsEntityInFOV(float worldX, float worldY, float worldZ, 
                    const float* cameraPos, const float* cameraForward, 
                    float fovDegrees) {
-    if (!cameraPos || !cameraForward) return false;
-    
-    /* Calculate direction to entity */
     float dx = worldX - cameraPos[0];
     float dy = worldY - cameraPos[1];
     float dz = worldZ - cameraPos[2];
     
-    /* Normalize direction */
-    float length = std::sqrt(dx*dx + dy*dy + dz*dz);
-    if (length < 0.001f) return false;
+    /* Direction vector from camera to entity. */
+    float dirLen = std::sqrt(dx*dx + dy*dy + dz*dz);
+    if (dirLen == 0.0f) return false;
+    dx /= dirLen; dy /= dirLen; dz /= dirLen;
     
-    dx /= length;
-    dy /= length;
-    dz /= length;
-    
-    /* Calculate dot product with camera forward vector */
+    /* Dot product with camera_forward. */
     float dot = dx * cameraForward[0] + dy * cameraForward[1] + dz * cameraForward[2];
+    /* Clamp to [-1, 1] for acos. */
+    if (dot > 1.0f) dot = 1.0f;
+    if (dot < -1.0f) dot = -1.0f;
     
-    /* Convert dot product to angle */
-    float angle = std::acos(std::fmax(-1.0f, std::fmin(1.0f, dot)));
-    
-    return CheckFOV(angle, fovDegrees);
+    return CheckFOV(static_cast<float>(std::acos(dot)), fovDegrees);
 }
 
 /*
  * Check if entity has line-of-sight
- * 
- * This would implement raycasting or use game visibility flags.
- * For now, returns true as placeholder.
  */
 bool HasLineOfSight(uint32_t pid, uint64_t cameraAddress, uint64_t entityAddress) {
-    if (pid == 0 || cameraAddress == 0 || entityAddress == 0) {
-        return false;
-    }
-    
-    /* 
-     * In a real implementation, this would:
-     * 1. Read camera position and orientation
-     * 2. Read entity position
-     * 3. Perform raycast through game world
-     * 4. Check for obstacles/visibility flags
-     * 
-     * For now, we return true and rely on distance/FOV filtering.
-     */
+    /* Would need entity address for proper LOS check */
+    /* For now, pass through */
+    (void)pid;
+    (void)cameraAddress;
+    (void)entityAddress;
     return true;
 }
 
 /*
- * Update with hardening applied
+ * Update hardened ESP module
  */
 bool HardenedEspUpdate() {
-    if (!g_initialized) {
-        return false;
-    }
-    
     /* Apply random delay before reading */
     ApplyRandomReadDelay();
-    
-    /* Read camera position from game */
-    uint64_t cameraAddress = 0; /* Would be obtained from game state */
-    if (cameraAddress != 0) {
-        /* Read camera location */
-        float cameraLocation[3] = {0};
-        if (HvReadGuestMemory(g_baseConfig.target_pid, 
-                             cameraAddress + arc_raiders::kCameraManager_POV_Location,
-                             cameraLocation, sizeof(cameraLocation))) {
-            g_cameraPos[0] = cameraLocation[0];
-            g_cameraPos[1] = cameraLocation[1];
-            g_cameraPos[2] = cameraLocation[2];
+
+    /* Read camera position via CL-1426848 chain:
+     * Resolve player_controller from uworld_signature via
+     * kUWORLD_GAME_INSTANCE -> kGI_LOCAL_PLAYERS -> kLP_PLAYER_CONTROLLER,
+     * then view_target = player_controller + kVIEW_TARGET (0x4C0),
+     * POV at view_target + 0x10 + 0x08/0x28/0x48. */
+    if (g_baseConfig.target_pid != 0) {
+        uint64_t player_controller = 0;
+        if (g_baseConfig.uworld_signature != 0) {
+            uint64_t gi = 0;
+            if (HvReadGuestMemory(g_baseConfig.target_pid,
+                                  g_baseConfig.uworld_signature + arc_raiders::kUWORLD_GAME_INSTANCE,
+                                  &gi, sizeof(gi))) {
+                if (gi != 0) {
+                    uint64_t lp = 0;
+                    if (HvReadGuestMemory(g_baseConfig.target_pid,
+                                          gi + arc_raiders::kGI_LOCAL_PLAYERS,
+                                          &lp, sizeof(lp))) {
+                        if (lp != 0) {
+                            HvReadGuestMemory(g_baseConfig.target_pid,
+                                              lp + arc_raiders::kLP_PLAYER_CONTROLLER,
+                                              &player_controller, sizeof(player_controller));
+                        }
+                    }
+                }
+            }
         }
         
-        /* Read camera rotation and convert to forward vector */
-        float cameraRotation[3] = {0};
-        if (HvReadGuestMemory(g_baseConfig.target_pid,
-                             cameraAddress + arc_raiders::kCameraManager_POV_Rotation,
-                             cameraRotation, sizeof(cameraRotation))) {
-            float pitch = cameraRotation[0] * 3.14159265f / 180.0f;
-            float yaw = cameraRotation[1] * 3.14159265f / 180.0f;
-            
-            g_cameraForward[0] = std::cos(pitch) * std::sin(yaw);
-            g_cameraForward[1] = std::sin(pitch);
-            g_cameraForward[2] = std::cos(pitch) * std::cos(yaw);
+        if (player_controller != 0) {
+            uint64_t view_target = 0;
+            if (HvReadGuestMemory(g_baseConfig.target_pid,
+                                  player_controller + arc_raiders::kVIEW_TARGET,
+                                  &view_target, sizeof(view_target))) {
+                /* Location: view_target + 0x10 + 0x08 (FVector3d). */
+                double cameraLocation[3] = {};
+                if (HvReadGuestMemory(g_baseConfig.target_pid,
+                                      view_target + 0x10 + 0x08,
+                                      cameraLocation, sizeof(cameraLocation))) {
+                    g_cameraPos[0] = static_cast<float>(cameraLocation[0]);
+                    g_cameraPos[1] = static_cast<float>(cameraLocation[1]);
+                    g_cameraPos[2] = static_cast<float>(cameraLocation[2]);
+                }
+                
+                /* Rotation: view_target + 0x10 + 0x28 (FRotator). */
+                float cameraRotation[3] = {0};
+                if (HvReadGuestMemory(g_baseConfig.target_pid,
+                                      view_target + 0x10 + 0x28,
+                                      cameraRotation, sizeof(cameraRotation))) {
+                    float pitch = cameraRotation[0] * 3.14159265f / 180.0f;
+                    float yaw = cameraRotation[1] * 3.14159265f / 180.0f;
+                    
+                    g_cameraForward[0] = std::cos(pitch) * std::sin(yaw);
+                    g_cameraForward[1] = std::sin(pitch);
+                    g_cameraForward[2] = std::cos(pitch) * std::cos(yaw);
+                }
+            }
         }
     }
     
@@ -212,7 +222,6 @@ bool HardenedEspUpdate() {
     
     return true;
 }
-
 /*
  * Get filtered entities
  */
