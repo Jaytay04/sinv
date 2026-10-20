@@ -1255,11 +1255,6 @@ function Invoke-GpuGuestPhase {
     })
     if ([string]$Response.Result.Status -cne 'PASS' -or
         [string]$Response.Result.RunId -cne $RunId) {
-        # The authenticated response and available evidence are saved locally.
-        # Release this request before diagnostics need the same mailbox.
-        Clear-VmwareGuestInfoVariables -Selected $script:Selected `
-            -VariableNames @($Transport.RequestVariableNames +
-                $Response.ResponseVariableNames)
         if ($Mode -ceq 'Inspect' -and
             [string]$Response.Result.Message -ceq 'The local RunId has already been used.') {
             # Preserve the failure while allowing an already-running read-only
@@ -1283,6 +1278,11 @@ function Invoke-GpuGuestPhase {
                     $GuestDiagnostic, [Text.UTF8Encoding]::new($false))
             }
         }
+        # Save late inspection evidence before releasing this request's keys.
+        # Diagnostics then have room to use the same mailbox.
+        Clear-VmwareGuestInfoVariables -Selected $script:Selected `
+            -VariableNames @($Transport.RequestVariableNames +
+                $Response.ResponseVariableNames)
         if ($Mode -cne 'Diagnose') {
             # A fresh authenticated read-only request preserves diagnostics
             # before snapshot recovery. Its result never changes the failure.

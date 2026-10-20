@@ -239,7 +239,9 @@ The follow-up transport change releases only the authenticated Stage request's
 current-RunId chunk values after the VM/SYSTEM and package checks pass, before
 publishing setup diagnostics. The verified local package remains available.
 The controller also clears a saved failed response's owned mailbox values
-before requesting Diagnose. The focused controller suite passes 113 pure
+before requesting Diagnose, after preserving any late inspection evidence.
+The focused controller suite passes 114 pure
 checks, including exact chunk names, rejection without writes, write failure,
-and cleanup ordering. A fresh VM execution must still verify that tombstoning
+cleanup ordering, and producer/consumer chunk-size agreement. A fresh VM
+execution must still verify that tombstoning
 these values releases sufficient GuestInfo capacity.

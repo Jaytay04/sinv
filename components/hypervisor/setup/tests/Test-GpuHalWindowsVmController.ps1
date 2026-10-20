@@ -285,10 +285,17 @@ if ($GuestFailureBranches.Count -eq 1) {
                     $Node.GetCommandName() -ceq 'Invoke-GpuGuestPhase' -and
                     $Node.Extent.Text -match "-Mode\s+'Diagnose'"
             }, $true))
+    $LateEvidenceReads = @($FailureBranch.FindAll({
+                param($Node)
+                $Node -is [Management.Automation.Language.CommandAst] -and
+                    $Node.GetCommandName() -ceq 'Invoke-VmwareGuestInfoRead'
+            }, $true))
     $FailureCleanupOrderPassed = ($FailureCleanupCalls.Count -eq 1 -and
         $FailureDiagnoseCalls.Count -eq 1 -and
+        $LateEvidenceReads.Count -eq 2 -and
         $FailureCleanupCalls[0].Extent.Text.Contains('$Transport.RequestVariableNames') -and
         $FailureCleanupCalls[0].Extent.Text.Contains('$Response.ResponseVariableNames') -and
+        $LateEvidenceReads[1].Extent.EndOffset -lt $FailureCleanupCalls[0].Extent.StartOffset -and
         $FailureCleanupCalls[0].Extent.StartOffset -lt $FailureDiagnoseCalls[0].Extent.StartOffset)
 }
 $AllGuestPhaseCleanupCalls = @($GuestPhaseDefinition.FindAll({
@@ -326,7 +333,18 @@ function Assert-Check {
 Assert-Check $script:GuestStageReclamationContractPassed `
     'Stage request reclamation is guarded by LocalSystem and authenticated-package validation and precedes entry diagnostics'
 Assert-Check $script:GuestControllerFailureCleanupOrderPassed `
-    'failed authenticated response releases request/response variables before Diagnose while retaining success-path cleanup'
+    'failed response preserves late inspection reads then releases owned variables before Diagnose while retaining success-path cleanup'
+
+$GuestReleaseDefinition = Find-FunctionDefinitionAst $GuestAst 'Clear-AuthenticatedStageRequestChunks'
+$GuestChunkAssignments = @($GuestReleaseDefinition.FindAll({
+            param($Node)
+            $Node -is [Management.Automation.Language.AssignmentStatementAst] -and
+                $Node.Left.Extent.Text -ceq '$ChunkBytes'
+        }, $true))
+Assert-Check ($GuestChunkAssignments.Count -eq 1 -and
+    $GuestChunkAssignments[0].Right.Extent.Text -cmatch '^[0-9]+$' -and
+    [int]$GuestChunkAssignments[0].Right.Extent.Text -eq $script:VmwareGuestInfoChunkBytes) `
+    'guest consumed-request chunk size matches the imported HostRunner producer constant'
 
 $SaveRunResultText = [string]$FunctionDefinitions['Save-RunResult'].Extent.Text
 $ControllerText = [string]$ControllerAst.Extent.Text
