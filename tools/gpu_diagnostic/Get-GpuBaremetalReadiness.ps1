@@ -180,13 +180,17 @@ function Get-GpuBaremetalReadinessDecision {
     if (@($Facts.CleanupErrors).Count -gt 0) { $blockers.Add('Temporary ESP cleanup failed; do not continue until the owned S: mount is resolved.') }
     if (@($Facts.Errors).Count -gt 0) { foreach ($errorText in @($Facts.Errors)) { $blockers.Add([string]$errorText) } }
 
-    $status = if ($blockers.Count -eq 0) { 'READY_FOR_FRESH_PREPARE' } else { 'BLOCKED_READINESS' }
-    $nextStep = if ($blockers.Count -eq 0) {
+    $uniqueBlockers = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($blocker in $blockers) {
+        if (-not $uniqueBlockers.Contains($blocker)) { $uniqueBlockers.Add($blocker) }
+    }
+    $status = if ($uniqueBlockers.Count -eq 0) { 'READY_FOR_FRESH_PREPARE' } else { 'BLOCKED_READINESS' }
+    $nextStep = if ($uniqueBlockers.Count -eq 0) {
         'Run gpu-host-test.ps1 Prepare -PhysicalOutputConfirmed -RecoveryReady after manually confirming the Intel-connected diagnostic display and recovery readiness.'
     } else {
         'Resolve each blocker using the existing Status/rollback/archive workflow or an ownership-reviewed ESP retirement, then run this inspection again. Do not delete retained EFI files generically or retry an interrupted action.'
     }
-    return [pscustomobject]@{ Status = $status; Succeeded = ($blockers.Count -eq 0); Blockers = @($blockers.ToArray()); NextStep = $nextStep }
+    return [pscustomobject]@{ Status = $status; Succeeded = ($uniqueBlockers.Count -eq 0); Blockers = @($uniqueBlockers.ToArray()); NextStep = $nextStep }
 }
 
 function Get-GpuBaremetalEspLifecycleFacts {
@@ -224,6 +228,30 @@ function New-GpuBaremetalSourceFacts {
         Error = $errorText
         Pins = @()
     }
+}
+
+function Get-GpuBaremetalSourcePins {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][string]$SourceRoot)
+
+    $relativePaths = @(
+        'tools/gpu_diagnostic/Get-GpuBaremetalReadiness.ps1',
+        'tools/gpu_diagnostic/GpuHostState.psm1',
+        'tools/gpu_diagnostic/GpuHostPlatform.psm1',
+        'components/hypervisor/setup/Get-GpuDiagnosticPreflight.ps1'
+    )
+    $pins = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($relativePath in $relativePaths) {
+        try {
+            $filePath = Join-Path $SourceRoot ($relativePath.Replace('/', '\'))
+            $null = Assert-GpuPathWithin -Path $filePath -Root $SourceRoot -MustExist
+            $pin = Get-GpuFilePin -Path $filePath
+            $pins.Add([pscustomobject]@{ RelativePath = $relativePath; Sha256 = $pin.Sha256; Bytes = [long]$pin.Bytes })
+        } catch {
+            throw "Could not pin required source file '$relativePath': $($_.Exception.Message)"
+        }
+    }
+    return @($pins.ToArray())
 }
 
 function New-GpuBaremetalReadinessFacts {
@@ -346,18 +374,7 @@ try {
         -StatusEntries ([string[]]$statusOutput)
     if ($null -ne $SourceFacts.Error) { Add-ReadinessError $SourceFacts.Error }
     try {
-        $sourcePinRows = New-Object 'System.Collections.Generic.List[object]'
-        foreach ($relativePath in @(
-            'tools/gpu_diagnostic/Get-GpuBaremetalReadiness.ps1',
-            'tools/gpu_diagnostic/GpuHostState.psm1',
-            'tools/gpu_diagnostic/GpuHostPlatform.psm1',
-            'components/hypervisor/setup/Get-GpuDiagnosticPreflight.ps1'
-        )) {
-            $pinPath = Join-Path $WorkspaceRoot ($relativePath.Replace('/', '\'))
-            $pin = Get-GpuFilePin -Path $pinPath
-            $sourcePinRows.Add([pscustomobject]@{ RelativePath = $relativePath; Sha256 = $pin.Sha256; Bytes = $pin.Bytes })
-        }
-        $SourceFacts.Pins = @($sourcePinRows.ToArray())
+        $SourceFacts.Pins = @(Get-GpuBaremetalSourcePins -SourceRoot $SourceRoot)
     } catch {
         $SourceFacts.Error = 'Required readiness source pins could not be read: ' + $_.Exception.Message
         Add-ReadinessError $SourceFacts.Error

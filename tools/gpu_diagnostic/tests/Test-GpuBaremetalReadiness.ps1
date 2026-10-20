@@ -51,7 +51,7 @@ $decisionFunction = @($ast.FindAll({ param($node)
 $inventoryFunction = @($ast.FindAll({ param($node)
     $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq 'Get-GpuBaremetalStageInventory'
 }, $true))
-foreach ($functionName in @('Get-GpuBaremetalEspLifecycleFacts','New-GpuBaremetalSourceFacts','New-GpuBaremetalReadinessFacts','New-GpuBaremetalRecoveryFacts','Set-GpuBaremetalReportSaveFailure')) {
+foreach ($functionName in @('Get-GpuBaremetalEspLifecycleFacts','New-GpuBaremetalSourceFacts','Get-GpuBaremetalSourcePins','New-GpuBaremetalReadinessFacts','New-GpuBaremetalRecoveryFacts','Set-GpuBaremetalReportSaveFailure')) {
     $functionAst = @($ast.FindAll({ param($node)
         $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $functionName
     }, $true))
@@ -107,6 +107,59 @@ try {
         Assert-Equal 'READY_FOR_FRESH_PREPARE' $decision.Status 'Clean readiness status differs.'
         Assert-True $decision.Succeeded 'Clean readiness was rejected.'
         Assert-Equal 0 $decision.Blockers.Count 'Clean readiness returned blockers.'
+    }
+
+    Invoke-TestCase 'duplicate blocker evidence is reported once' {
+        $facts = New-ReadyFacts
+        $facts.Source.Error = 'Repeated source evidence failure.'
+        $facts.Errors = @('Repeated source evidence failure.', 'Repeated source evidence failure.')
+        $decision = Get-GpuBaremetalReadinessDecision -Facts $facts
+        $matching = @($decision.Blockers | Where-Object { $_ -ceq 'Repeated source evidence failure.' })
+        Assert-Equal 1 $matching.Count 'Identical blocker evidence was duplicated.'
+    }
+
+    Invoke-TestCase 'source pins come from the nested feature root and fail closed when a pin is missing' {
+        $mainRoot = Join-Path $fixtureRoot 'main'
+        $featureRoot = Join-Path $mainRoot '.codex-build\worktrees\gpu-windows-validation'
+        $relativePaths = @(
+            'tools/gpu_diagnostic/Get-GpuBaremetalReadiness.ps1',
+            'tools/gpu_diagnostic/GpuHostState.psm1',
+            'tools/gpu_diagnostic/GpuHostPlatform.psm1',
+            'components/hypervisor/setup/Get-GpuDiagnosticPreflight.ps1'
+        )
+        foreach ($relativePath in $relativePaths) {
+            $featureFile = Join-Path $featureRoot ($relativePath.Replace('/', '\'))
+            $mainFile = Join-Path $mainRoot ($relativePath.Replace('/', '\'))
+            $null = New-Item -ItemType Directory -Path (Split-Path -Parent $featureFile) -Force
+            $null = New-Item -ItemType Directory -Path (Split-Path -Parent $mainFile) -Force
+            [IO.File]::WriteAllText($featureFile, ('feature:' + $relativePath))
+            [IO.File]::WriteAllText($mainFile, ('main-decoy:' + $relativePath))
+        }
+
+        $pins = @(Get-GpuBaremetalSourcePins -SourceRoot $featureRoot)
+        Assert-Equal $relativePaths.Count $pins.Count 'Feature source pin count differs.'
+        for ($index = 0; $index -lt $relativePaths.Count; $index++) {
+            $relativePath = $relativePaths[$index]
+            $featureFile = Join-Path $featureRoot ($relativePath.Replace('/', '\'))
+            $mainFile = Join-Path $mainRoot ($relativePath.Replace('/', '\'))
+            $featureHash = (Get-FileHash -LiteralPath $featureFile -Algorithm SHA256).Hash
+            $mainHash = (Get-FileHash -LiteralPath $mainFile -Algorithm SHA256).Hash
+            Assert-Equal $relativePath $pins[$index].RelativePath 'Source pin relative path differs.'
+            Assert-Equal $featureHash $pins[$index].Sha256 'Source pin did not hash the feature worktree file.'
+            Assert-True ($pins[$index].Sha256 -cne $mainHash) 'Source pin unexpectedly matched the main-workspace decoy.'
+        }
+
+        $missingRelativePath = $relativePaths[2]
+        $missingFeatureFile = [IO.Path]::GetFullPath((Join-Path $featureRoot ($missingRelativePath.Replace('/', '\'))))
+        $fixturePrefix = [IO.Path]::GetFullPath($fixtureRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+        if (-not $missingFeatureFile.StartsWith($fixturePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Refusing to delete a source pin outside the test fixture: $missingFeatureFile"
+        }
+        Remove-Item -LiteralPath $missingFeatureFile -Force
+        $missingRejected = $false
+        try { $null = Get-GpuBaremetalSourcePins -SourceRoot $featureRoot }
+        catch { $missingRejected = ($_.Exception.Message -match [regex]::Escape($missingRelativePath)) }
+        Assert-True $missingRejected 'Missing feature source pin did not fail with its relative path.'
     }
 
     Invoke-TestCase 'completed selector requires Archive first' {

@@ -78,11 +78,55 @@ GPU isolation, or framebuffer ownership.
 and its selector is archived. That does not remove its retained
 `EFI\insecure-boot` files. If inspection finds them, it reports
 `BLOCKED_READINESS`. Stop here and preserve the report: `Backup` and `Stage`
-intentionally reject an existing stage. The current installer has no unstage
-action. Do not delete/rename the directory, repeat old rollback, or reuse the
-old stage; its exact ownership and an evidence-preserving retirement procedure
-must be reviewed first. This guide does not silently authorize generic ESP
-cleanup. Do not spend another build/sign cycle while this gate is blocked.
+intentionally reject an existing stage. The installer has no generic unstage
+action. For the six files already reviewed from this specific completed run,
+use the retirement procedure below. Other files or runs require a separate
+review. Do not delete/rename the directory, repeat old rollback, or reuse the
+old stage. Do not spend another build/sign cycle while this gate is blocked.
+
+### Retire the reviewed previous stage
+
+The inspection saved at
+`.analysis\gpu-baremetal-readiness\334426c80d1d47b2bb454d2c25e65d41\readiness.json`
+matched all six files to the archived run's Stage/Collection records. Its
+source-pin error was a script bug: it searched the main workspace instead of
+the feature worktree. The corrected script hashes the feature files. That bug
+does not establish readiness or authorize cleanup by itself.
+
+The retirement script is bound to that exact audit, completed journal, archived
+selector, ESP identity, and six hashes. First review the live state:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1
+```
+
+Require `REVIEWED_STAGE_READY_FOR_RETIREMENT`. Review does not remove ESP files.
+It saves local and external copies and receipts, checks health `ABSENT`, and
+uses the existing pinned `ibaudit.exe` to read BootNext/BootOrder and check
+referenced boot entries. BootNext must be absent. The full `bcdedit` firmware
+enumeration must also match the saved baseline with `S:` mounted. A variable
+read failure, active boot reference, unknown file, changed hash, or missing
+recovery copy stops the operation; no installer `off` operation is used as a
+read-only check.
+
+To perform the reviewed removal, run the explicit apply command yourself:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -Apply
+```
+
+Apply repeats the live checks, verifies a fresh external checkpoint under the
+original recovery run directory, and saves an intent before removal. It removes
+only the six matching files and their now-empty directory, without recursive
+deletion. Windows Boot Manager, BCD, firmware variables, the old journal, and
+the archived selector are preserved. Require `STAGE_RETIRED` and successful
+owned-mount cleanup. If anything fails, preserve the receipt and copies; do
+not retry a partial removal or restore files automatically.
+
+After successful retirement, repeat the readiness command above. Only a new
+`READY_FOR_FRESH_PREPARE` result permits step 2. Retirement is file maintenance;
+it does not test GPU isolation or scanout. This script cannot retire a future
+run or an unreviewed stage.
 
 If inspection instead finds an active selector, inspect its saved state:
 
@@ -254,7 +298,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees
 
 Keep the journal, signed hashes, CTest/audit logs, console captures, monitor
 photograph, and external recovery copy. Stage files remain evidence until
-separately retired; Archive does not remove them. Keep both repository VM
+separately reviewed and retired; Archive does not remove them. The retirement
+script above is limited to the previous run, not this future run. Keep both repository VM
 folders on disk as well.
 
 ## Recovery after a failed or interrupted action
