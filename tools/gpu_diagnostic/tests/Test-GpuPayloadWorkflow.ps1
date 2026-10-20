@@ -436,10 +436,93 @@ try {
             $archiveProof.PreControllerFailureProof.FreshNvramAbsent -eq $true) `
             'the exact legacy pre-controller failure should archive only with matching VMX pins and no controller/NVRAM evidence'
 
+        $controllerRunPath = Join-Path $paths.ControllerRunsRoot ($runId + '-fd170b1a1994422f809162e89b2dbfeb')
+        $knownVmPreflightFailure = [pscustomobject]@{
+            RunId = $runId; WorkspaceRoot = $workspace; SourceCommit = $commit; Phase = 'Signed'
+            LastFailure = [pscustomobject]@{
+                Action = 'ValidateVm';
+                Failure = 'Signed loader Authenticode signature is invalid: UnknownError'
+                Intent = [pscustomobject]@{
+                    Action = 'ValidateVm'; ControllerInvocationStarted = $true
+                    ControllerRunDirectory = $controllerRunPath; VmxPath = $vmxPath
+                }
+            }
+        }
+        $knownFailureProof = Get-GpuPayloadArchiveDisposition -State $knownVmPreflightFailure -Paths $paths
+        Assert-True ($knownFailureProof.Status -ceq 'ABORTED_ARCHIVED' -and
+            $knownFailureProof.PreControllerFailureProof.Status -ceq 'PRE_VM_START_FAILURE_NO_VM_BOOT' -and
+            $knownFailureProof.PreControllerFailureProof.ControllerRunDirectoryAbsent -and
+            $knownFailureProof.PreControllerFailureProof.FreshNvramAbsent -and
+            $knownFailureProof.PreControllerFailureProof.VmLockAbsent) `
+            'the exact known Authenticode preflight failure can archive only with no controller run, unchanged VMX pins, and no NVRAM/lock'
+
+        $unknownFailure = [pscustomobject]@{
+            RunId = $runId; WorkspaceRoot = $workspace; SourceCommit = $commit; Phase = 'Signed'
+            LastFailure = [pscustomobject]@{
+                Action = 'ValidateVm'; Failure = 'Unexpected controller failure before result';
+                Intent = [pscustomobject]@{
+                    Action = 'ValidateVm'; ControllerInvocationStarted = $true
+                    ControllerRunDirectory = $controllerRunPath; VmxPath = $vmxPath
+                }
+            }
+        }
+        Assert-Throws { Get-GpuPayloadArchiveDisposition -State $unknownFailure -Paths $paths } `
+            'Path does not exist|controller result|result.json' 'an unknown controller failure without a run result cannot be archived'
+
+        [IO.File]::WriteAllText($vmxPath, 'tampered-diagnostic-vmx-fixture')
+        Assert-Throws { Get-GpuPayloadArchiveDisposition -State $knownVmPreflightFailure -Paths $paths } `
+            'changed|pins are unchanged' 'modified prepared VMX must block the known preflight archive recovery'
+        [IO.File]::WriteAllText($vmxPath, 'diagnostic-vmx-fixture')
+
         $nvramPath = Join-Path $vmxDirectory 'gpu-payload-test.nvram'
         [IO.File]::WriteAllBytes($nvramPath, [byte[]]@(1))
         Assert-Throws { Get-GpuPayloadArchiveDisposition -State $state -Paths $paths } `
             'NVRAM exists|may have started' 'diagnostic NVRAM existence must block the pre-controller archive proof'
+        Assert-Throws { Get-GpuPayloadArchiveDisposition -State $knownVmPreflightFailure -Paths $paths } `
+            'NVRAM exists|may have started' 'diagnostic NVRAM existence must block the known VM preflight recovery'
+        Remove-Item -LiteralPath $nvramPath -Force
+
+        $lockPath = $vmxPath + '.lck'
+        [void](New-Item -ItemType Directory -Path $lockPath)
+        Assert-Throws { Get-GpuPayloadArchiveDisposition -State $knownVmPreflightFailure -Paths $paths } `
+            'lock artifact exists|may have started' 'diagnostic VMX lock must block the known VM preflight recovery'
+        Remove-Item -LiteralPath $lockPath -Recurse -Force
+
+        [void](New-Item -ItemType Directory -Path $controllerRunPath -Force)
+        Assert-Throws { Get-GpuPayloadArchiveDisposition -State $knownVmPreflightFailure -Paths $paths } `
+            'Path does not exist|result.json' `
+            'an existing controller run directory without result cannot use no-result recovery'
+        Remove-Item -LiteralPath $controllerRunPath -Recurse -Force
+
+        [void](New-Item -ItemType Directory -Path $controllerRunPath -Force)
+        $earlyResultPath = Join-Path $controllerRunPath 'result.json'
+        $earlyResult = [pscustomobject]@{
+            SchemaVersion = 1; Result = 'FAIL'; ValidationProfile = 'SignedNative'; CleanupFailures = @()
+            Vm = [pscustomobject]@{ VmStartAttempted = $false; VmWriteAttempted = $false }
+            Snapshots = [pscustomobject]@{ BeforeCreated = $false; AfterCreated = $false; Before = $null; After = $null }
+        }
+        [IO.File]::WriteAllText($earlyResultPath, (ConvertTo-Json -InputObject $earlyResult -Depth 6), [Text.UTF8Encoding]::new($false))
+        $earlyResultState = [pscustomobject]@{
+            RunId = $runId; WorkspaceRoot = $workspace; SourceCommit = $commit; Phase = 'Signed'
+            LastFailure = [pscustomobject]@{
+                Action = 'ValidateVm'; Failure = 'Early SignedNative preflight failed';
+                Intent = [pscustomobject]@{
+                    Action = 'ValidateVm'; ControllerInvocationStarted = $true
+                    ControllerRunDirectory = $controllerRunPath; VmxPath = $vmxPath
+                }
+            }
+        }
+        $earlyResultProof = Get-GpuPayloadArchiveDisposition -State $earlyResultState -Paths $paths
+        Assert-True ($earlyResultProof.Status -ceq 'ABORTED_ARCHIVED' -and
+            $earlyResultProof.PreControllerFailureProof.Status -ceq 'PRE_VM_START_FAILURE_NO_VM_BOOT' -and
+            $null -ne $earlyResultProof.PreControllerFailureProof.ControllerResultPin -and
+            $null -eq $earlyResultProof.VmCleanupResultPin) `
+            'an integrity-pinned controller result may prove failure before any VM start/write without weakening normal cleanup checks'
+        $earlyResult.Vm.VmStartAttempted = $true
+        [IO.File]::WriteAllText($earlyResultPath, (ConvertTo-Json -InputObject $earlyResult -Depth 6), [Text.UTF8Encoding]::new($false))
+        Assert-Throws { Get-GpuPayloadArchiveDisposition -State $earlyResultState -Paths $paths } `
+            'snapshot/stop gate|cleanup evidence' 'a controller result claiming a VM start must satisfy normal VM cleanup evidence'
+        Remove-Item -LiteralPath $controllerRunPath -Recurse -Force
     }
 
     Invoke-TestCase 'VM admission requires authenticated SignedNative evidence and cleanup gates' {

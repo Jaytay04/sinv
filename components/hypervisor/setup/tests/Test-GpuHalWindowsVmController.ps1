@@ -62,7 +62,8 @@ $FunctionNames = @(
     'Get-AuthenticatedWindowsResult', 'Write-CommandRecord',
     'Stop-OnlyTargetVm', 'Get-VerifiedLiteralAssignmentValue',
     'Import-VmwareGuestInfoConstants', 'Assert-GuestInspection',
-    'Read-BoundedText', 'Get-Sha256', 'Test-EfiMarkers',
+    'Read-BoundedText', 'Get-Sha256', 'Test-SignedNativeSignatureEvidence',
+    'Get-SignedNativeArtifactEvidence', 'Test-EfiMarkers',
     'Test-SignedNativeEfiMarkers', 'Test-SignedNativePayloadEvidence',
     'Render-GpuStartupTemplate',
     'Wait-WindowsVmEvidence'
@@ -231,6 +232,23 @@ function Assert-Check {
     Write-Output "PASS: $Name"
 }
 
+$SaveRunResultText = [string]$FunctionDefinitions['Save-RunResult'].Extent.Text
+$ControllerText = [string]$ControllerAst.Extent.Text
+$RunRootInitialization = $ControllerText.IndexOf('$script:RunRoot = $RunDirectory', [StringComparison]::Ordinal)
+$SignedNativePrerequisiteCheck = $ControllerText.IndexOf(
+    'SignedNative requires ShimPath, CertificatePath, VerifierPath, and VerifierSha256',
+    [StringComparison]::Ordinal)
+$ConfigureCall = $ControllerText.IndexOf('Configure-DisposableClone -Lines $Lines', [StringComparison]::Ordinal)
+$VmWriteAttempt = $ControllerText.IndexOf('$script:VmWriteAttempted = $true', [StringComparison]::Ordinal)
+Assert-Check ($RunRootInitialization -ge 0 -and
+    $SignedNativePrerequisiteCheck -gt $RunRootInitialization -and
+    $SaveRunResultText.Contains('VmStartAttempted = [bool]$script:VmStartAttempted') -and
+    $SaveRunResultText.Contains('VmWriteAttempted = [bool]$script:VmWriteAttempted') -and
+    $SaveRunResultText.Contains('BeforeCreated = $script:BeforeSnapshotCreated') -and
+    $SaveRunResultText.Contains('AfterCreated = $script:AfterSnapshotCreated') -and
+    $VmWriteAttempt -ge 0 -and $ConfigureCall -gt $VmWriteAttempt) `
+    'preflight failures persist explicit no-start/no-write/snapshot evidence before VM lifecycle operations'
+
 function Assert-Throws {
     param(
         [Parameter(Mandatory = $true)][scriptblock]$Operation,
@@ -259,6 +277,139 @@ $Hmac = $null
 
 try {
     New-Item -ItemType Directory -Path $VmxFixtureRoot, $OutsideFixtureRoot | Out-Null
+
+    $PinnedVerifierMessage = 'Authenticode integrity and signer pinning test passed'
+    $ValidVerifierProcess = [pscustomobject]@{
+        ExitCode = 0
+        TimedOut = $false
+        OutputTooLarge = $false
+        Stdout = $PinnedVerifierMessage + "`r`n"
+        Stderr = ''
+    }
+    Assert-Check (Test-SignedNativeSignatureEvidence -SignatureStatus 'UnknownError' `
+            -VerifierResult $ValidVerifierProcess) `
+        'UnknownError host chain metadata is accepted only with pinned verifier success'
+    Assert-Check (Test-SignedNativeSignatureEvidence -SignatureStatus 'Valid' `
+            -VerifierResult $ValidVerifierProcess) `
+        'Valid host signature metadata still requires the pinned verifier success marker'
+    Assert-Check (-not (Test-SignedNativeSignatureEvidence -SignatureStatus 'UnknownError' `
+            -VerifierResult ([pscustomobject]@{
+                ExitCode = 1; TimedOut = $false; OutputTooLarge = $false
+                Stdout = ''; Stderr = 'tampered signed PE rejected'
+            }))) `
+        'tampered signed PE verifier failure cannot pass with UnknownError host metadata'
+    Assert-Check (-not (Test-SignedNativeSignatureEvidence -SignatureStatus 'UnknownError' `
+            -VerifierResult ([pscustomobject]@{
+                ExitCode = 0; TimedOut = $true; OutputTooLarge = $false
+                Stdout = $PinnedVerifierMessage; Stderr = ''
+            }))) `
+        'timed-out Authenticode verifier is rejected'
+    Assert-Check (-not (Test-SignedNativeSignatureEvidence -SignatureStatus 'UnknownError' `
+            -VerifierResult ([pscustomobject]@{
+                ExitCode = 0; TimedOut = $false; OutputTooLarge = $true
+                Stdout = $PinnedVerifierMessage; Stderr = ''
+            }))) `
+        'oversized Authenticode verifier output is rejected'
+    Assert-Check (-not (Test-SignedNativeSignatureEvidence -SignatureStatus 'HashMismatch' `
+            -VerifierResult $ValidVerifierProcess)) `
+        'invalid host signature status is rejected even if verifier metadata is malformed'
+    Assert-Check (-not (Test-SignedNativeSignatureEvidence -SignatureStatus 'UnknownError' `
+            -VerifierResult $null)) `
+        'missing Authenticode verifier result is rejected'
+
+    $SignedArtifactPath = Join-Path $FixtureRoot 'signed-artifact-fixture.exe'
+    $SignedVerifierPath = Join-Path $FixtureRoot 'pinned-verifier-fixture.exe'
+    $SignedCertificatePath = Join-Path $FixtureRoot 'pinned-certificate-fixture.cer'
+    [IO.File]::WriteAllBytes($SignedArtifactPath, [byte[]]@(0x4d, 0x5a, 0x01, 0x02))
+    [IO.File]::WriteAllBytes($SignedVerifierPath, [byte[]]@(0x4d, 0x5a, 0x05, 0x06))
+    [IO.File]::WriteAllBytes($SignedCertificatePath, [byte[]]@(0x30, 0x04, 0x02, 0x01, 0x01))
+    $SignedVerifierPin = (Get-Sha256 $SignedVerifierPath)
+    $script:SignedNativeVerifierEvidence = [Collections.Generic.List[object]]::new()
+    $script:MockSignatureStatus = 'UnknownError'
+    $script:MockSignatureThumbprint = 'AABBCCDDEEFF00112233445566778899AABBCCDD'
+    $script:MockVerifierResult = $ValidVerifierProcess
+    $script:MockVerifierArguments = $null
+    $script:MockVerifierCalls = 0
+    $OriginalAuthFunction = Get-Item Function:\Get-AuthenticodeSignature -ErrorAction SilentlyContinue
+    $OriginalVerifierFunction = Get-Item Function:\Invoke-LoggedUhrProcess -ErrorAction SilentlyContinue
+    Set-Item Function:\Get-AuthenticodeSignature -Value {
+        param([string]$FilePath)
+        return [pscustomobject]@{
+            Status = $script:MockSignatureStatus
+            StatusMessage = 'Synthetic local chain root is not trusted.'
+            SignerCertificate = [pscustomobject]@{ Thumbprint = $script:MockSignatureThumbprint }
+        }
+    }
+    Set-Item Function:\Invoke-LoggedUhrProcess -Value {
+        param([string]$FilePath, [string[]]$ArgumentList, [string]$WorkingDirectory,
+            [int]$TimeoutSeconds)
+        $script:MockVerifierCalls++
+        $script:MockVerifierArguments = @($ArgumentList)
+        return $script:MockVerifierResult
+    }
+    try {
+        $UnknownErrorEvidence = Get-SignedNativeArtifactEvidence -Path $SignedArtifactPath `
+            -Label 'Synthetic signed PE' -ExpectedSignerThumbprint $script:MockSignatureThumbprint `
+            -CertificatePath $SignedCertificatePath -VerifierPath $SignedVerifierPath `
+            -ExpectedVerifierSha256 $SignedVerifierPin
+        Assert-Check ($UnknownErrorEvidence.SignatureStatus -ceq 'UnknownError' -and
+            $UnknownErrorEvidence.Verifier.VerifierStatus -ceq 'PINNED_SIGNATURE_PASS' -and
+            $UnknownErrorEvidence.Verifier.VerifierSha256 -ceq $SignedVerifierPin -and
+            $script:MockVerifierArguments.Count -eq 2 -and
+            $script:MockVerifierArguments[0] -ceq $SignedArtifactPath -and
+            $script:MockVerifierArguments[1] -ceq $SignedCertificatePath) `
+            'artifact preflight runs the hash-pinned verifier against the PE and supplied DER certificate'
+
+        $script:MockVerifierResult = [pscustomobject]@{
+            ExitCode = 1; TimedOut = $false; Stdout = ''
+            Stderr = 'tampered signed PE was not rejected'
+        }
+        $TamperedError = $null
+        try {
+            $null = Get-SignedNativeArtifactEvidence -Path $SignedArtifactPath `
+                -Label 'Tampered signed PE' -ExpectedSignerThumbprint $script:MockSignatureThumbprint `
+                -CertificatePath $SignedCertificatePath -VerifierPath $SignedVerifierPath `
+                -ExpectedVerifierSha256 $SignedVerifierPin
+        }
+        catch { $TamperedError = [string]$_.Exception.Message }
+        Assert-Check ($TamperedError -match 'failed the pinned Authenticode verifier' -and
+            $script:SignedNativeVerifierEvidence[$script:SignedNativeVerifierEvidence.Count - 1].VerifierStatus -ceq 'PINNED_SIGNATURE_REJECTED') `
+            'tampered signed PE is rejected and its bounded verifier failure evidence is retained'
+
+        $script:MockVerifierResult = $null
+        $MissingVerifierError = $null
+        try {
+            $null = Get-SignedNativeArtifactEvidence -Path $SignedArtifactPath `
+                -Label 'Missing verifier result' -ExpectedSignerThumbprint $script:MockSignatureThumbprint `
+                -CertificatePath $SignedCertificatePath -VerifierPath $SignedVerifierPath `
+                -ExpectedVerifierSha256 $SignedVerifierPin
+        }
+        catch { $MissingVerifierError = [string]$_.Exception.Message }
+        Assert-Check ($MissingVerifierError -match 'failed the pinned Authenticode verifier') `
+            'missing verifier process result fails closed'
+
+        $VerifierCallsBeforeBadPin = $script:MockVerifierCalls
+        $BadPinError = $null
+        try {
+            $null = Get-SignedNativeArtifactEvidence -Path $SignedArtifactPath `
+                -Label 'Verifier pin mismatch' -ExpectedSignerThumbprint $script:MockSignatureThumbprint `
+                -CertificatePath $SignedCertificatePath -VerifierPath $SignedVerifierPath `
+                -ExpectedVerifierSha256 ('0' * 64)
+        }
+        catch { $BadPinError = [string]$_.Exception.Message }
+        Assert-Check ($BadPinError -match 'verifier SHA-256 does not match' -and
+            $script:MockVerifierCalls -eq $VerifierCallsBeforeBadPin -and
+            $script:SignedNativeVerifierEvidence[$script:SignedNativeVerifierEvidence.Count - 1].VerifierStatus -ceq 'VERIFIER_PIN_MISMATCH') `
+            'verifier hash mismatch is recorded and rejected before executable invocation'
+    }
+    finally {
+        if ($null -ne $OriginalAuthFunction) {
+            Set-Item Function:\Get-AuthenticodeSignature -Value $OriginalAuthFunction.ScriptBlock
+        } else { Remove-Item Function:\Get-AuthenticodeSignature -ErrorAction SilentlyContinue }
+        if ($null -ne $OriginalVerifierFunction) {
+            Set-Item Function:\Invoke-LoggedUhrProcess -Value $OriginalVerifierFunction.ScriptBlock
+        } else { Remove-Item Function:\Invoke-LoggedUhrProcess -ErrorAction SilentlyContinue }
+    }
 
     $SecureBootCases = @(
         [pscustomobject]@{ Name = 'DWORD 0 reports false'; Value = 0; Missing = $false; AccessFailure = $false; Expected = 'False' }

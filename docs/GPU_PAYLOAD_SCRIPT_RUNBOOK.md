@@ -55,6 +55,10 @@ Require signature verification and signed `.hvscan` success. Local signed
 copies are immutable inputs to the VM action; they are not deployed to the
 primary host.
 
+The Sign action and VM controller use the built verifier to check signature
+integrity and the pinned signer certificate. Windows host certificate-chain
+trust is recorded separately; the scripts do not add a host trusted root.
+
 ## 5. Create the disposable signed-test VM
 
 ```powershell
@@ -68,6 +72,11 @@ The clone, disks, and test NVRAM stay under `.codex-build\gpu_payload_vm`.
 The script publishes its exact path/hash in `vm-prepared.json`; later actions
 never select the newest directory. An existing prepared receipt blocks another
 clone instead of silently switching targets.
+
+An untouched prepared copy can be reused after a workflow-only fix when Git
+proves that its preparation revision is an ancestor and all four preparation
+dependencies have identical blobs. The VMX, retained source, and certificate
+pins must still match. This does not authorize reuse of a VM that has booted.
 
 The offline-copy path avoids the VMware encrypted-snapshot clone operation
 that failed during validation. A failed preparation keeps its partial output

@@ -773,23 +773,40 @@ function Get-GpuPayloadArchiveDisposition {
         return [pscustomobject]@{ Allowed = $true; Status = 'ABORTED_ARCHIVED'; VmCleanupResultPin = $null; Reason = 'No VM controller invocation is recorded.' }
     }
     $controllerRunDirectory = [string](Get-GpuPayloadObjectProperty -Object $intent -Name 'ControllerRunDirectory')
-    if ([string]::IsNullOrWhiteSpace($controllerRunDirectory)) {
-        $invocationStarted = Get-GpuPayloadObjectProperty -Object $intent -Name 'ControllerInvocationStarted'
-        $legacyFailure = [string](Get-GpuPayloadObjectProperty -Object $lastFailure -Name 'Failure')
-        $legacyMissingPropertyFailure = $null -eq $invocationStarted -and
-            $legacyFailure -like '*property ''ControllerRunDirectory'' cannot be found*'
-        if (($invocationStarted -is [bool] -and -not [bool]$invocationStarted) -or $legacyMissingPropertyFailure) {
-            $preControllerProof = Get-GpuPayloadPreControllerProof -State $State -Paths $Paths `
-                -RequirePreparationCommitMatch $legacyMissingPropertyFailure
-            return [pscustomobject]@{
-                Allowed = $true
-                Status = 'ABORTED_ARCHIVED'
-                VmCleanupResultPin = $null
-                PreControllerFailureProof = $preControllerProof
-                Reason = 'No VM controller invocation occurred; prepared VMX and retained source pins are unchanged and the fresh NVRAM is absent.'
-            }
+    $invocationStarted = Get-GpuPayloadObjectProperty -Object $intent -Name 'ControllerInvocationStarted'
+    $lastFailureMessage = [string](Get-GpuPayloadObjectProperty -Object $lastFailure -Name 'Failure')
+    $legacyMissingPropertyFailure = $null -eq $invocationStarted -and
+        $lastFailureMessage -like '*property ''ControllerRunDirectory'' cannot be found*'
+    $knownPreflightSignatureFailure = $invocationStarted -is [bool] -and [bool]$invocationStarted -and
+        $lastFailureMessage -like '*Signed loader Authenticode signature is invalid: UnknownError*'
+    $neverInvokedController = $invocationStarted -is [bool] -and -not [bool]$invocationStarted
+    if ($neverInvokedController -or $legacyMissingPropertyFailure) {
+        $preControllerProof = Get-GpuPayloadPreControllerProof -State $State -Paths $Paths `
+            -ExpectedControllerRunDirectory $controllerRunDirectory `
+            -RequirePreparationCommitMatch $legacyMissingPropertyFailure
+        return [pscustomobject]@{
+            Allowed = $true
+            Status = 'ABORTED_ARCHIVED'
+            VmCleanupResultPin = $null
+            PreControllerFailureProof = $preControllerProof
+            Reason = 'No VM controller invocation began; VMX pins are unchanged and diagnostic NVRAM and lock artifacts are absent.'
         }
-        throw 'Cannot archive a VM validation attempt without a saved controller result or pre-controller no-start proof.'
+    }
+    if ($knownPreflightSignatureFailure -and -not [string]::IsNullOrWhiteSpace($controllerRunDirectory) -and
+        -not (Test-Path -LiteralPath ([IO.Path]::GetFullPath($controllerRunDirectory)))) {
+        $preVmProof = Get-GpuPayloadPreControllerProof -State $State -Paths $Paths `
+            -ExpectedControllerRunDirectory $controllerRunDirectory -ProofStatus 'PRE_VM_START_FAILURE_NO_VM_BOOT' `
+            -RequireNoVmLocks
+        return [pscustomobject]@{
+            Allowed = $true
+            Status = 'ABORTED_ARCHIVED'
+            VmCleanupResultPin = $null
+            PreControllerFailureProof = $preVmProof
+            Reason = 'The known SignedNative Authenticode preflight failure happened before VM start; VMX pins are unchanged and NVRAM/lock evidence is absent.'
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($controllerRunDirectory)) {
+        throw 'Cannot archive a VM validation attempt without a saved controller result or recognized no-start proof.'
     }
     $controllerRunDirectory = [IO.Path]::GetFullPath($controllerRunDirectory)
     $null = Assert-GpuPathWithin -Path $controllerRunDirectory -Root $Paths.ControllerRunsRoot -MustExist
@@ -800,6 +817,20 @@ function Get-GpuPayloadArchiveDisposition {
     $afterPin = Get-GpuFilePin -Path $resultPath
     if ([string]$beforePin.Sha256 -cne [string]$afterPin.Sha256 -or [long]$beforePin.Bytes -ne [long]$afterPin.Bytes) {
         throw 'VM controller result changed while checking its stop and snapshot cleanup proof.'
+    }
+    if (Test-GpuPayloadNoVmStartResult -Result $result) {
+        $noStartProof = Get-GpuPayloadPreControllerProof -State $State -Paths $Paths `
+            -ExpectedControllerRunDirectory $controllerRunDirectory -ProofStatus 'PRE_VM_START_FAILURE_NO_VM_BOOT' `
+            -RequireNoVmLocks -AllowExpectedControllerRunDirectory
+        $noStartProof | Add-Member -MemberType NoteProperty -Name 'ControllerResultPin' -Value $afterPin
+        return [pscustomobject]@{
+            Allowed = $true
+            Status = 'ABORTED_ARCHIVED'
+            VmCleanupResultPin = $null
+            PreControllerFailureProof = $noStartProof
+            ControllerRunDirectory = $controllerRunDirectory
+            Reason = 'Controller evidence confirms it failed before VM start or VM writes; prepared VMX pins and absent NVRAM/lock evidence agree.'
+        }
     }
     Assert-GpuPayloadVmCleanupEvidence -Result $result -ExpectedVmxPath ([string]$intent.VmxPath)
     return [pscustomobject]@{
@@ -817,7 +848,11 @@ function Get-GpuPayloadPreControllerProof {
     param(
         [Parameter(Mandatory = $true)][object]$State,
         [Parameter(Mandatory = $true)][object]$Paths,
-        [bool]$RequirePreparationCommitMatch = $false
+        [AllowNull()][string]$ExpectedControllerRunDirectory,
+        [string]$ProofStatus = 'PRE_CONTROLLER_FAILURE_NO_VM_STARTED',
+        [bool]$RequirePreparationCommitMatch = $false,
+        [switch]$RequireNoVmLocks,
+        [switch]$AllowExpectedControllerRunDirectory
     )
 
     $controllerRoot = [IO.Path]::GetFullPath([string]$Paths.ControllerRunsRoot)
@@ -825,6 +860,21 @@ function Get-GpuPayloadPreControllerProof {
     if (Test-Path -LiteralPath $controllerRoot -PathType Container) {
         $matchingControllerRuns = @(Get-ChildItem -LiteralPath $controllerRoot -Force -Directory |
             Where-Object { $_.Name.StartsWith(([string]$State.RunId + '-'), [StringComparison]::OrdinalIgnoreCase) })
+    }
+    $expectedControllerRun = $null
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedControllerRunDirectory)) {
+        $expectedControllerRun = [IO.Path]::GetFullPath($ExpectedControllerRunDirectory)
+        $null = Assert-GpuPathWithin -Path $expectedControllerRun -Root $controllerRoot
+        if ($AllowExpectedControllerRunDirectory) {
+            $matchingControllerRuns = @($matchingControllerRuns | Where-Object {
+                -not [string]::Equals([IO.Path]::GetFullPath($_.FullName), $expectedControllerRun, [StringComparison]::OrdinalIgnoreCase)
+            })
+            if (-not (Test-Path -LiteralPath $expectedControllerRun -PathType Container)) {
+                throw 'The expected controller run directory is missing despite a result-based VM no-start claim.'
+            }
+        } elseif (Test-Path -LiteralPath $expectedControllerRun) {
+            throw 'The expected controller run directory exists; the no-result preflight failure cannot be proven.'
+        }
     }
     if ($matchingControllerRuns.Count -ne 0) {
         throw 'A controller run directory exists for this payload workflow; no pre-controller archive proof is possible.'
@@ -862,19 +912,47 @@ function Get-GpuPayloadPreControllerProof {
     if (Test-Path -LiteralPath $nvramPath) {
         throw 'Diagnostic VM NVRAM exists; the VM may have started, so pre-controller archival is blocked.'
     }
+    $vmLockPath = $vmx + '.lck'
+    if ($RequireNoVmLocks -and (Test-Path -LiteralPath $vmLockPath)) {
+        throw 'Diagnostic VMX lock artifact exists; the VM may have started, so archival is blocked.'
+    }
     return [pscustomobject]@{
-        Status = 'PRE_CONTROLLER_FAILURE_NO_VM_STARTED'
+        Status = $ProofStatus
         Failure = [string](Get-GpuPayloadObjectProperty -Object $State.LastFailure -Name 'Failure')
         LegacyRecovery = [bool]$RequirePreparationCommitMatch
         WorkflowCommit = [string]$State.SourceCommit
         PreparationCommit = [string]$receipt.SourceCommit
-        ControllerRunDirectoryAbsent = $true
-        ControllerRunDirectoryCount = 0
+        ControllerRunDirectory = $expectedControllerRun
+        ControllerRunDirectoryAbsent = ($null -eq $expectedControllerRun -or -not (Test-Path -LiteralPath $expectedControllerRun))
+        ControllerRunDirectoryCount = $matchingControllerRuns.Count
         PreparedVmxPin = $vmxPin
         RetainedVmxPin = $sourceVmxPin
         FreshNvramPath = $nvramPath
         FreshNvramAbsent = $true
+        VmLockPath = if ($RequireNoVmLocks) { $vmLockPath } else { $null }
+        VmLockAbsent = if ($RequireNoVmLocks) { -not (Test-Path -LiteralPath $vmLockPath) } else { $null }
     }
+}
+
+function Test-GpuPayloadNoVmStartResult {
+    param([AllowNull()][object]$Result)
+
+    if ($null -eq $Result -or [int]$Result.SchemaVersion -ne 1 -or [string]$Result.Result -ceq 'PASS' -or
+        [string]$Result.ValidationProfile -cne 'SignedNative' -or @($Result.CleanupFailures).Count -ne 0) { return $false }
+    $vmStartAttempted = Get-GpuPayloadObjectProperty -Object $Result -Name 'VmStartAttempted'
+    if ($null -eq $vmStartAttempted) { $vmStartAttempted = Get-GpuPayloadObjectProperty -Object $Result.Vm -Name 'VmStartAttempted' }
+    $vmWriteAttempted = Get-GpuPayloadObjectProperty -Object $Result -Name 'VmWriteAttempted'
+    if ($null -eq $vmWriteAttempted) { $vmWriteAttempted = Get-GpuPayloadObjectProperty -Object $Result.Vm -Name 'VmWriteAttempted' }
+    $beforeCreated = Get-GpuPayloadObjectProperty -Object $Result.Snapshots -Name 'BeforeCreated'
+    $afterCreated = Get-GpuPayloadObjectProperty -Object $Result.Snapshots -Name 'AfterCreated'
+    $beforeSnapshot = Get-GpuPayloadObjectProperty -Object $Result.Snapshots -Name 'Before'
+    $afterSnapshot = Get-GpuPayloadObjectProperty -Object $Result.Snapshots -Name 'After'
+    return ($vmStartAttempted -is [bool] -and -not [bool]$vmStartAttempted -and
+        $vmWriteAttempted -is [bool] -and -not [bool]$vmWriteAttempted -and
+        $beforeCreated -is [bool] -and -not [bool]$beforeCreated -and
+        $afterCreated -is [bool] -and -not [bool]$afterCreated -and
+        [string]::IsNullOrWhiteSpace([string]$beforeSnapshot) -and
+        [string]::IsNullOrWhiteSpace([string]$afterSnapshot))
 }
 
 function Test-GpuPayloadSignedNativeRawEvidence {
@@ -1053,7 +1131,9 @@ function Invoke-GpuPayloadValidateVm {
         '-CredentialStateRoot', $credentialRoot,
         '-ValidationProfile', 'SignedNative',
         '-ShimPath', $State.Tools.Shim.Path,
-        '-CertificatePath', $State.Tools.Certificate.Path
+        '-CertificatePath', $State.Tools.Certificate.Path,
+        '-VerifierPath', $State.Tools.Verifier.Path,
+        '-VerifierSha256', $State.Tools.Verifier.Sha256
     )
     $State.InProgress.ControllerInvocationStarted = $true
     Save-GpuPayloadState -State $State -Paths $Paths

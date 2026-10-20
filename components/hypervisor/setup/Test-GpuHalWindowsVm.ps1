@@ -11,6 +11,8 @@ param(
     [ValidateSet('Model', 'SignedNative')][string]$ValidationProfile = 'Model',
     [string]$ShimPath,
     [string]$CertificatePath,
+    [string]$VerifierPath,
+    [string]$VerifierSha256,
     [ValidateRange(1, 65535)][int]$ExpectedBuild = 26200,
     [ValidateRange(0, 65535)][int]$ExpectedUbr = 9457,
     [ValidateRange(1, 256)][int]$ExpectedCpus = 4,
@@ -69,6 +71,7 @@ $script:BeforeSnapshotCreated = $false
 $script:AfterSnapshotCreated = $false
 $script:RevertedBefore = $false
 $script:VmStartAttempted = $false
+$script:VmWriteAttempted = $false
 $script:VmOffConfirmed = $false
 $script:InspectStatus = 'NOT_RUN'
 $script:StageStatus = 'NOT_RUN'
@@ -80,6 +83,7 @@ $script:ValidationProfile = $ValidationProfile
 $script:ModelPassed = $null
 $script:SignedNativePassed = $null
 $script:SignedNativeArtifactEvidence = $null
+$script:SignedNativeVerifierEvidence = [Collections.Generic.List[object]]::new()
 $script:InspectEvidence = $null
 $script:StageEvidence = $null
 $script:HalResults = $null
@@ -901,12 +905,55 @@ function Get-Sha256([string]$Path) {
     }
 }
 
+function Test-SignedNativeSignatureEvidence {
+    param(
+        [AllowNull()][string]$SignatureStatus,
+        [AllowNull()][object]$VerifierResult
+    )
+    if ($null -eq $VerifierResult -or $VerifierResult.TimedOut -isnot [bool] -or
+        [bool]$VerifierResult.TimedOut -or $VerifierResult.ExitCode -isnot [ValueType] -or
+        $VerifierResult.ExitCode -is [bool] -or
+        $VerifierResult.OutputTooLarge -isnot [bool] -or [bool]$VerifierResult.OutputTooLarge -or
+        [int]$VerifierResult.ExitCode -ne 0 -or
+        ([string]$VerifierResult.Stdout).Trim() -cne
+            'Authenticode integrity and signer pinning test passed' -or
+        -not [string]::IsNullOrWhiteSpace([string]$VerifierResult.Stderr)) {
+        return $false
+    }
+    return $SignatureStatus -cin @('Valid', 'NotTrusted', 'UnknownError')
+}
+
 function Get-SignedNativeArtifactEvidence {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
         [Parameter(Mandatory = $true)][string]$Label,
-        [Parameter(Mandatory = $true)][string]$ExpectedSignerThumbprint
+        [Parameter(Mandatory = $true)][string]$ExpectedSignerThumbprint,
+        [Parameter(Mandatory = $true)][string]$CertificatePath,
+        [Parameter(Mandatory = $true)][string]$VerifierPath,
+        [Parameter(Mandatory = $true)][string]$ExpectedVerifierSha256
     )
+    $VerifierPath = Get-FullPath $VerifierPath
+    $VerifierHash = Get-Sha256 $VerifierPath
+    $ExpectedVerifierSha256 = $ExpectedVerifierSha256.ToUpperInvariant()
+    $VerifierHashMatches = $ExpectedVerifierSha256 -cmatch '^[0-9A-F]{64}$' -and
+        $VerifierHash -ceq $ExpectedVerifierSha256
+    if (-not $VerifierHashMatches) {
+        $script:SignedNativeVerifierEvidence.Add([pscustomobject]@{
+            Label = $Label
+            VerifierPath = $VerifierPath
+            VerifierSha256 = $VerifierHash
+            VerifierPin = $ExpectedVerifierSha256
+            VerifierExpectedSha256 = $ExpectedVerifierSha256
+            VerifierHashMatches = $false
+            VerifierStatus = 'VERIFIER_PIN_MISMATCH'
+            VerifierExitCode = $null
+            VerifierTimedOut = $false
+            VerifierStdout = ''
+            VerifierStderr = ''
+        })
+        throw 'SignedNative Authenticode verifier SHA-256 does not match its workflow pin.'
+    }
+
     $Signature = Get-AuthenticodeSignature -FilePath $Path
     if ($null -eq $Signature.SignerCertificate) {
         throw "$Label does not contain an Authenticode signer certificate."
@@ -915,10 +962,69 @@ function Get-SignedNativeArtifactEvidence {
     if ($ActualThumbprint -cne $ExpectedSignerThumbprint) {
         throw "$Label signer thumbprint does not match the supplied diagnostic certificate."
     }
-    # NotTrusted can mean that the build host does not trust the test certificate
-    # chain. The embedded signer must still match the pinned certificate exactly;
-    # Secure Boot acceptance is proven later by the SignedNative guest boot.
-    if ([string]$Signature.Status -cnotin @('Valid', 'NotTrusted')) {
+
+    $VerifierResult = $null
+    $VerifierError = ''
+    try {
+        $VerifierResult = Invoke-LoggedUhrProcess -FilePath $VerifierPath `
+            -ArgumentList @($Path, $CertificatePath) `
+            -WorkingDirectory (Split-Path -Parent $VerifierPath) -TimeoutSeconds 30
+    }
+    catch {
+        $VerifierError = [string]$_.Exception.Message
+        if ($VerifierError.Length -gt 2048) { $VerifierError = $VerifierError.Substring(0, 2048) }
+    }
+    $VerifierStdout = if ($null -ne $VerifierResult) { [string]$VerifierResult.Stdout } else { '' }
+    $VerifierStderr = if ($null -ne $VerifierResult) { [string]$VerifierResult.Stderr } else { '' }
+    $VerifierOutputTooLarge = $VerifierStdout.Length -gt 4096 -or $VerifierStderr.Length -gt 4096
+    if ($VerifierStdout.Length -gt 4096) { $VerifierStdout = $VerifierStdout.Substring(0, 4096) }
+    if ($VerifierStderr.Length -gt 4096) { $VerifierStderr = $VerifierStderr.Substring(0, 4096) }
+    $VerifierResultForCheck = if ($null -ne $VerifierResult) {
+        [pscustomobject]@{
+            ExitCode = [int]$VerifierResult.ExitCode
+            TimedOut = [bool]$VerifierResult.TimedOut
+            OutputTooLarge = [bool]$VerifierOutputTooLarge
+            Stdout = $VerifierStdout
+            Stderr = $VerifierStderr
+        }
+    } else { $null }
+    $VerifierEvidence = [pscustomobject]@{
+        Label = $Label
+        VerifierPath = $VerifierPath
+        VerifierSha256 = $VerifierHash
+        VerifierPin = $ExpectedVerifierSha256
+        VerifierExpectedSha256 = $ExpectedVerifierSha256
+        VerifierHashMatches = $VerifierHashMatches
+        CertificatePath = $CertificatePath
+        CertificateSha256 = Get-Sha256 $CertificatePath
+        SignerThumbprint = $ActualThumbprint
+        VerifierStatus = if ($VerifierError) { 'PROCESS_ERROR' } else { 'NOT_VERIFIED' }
+        VerifierExitCode = if ($null -ne $VerifierResult) { [int]$VerifierResult.ExitCode } else { $null }
+        VerifierTimedOut = if ($null -ne $VerifierResult) { [bool]$VerifierResult.TimedOut } else { $false }
+        VerifierOutputTooLarge = [bool]$VerifierOutputTooLarge
+        VerifierStdout = $VerifierStdout
+        VerifierStderr = $VerifierStderr
+        VerifierError = $VerifierError
+    }
+    $script:SignedNativeVerifierEvidence.Add($VerifierEvidence)
+
+    if ($VerifierError) {
+        $VerifierEvidence.VerifierStatus = 'PROCESS_ERROR'
+        throw "$Label pinned Authenticode verification could not run: $VerifierError"
+    }
+    $VerifierPassed = Test-SignedNativeSignatureEvidence `
+        -SignatureStatus ([string]$Signature.Status) -VerifierResult $VerifierResultForCheck
+    if (-not $VerifierPassed) {
+        $VerifierEvidence.VerifierStatus = 'PINNED_SIGNATURE_REJECTED'
+        throw "$Label failed the pinned Authenticode verifier (exit $($VerifierEvidence.VerifierExitCode), timeout $($VerifierEvidence.VerifierTimedOut))."
+    }
+    $VerifierEvidence.VerifierStatus = 'PINNED_SIGNATURE_PASS'
+
+    # The pinned verifier proves PE integrity, embedded signer identity, and
+    # signature validity. This host API status can be UnknownError when its
+    # local trust store lacks the diagnostic certificate's root; that status
+    # is metadata only and is tolerated solely after the pinned check passed.
+    if ([string]$Signature.Status -cnotin @('Valid', 'NotTrusted', 'UnknownError')) {
         throw "$Label Authenticode signature is invalid: $($Signature.Status): $($Signature.StatusMessage)"
     }
     return [pscustomobject]@{
@@ -928,6 +1034,7 @@ function Get-SignedNativeArtifactEvidence {
         SignatureStatus = [string]$Signature.Status
         SignatureStatusMessage = [string]$Signature.StatusMessage
         SignerThumbprint = $ActualThumbprint
+        Verifier = $VerifierEvidence
     }
 }
 
@@ -1653,6 +1760,9 @@ function Save-RunResult {
         SignedNativeArtifacts = if ($script:ValidationProfile -ceq 'SignedNative') {
             $script:SignedNativeArtifactEvidence
         } else { $null }
+        SignedNativeVerifierEvidence = if ($script:ValidationProfile -ceq 'SignedNative') {
+            @($script:SignedNativeVerifierEvidence.ToArray())
+        } else { $null }
         Failure = $script:Failure
         FailureScriptStackTrace = $script:FailureScriptStackTrace
         CleanupFailures = @($script:CleanupFailures)
@@ -1660,7 +1770,7 @@ function Save-RunResult {
         Vm = [ordered]@{
             VmxPath = if ($null -ne $script:Selected) {
                 [string]$script:Selected.VmxPath
-            } else { $null }
+            } else { [string]$VmxPath }
             ValidationProfile = $script:ValidationProfile
             Build = $ExpectedBuild
             Ubr = $ExpectedUbr
@@ -1671,6 +1781,8 @@ function Save-RunResult {
             OriginalSecureBoot = $script:OriginalSecureBoot
             ExpectedSecureBoot = ($script:ValidationProfile -ceq 'SignedNative')
             SecureBootChangedOnlyAfterStage = $script:SecureBootChanged
+            VmStartAttempted = [bool]$script:VmStartAttempted
+            VmWriteAttempted = [bool]$script:VmWriteAttempted
         }
         Phases = [ordered]@{
             Inspect = $script:InspectStatus
@@ -1735,15 +1847,6 @@ try {
     $InstallerPath = Get-FullPath $InstallerPath
     $ProbePath = Get-FullPath $ProbePath
     $VmrunPath = Get-FullPath $VmrunPath
-    if ($script:ValidationProfile -ceq 'SignedNative') {
-        if ([string]::IsNullOrWhiteSpace($ShimPath) -or
-            [string]::IsNullOrWhiteSpace($CertificatePath)) {
-            throw 'SignedNative requires both ShimPath and CertificatePath.'
-        }
-        $ShimPath = Get-FullPath $ShimPath
-        $CertificatePath = Get-FullPath $CertificatePath
-    }
-
     if (-not (Test-Path -LiteralPath $WorkspaceRoot -PathType Container) -or
         -not (Test-Path -LiteralPath $BuildRoot -PathType Container)) {
         throw 'WorkspaceRoot and its .codex-build directory must already exist.'
@@ -1758,6 +1861,31 @@ try {
     if (Test-Path -LiteralPath $RunDirectory) {
         throw 'RunDirectory must be a fresh, nonexistent directory.'
     }
+    $script:RunRoot = $RunDirectory
+    New-Item -ItemType Directory -Path $script:RunRoot | Out-Null
+    $script:CommandLog = Join-Path $script:RunRoot 'commands.jsonl'
+    [IO.File]::WriteAllText($script:CommandLog, '', [Text.UTF8Encoding]::new($false))
+    $script:RunId = 'gpu-hal-windows-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '-' +
+        [Guid]::NewGuid().ToString('N').Substring(0, 10)
+    $script:Serial0Path = Join-Path $script:RunRoot 'efi-serial.log'
+    $script:Serial1Path = Join-Path $script:RunRoot 'windows-session.log'
+
+    if ($script:ValidationProfile -ceq 'SignedNative') {
+        if ([string]::IsNullOrWhiteSpace($ShimPath) -or
+            [string]::IsNullOrWhiteSpace($CertificatePath) -or
+            [string]::IsNullOrWhiteSpace($VerifierPath) -or
+            [string]::IsNullOrWhiteSpace($VerifierSha256)) {
+            throw 'SignedNative requires ShimPath, CertificatePath, VerifierPath, and VerifierSha256.'
+        }
+        $ShimPath = Get-FullPath $ShimPath
+        $CertificatePath = Get-FullPath $CertificatePath
+        $VerifierPath = Get-FullPath $VerifierPath
+        $VerifierSha256 = $VerifierSha256.ToUpperInvariant()
+        if ($VerifierSha256 -cnotmatch '^[0-9A-F]{64}$') {
+            throw 'SignedNative VerifierSha256 must be a 64-character SHA-256 pin.'
+        }
+    }
+
     $InputPaths = [Collections.Generic.List[string]]::new()
     foreach ($InputPath in @($EfiPath, $LoaderPath, $InstallerPath, $ProbePath,
             (Join-Path $PSScriptRoot 'guest\Invoke-GpuHalWindowsGuest.ps1'),
@@ -1767,6 +1895,7 @@ try {
     if ($script:ValidationProfile -ceq 'SignedNative') {
         $InputPaths.Add($ShimPath)
         $InputPaths.Add($CertificatePath)
+        $InputPaths.Add($VerifierPath)
     }
     foreach ($InputPath in $InputPaths) {
         if (-not (Test-Path -LiteralPath $InputPath -PathType Leaf) -or
@@ -1775,6 +1904,18 @@ try {
         }
         Assert-NoReparsePoint $InputPath 'Input artifact'
     }
+    $CoreModulePath = Join-Path $WorkspaceRoot 'tools\host-runner\HostRunner.Core.psm1'
+    Import-Module $CoreModulePath -Force
+    $CoreModule = @(Get-Module | Where-Object {
+        [IO.Path]::GetFullPath([string]$_.Path).Equals(
+            [IO.Path]::GetFullPath($CoreModulePath), [StringComparison]::OrdinalIgnoreCase)
+    }) | Select-Object -First 1
+    if ($null -eq $CoreModule) { throw 'HostRunner.Core did not load.' }
+    $script:CoreInvokeUhrProcess = Get-Command Invoke-UhrProcess `
+        -Module $CoreModule.Name -CommandType Function
+    Set-Alias -Name Invoke-UhrProcess -Value Invoke-LoggedUhrProcess `
+        -Scope Script -Force
+
     if ($script:ValidationProfile -ceq 'SignedNative') {
         $CertificateItem = Get-Item -LiteralPath $CertificatePath -Force
         if ($CertificateItem.Length -eq 0 -or $CertificateItem.Length -gt 65536) {
@@ -1806,9 +1947,13 @@ try {
             throw 'ShimPath does not match the repository-pinned vendor shim image.'
         }
         $LoaderEvidence = Get-SignedNativeArtifactEvidence -Path $LoaderPath `
-            -Label 'Signed loader' -ExpectedSignerThumbprint $SignerThumbprint
+            -Label 'Signed loader' -ExpectedSignerThumbprint $SignerThumbprint `
+            -CertificatePath $CertificatePath -VerifierPath $VerifierPath `
+            -ExpectedVerifierSha256 $VerifierSha256
         $PayloadEvidence = Get-SignedNativeArtifactEvidence -Path $EfiPath `
-            -Label 'Signed EFI payload' -ExpectedSignerThumbprint $SignerThumbprint
+            -Label 'Signed EFI payload' -ExpectedSignerThumbprint $SignerThumbprint `
+            -CertificatePath $CertificatePath -VerifierPath $VerifierPath `
+            -ExpectedVerifierSha256 $VerifierSha256
         $script:SignedNativeArtifactEvidence = [pscustomobject]@{
             Shim = $ShimEvidence
             Loader = $LoaderEvidence
@@ -1817,6 +1962,13 @@ try {
                 Path = $CertificatePath
                 Sha256 = Get-Sha256 $CertificatePath
                 Bytes = $CertificateItem.Length
+            }
+            Verifier = [pscustomobject]@{
+                Path = $VerifierPath
+                Sha256 = Get-Sha256 $VerifierPath
+                Pin = $VerifierSha256
+                ExpectedSha256 = $VerifierSha256
+                PinMatches = $true
             }
             SignerThumbprint = $SignerThumbprint
         }
@@ -1836,15 +1988,6 @@ try {
         Assert-NoReparsePoint $CredentialPath 'Credential file'
     }
 
-    $script:RunRoot = $RunDirectory
-    New-Item -ItemType Directory -Path $script:RunRoot | Out-Null
-    $script:CommandLog = Join-Path $script:RunRoot 'commands.jsonl'
-    [IO.File]::WriteAllText($script:CommandLog, '', [Text.UTF8Encoding]::new($false))
-    $script:RunId = 'gpu-hal-windows-' + [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss') + '-' +
-        [Guid]::NewGuid().ToString('N').Substring(0, 10)
-    $script:Serial0Path = Join-Path $script:RunRoot 'efi-serial.log'
-    $script:Serial1Path = Join-Path $script:RunRoot 'windows-session.log'
-
     $script:Config = [pscustomobject]@{
         ProjectRoot = $WorkspaceRoot
         Tools = [pscustomobject]@{ VmrunPath = $VmrunPath }
@@ -1861,18 +2004,6 @@ try {
         GuestTransport = 'VmwareGuestInfo'
         ExpectedProbeVerdict = 'NOT_MET'
     }
-
-    $CoreModulePath = Join-Path $WorkspaceRoot 'tools\host-runner\HostRunner.Core.psm1'
-    Import-Module $CoreModulePath -Force
-    $CoreModule = @(Get-Module | Where-Object {
-        [IO.Path]::GetFullPath([string]$_.Path).Equals(
-            [IO.Path]::GetFullPath($CoreModulePath), [StringComparison]::OrdinalIgnoreCase)
-    }) | Select-Object -First 1
-    if ($null -eq $CoreModule) { throw 'HostRunner.Core did not load.' }
-    $script:CoreInvokeUhrProcess = Get-Command Invoke-UhrProcess `
-        -Module $CoreModule.Name -CommandType Function
-    Set-Alias -Name Invoke-UhrProcess -Value Invoke-LoggedUhrProcess `
-        -Scope Script -Force
 
     $HostRunnerPath = Join-Path $WorkspaceRoot 'tools\host-runner\Invoke-UEFILoaderHostRunner.ps1'
     $Tokens = $null
@@ -1947,6 +2078,7 @@ try {
     $Lines = Assert-PreparedClone -Root $WorkspaceRoot -BuildRoot $BuildRoot -Vmx $VmxPath `
         -ValidationProfile $script:ValidationProfile -CertificatePath $CertificatePath
     $SafeVmxSummary = Get-SafeVmxSummary -Lines $Lines -Vmx $VmxPath -BuildRoot $BuildRoot
+    $script:VmWriteAttempted = $true
     Configure-DisposableClone -Lines $Lines
 
     $EfiHash = Get-Sha256 $EfiPath
@@ -2098,12 +2230,12 @@ finally {
             if ($script:VmStartAttempted) {
                 try { Copy-CloneVmwareLog }
                 catch { $script:VmwareLogStatus = 'COPY_FAILED: ' + $_.Exception.Message }
-            }
-            try { Confirm-SignedNativeVmwareDbAppend }
-            catch {
-                $script:VmwareDbAppendMarker = 'NOT_CONFIRMED'
-                if ([string]::IsNullOrWhiteSpace($script:Failure)) {
-                    $script:Failure = 'Could not verify the VMware Secure Boot db append log marker: ' + $_.Exception.Message
+                try { Confirm-SignedNativeVmwareDbAppend }
+                catch {
+                    $script:VmwareDbAppendMarker = 'NOT_CONFIRMED'
+                    if ([string]::IsNullOrWhiteSpace($script:Failure)) {
+                        $script:Failure = 'Could not verify the VMware Secure Boot db append log marker: ' + $_.Exception.Message
+                    }
                 }
             }
             if ($script:BeforeSnapshotCreated) {
