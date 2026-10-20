@@ -71,6 +71,7 @@ extern "C" {
  * and nine private ranges per processor. */
 #define HV_EFI_EPT_MAX_DENY_RANGES \
     (UINT32_C(29) + UINT32_C(9) * HV_EFI_MAX_SUPPORTED_PROCESSORS)
+#define HV_EFI_EPT_MAX_MMIO_WINDOWS UINT32_C(8)
 #define HV_EFI_GUEST_DESCRIPTOR_STORAGE_PAGES UINT32_C(3)
 #define HV_EFI_HOST_DESCRIPTOR_STORAGE_PAGES UINT32_C(3)
 #define HV_EFI_DESCRIPTOR_STORAGE_PAGES \
@@ -968,6 +969,15 @@ int HvEfiBuildProtectedEptIdentityHierarchy(
     uint64_t *eptPointer,
     uint32_t *splitPageCount,
     uint32_t *deniedPageCount);
+/* Sorts fixed-size firmware MMIO windows and unions overlap/adjacency.
+ * Rejects invalid input without changing ranges or rangeCount. */
+int HvEfiBuildEptMmioDenyRanges(
+    const uint64_t *registerBases,
+    uint32_t registerCount,
+    uint32_t pagesPerUnit,
+    HV_EFI_EPT_DENY_RANGE *ranges,
+    uint32_t rangeCapacity,
+    uint32_t *rangeCount);
 int HvEfiEptIdentityHierarchyValid(
     const uint64_t *storage,
     uint32_t storagePages,

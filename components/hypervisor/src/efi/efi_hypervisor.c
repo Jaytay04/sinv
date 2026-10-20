@@ -21,7 +21,7 @@
 #define HV_EFI_MEMORY_MAP_SLACK_DESCRIPTORS ((UINTN)8)
 #define HV_EFI_MEMORY_MAP_MAX_ATTEMPTS UINT32_C(4)
 #define HV_EFI_PHYSICAL_IOMMU_TABLE_PAGES UINT32_C(2048)
-#define HV_EFI_PHYSICAL_IOMMU_MAX_UNITS UINT32_C(8)
+#define HV_EFI_PHYSICAL_IOMMU_MAX_UNITS HV_EFI_EPT_MAX_MMIO_WINDOWS
 #define HV_EFI_PHYSICAL_IOMMU_MAX_PCI_STATES UINT32_C(512)
 #define HV_EFI_PHYSICAL_IOMMU_MAX_OPERATIONS UINT32_C(192)
 #define HV_EFI_PHYSICAL_IOMMU_SIGNATURE UINT64_C(0x56544452554e3031)
@@ -2848,6 +2848,9 @@ static int HvEfiBuildEptDenyInventory(
         const HV_EFI_PHYSICAL_IOMMU_STATE *physicalState =
             (const HV_EFI_PHYSICAL_IOMMU_STATE *)(uintptr_t)
                 context->PhysicalIommuStatePhysical;
+        uint64_t registerBases[HV_EFI_PHYSICAL_IOMMU_MAX_UNITS];
+        HV_EFI_EPT_DENY_RANGE mmioRanges[HV_EFI_PHYSICAL_IOMMU_MAX_UNITS];
+        uint32_t mmioRangeCount = 0;
         if (physicalState == NULL ||
             physicalState->Signature != HV_EFI_PHYSICAL_IOMMU_SIGNATURE ||
             physicalState->Dmar.UnitCount == 0 ||
@@ -2870,10 +2873,23 @@ static int HvEfiBuildEptDenyInventory(
             return 0;
         }
         for (index = 0; index < physicalState->Dmar.UnitCount; ++index) {
+            registerBases[index] = physicalState->Dmar.Units[index].RegisterBase;
+        }
+        /* Firmware units may be one page apart while our conservative MMIO
+         * windows cover four pages each. Union those windows before combining
+         * them with root-owned allocations; the final ownership overlap check
+         * remains strict for every other range. */
+        if (!HvEfiBuildEptMmioDenyRanges(
+                registerBases, physicalState->Dmar.UnitCount,
+                HV_EFI_PHYSICAL_IOMMU_MMIO_PAGES, mmioRanges,
+                HV_EFI_PHYSICAL_IOMMU_MAX_UNITS, &mmioRangeCount)) {
+            return 0;
+        }
+        for (index = 0; index < mmioRangeCount; ++index) {
             if (!HvEfiAppendEptDenyRange(
                     ranges, capacity, &count,
-                    physicalState->Dmar.Units[index].RegisterBase,
-                    HV_EFI_PHYSICAL_IOMMU_MMIO_PAGES)) {
+                    mmioRanges[index].PhysicalBase,
+                    (uint32_t)(mmioRanges[index].Size / HV_EFI_PAGE_SIZE))) {
                 return 0;
             }
         }
@@ -3408,11 +3424,14 @@ static EFI_STATUS HvEfiPrepareApProcessorStates(HV_EFI_CONTEXT *context)
         return EFI_ABORTED;
     }
 
-    HvEfiBootDiagnosticSetDetail(HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_MEMORY_MAP);
+    HvEfiBootDiagnosticSetDetail(
+        HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_ALLOC_MEMORY_TYPES);
     status = gBS->AllocatePool(
         EfiLoaderData, HV_EFI_EPT_IDENTITY_PAGE_COUNT,
         (void **)&eptMemoryTypes);
     if (!EFI_ERROR(status)) {
+        HvEfiBootDiagnosticSetDetail(
+            HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_ALLOC_DENY_RANGES);
         status = gBS->AllocatePool(
             EfiLoaderData,
             (UINTN)HV_EFI_EPT_MAX_DENY_RANGES *
@@ -3420,23 +3439,49 @@ static EFI_STATUS HvEfiPrepareApProcessorStates(HV_EFI_CONTEXT *context)
             (void **)&eptDenyRanges);
     }
     if (!EFI_ERROR(status)) {
+        HvEfiBootDiagnosticSetDetail(
+            HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_GET_MEMORY_MAP);
         status = HvEfiGetMemoryMap(&memoryMap, &memoryMapSize,
                                    &descriptorSize, &descriptorVersion);
     }
-    if (EFI_ERROR(status) ||
-        descriptorVersion != HV_EFI_MEMORY_DESCRIPTOR_VERSION ||
-        !HvEfiBuildEptMemoryTypePlan(
+    if (!EFI_ERROR(status)) {
+        HvEfiBootDiagnosticSetDetail(
+            HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_DESCRIPTOR_VERSION);
+        if (descriptorVersion != HV_EFI_MEMORY_DESCRIPTOR_VERSION) {
+            status = EFI_UNSUPPORTED;
+        }
+    }
+    if (!EFI_ERROR(status)) {
+        HvEfiBootDiagnosticSetDetail(
+            HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_MEMORY_TYPE_PLAN);
+        if (!HvEfiBuildEptMemoryTypePlan(
             (const uint8_t *)(const void *)memoryMap, memoryMapSize,
             descriptorSize, eptMemoryTypes,
             HV_EFI_EPT_IDENTITY_PAGE_COUNT,
-            &writeBackLeafCount) ||
-        !HvEfiBuildEptDenyInventory(
+            &writeBackLeafCount)) {
+            status = EFI_ABORTED;
+        }
+    }
+    if (!EFI_ERROR(status)) {
+        HvEfiBootDiagnosticSetDetail(
+            HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_DENY_INVENTORY);
+        if (!HvEfiBuildEptDenyInventory(
             context, eptDenyRanges,
             HV_EFI_EPT_MAX_DENY_RANGES,
-            &eptDenyRangeCount) ||
-        !HvEfiBuildRuntimeScannerAllowlist(
+            &eptDenyRangeCount)) {
+            status = EFI_ABORTED;
+        }
+    }
+    if (!EFI_ERROR(status)) {
+        HvEfiBootDiagnosticSetDetail(
+            HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_SCANNER_ALLOWLIST);
+        if (!HvEfiBuildRuntimeScannerAllowlist(
             context, memoryMap, memoryMapSize, descriptorSize,
             eptDenyRanges, eptDenyRangeCount)) {
+            status = EFI_ABORTED;
+        }
+    }
+    if (EFI_ERROR(status)) {
         if (memoryMap != NULL) {
             gBS->FreePool(memoryMap);
         }
@@ -3450,7 +3495,7 @@ static EFI_STATUS HvEfiPrepareApProcessorStates(HV_EFI_CONTEXT *context)
             HV_EFI_PROCESSOR_PREPARATION_FAILURE_MEMORY_POLICY;
         context->ProcessorPreparationStatus =
             HV_EFI_PROCESSOR_PREPARATION_FAILED;
-        return EFI_ABORTED;
+        return status;
     }
 
     HvEfiBootDiagnosticSetDetail(

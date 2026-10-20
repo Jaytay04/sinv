@@ -39,6 +39,263 @@ static void gpu_model_emit(const char *message)
     puts(message);
 }
 
+static int expect_mmio_rejection_is_unchanged(
+    const char *message,
+    const uint64_t *registerBases,
+    uint32_t registerCount,
+    uint32_t pagesPerUnit,
+    uint32_t rangeCapacity,
+    int nullRanges,
+    int nullRangeCount)
+{
+    HV_EFI_EPT_DENY_RANGE ranges[3] = {
+        { UINT64_C(0x123000), UINT64_C(0x2000) },
+        { UINT64_C(0x456000), UINT64_C(0x3000) },
+        { UINT64_C(0x789000), UINT64_C(0x4000) }
+    };
+    const HV_EFI_EPT_DENY_RANGE originalRanges[3] = {
+        { UINT64_C(0x123000), UINT64_C(0x2000) },
+        { UINT64_C(0x456000), UINT64_C(0x3000) },
+        { UINT64_C(0x789000), UINT64_C(0x4000) }
+    };
+    uint32_t rangeCount = UINT32_C(0xa5a5a5a5);
+    uint32_t index;
+    int unchanged = 1;
+
+    if (HvEfiBuildEptMmioDenyRanges(
+            registerBases, registerCount, pagesPerUnit,
+            nullRanges ? NULL : ranges, rangeCapacity,
+            nullRangeCount ? NULL : &rangeCount) != 0) {
+        return expect(0, message);
+    }
+    for (index = 0; index < 3; ++index) {
+        if (ranges[index].PhysicalBase !=
+                originalRanges[index].PhysicalBase ||
+            ranges[index].Size != originalRanges[index].Size) {
+            unchanged = 0;
+        }
+    }
+    return expect(unchanged && rangeCount == UINT32_C(0xa5a5a5a5),
+                  message);
+}
+
+static int test_efi_mmio_deny_range_normalization(void)
+{
+    const uint64_t unsortedBases[2] = {
+        UINT64_C(0xfed91000), UINT64_C(0xfed90000)
+    };
+    const uint64_t disjointBases[2] = {
+        UINT64_C(0xfed90000), UINT64_C(0xfed95000)
+    };
+    const uint64_t adjacentBases[2] = {
+        UINT64_C(0xfed94000), UINT64_C(0xfed90000)
+    };
+    const uint64_t containedAndDuplicateBases[3] = {
+        UINT64_C(0xfed91000), UINT64_C(0xfed90000),
+        UINT64_C(0xfed90000)
+    };
+    const uint64_t maximumWindowBases[HV_EFI_EPT_MAX_MMIO_WINDOWS] = {
+        UINT64_C(0xfee00000), UINT64_C(0xfedf0000),
+        UINT64_C(0xfede0000), UINT64_C(0xfedd0000),
+        UINT64_C(0xfedc0000), UINT64_C(0xfedb0000),
+        UINT64_C(0xfeda0000), UINT64_C(0xfed90000)
+    };
+    const uint64_t zeroBase[1] = { 0 };
+    const uint64_t unalignedBase[1] = { UINT64_C(0xfed90001) };
+    const uint64_t overflowingBase[1] = {
+        (UINT64_C(1) << HV_EFI_EPT_GUEST_PHYSICAL_BITS) -
+            HV_EFI_PAGE_SIZE
+    };
+    const uint64_t lastValidBase[1] = {
+        (UINT64_C(1) << HV_EFI_EPT_GUEST_PHYSICAL_BITS) -
+            UINT64_C(4) * HV_EFI_PAGE_SIZE
+    };
+    const uint64_t outOfRangeBase[1] = {
+        UINT64_C(1) << HV_EFI_EPT_GUEST_PHYSICAL_BITS
+    };
+    const uint64_t lateInvalidBases[2] = {
+        UINT64_C(0xfed90000), UINT64_C(0xfed90001)
+    };
+    const uint64_t capabilities =
+        HV_EFI_EPT_CAP_WALK_LENGTH_4 |
+        HV_EFI_EPT_CAP_EPTP_MEMORY_TYPE_WB |
+        HV_EFI_EPT_CAP_2MB_PAGE |
+        HV_EFI_EPT_CAP_1GB_PAGE;
+    HV_EFI_EPT_DENY_RANGE normalized[HV_EFI_EPT_MAX_MMIO_WINDOWS] = {
+        { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 },
+        { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }
+    };
+    HV_EFI_EPT_DENY_RANGE legacyOverlapping[2] = {
+        { UINT64_C(0xfed90000), UINT64_C(0x4000) },
+        { UINT64_C(0xfed91000), UINT64_C(0x4000) }
+    };
+    HV_EFI_EPT_DENY_RANGE mixedPrivateAndMmio[2];
+    uint64_t protectedPointer = 0;
+    uint32_t normalizedCount = 0;
+    uint32_t splitPages = 0;
+    uint32_t deniedPages = 0;
+    uint32_t index;
+    uint32_t firstPage;
+    uint32_t ptBase;
+    uint64_t blockBase;
+    uint64_t expectedNeighbor;
+    int normalizedEptBuilt;
+    int failures = 0;
+
+    failures += expect(HvEfiBuildEptMmioDenyRanges(
+                           unsortedBases, 2, 4, normalized, 2,
+                           &normalizedCount) != 0 && normalizedCount == 1 &&
+                       normalized[0].PhysicalBase == UINT64_C(0xfed90000) &&
+                       normalized[0].Size == UINT64_C(0x5000),
+                       "overlapping VT-d MMIO register windows normalize to their five-page union");
+    failures += expect(HvEfiBuildEptMmioDenyRanges(
+                           disjointBases, 2, 4, normalized, 2,
+                           &normalizedCount) != 0 && normalizedCount == 2 &&
+                       normalized[0].PhysicalBase == UINT64_C(0xfed90000) &&
+                       normalized[0].Size == UINT64_C(0x4000) &&
+                       normalized[1].PhysicalBase == UINT64_C(0xfed95000) &&
+                       normalized[1].Size == UINT64_C(0x4000),
+                       "disjoint VT-d MMIO register windows remain separate and sorted");
+    failures += expect(HvEfiBuildEptMmioDenyRanges(
+                           adjacentBases, 2, 4, normalized, 2,
+                           &normalizedCount) != 0 && normalizedCount == 1 &&
+                       normalized[0].PhysicalBase == UINT64_C(0xfed90000) &&
+                       normalized[0].Size == UINT64_C(0x8000),
+                       "adjacent VT-d MMIO register windows merge without an accessible gap");
+    failures += expect(HvEfiBuildEptMmioDenyRanges(
+                           containedAndDuplicateBases, 3, 4, normalized, 3,
+                           &normalizedCount) != 0 && normalizedCount == 1 &&
+                       normalized[0].PhysicalBase == UINT64_C(0xfed90000) &&
+                       normalized[0].Size == UINT64_C(0x5000),
+                       "contained and duplicate VT-d MMIO windows do not shrink or duplicate the union");
+    failures += expect(HvEfiBuildEptMmioDenyRanges(
+                           maximumWindowBases,
+                           HV_EFI_EPT_MAX_MMIO_WINDOWS, 4,
+                           normalized, HV_EFI_EPT_MAX_MMIO_WINDOWS,
+                           &normalizedCount) != 0 &&
+                       normalizedCount == HV_EFI_EPT_MAX_MMIO_WINDOWS &&
+                       normalized[0].PhysicalBase == UINT64_C(0xfed90000) &&
+                       normalized[0].Size == UINT64_C(0x4000) &&
+                       normalized[7].PhysicalBase == UINT64_C(0xfee00000) &&
+                       normalized[7].Size == UINT64_C(0x4000),
+                       "all eight supported VT-d MMIO windows normalize in sorted order");
+    failures += expect(HvEfiBuildEptMmioDenyRanges(
+                           lastValidBase, 1, 4, normalized, 1,
+                           &normalizedCount) != 0 && normalizedCount == 1 &&
+                       normalized[0].PhysicalBase == lastValidBase[0] &&
+                       normalized[0].Size == UINT64_C(0x4000),
+                       "MMIO window ending exactly at the 39-bit EPT limit is accepted");
+
+    failures += expect_mmio_rejection_is_unchanged(
+        "null VT-d register list leaves deny output and count unchanged",
+        NULL, 1, 4, 3, 0, 0);
+    failures += expect_mmio_rejection_is_unchanged(
+        "empty VT-d register list leaves deny output and count unchanged",
+        unsortedBases, 0, 4, 3, 0, 0);
+    failures += expect_mmio_rejection_is_unchanged(
+        "excessive VT-d register count leaves deny output and count unchanged",
+        unsortedBases, HV_EFI_EPT_MAX_MMIO_WINDOWS + 1, 4, 3, 0, 0);
+    failures += expect_mmio_rejection_is_unchanged(
+        "zero pages per VT-d unit leaves deny output and count unchanged",
+        unsortedBases, 2, 0, 2, 0, 0);
+    failures += expect_mmio_rejection_is_unchanged(
+        "short deny output capacity leaves output and count unchanged",
+        unsortedBases, 2, 4, 1, 0, 0);
+    failures += expect_mmio_rejection_is_unchanged(
+        "null deny output leaves count unchanged",
+        unsortedBases, 2, 4, 2, 1, 0);
+    failures += expect_mmio_rejection_is_unchanged(
+        "null deny count leaves output unchanged",
+        unsortedBases, 2, 4, 2, 0, 1);
+    failures += expect_mmio_rejection_is_unchanged(
+        "zero VT-d register base leaves output and count unchanged",
+        zeroBase, 1, 4, 1, 0, 0);
+    failures += expect_mmio_rejection_is_unchanged(
+        "unaligned VT-d register base leaves output and count unchanged",
+        unalignedBase, 1, 4, 1, 0, 0);
+    failures += expect_mmio_rejection_is_unchanged(
+        "VT-d MMIO range past the 39-bit EPT boundary leaves output unchanged",
+        overflowingBase, 1, 4, 1, 0, 0);
+    failures += expect_mmio_rejection_is_unchanged(
+        "late invalid VT-d base leaves earlier candidate output unchanged",
+        lateInvalidBases, 2, 4, 2, 0, 0);
+    failures += expect_mmio_rejection_is_unchanged(
+        "VT-d register base outside 39-bit EPT leaves output unchanged",
+        outOfRangeBase, 1, 4, 1, 0, 0);
+
+    memset(eptMemoryTypes, HV_EFI_EPT_MEMORY_TYPE_WB,
+           sizeof(eptMemoryTypes));
+    failures += expect(HvEfiBuildProtectedEptIdentityHierarchy(
+                           eptHierarchy, HV_EFI_EPT_BASE_TABLE_PAGES + 4,
+                           UINT64_C(0x12000), capabilities,
+                           eptMemoryTypes, HV_EFI_EPT_IDENTITY_PAGE_COUNT,
+                           legacyOverlapping, 2, &protectedPointer,
+                           &splitPages, &deniedPages) == 0,
+                       "protected EPT continues rejecting overlapping raw ownership ranges");
+
+    normalizedEptBuilt =
+        HvEfiBuildEptMmioDenyRanges(
+            unsortedBases, 2, 4, normalized, 2, &normalizedCount) != 0 &&
+        normalizedCount == 1 &&
+        HvEfiBuildProtectedEptIdentityHierarchy(
+            eptHierarchy, HV_EFI_EPT_BASE_TABLE_PAGES + 4,
+            UINT64_C(0x12000), capabilities,
+            eptMemoryTypes, HV_EFI_EPT_IDENTITY_PAGE_COUNT,
+            normalized, normalizedCount, &protectedPointer,
+            &splitPages, &deniedPages) != 0 &&
+        splitPages == 1 && deniedPages == 5 &&
+        HvEfiProtectedEptIdentityHierarchyValid(
+            eptHierarchy, HV_EFI_EPT_BASE_TABLE_PAGES + 4,
+            UINT64_C(0x12000), capabilities,
+            eptMemoryTypes, HV_EFI_EPT_IDENTITY_PAGE_COUNT,
+            normalized, normalizedCount, protectedPointer,
+            HV_EFI_EPT_IDENTITY_PAGE_COUNT, splitPages,
+            deniedPages) != 0;
+    failures += expect(normalizedEptBuilt,
+                       "normalized VT-d MMIO union builds and audits as five denied EPT pages");
+
+    if (normalizedEptBuilt) {
+        blockBase = normalized[0].PhysicalBase &
+            ~((UINT64_C(1) << HV_EFI_EPT_2MB_SHIFT) - UINT64_C(1));
+        firstPage = (uint32_t)((normalized[0].PhysicalBase - blockBase) /
+                               HV_EFI_PAGE_SIZE);
+        ptBase = HV_EFI_EPT_BASE_TABLE_PAGES *
+            HV_EFI_EPT_ENTRIES_PER_PAGE;
+        expectedNeighbor =
+            (blockBase + (uint64_t)(firstPage - 1) * HV_EFI_PAGE_SIZE) |
+            HV_EFI_EPT_ACCESS_RWX |
+            ((uint64_t)HV_EFI_EPT_MEMORY_TYPE_WB << 3);
+        failures += expect(eptHierarchy[ptBase + firstPage - 1] ==
+                               expectedNeighbor &&
+                           eptHierarchy[ptBase + firstPage + 5] ==
+                               ((blockBase + (uint64_t)(firstPage + 5) *
+                                     HV_EFI_PAGE_SIZE) |
+                                HV_EFI_EPT_ACCESS_RWX |
+                                ((uint64_t)HV_EFI_EPT_MEMORY_TYPE_WB << 3)),
+                           "pages immediately outside the MMIO union stay accessible");
+        for (index = 0; index < 5; ++index) {
+            if (eptHierarchy[ptBase + firstPage + index] != 0) {
+                failures += expect(0,
+                                  "every page in the MMIO union is denied by EPT");
+                break;
+            }
+        }
+    }
+
+    mixedPrivateAndMmio[0] = normalized[0];
+    mixedPrivateAndMmio[1].PhysicalBase = UINT64_C(0xfed92000);
+    mixedPrivateAndMmio[1].Size = HV_EFI_PAGE_SIZE;
+    failures += expect(HvEfiBuildProtectedEptIdentityHierarchy(
+                           eptHierarchy, HV_EFI_EPT_BASE_TABLE_PAGES + 4,
+                           UINT64_C(0x12000), capabilities,
+                           eptMemoryTypes, HV_EFI_EPT_IDENTITY_PAGE_COUNT,
+                           mixedPrivateAndMmio, 2, &protectedPointer,
+                           &splitPages, &deniedPages) == 0,
+                       "MMIO normalization does not merge overlapping private ownership downstream");
+
+    return failures;
+}
+
 int main(int argc, char **argv)
 {
     uint32_t adjusted = 0;
@@ -71,6 +328,8 @@ int main(int argc, char **argv)
         return HvGpuVmSelfTest(gpu_model_emit) == 1 ? 0 : 1;
     }
     if (argc != 1) return 1;
+
+    failures += test_efi_mmio_deny_range_normalization();
 
     failures += expect(HV_EFI_CPUID_LEAF1_GUEST_ECX_MASK ==
                            UINT32_C(0xffffff9f) &&

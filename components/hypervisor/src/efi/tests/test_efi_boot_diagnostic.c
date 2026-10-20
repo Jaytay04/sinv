@@ -188,13 +188,59 @@ static int test_stage_cannot_regress(void)
     return 1;
 }
 
+static int test_memory_policy_failure_details(void)
+{
+    const uint32_t details[] = {
+        HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_ALLOC_MEMORY_TYPES,
+        HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_ALLOC_DENY_RANGES,
+        HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_GET_MEMORY_MAP,
+        HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_DESCRIPTOR_VERSION,
+        HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_MEMORY_TYPE_PLAN,
+        HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_DENY_INVENTORY,
+        HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_SCANNER_ALLOWLIST
+    };
+    const uint64_t statuses[] = {
+        UINT64_C(0x8000000000000009), UINT64_C(0x8000000000000009),
+        UINT64_C(0x8000000000000005), UINT64_C(0x8000000000000003),
+        UINT64_C(0x8000000000000015), UINT64_C(0x8000000000000015),
+        UINT64_C(0x8000000000000015)
+    };
+    uint32_t index;
+    for (index = 0; index < sizeof(details) / sizeof(details[0]); ++index) {
+        hv_boot_diagnostic_t record;
+        hv_efi_boot_diagnostic_snapshot_t snapshot = snapshot_values();
+        snapshot.Detail = details[index];
+        snapshot.PreparedCpus = 1;
+        hv_boot_diagnostic_init(&record);
+        if (!check(details[index] == 10u + index,
+                   "memory policy detail identifiers stay stable") ||
+            !hv_efi_boot_diagnostic_mark_entry(
+                &record, (uint32_t)sizeof(record)) ||
+            !hv_efi_boot_diagnostic_set_stage(
+                &record, (uint32_t)sizeof(record), HV_BOOT_STAGE_AP_PREPARE,
+                HV_BOOT_REASON_OPERATION_FAILED, details[index]) ||
+            !hv_efi_boot_diagnostic_record_return(
+                &record, (uint32_t)sizeof(record), HV_BOOT_STAGE_AP_PREPARE,
+                HV_BOOT_REASON_OPERATION_FAILED, statuses[index], &snapshot) ||
+            !check(record.Detail == details[index] &&
+                       record.Status == statuses[index] &&
+                       record.PreparationFailure == 10 &&
+                       record.PreparedCpus == 1,
+                   "memory policy substep and EFI status survive return")) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 int main(void)
 {
     if (!test_failure_snapshot() || !test_success_snapshot() ||
         !reject_without_writes((uint32_t)sizeof(hv_boot_diagnostic_t) - 1u,
                                0) ||
         !reject_without_writes((uint32_t)sizeof(hv_boot_diagnostic_t), 1) ||
-        !test_inconsistent_outcomes() || !test_stage_cannot_regress()) {
+        !test_inconsistent_outcomes() || !test_stage_cannot_regress() ||
+        !test_memory_policy_failure_details()) {
         return 1;
     }
     return 0;

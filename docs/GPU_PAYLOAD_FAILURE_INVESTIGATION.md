@@ -28,9 +28,9 @@ callbacks, GPU arming, and AP activation. The resource-ready result and
 VMX-ready count describe earlier setup and capability checks, not successful
 processor launches. The prepared count is initialized to one for the BSP.
 
-The failing block in `HvEfiPrepareApProcessorStates` combines two pool
-allocations, `HvEfiGetMemoryMap`, the descriptor-version check, the EPT
-memory-type plan, the EPT deny inventory, and the runtime scanner RAM
+The failing block in the tested revision of `HvEfiPrepareApProcessorStates`
+combines two pool allocations, `HvEfiGetMemoryMap`, the descriptor-version
+check, the EPT memory-type plan, the EPT deny inventory, and the scanner RAM
 allowlist. All failures in this block produce the same diagnostic. The saved
 run does not contain the firmware memory map, allocation results, deny
 inventory, or individual helper verdicts. Consequently, it cannot identify
@@ -38,13 +38,75 @@ the rejected predicate or a specific physical hardware cause. Missing EPT
 coverage alone selects conservative UC memory; it is not a plan rejection.
 The separate PCR replay refusal does not explain this payload return.
 
+### VT-d MMIO inventory overlap confirmed and corrected
+
+A subsequent read-only capture of this host's DMAR table found DRHD register
+bases `0xFED90000` and `0xFED91000`. The table is 136 bytes, SHA-256
+`3F5B6BAF70DC8CD829B666B7AFA5F7D6F51CDB0A6B84902669467443267E43F8`.
+It was retrieved through the Windows
+[GetSystemFirmwareTable API](https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getsystemfirmwaretable)
+and its signature, length, record bounds, and ACPI checksum were checked.
+The retained capture is
+`.analysis/ap-preparation-fix/dmar-5c5eaa9e899a406eaa72e48254f6f3e6/dmar.bin`.
+This observation wrote only local evidence; it did not change firmware or boot
+selection.
+
+The old deny inventory reserves four 4-KiB pages at each DRHD register base.
+Those windows are `[0xFED90000, 0xFED94000)` and
+`[0xFED91000, 0xFED95000)`. Its final overlap check therefore rejects this
+host's inventory deterministically before AP callbacks can run. This is a
+confirmed blocker consistent with the saved `AP_MEMORY_MAP`/`MEMORY_POLICY`
+record. The coarse historical record cannot establish whether an earlier
+predicate in the same block also failed.
+
+`HvEfiBuildEptMmioDenyRanges` now validates and sorts the firmware MMIO windows
+and forms their union before they enter the combined deny inventory. For this
+host the result is `[0xFED90000, 0xFED95000)`, five pages. All intended protected
+bytes remain denied. Only firmware MMIO windows are normalized; overlap
+between that union and CPU/GPU/private allocations still fails the final
+ownership check. The helper admits at most eight windows and uses a 64-byte
+scratch array. No context layout, C/MASM offset, or loader handoff ABI changed.
+
+The preparation block also records each substep separately and preserves a
+failing firmware call's EFI status through cleanup. Existing detail values
+retain their meanings; new values are:
+
+| `startup_detail` | Preparation substep |
+| --- | --- |
+| 10 | Allocate EPT memory-type storage |
+| 11 | Allocate deny-range storage |
+| 12 | Retrieve the UEFI memory map |
+| 13 | Validate memory descriptor version |
+| 14 | Build the EPT memory-type plan |
+| 15 | Build the combined deny inventory |
+| 16 | Build the scanner RAM allowlist |
+
+The host regression exercises the captured address pair, all five denied EPT
+pages, accessible neighboring pages, unsorted/disjoint/adjacent/duplicate
+windows, the eight-window bound, malformed input and unchanged outputs on
+rejection, the 39-bit boundary, and continued rejection of private/MMIO
+overlap. Diagnostic tests preserve all seven substep values and their raw EFI
+errors through the existing startup record. The native-enabled Release EFI
+build passed its `.hvscan` self-containment audit at 54,870 bytes. Build outputs
+are isolated under `.codex-build/apfix/h`; original signed run artifacts and
+recovery evidence are preserved. A new boot has not yet confirmed physical
+startup after this correction, and GPU isolation remains unattested.
+
+The unsigned EFI image is 186,368 bytes, SHA-256
+`6EF5A1B4C1BBFF039D1CA1EDEEC8F5B7D6AA8A3C5516C4E6E7E0B6F9B8419FC5`.
+It was built for source verification, without signing, staging, or arming it.
+All 37 hypervisor component tests passed in 98.38 seconds, including the new
+MMIO-union and diagnostic regressions. The CTest log is retained at
+`.analysis/ap-preparation-fix/ctest.log`.
+
 ### Reset passed; firmware text still differs
 
 Rollback succeeded. FinalVerify at `2026-10-20T20:50:30Z` observed a changed
 boot ID, Secure Boot enabled, expected ABSENT health on all 20 CPUs, both
 display adapters, and the original Microsoft boot-manager hash. Its only
-reported error was the firmware textual comparison. The journal remains
-`Disarmed`; recovery completion and Archive have not been established.
+reported error was the firmware textual comparison. At that checkpoint the
+journal remained `Disarmed`; completion and Archive were established later
+through the reviewed recovery described below.
 
 Both firmware captures are 4,336 bytes. The backup hash is
 `ECB8F364A0058CB7D60B313E3941FCF61760F0C8F814EA188FD9BE5122C478CE`; the final
@@ -144,8 +206,16 @@ validation without journal changes or native queries. Retry
 `FinalVerify -ReviewedFirmwareDifference` through the normal dispatcher; its
 existing recovery rule accepts interrupted FinalVerify in phase `Disarmed`.
 No manual journal repair, baseline replacement, new rollback, or additional
-reset is required for this writer failure. Recovery remains incomplete until
-the operator receives the successful final status and phase `Complete`.
+reset is required for this writer failure.
+
+The operator's retry completed at `2026-10-20T21:37:47Z` with
+`FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED`, success,
+phase `Complete`, no active intent, and no verification errors. The saved
+record retains `TextEqual: false` and records review acceptance separately.
+Archive then returned `SELECTOR_ARCHIVED`; the archive exists, the active
+selector is absent, and the completed journal is preserved. This closes the
+run's recovery workflow without attesting GPU isolation or resolving the
+historical raw BootOrder limitation.
 
 ## Second physical run: entry returned EFI_ABORTED
 

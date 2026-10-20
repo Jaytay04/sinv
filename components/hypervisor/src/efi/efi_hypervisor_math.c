@@ -877,6 +877,81 @@ static int HvEfiAnalyzeEptDenyRanges(
     return 1;
 }
 
+int HvEfiBuildEptMmioDenyRanges(
+    const uint64_t *registerBases,
+    uint32_t registerCount,
+    uint32_t pagesPerUnit,
+    HV_EFI_EPT_DENY_RANGE *ranges,
+    uint32_t rangeCapacity,
+    uint32_t *rangeCount)
+{
+    uint64_t sortedBases[HV_EFI_EPT_MAX_MMIO_WINDOWS];
+    const uint64_t eptLimit =
+        UINT64_C(1) << HV_EFI_EPT_GUEST_PHYSICAL_BITS;
+    uint64_t windowSize;
+    uint64_t currentBase;
+    uint64_t currentEnd;
+    uint32_t outputCount = 0;
+    uint32_t index;
+
+    if (registerBases == NULL || registerCount == 0 ||
+        registerCount > HV_EFI_EPT_MAX_MMIO_WINDOWS || pagesPerUnit == 0 ||
+        ranges == NULL || rangeCount == NULL ||
+        rangeCapacity < registerCount) {
+        return 0;
+    }
+
+    windowSize = (uint64_t)pagesPerUnit * HV_EFI_PAGE_SIZE;
+    if (windowSize > eptLimit) {
+        return 0;
+    }
+    for (index = 0; index < registerCount; ++index) {
+        uint64_t base = registerBases[index];
+
+        if (base == 0 || (base & HV_EFI_PAGE_MASK) != 0 ||
+            base >= eptLimit || windowSize > eptLimit - base) {
+            return 0;
+        }
+        sortedBases[index] = base;
+    }
+
+    /* The bounded local copy also makes input/output aliasing safe. */
+    for (index = 1; index < registerCount; ++index) {
+        uint64_t base = sortedBases[index];
+        uint32_t insertion = index;
+
+        while (insertion != 0 && sortedBases[insertion - 1] > base) {
+            sortedBases[insertion] = sortedBases[insertion - 1];
+            --insertion;
+        }
+        sortedBases[insertion] = base;
+    }
+
+    currentBase = sortedBases[0];
+    currentEnd = currentBase + windowSize;
+    for (index = 1; index < registerCount; ++index) {
+        uint64_t nextBase = sortedBases[index];
+        uint64_t nextEnd = nextBase + windowSize;
+
+        if (nextBase <= currentEnd) {
+            if (nextEnd > currentEnd) {
+                currentEnd = nextEnd;
+            }
+            continue;
+        }
+        ranges[outputCount].PhysicalBase = currentBase;
+        ranges[outputCount].Size = currentEnd - currentBase;
+        ++outputCount;
+        currentBase = nextBase;
+        currentEnd = nextEnd;
+    }
+    ranges[outputCount].PhysicalBase = currentBase;
+    ranges[outputCount].Size = currentEnd - currentBase;
+    ++outputCount;
+    *rangeCount = outputCount;
+    return 1;
+}
+
 static int HvEfiEptRangeIntersects(const HV_EFI_EPT_DENY_RANGE *range,
                                    uint64_t base, uint64_t size)
 {
