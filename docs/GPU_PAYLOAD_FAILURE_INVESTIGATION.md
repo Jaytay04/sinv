@@ -242,6 +242,20 @@ The controller also clears a saved failed response's owned mailbox values
 before requesting Diagnose, after preserving any late inspection evidence.
 The focused controller suite passes 114 pure
 checks, including exact chunk names, rejection without writes, write failure,
-cleanup ordering, and producer/consumer chunk-size agreement. A fresh VM
-execution must still verify that tombstoning
-these values releases sufficient GuestInfo capacity.
+cleanup ordering, and producer/consumer chunk-size agreement.
+
+The subsequent fresh VM execution at candidate
+`06a13691ccbaa328c00789ed5c4688af3b50b015` passed Stage after releasing its
+85 consumed request chunks, then passed signed EFI execution and authenticated
+four-CPU Windows health. Its 545-byte payload diagnostic reports a valid
+version-1 record, `startup_stage=return`, `startup_reason=none`, and EFI status
+zero. The EFI serial and authenticated Windows copies contain the same startup
+fields. Both snapshots were created, baseline revert completed, and the VM was
+confirmed off without cleanup failures. Graceful shutdown timed out and used
+the bounded hard-stop fallback; graceful shutdown remains unvalidated.
+
+See [the startup diagnostic VM result](GPU_STARTUP_DIAGNOSTIC_VM_RESULT.md)
+for pinned artifacts, paths, and limits. This validates the new diagnostic
+transport in the nested VM. It does not recover the original physical
+rejection reason or validate Intel physical GPU isolation. The archived
+physical run's journal and archive hashes remain unchanged.

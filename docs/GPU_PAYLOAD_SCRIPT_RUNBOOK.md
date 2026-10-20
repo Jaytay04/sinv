@@ -6,7 +6,10 @@ bare-metal journal, external backup, and retained ESP files remain untouched.
 There is no runtime GPU hand-back operation.
 
 The current validation run is already complete. See the
-[signed VM result](GPU_PAYLOAD_SIGNED_VM_RESULT.md) for its evidence and limits.
+[startup diagnostic VM result](GPU_STARTUP_DIAGNOSTIC_VM_RESULT.md) for its
+evidence and limits. The
+[earlier signed VM result](GPU_PAYLOAD_SIGNED_VM_RESULT.md) remains available
+as historical evidence.
 To inspect that run, execute the Report command in step 7. No additional boot
 or recovery command is needed for it. Steps 1 through 6 describe the scripted
 validation procedure; do not repeat them against the completed run or its
