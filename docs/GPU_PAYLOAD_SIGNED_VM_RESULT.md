@@ -3,8 +3,12 @@
 The controller passed the signed EFI boot and Windows health test on
 2026-10-20 UTC. The outer workflow initially rejected the successful result
 because it expected an `EfiMarkers` array that the controller does not emit.
-The corrected reader verifies the saved serial file against its recorded hash;
-evidence review must preserve the original controller result and candidate.
+The corrected reader verified the saved serial file against its recorded hash
+and completed the evidence review without rebuilding, signing, or booting again.
+The original controller result, candidate, and wrapper failure remain preserved.
+
+Workflow status is `Complete`, with `SIGNED_NATIVE_VM_EVIDENCE_REVIEW_PASS`.
+The review ran at revision `44583f55a0e69d1f9d43847efce51c8eb192f1bd`.
 
 Candidate revision: `928971e7fb118d46d5bfcb54e5b406b0b65389fe` on
 `feat/smbios-boot-serial-probe`. Main was not changed. The renderer and scanner
@@ -24,6 +28,7 @@ were not changed by this workflow work.
 | Windows health | Authenticated current-run result, four of four CPUs passed |
 | Boot manager | Guest Windows boot-manager hash unchanged |
 | Recovery | Before/after snapshots created; reverted to before; VM confirmed off |
+| Evidence review | Original successful controller receipt and pinned artifacts/logs verified; no repeated boot |
 | Component tests | Hypervisor 33/33; loader 29/29 |
 | Image audit | Unsigned and signed `.hvscan` passed, 54,870 resident bytes |
 
@@ -64,6 +69,7 @@ The copied disk parent chain resolves inside the new copy.
 | --- | --- |
 | Signed payload, 185,192 bytes | `28E131456D89BE634587741506515C99EC20BDDB27FB94DC7179476950C25753` |
 | Signed loader, 58,216 bytes | `D7BBB209EF70F0791BF40F052956224650492C07C2C8CF45E338371354C34F53` |
+| Controller result | `A0424B014F5D13B83A05B4BA81231D7FA9419E969E6AE50399E9B1702C257A8C` |
 | EFI serial log | `585999A1994ECE0AB0DEA0DE43F1D7875836315A43D7A7DFC6FF6650266C807F` |
 | Windows serial log | `968809A223769EE427C1A6C2A95EF233311180CE8022506486F3EA36A4FEEE30` |
 | Copied VMware log | `BE36DE593E674D9BAE7BBDAFE5E332A48235ADFC390966E26552E0A4FE822EDD` |
