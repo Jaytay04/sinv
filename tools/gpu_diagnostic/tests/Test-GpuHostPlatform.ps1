@@ -101,6 +101,7 @@ function New-PlatformHelperModule {
 
     $functionNames = @(
         'Get-GpuObjectProperty',
+        'Get-GpuDisarmBoundaryBootId',
         'Assert-GpuFreshPath',
         'Get-GpuSafeLeaf',
         'Get-GpuRunIdLeaf',
@@ -461,6 +462,176 @@ function Invoke-GpuNativeCommand {
     return $fixtureModule
 }
 
+function New-GpuFinalVerifyFixtureModule {
+    param([string]$ModulePath, [string]$StatePath)
+
+    $platformNames = @(
+        'Get-GpuObjectProperty',
+        'Set-GpuStateProperty',
+        'New-GpuPlatformResult',
+        'Assert-GpuSecureBootOn',
+        'Invoke-GpuFinalVerify'
+    )
+    $platformDefinitions = @(Get-PlatformFunctionTexts -Path $ModulePath -Names $platformNames)
+    $stateTokens = $null
+    $stateParseErrors = $null
+    $stateAst = [System.Management.Automation.Language.Parser]::ParseFile($StatePath, [ref]$stateTokens, [ref]$stateParseErrors)
+    if ($null -ne $stateParseErrors -and $stateParseErrors.Count -gt 0) {
+        throw "State helper module does not parse: $($stateParseErrors[0].Message)"
+    }
+    $stateFunctions = @($stateAst.FindAll({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true))
+    $stateDefinitions = @($stateFunctions | ForEach-Object { $_.Extent.Text })
+    $fixtureDefinitions = @'
+$script:GpuFinalVerifyFixtureScenario = $null
+$script:GpuFinalVerifyFixtureMounted = $false
+$script:GpuFinalVerifyFixtureMountCount = 0
+$script:GpuFinalVerifyFixtureDismountCount = 0
+$script:GpuFinalVerifyFixtureFirmwareMountStates = New-Object 'System.Collections.Generic.List[bool]'
+
+function Set-GpuFinalVerifyFixtureScenario {
+    param([Parameter(Mandatory = $true)][object]$Scenario)
+    $script:GpuFinalVerifyFixtureScenario = $Scenario
+    $script:GpuFinalVerifyFixtureMounted = $false
+    $script:GpuFinalVerifyFixtureMountCount = 0
+    $script:GpuFinalVerifyFixtureDismountCount = 0
+    $script:GpuFinalVerifyFixtureFirmwareMountStates.Clear()
+}
+
+function Get-GpuFinalVerifyFixtureObservations {
+    return [pscustomobject]@{
+        Mounted = $script:GpuFinalVerifyFixtureMounted
+        MountCount = $script:GpuFinalVerifyFixtureMountCount
+        DismountCount = $script:GpuFinalVerifyFixtureDismountCount
+        FirmwareEnumerationMounted = @($script:GpuFinalVerifyFixtureFirmwareMountStates.ToArray())
+    }
+}
+
+function Assert-GpuAdministrator { }
+
+function Get-GpuCurrentMachineSnapshot {
+    param([switch]$IncludeSecureBoot)
+    return $script:GpuFinalVerifyFixtureScenario.Current
+}
+
+function Assert-GpuSameMachine {
+    param([object]$State, [object]$Current, [switch]$RequireCpuCount)
+}
+
+function Get-GpuExpectedToolPaths {
+    param([object]$State)
+    return [pscustomobject]@{ Probe = [string]$script:GpuFinalVerifyFixtureScenario.ProbePin.Path }
+}
+
+function Assert-GpuNamedPin {
+    param([object]$PinSet, [string]$Name, [string]$ExpectedPath, [string]$Description)
+    $pin = $PinSet.PSObject.Properties[$Name]
+    if ($null -eq $pin -or [string]$pin.Value.Path -cne $ExpectedPath) {
+        throw "Fixture $Description pin does not match the expected path."
+    }
+    return $pin.Value
+}
+
+function Get-GpuPreflight {
+    param([object]$State, [string]$ActionDirectory, [string]$Name)
+    return [pscustomobject]@{
+        Report = [pscustomobject]@{
+            InventoryComplete = $true
+            DiagnosticCandidate = [pscustomobject]@{ PciId = 'PCI\VEN_8086&DEV_4680'; Present = $true }
+            Nvidia = [pscustomobject]@{ PciId = 'PCI\VEN_10DE&DEV_2206'; Present = $true }
+        }
+        Pin = $null
+    }
+}
+
+function Assert-GpuPreflightAdapters {
+    param([object]$Report)
+    if (-not [bool]$script:GpuFinalVerifyFixtureScenario.PreflightValid) { throw 'Synthetic preflight was rejected.' }
+}
+
+function Get-GpuApplicationPath {
+    param([Parameter(Mandatory = $true)][string]$Name)
+    if ($Name -cne 'bcdedit.exe') { throw "TEST MOCK DENIED: unexpected executable lookup: $Name" }
+    return 'fixture-bcdedit.exe'
+}
+
+function Assert-GpuBackupState {
+    param([object]$State)
+}
+
+function Get-GpuEspMount {
+    param([string]$ActionDirectory)
+    if ($script:GpuFinalVerifyFixtureMounted) { throw 'Fixture ESP was already mounted.' }
+    $script:GpuFinalVerifyFixtureMounted = $true
+    $script:GpuFinalVerifyFixtureMountCount++
+    return $script:GpuFinalVerifyFixtureScenario.MountedEsp
+}
+
+function Assert-GpuMountedEspMatchesBackup {
+    param([object]$MountedEsp, [object]$Backup, [string]$Description)
+    return [pscustomobject]@{ Sha256 = [string]$Backup.BootManagerSha256 }
+}
+
+function Dismount-GpuEspMount {
+    param([string]$ActionDirectory)
+    if (-not $script:GpuFinalVerifyFixtureMounted) { throw 'Fixture attempted to dismount an ESP it did not mount.' }
+    $script:GpuFinalVerifyFixtureMounted = $false
+    $script:GpuFinalVerifyFixtureDismountCount++
+}
+
+function Invoke-GpuNativeCommand {
+    param(
+        [Parameter(Mandatory = $true)][string]$Program,
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [Parameter(Mandatory = $true)][string]$ActionDirectory,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [int[]]$AllowedExitCodes = @(0)
+    )
+    if ($Label -ceq 'post-disarm-absent-health') {
+        $stdoutPath = Join-Path $ActionDirectory 'fixture-post-disarm-health.stdout.txt'
+        $stderrPath = Join-Path $ActionDirectory 'fixture-post-disarm-health.stderr.txt'
+        [System.IO.File]::WriteAllText($stdoutPath, "UEFI_HYPERVISOR_WINDOWS_CPU:0:0:ABSENT`r`nUEFI_HYPERVISOR_WINDOWS_CPUID:ABSENT`r`n")
+        [System.IO.File]::WriteAllText($stderrPath, '')
+        return [pscustomobject]@{ Succeeded = $true; ExitCode = 0; StdoutPath = $stdoutPath; StderrPath = $stderrPath; ReceiptPath = $stdoutPath }
+    }
+    if ($Label -ceq 'firmware-enumeration-final') {
+        [void]$script:GpuFinalVerifyFixtureFirmwareMountStates.Add([bool]$script:GpuFinalVerifyFixtureMounted)
+        $stdoutPath = Join-Path $ActionDirectory 'fixture-firmware-final.stdout.txt'
+        $stderrPath = Join-Path $ActionDirectory 'fixture-firmware-final.stderr.txt'
+        $text = if ($script:GpuFinalVerifyFixtureMounted) {
+            [string]$script:GpuFinalVerifyFixtureScenario.FirmwareTextWhenMounted
+        }
+        else {
+            $alternate = [string]$script:GpuFinalVerifyFixtureScenario.FirmwareTextWhenUnmounted
+            if ([string]::IsNullOrEmpty($alternate)) { $alternate = "device partition=\Device\HarddiskVolume2`r`n" }
+            $alternate
+        }
+        [System.IO.File]::WriteAllText($stdoutPath, $text)
+        [System.IO.File]::WriteAllText($stderrPath, '')
+        $succeeded = [bool]$script:GpuFinalVerifyFixtureScenario.FirmwareNativeSucceeded
+        return [pscustomobject]@{
+            Succeeded = $succeeded
+            ExitCode = if ($succeeded) { 0 } else { 1 }
+            StdoutPath = $stdoutPath
+            StderrPath = $stderrPath
+            ReceiptPath = $stdoutPath
+        }
+    }
+    throw "TEST MOCK DENIED: unexpected native command label: $Label"
+}
+'@
+    $source = @(
+        'Set-StrictMode -Version 2.0'
+        $stateDefinitions
+        $platformDefinitions
+        $fixtureDefinitions
+        "Export-ModuleMember -Function 'Invoke-GpuFinalVerify','Set-GpuFinalVerifyFixtureScenario','Get-GpuFinalVerifyFixtureObservations'"
+    ) -join "`r`n"
+    $fixtureModule = New-Module -Name ('GpuFinalVerifyFixture' + [guid]::NewGuid().ToString('N')) `
+        -ScriptBlock ([scriptblock]::Create($source))
+    Import-Module -ModuleInfo $fixtureModule -Force -ErrorAction Stop
+    return $fixtureModule
+}
+
 $workspaceRoot = Split-Path -Parent (Split-Path -Parent $ToolRoot)
 $scratchParent = Join-Path $workspaceRoot '.codex-build\gpu-host-platform-tests'
 $null = Assert-GpuPathWithin -Path $scratchParent -Root $workspaceRoot
@@ -474,10 +645,27 @@ $null = Assert-GpuPathWithin -Path $runRoot -Root $scratchParent
 $junctionPath = $null
 $isolatedModule = $null
 $bcdExportFixtureModule = $null
+$finalVerifyFixtureModule = $null
 
 try {
     $isolatedModule = New-PlatformHelperModule -ModulePath $platformPath -StatePath $stateModulePath
     $bcdExportFixtureModule = New-GpuSystemBcdExportFixtureModule -ModulePath $platformPath -StatePath $stateModulePath
+    $finalVerifyFixtureModule = New-GpuFinalVerifyFixtureModule -ModulePath $platformPath -StatePath $stateModulePath
+
+    Invoke-PlatformTestCase 'Repeated disarm preserves the original reset boundary only for an already disarmed run' {
+        Assert-PlatformEqual 'boot-current' `
+            (Get-GpuDisarmBoundaryBootId -State ([pscustomobject]@{ Phase = 'Signed'; DisarmedBootId = 'boot-old' }) -CurrentBootId 'boot-current') `
+            'A new activation phase reused a stale disarm boundary.'
+        Assert-PlatformEqual 'boot-original-disarm' `
+            (Get-GpuDisarmBoundaryBootId -State ([pscustomobject]@{ Phase = 'Disarmed'; DisarmedBootId = 'boot-original-disarm' }) -CurrentBootId 'boot-after-reset') `
+            'Repeated disarm replaced the original reset boundary.'
+        Assert-PlatformEqual 'boot-current' `
+            (Get-GpuDisarmBoundaryBootId -State ([pscustomobject]@{ Phase = 'Disarmed'; DisarmedBootId = '' }) -CurrentBootId 'boot-current') `
+            'A disarmed run without a saved boundary did not establish the current boot ID.'
+        Assert-PlatformEqual 'boot-current' `
+            (Get-GpuDisarmBoundaryBootId -State ([pscustomobject]@{ Phase = 'Prepared' }) -CurrentBootId 'boot-current') `
+            'A state without a saved boundary did not use the current boot ID.'
+    }
 
     Invoke-PlatformTestCase 'Pinned certificate DER and CurrentUser private-key check use the intended store path' {
         $fixtureSourceRoot = Join-Path $runRoot 'certificate-source'
@@ -1226,6 +1414,99 @@ catch {
         Assert-PlatformThrows {
             Assert-GpuSystemBcdBackup -Backup $backup -Manifest $manifest -RecoveryRunDirectory $recoveryDirectory
         } 'Validator accepted a missing external system BCD export.' 'does not exist|not found|missing'
+    }
+
+    Invoke-PlatformTestCase 'Final verification compares firmware with the ESP mounted and always releases it' {
+        $baselinePath = Join-Path $runRoot 'final-verify-firmware-baseline.txt'
+        $baselineText = "Windows Boot Manager`r`ndevice partition=S:`r`ndisplayorder {A} {B}`r`n"
+        [System.IO.File]::WriteAllText($baselinePath, $baselineText)
+        $baselinePin = Get-GpuFilePin -Path $baselinePath
+        $probePath = Join-Path $runRoot 'final-verify-probe.exe'
+        [System.IO.File]::WriteAllBytes($probePath, [byte[]]@(1, 2, 3, 4))
+        $probePin = Get-GpuFilePin -Path $probePath
+        $mountedEsp = [pscustomobject]@{
+            Volume = '\\?\Volume{11111111-2222-3333-4444-555555555555}\'
+            DiskNumber = 1
+            PartitionGuid = '{AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}'
+        }
+        $backup = [pscustomobject]@{
+            FirmwareEnumeration = $baselinePin
+            BootManagerSha256 = ('A' * 64)
+            EspVolume = $mountedEsp.Volume
+            EspDiskNumber = $mountedEsp.DiskNumber
+            EspPartitionGuid = $mountedEsp.PartitionGuid
+        }
+        $state = [pscustomobject]@{
+            Host = [pscustomobject]@{ LogicalCpus = 1 }
+            EverArmIntent = $true
+            DisarmedBootId = 'boot-before-reset'
+            Tools = [pscustomobject]@{ Probe = $probePin }
+            Backup = $backup
+        }
+        $current = [pscustomobject]@{ BootId = 'boot-after-reset'; SecureBoot = $true; LogicalCpus = 1 }
+        $unmountedText = "Windows Boot Manager`r`ndevice partition=\Device\HarddiskVolume2`r`ndisplayorder {A} {B}`r`n"
+        $scenarios = @(
+            [pscustomobject]@{
+                Name = 'healthy-mounted-comparison'
+                FirmwareTextWhenMounted = $baselineText
+                FirmwareTextWhenUnmounted = $unmountedText
+                FirmwareNativeSucceeded = $true
+                ExpectedSucceeded = $true
+                ExpectedTextEqual = $true
+                ExpectedStatus = 'FINAL_RESET_VERIFIED_GPU_UNATTESTED'
+            }
+            [pscustomobject]@{
+                Name = 'changed-firmware-order'
+                FirmwareTextWhenMounted = "Windows Boot Manager`r`ndevice partition=S:`r`ndisplayorder {B} {A}`r`n"
+                FirmwareTextWhenUnmounted = $unmountedText
+                FirmwareNativeSucceeded = $true
+                ExpectedSucceeded = $false
+                ExpectedTextEqual = $false
+                ExpectedStatus = 'FINAL_VERIFY_FAILED_GPU_UNATTESTED'
+            }
+            [pscustomobject]@{
+                Name = 'native-enumeration-failure'
+                FirmwareTextWhenMounted = $baselineText
+                FirmwareTextWhenUnmounted = $unmountedText
+                FirmwareNativeSucceeded = $false
+                ExpectedSucceeded = $false
+                ExpectedTextEqual = $null
+                ExpectedStatus = 'FINAL_VERIFY_FAILED_GPU_UNATTESTED'
+            }
+        )
+
+        foreach ($scenarioCase in $scenarios) {
+            $actionDirectory = Join-Path $runRoot ('final-verify-action-' + $scenarioCase.Name)
+            [void](New-Item -ItemType Directory -Path $actionDirectory -Force)
+            $scenario = [pscustomobject]@{
+                Current = $current
+                ProbePin = $probePin
+                PreflightValid = $true
+                MountedEsp = $mountedEsp
+                FirmwareTextWhenMounted = [string]$scenarioCase.FirmwareTextWhenMounted
+                FirmwareTextWhenUnmounted = [string]$scenarioCase.FirmwareTextWhenUnmounted
+                FirmwareNativeSucceeded = [bool]$scenarioCase.FirmwareNativeSucceeded
+            }
+            Set-GpuFinalVerifyFixtureScenario $scenario
+            $result = Invoke-GpuFinalVerify -State $state -ActionDirectory $actionDirectory
+            $observations = Get-GpuFinalVerifyFixtureObservations
+
+            Assert-PlatformEqual ([bool]$scenarioCase.ExpectedSucceeded) ([bool]$result.Succeeded) "Final verification success differs for $($scenarioCase.Name)."
+            Assert-PlatformEqual ([string]$scenarioCase.ExpectedStatus) ([string]$result.Status) "Final verification status differs for $($scenarioCase.Name)."
+            Assert-PlatformEqual 1 $observations.MountCount "Final verification mounted the ESP an unexpected number of times for $($scenarioCase.Name)."
+            Assert-PlatformEqual 1 $observations.DismountCount "Final verification did not unmount exactly once for $($scenarioCase.Name)."
+            Assert-PlatformTrue (-not [bool]$observations.Mounted) "Final verification left the ESP mounted after $($scenarioCase.Name)."
+            Assert-PlatformEqual 1 $observations.FirmwareEnumerationMounted.Count "Final verification did not enumerate firmware exactly once for $($scenarioCase.Name)."
+            Assert-PlatformTrue ([bool]$observations.FirmwareEnumerationMounted[0]) "Firmware enumeration ran after unmount for $($scenarioCase.Name)."
+            if ($null -ne $scenarioCase.ExpectedTextEqual) {
+                Assert-PlatformEqual ([bool]$scenarioCase.ExpectedTextEqual) ([bool]$result.FinalVerification.FirmwareEnumeration.TextEqual) `
+                    "Firmware text comparison differs for $($scenarioCase.Name)."
+            }
+            if ($scenarioCase.Name -ceq 'healthy-mounted-comparison') {
+                Assert-PlatformEqual 'SystemEspMountedAtS' ([string]$result.FinalVerification.FirmwareEnumeration.CaptureContext) `
+                    'Firmware comparison omitted its mounted capture context.'
+            }
+        }
     }
 
     Invoke-PlatformTestCase 'Stage readback validates all five owned files and detects payload drift' {

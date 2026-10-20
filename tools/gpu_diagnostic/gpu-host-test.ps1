@@ -342,7 +342,8 @@ try {
         Phase=$State.Phase; ActionDirectory=$ActionDirectory
         Details=$Result; AutomaticReboot=$false; NativeGpuIsolationAttested=$false
     }
-    if ($Action -eq 'Rollback' -and $State.EverArmIntent) {
+    $ResetAlreadyObserved = ($null -ne $Result.PSObject.Properties['ResetBoundaryPassed'] -and [bool]$Result.ResetBoundaryPassed)
+    if ($Action -eq 'Rollback' -and $State.EverArmIntent -and -not $ResetAlreadyObserved) {
         $Receipt.Status = 'RECOVERY_PENDING_USER_POWER_CYCLE'
     }
     Write-GpuJson -Path (Join-Path $ActionDirectory 'result.json') -Value $Receipt -NoOverwrite

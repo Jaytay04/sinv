@@ -1714,6 +1714,17 @@ function Invoke-GpuCollect {
     })
 }
 
+function Get-GpuDisarmBoundaryBootId {
+    param([object]$State, [string]$CurrentBootId)
+
+    $previous = [string](Get-GpuObjectProperty -Object $State -Name 'DisarmedBootId')
+    $phase = [string](Get-GpuObjectProperty -Object $State -Name 'Phase')
+    # Recovery retries cannot re-arm a Disarmed run. Keep its first successful
+    # cleanup boundary so a failed verification does not require another reset.
+    if ($phase -ceq 'Disarmed' -and -not [string]::IsNullOrWhiteSpace($previous)) { return $previous }
+    return $CurrentBootId
+}
+
 function Invoke-GpuDisarm {
     param([object]$State, [string]$ActionDirectory)
 
@@ -1725,9 +1736,10 @@ function Invoke-GpuDisarm {
     if ($null -eq $backup) {
         $status = 'DISARMED_NO_ACTIVATION'
         if ([bool](Get-GpuObjectProperty -Object $State -Name 'EverArmIntent' -Default $false)) { $status = 'DISARMED_NO_RECORDED_FIRMWARE_TARGET' }
-        Set-GpuStateProperty -Object $State -Name 'DisarmedBootId' -Value ([string]$current.BootId)
+        $disarmedBootId = Get-GpuDisarmBoundaryBootId -State $State -CurrentBootId ([string]$current.BootId)
+        Set-GpuStateProperty -Object $State -Name 'DisarmedBootId' -Value $disarmedBootId
         return New-GpuPlatformResult -Status $status -Succeeded ([bool]($status -eq 'DISARMED_NO_ACTIVATION')) -Data ([ordered]@{
-            DisarmedBootId = [string]$current.BootId
+            DisarmedBootId = $disarmedBootId
             InstallerInvoked = $false
             Detail = 'No recorded ESP target exists; no firmware entry was guessed or changed.'
         })
@@ -1758,15 +1770,19 @@ function Invoke-GpuDisarm {
     finally {
         if ($ownedMount) { Dismount-GpuEspMount -ActionDirectory $ActionDirectory }
     }
-    $disarmedBootId = [string]$current.BootId
+    $disarmedBootId = Get-GpuDisarmBoundaryBootId -State $State -CurrentBootId ([string]$current.BootId)
     Set-GpuStateProperty -Object $State -Name 'DisarmedBootId' -Value $disarmedBootId
     $firmware = Invoke-GpuNativeCommand -Program (Get-GpuApplicationPath 'bcdedit.exe') -Arguments @('/enum', 'firmware', '/v') -ActionDirectory $ActionDirectory -Label 'firmware-enumeration-disarmed'
     Assert-GpuNativeSuccess -Result $firmware -Description 'Post-disarm firmware enumeration'
     $everArm = [bool](Get-GpuObjectProperty -Object $State -Name 'EverArmIntent' -Default $false)
+    $resetBoundaryPassed = ($everArm -and -not [string]::Equals($disarmedBootId, [string]$current.BootId, [StringComparison]::Ordinal))
     $status = 'DISARMED_NO_ACTIVATION'
-    if ($everArm) { $status = 'DISARMED_RESET_REQUIRED' }
+    if ($resetBoundaryPassed) { $status = 'DISARMED_RESET_OBSERVED' }
+    elseif ($everArm) { $status = 'DISARMED_RESET_REQUIRED' }
     return New-GpuPlatformResult -Status $status -Succeeded $true -Data ([ordered]@{
         DisarmedBootId = $disarmedBootId
+        CurrentBootId = [string]$current.BootId
+        ResetBoundaryPassed = [bool]$resetBoundaryPassed
         InstallerReceipt = $off.ReceiptPath
         FirmwareEnumerationReceipt = $firmware.ReceiptPath
         RuntimeHandback = $false
@@ -1847,6 +1863,33 @@ function Invoke-GpuFinalVerify {
                 BootManagerSha256 = [string]$bootManager.Sha256
                 MatchesBaseline = $true
             }
+            # Backup records bcdedit output with the system ESP mounted at S:.
+            # Capture in the same state: an unmounted ESP is instead printed as
+            # \Device\HarddiskVolumeN, making a byte comparison fail spuriously.
+            # Keep the complete text comparison, including every boot entry.
+            try {
+                $firmwareNow = Invoke-GpuNativeCommand -Program (Get-GpuApplicationPath 'bcdedit.exe') -Arguments @('/enum', 'firmware', '/v') -ActionDirectory $ActionDirectory -Label 'firmware-enumeration-final'
+                if (-not $firmwareNow.Succeeded) { throw "bcdedit failed with exit $($firmwareNow.ExitCode)." }
+                $currentPin = Get-GpuFilePin -Path $firmwareNow.StdoutPath
+                $baselinePin = Get-GpuObjectProperty -Object $backup -Name 'FirmwareEnumeration'
+                $baselineText = $null
+                if ($null -ne $baselinePin) {
+                    Assert-GpuFilePin -Pin $baselinePin
+                    $baselineText = [System.IO.File]::ReadAllText([string]$baselinePin.Path)
+                }
+                $currentText = [System.IO.File]::ReadAllText([string]$firmwareNow.StdoutPath)
+                $firmwareComparison = [pscustomobject]@{
+                    BaselineSha256 = if ($null -ne $baselinePin) { [string]$baselinePin.Sha256 } else { $null }
+                    CurrentSha256 = [string]$currentPin.Sha256
+                    TextEqual = if ($null -ne $baselineText) { [string]::Equals($baselineText, $currentText, [StringComparison]::Ordinal) } else { $null }
+                    CaptureContext = 'SystemEspMountedAtS'
+                    Meaning = 'Textual bcdedit enumeration comparison with the system ESP mounted at S: for both captures; not a raw firmware-variable attestation.'
+                }
+                if ($null -ne $baselineText -and -not [bool]$firmwareComparison.TextEqual) {
+                    $errors.Add('Firmware enumeration differs from the saved textual baseline.')
+                }
+            }
+            catch { $errors.Add("Firmware enumeration comparison: $($_.Exception.Message)") }
         }
         catch { $errors.Add("Final ESP/boot-manager verification: $($_.Exception.Message)") }
         finally {
@@ -1856,28 +1899,6 @@ function Invoke-GpuFinalVerify {
             }
         }
 
-        try {
-            $firmwareNow = Invoke-GpuNativeCommand -Program (Get-GpuApplicationPath 'bcdedit.exe') -Arguments @('/enum', 'firmware', '/v') -ActionDirectory $ActionDirectory -Label 'firmware-enumeration-final'
-            if (-not $firmwareNow.Succeeded) { throw "bcdedit failed with exit $($firmwareNow.ExitCode)." }
-            $currentPin = Get-GpuFilePin -Path $firmwareNow.StdoutPath
-            $baselinePin = Get-GpuObjectProperty -Object $backup -Name 'FirmwareEnumeration'
-            $baselineText = $null
-            if ($null -ne $baselinePin) {
-                Assert-GpuFilePin -Pin $baselinePin
-                $baselineText = [System.IO.File]::ReadAllText([string]$baselinePin.Path)
-            }
-            $currentText = [System.IO.File]::ReadAllText([string]$firmwareNow.StdoutPath)
-            $firmwareComparison = [pscustomobject]@{
-                BaselineSha256 = if ($null -ne $baselinePin) { [string]$baselinePin.Sha256 } else { $null }
-                CurrentSha256 = [string]$currentPin.Sha256
-                TextEqual = if ($null -ne $baselineText) { [string]::Equals($baselineText, $currentText, [StringComparison]::Ordinal) } else { $null }
-                Meaning = 'Textual bcdedit enumeration comparison only; not a raw firmware-variable attestation.'
-            }
-            if ($null -ne $baselineText -and -not [bool]$firmwareComparison.TextEqual) {
-                $errors.Add('Firmware enumeration differs from the saved textual baseline.')
-            }
-        }
-        catch { $errors.Add("Firmware enumeration comparison: $($_.Exception.Message)") }
     }
     elseif ($everArm) { $errors.Add('Recorded ESP backup identity is unavailable after Arm.') }
 

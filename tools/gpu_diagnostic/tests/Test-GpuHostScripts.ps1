@@ -206,10 +206,25 @@ function Invoke-GpuHostPlatformAction {
             VerifiedUtc = [DateTime]::UtcNow.ToString('o')
         }
     }
+    if ($Action -eq 'Disarm' -and $env:GPU_FIXTURE_DISARMED_BOOT_ID) {
+        $State.DisarmedBootId = $env:GPU_FIXTURE_DISARMED_BOOT_ID
+    }
     $line = '{0}|{1}|{2}' -f $Action, $State.InProgress.Action, $State.Phase
     [IO.File]::AppendAllText($env:GPU_FIXTURE_PLATFORM_LOG, $line + [Environment]::NewLine)
     if ($env:GPU_FIXTURE_FAIL_ACTION -and $env:GPU_FIXTURE_FAIL_ACTION -ceq $Action) {
         throw "FIXTURE_INJECTED_FAILURE:$Action"
+    }
+    if ($Action -eq 'Disarm') {
+        $result = [ordered]@{
+            Succeeded = $true
+            Status = if ($env:GPU_FIXTURE_RESET_MARKER -ceq 'true') { 'DISARMED_RESET_OBSERVED' } else { 'DISARMED_RESET_REQUIRED' }
+            FixtureOnly = $true
+            PersistedIntent = $diskState.InProgress.Action
+            ArmIntentLatched = [bool]$diskState.EverArmIntent
+        }
+        if ($env:GPU_FIXTURE_RESET_MARKER -ceq 'true') { $result.ResetBoundaryPassed = $true }
+        elseif ($env:GPU_FIXTURE_RESET_MARKER -ceq 'false') { $result.ResetBoundaryPassed = $false }
+        return [pscustomobject]$result
     }
     return [pscustomobject]@{
         Succeeded = $true
@@ -290,7 +305,8 @@ function Invoke-GpuFixtureAction {
         [object]$Fixture,
         [string]$Action,
         [string]$FailPlatformAction,
-        [string]$RunDirectory
+        [string]$RunDirectory,
+        [hashtable]$AdditionalEnvironment = @{}
     )
     $arguments = @('-ToolRoot', $Fixture.ToolRoot, '-Action', $Action, '-WorkspaceRoot', $Fixture.WorkspaceRoot)
     if ($RunDirectory) { $arguments += @('-RunDirectory', $RunDirectory) }
@@ -301,6 +317,9 @@ function Invoke-GpuFixtureAction {
         GPU_FIXTURE_GIT_LOG = $Fixture.GitLog
         GPU_FIXTURE_PLATFORM_LOG = $Fixture.PlatformLog
         GPU_FIXTURE_FAIL_ACTION = $FailPlatformAction
+    }
+    foreach ($name in $AdditionalEnvironment.Keys) {
+        $environment[$name] = $AdditionalEnvironment[$name]
     }
     return Invoke-PreviewChild -ScriptPath $Fixture.HarnessPath -ScriptArguments $arguments -Environment $environment
 }
@@ -940,6 +959,60 @@ try {
         Assert-True ($null -eq $recovered.InProgress) 'Rollback recovery left an in-progress action.'
         $calls = @(Get-GpuFixturePlatformCalls -Fixture $fixture)
         Assert-True ($calls[-1] -match '^Disarm\|Rollback\|BackedUp$') 'Rollback was not mapped to fixture Disarm after persisting Rollback intent.'
+    }
+
+    Invoke-TestCase 'Rollback preserves an observed reset boundary and permits FinalVerify' {
+        $fixture = New-GpuDispatcherFixture -Parent $runRoot -Name 'rollback-reset-observed'
+        foreach ($action in @('Prepare', 'Build', 'Sign', 'Backup', 'Stage', 'Arm')) {
+            $null = Assert-GpuFixtureActionSucceeded -Fixture $fixture -Action $action
+        }
+
+        $firstDisarm = Invoke-GpuFixtureAction -Fixture $fixture -Action Disarm -AdditionalEnvironment @{
+            GPU_FIXTURE_RESET_MARKER = 'false'
+            GPU_FIXTURE_DISARMED_BOOT_ID = 'boot-first-disarm'
+        }
+        Assert-Equal 0 $firstDisarm.ExitCode "Initial fixture Disarm failed: $($firstDisarm.StdErr)"
+        $beforeRollback = Get-GpuFixtureJournal -Fixture $fixture
+        Assert-Equal 'Disarmed' $beforeRollback.Phase 'Initial fixture Disarm did not reach Disarmed.'
+        Assert-Equal 'boot-first-disarm' $beforeRollback.DisarmedBootId 'Initial fixture disarm boundary was not recorded.'
+
+        $rollback = Invoke-GpuFixtureAction -Fixture $fixture -Action Rollback -AdditionalEnvironment @{
+            GPU_FIXTURE_RESET_MARKER = 'true'
+        }
+        Assert-Equal 0 $rollback.ExitCode "Rollback failed after the reset boundary was observed: $($rollback.StdErr)"
+        $receipt = $rollback.StdOut | ConvertFrom-Json
+        Assert-Equal 'DISARMED_RESET_OBSERVED' $receipt.Status 'Rollback replaced the successful reset-observed status with a power-cycle-pending status.'
+        Assert-True ([bool]$receipt.Details.ResetBoundaryPassed) 'Rollback receipt omitted the reset-boundary evidence.'
+        $afterRollback = Get-GpuFixtureJournal -Fixture $fixture
+        Assert-Equal 'Disarmed' $afterRollback.Phase 'Successful Rollback did not remain in Disarmed.'
+        Assert-Equal 'boot-first-disarm' $afterRollback.DisarmedBootId 'Rollback overwrote the original disarm boot boundary.'
+
+        $finalVerify = Invoke-GpuFixtureAction -Fixture $fixture -Action FinalVerify
+        Assert-Equal 0 $finalVerify.ExitCode "FinalVerify was blocked after reset-observed Rollback: $($finalVerify.StdErr)"
+        $completed = Get-GpuFixtureJournal -Fixture $fixture
+        Assert-Equal 'Complete' $completed.Phase 'FinalVerify did not complete after reset-observed Rollback.'
+        Assert-Equal 'boot-first-disarm' $completed.DisarmedBootId 'FinalVerify changed the saved disarm reset boundary.'
+    }
+
+    Invoke-TestCase 'Rollback keeps the power-cycle pending status when reset evidence is false or absent' {
+        foreach ($marker in @('false', 'absent')) {
+            $fixture = New-GpuDispatcherFixture -Parent $runRoot -Name ('rollback-reset-' + $marker)
+            foreach ($action in @('Prepare', 'Build', 'Sign', 'Backup', 'Stage', 'Arm')) {
+                $null = Assert-GpuFixtureActionSucceeded -Fixture $fixture -Action $action
+            }
+            $rollback = Invoke-GpuFixtureAction -Fixture $fixture -Action Rollback -AdditionalEnvironment @{
+                GPU_FIXTURE_RESET_MARKER = $marker
+            }
+            Assert-Equal 0 $rollback.ExitCode "Rollback with '$marker' reset evidence failed: $($rollback.StdErr)"
+            $receipt = $rollback.StdOut | ConvertFrom-Json
+            Assert-Equal 'RECOVERY_PENDING_USER_POWER_CYCLE' $receipt.Status "Rollback did not preserve the pending status for '$marker' reset evidence."
+            if ($marker -eq 'false') {
+                Assert-Equal $false ([bool]$receipt.Details.ResetBoundaryPassed) 'Explicit false reset evidence was not retained.'
+            }
+            else {
+                Assert-True ($null -eq $receipt.Details.PSObject.Properties['ResetBoundaryPassed']) 'Absent reset evidence was synthesized as present.'
+            }
+        }
     }
 
     Invoke-TestCase 'Hermetic dispatcher rejects source-pin drift before platform execution' {

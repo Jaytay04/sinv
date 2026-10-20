@@ -1,6 +1,6 @@
 # Intel UHD 770 diagnostic scanout: bare-metal test runbook
 
-This runbook follows the script-per-action format in [`COMBINED_HOST_RUNBOOK.md`](spoof-handoff/docs/COMBINED_HOST_RUNBOOK.md). It uses a separate one-time, reboot-bounded GPU workflow. The physical test has **not** been run. The Windows VM passed its EFI boot, actual root WC render/drain/unmap, and synthetic GPU model checks, but it had no Intel GPU; it does not prove host scanout, GPU DMA isolation, or the Intel-excluded/NVIDIA-primary topology.
+This runbook follows the script-per-action format in [`COMBINED_HOST_RUNBOOK.md`](spoof-handoff/docs/COMBINED_HOST_RUNBOOK.md). It uses a separate one-time, reboot-bounded GPU workflow. The first physical attempt, run `gpu-20261020T031023Z-9a2a92a17bf54b4faf4b60c6b7231ec7`, returned to Windows with `replay=ABORTED`, `payload=FAILED`, and the test hypervisor `ABSENT` on all 20 CPUs. Secure Boot remained enabled and the Windows Boot Manager hash matched its baseline. The payload failure cause is unresolved; this build attempts its payload independently of replay, so the replay verdict alone does not explain the launch failure. Physical scanout and GPU isolation remain unverified. The Windows VM passed its EFI boot, actual root WC render/drain/unmap, and synthetic GPU model checks, but it had no Intel GPU; it does not prove host scanout, GPU DMA isolation, or the Intel-excluded/NVIDIA-primary topology.
 
 The VM is the default validation machine. Keep the full directory containing `C:\Users\jayli\OneDrive\Documents\Projects\hsinv\.codex-build\gpu_windows_vm\run-01\standalone\hsinv-Windows-25H2.vmx`, including its disks, snapshots, NVRAM, and vTPM, at its current location.
 
@@ -140,6 +140,8 @@ After normal Windows startup, verify that the test hypervisor health result is a
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 FinalVerify
 ```
 
+FinalVerify captures the textual firmware enumeration while its verified system ESP is still mounted at `S:`, matching Backup's capture context. It compares the complete text without replacing device aliases or ignoring changed entries. This avoids a false mismatch between `partition=S:` and the unmounted `partition=\Device\HarddiskVolumeN` display of the same ESP. The existing ESP identity, boot-manager hash, recovery-file, Secure Boot, and CPU checks remain required.
+
 Only a successful `FinalVerify` records `Complete`. Keep the journal, action receipts, external recovery copy, logs, and photographs. If preparing another test later, archive the selector only after that verified Complete endpoint:
 
 ```powershell
@@ -170,6 +172,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees
 ```
 
 Rollback does not automatically power-cycle the machine. After an Arm intent, it can return `RECOVERY_PENDING_USER_POWER_CYCLE`; follow the recorded recovery result, shut down/power-cycle manually, and run `FinalVerify` only where the action state permits it. Rollback does not remove staged ESP files automatically. Do not delete them recursively; preserve them for exact, reviewed cleanup.
+
+If FinalVerify fails, preserve its receipts and use Rollback before retrying verification. Repeating recovery for an already `Disarmed` run rechecks owned boot-state cleanup while preserving the original `DisarmedBootId`. If the recorded boot identifier has changed since that successful disarm, it reports `DISARMED_RESET_OBSERVED`; another reset is not required solely because verification failed. An initial disarm or a run that has not crossed its reset boundary still requires a full shutdown/power cycle. No journal edits or automatic retry bypass this sequence.
 
 If Prepare, Build, Sign, or Backup failed and the saved run has neither an Arm intent nor an ESP backup, rollback reports `DISARMED_NO_ACTIVATION` without invoking the installer or mounting the ESP. After a failed Backup that acquired the temporary ESP mount, first require a successful `unmount-owned-system-esp` receipt and verify the owned `S:` mapping is gone. If cleanup failed, preserve the receipts and stop for reviewed mount recovery; do not remove an unrelated assignment. When the probe has been built and pinned, FinalVerify requires its per-CPU `ABSENT` result; an unbuilt probe is allowed only for an earlier abort. Close that exact run with the following checks, one successful action at a time:
 
