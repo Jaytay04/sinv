@@ -199,13 +199,6 @@ function Invoke-GpuHostPlatformAction {
             throw 'Fixture Prepare published a selector for a different run.'
         }
     }
-    if ($Action -eq 'FinalVerify') {
-        $State.FinalVerification = [pscustomobject]@{
-            Succeeded = $true
-            FixtureOnly = $true
-            VerifiedUtc = [DateTime]::UtcNow.ToString('o')
-        }
-    }
     if ($Action -eq 'Disarm' -and $env:GPU_FIXTURE_DISARMED_BOOT_ID) {
         $State.DisarmedBootId = $env:GPU_FIXTURE_DISARMED_BOOT_ID
     }
@@ -213,6 +206,13 @@ function Invoke-GpuHostPlatformAction {
     [IO.File]::AppendAllText($env:GPU_FIXTURE_PLATFORM_LOG, $line + [Environment]::NewLine)
     if ($env:GPU_FIXTURE_FAIL_ACTION -and $env:GPU_FIXTURE_FAIL_ACTION -ceq $Action) {
         throw "FIXTURE_INJECTED_FAILURE:$Action"
+    }
+    if ($Action -eq 'FinalVerify') {
+        $State.FinalVerification = [pscustomobject]@{
+            Succeeded = $true
+            FixtureOnly = $true
+            VerifiedUtc = [DateTime]::UtcNow.ToString('o')
+        }
     }
     if ($Action -eq 'Disarm') {
         $result = [ordered]@{
@@ -606,6 +606,25 @@ try {
         }
     }
 
+    Invoke-TestCase 'FinalVerify retry helper admits only a disarmed interrupted verification or cleanup' {
+        foreach ($interruptedAction in @('FinalVerify', 'Disarm', 'Rollback')) {
+            Assert-True (Test-GpuFinalVerifyRetry -Action FinalVerify -Phase Disarmed -InProgress $interruptedAction) "String in-progress action '$interruptedAction' was not eligible for the read-only retry."
+            Assert-True (Test-GpuFinalVerifyRetry -Action FinalVerify -Phase Disarmed -InProgress ([pscustomobject]@{ Action=$interruptedAction })) "Object in-progress action '$interruptedAction' was not eligible for the read-only retry."
+            Assert-GpuActionAllowed -Action FinalVerify -Phase Disarmed -InProgress ([pscustomobject]@{ Action=$interruptedAction })
+        }
+        foreach ($interruptedAction in @($null, '', 'Build', 'Arm', 'Stage', 'Collect', 'Unknown')) {
+            Assert-True (-not (Test-GpuFinalVerifyRetry -Action FinalVerify -Phase Disarmed -InProgress $interruptedAction)) "In-progress action '$interruptedAction' was incorrectly eligible for retry."
+        }
+        foreach ($action in @('Build', 'Sign', 'Backup', 'Stage', 'Arm', 'Collect', 'Rollback', 'Archive')) {
+            Assert-True (-not (Test-GpuFinalVerifyRetry -Action $action -Phase Disarmed -InProgress 'Rollback')) "Action '$action' was incorrectly eligible for FinalVerify retry."
+        }
+        foreach ($phase in @('Preparing', 'Prepared', 'Built', 'Signed', 'BackedUp', 'Staged', 'Armed', 'Collected', 'Complete')) {
+            Assert-True (-not (Test-GpuFinalVerifyRetry -Action FinalVerify -Phase $phase -InProgress 'Rollback')) "Phase '$phase' was incorrectly eligible for FinalVerify retry."
+            Assert-Throws { Assert-GpuActionAllowed -Action FinalVerify -Phase $phase -InProgress 'Rollback' } "FinalVerify retry was allowed from $phase."
+        }
+        Assert-True (-not (Test-GpuFinalVerifyRetry -Action FinalVerify -Phase Disarmed -InProgress $null)) 'A retry without interrupted evidence was incorrectly identified as a retry.'
+    }
+
     Invoke-TestCase 'Action state machine rejects unknown phase and action values' {
         Assert-Throws { Assert-GpuActionAllowed -Action Build -Phase Unknown } 'An unknown phase was accepted.'
         Assert-Throws { Assert-GpuActionAllowed -Action Unknown -Phase Prepared } 'An unknown action was accepted.'
@@ -733,6 +752,7 @@ try {
         Assert-True ($intentAt -gt $actionDirectoryAt -and $saveAfterIntentAt -gt $intentAt -and $platformAt -gt $saveAfterIntentAt) 'In-progress intent is not saved before the platform call.'
         Assert-True ($armLatchAt -gt $intentAt -and $armLatchAt -lt $saveAfterIntentAt) 'Arm ownership latch is not persisted with the initial intent.'
         Assert-True ($dispatcherText -match '(?is)\$State\.InProgress\s*-and\s*\$Action\s*-notin\s*@\(\x27Status\x27,\x27Disarm\x27,\x27Rollback\x27\)') 'Interrupted-action guard does not allow recovery/status actions.'
+        Assert-True ($dispatcherText -match '(?is)Test-GpuFinalVerifyRetry\s+-Action\s+\$Action\s+-Phase\s+\$State\.Phase\s+-InProgress\s+\$State\.InProgress') 'Interrupted-action guard does not use the narrow FinalVerify retry predicate.'
     }
 
     Invoke-TestCase 'Failure handling preserves journal evidence and keeps recovery actions reachable' {
@@ -785,7 +805,7 @@ try {
             'Get-GpuCanonicalPath', 'Get-GpuPathComparisonValue', 'Get-GpuSourceCommit', 'Get-GpuStatus',
             'Get-Item', 'Import-Module', 'Invoke-GpuHostPlatformAction', 'Join-Path',
             'New-Item', 'New-Object', 'Read-GpuJson', 'Remove-Item', 'Save-GpuJournal', 'Set-StrictMode',
-            'Split-Path', 'Test-GpuReparsePoint', 'Test-Path', 'Write-GpuJson',
+            'Split-Path', 'Test-GpuFinalVerifyRetry', 'Test-GpuReparsePoint', 'Test-Path', 'Write-GpuJson',
             'Write-Warning', 'git'
         )
         foreach ($path in @(
@@ -1013,6 +1033,124 @@ try {
                 Assert-True ($null -eq $receipt.Details.PSObject.Properties['ResetBoundaryPassed']) 'Absent reset evidence was synthesized as present.'
             }
         }
+    }
+
+    Invoke-TestCase 'Hermetic dispatcher retries failed FinalVerify directly and preserves its intent' {
+        $fixture = New-GpuDispatcherFixture -Parent $runRoot -Name 'final-verify-retry'
+        foreach ($action in @('Prepare', 'Build', 'Sign', 'Backup', 'Stage', 'Arm')) {
+            $null = Assert-GpuFixtureActionSucceeded -Fixture $fixture -Action $action
+        }
+        $disarm = Invoke-GpuFixtureAction -Fixture $fixture -Action Disarm -AdditionalEnvironment @{
+            GPU_FIXTURE_RESET_MARKER = 'true'
+        }
+        Assert-Equal 0 $disarm.ExitCode "Fixture Disarm failed before FinalVerify retry coverage: $($disarm.StdErr)"
+
+        $failed = Invoke-GpuFixtureAction -Fixture $fixture -Action FinalVerify -FailPlatformAction FinalVerify
+        Assert-True ($failed.ExitCode -ne 0) 'Injected FinalVerify failure unexpectedly succeeded.'
+        Assert-True ($failed.StdErr -match 'FIXTURE_INJECTED_FAILURE:FinalVerify') 'Initial FinalVerify failure reason was lost.'
+        $failedJournal = Get-GpuFixtureJournal -Fixture $fixture
+        Assert-Equal 'Disarmed' $failedJournal.Phase 'Failed FinalVerify changed the Disarmed phase.'
+        Assert-Equal 'FinalVerify' $failedJournal.InProgress.Action 'Failed FinalVerify intent was not retained.'
+        $failedIntent = $failedJournal.InProgress
+        $failedReceiptPath = Join-Path $failedIntent.Directory 'failure.json'
+        Assert-True (Test-Path -LiteralPath $failedReceiptPath -PathType Leaf) 'Failed FinalVerify receipt was not saved.'
+        Assert-Equal 0 @($failedJournal.RecoveryHistory).Count 'Fresh failed FinalVerify unexpectedly changed existing recovery history.'
+        $callsBeforeRetry = @(Get-GpuFixturePlatformCalls -Fixture $fixture)
+
+        $retry = Invoke-GpuFixtureAction -Fixture $fixture -Action FinalVerify
+        Assert-Equal 0 $retry.ExitCode "FinalVerify retry failed: $($retry.StdErr)"
+        $retryJournal = Get-GpuFixtureJournal -Fixture $fixture
+        Assert-Equal 'Complete' $retryJournal.Phase 'Successful FinalVerify retry did not complete the run.'
+        Assert-True ($null -eq $retryJournal.InProgress) 'Successful FinalVerify retry left an intent in progress.'
+        Assert-True ($null -ne $retryJournal.FinalVerification) 'Successful FinalVerify retry did not persist verification evidence.'
+        $retriedIntent = @($retryJournal.RecoveryHistory | Where-Object {
+            $_.Action -ceq 'FinalVerify' -and $_.Directory -ceq $failedIntent.Directory
+        })
+        Assert-Equal 1 $retriedIntent.Count 'Successful retry discarded or duplicated the original failed FinalVerify intent.'
+        Assert-True (Test-Path -LiteralPath $failedReceiptPath -PathType Leaf) 'Successful retry erased the original failure receipt.'
+        $callsAfterRetry = @(Get-GpuFixturePlatformCalls -Fixture $fixture)
+        Assert-Equal ($callsBeforeRetry.Count + 1) $callsAfterRetry.Count 'Successful retry did not make exactly one new platform call.'
+        Assert-True ($callsAfterRetry[-1] -match '^FinalVerify\|FinalVerify\|Disarmed$') 'Retry did not call FinalVerify directly from the disarmed state.'
+        Assert-Equal 1 @($callsAfterRetry | Where-Object { $_ -match '^Disarm\|' }).Count 'FinalVerify retry invoked Disarm again.'
+    }
+
+    Invoke-TestCase 'Hermetic dispatcher retries FinalVerify after failed Disarm or Rollback without cleanup' {
+        foreach ($interruptedAction in @('Disarm', 'Rollback')) {
+            $fixture = New-GpuDispatcherFixture -Parent $runRoot -Name ('final-verify-after-' + $interruptedAction.ToLowerInvariant())
+            foreach ($action in @('Prepare', 'Build', 'Sign', 'Backup', 'Stage', 'Arm')) {
+                $null = Assert-GpuFixtureActionSucceeded -Fixture $fixture -Action $action
+            }
+            $disarm = Invoke-GpuFixtureAction -Fixture $fixture -Action Disarm -AdditionalEnvironment @{
+                GPU_FIXTURE_RESET_MARKER = 'true'
+            }
+            Assert-Equal 0 $disarm.ExitCode "Initial fixture Disarm failed before interrupted $interruptedAction coverage: $($disarm.StdErr)"
+
+            $failedCleanup = Invoke-GpuFixtureAction -Fixture $fixture -Action $interruptedAction -FailPlatformAction Disarm
+            Assert-True ($failedCleanup.ExitCode -ne 0) "Injected $interruptedAction failure unexpectedly succeeded."
+            Assert-True ($failedCleanup.StdErr -match 'FIXTURE_INJECTED_FAILURE:Disarm') "$interruptedAction failure reason was lost."
+            $failedJournal = Get-GpuFixtureJournal -Fixture $fixture
+            Assert-Equal 'Disarmed' $failedJournal.Phase "$interruptedAction failure changed the existing Disarmed phase."
+            Assert-Equal $interruptedAction $failedJournal.InProgress.Action "$interruptedAction failure intent was not retained."
+            $failedIntent = $failedJournal.InProgress
+            $failedReceiptPath = Join-Path $failedIntent.Directory 'failure.json'
+            Assert-True (Test-Path -LiteralPath $failedReceiptPath -PathType Leaf) "$interruptedAction failure receipt was not saved."
+            $callsBeforeRetry = @(Get-GpuFixturePlatformCalls -Fixture $fixture)
+            $disarmCallsBeforeRetry = @($callsBeforeRetry | Where-Object { $_ -match '^Disarm\|' }).Count
+
+            $retry = Invoke-GpuFixtureAction -Fixture $fixture -Action FinalVerify
+            Assert-Equal 0 $retry.ExitCode "FinalVerify after interrupted $interruptedAction failed: $($retry.StdErr)"
+            $retriedJournal = Get-GpuFixtureJournal -Fixture $fixture
+            Assert-Equal 'Complete' $retriedJournal.Phase "FinalVerify after $interruptedAction did not complete the run."
+            Assert-True ($null -eq $retriedJournal.InProgress) "FinalVerify after $interruptedAction left an intent in progress."
+            $preservedIntent = @($retriedJournal.RecoveryHistory | Where-Object {
+                $_.Action -ceq $interruptedAction -and $_.Directory -ceq $failedIntent.Directory
+            })
+            Assert-Equal 1 $preservedIntent.Count "FinalVerify discarded or duplicated interrupted $interruptedAction evidence."
+            Assert-True (Test-Path -LiteralPath $failedReceiptPath -PathType Leaf) "FinalVerify erased the failed $interruptedAction receipt."
+            $callsAfterRetry = @(Get-GpuFixturePlatformCalls -Fixture $fixture)
+            Assert-Equal ($callsBeforeRetry.Count + 1) $callsAfterRetry.Count "FinalVerify after $interruptedAction made unexpected platform calls."
+            Assert-True ($callsAfterRetry[-1] -match '^FinalVerify\|FinalVerify\|Disarmed$') "FinalVerify after $interruptedAction did not invoke verification directly."
+            Assert-Equal $disarmCallsBeforeRetry @($callsAfterRetry | Where-Object { $_ -match '^Disarm\|' }).Count "FinalVerify after $interruptedAction retried cleanup."
+        }
+    }
+
+    Invoke-TestCase 'Failed FinalVerify retry stays disarmed and blocks Archive Arm and Stage' {
+        $fixture = New-GpuDispatcherFixture -Parent $runRoot -Name 'failed-final-verify-retry'
+        foreach ($action in @('Prepare', 'Build', 'Sign', 'Backup', 'Stage', 'Arm')) {
+            $null = Assert-GpuFixtureActionSucceeded -Fixture $fixture -Action $action
+        }
+        $disarm = Invoke-GpuFixtureAction -Fixture $fixture -Action Disarm -AdditionalEnvironment @{
+            GPU_FIXTURE_RESET_MARKER = 'true'
+        }
+        Assert-Equal 0 $disarm.ExitCode "Fixture Disarm failed before failed-retry coverage: $($disarm.StdErr)"
+        $firstFailure = Invoke-GpuFixtureAction -Fixture $fixture -Action FinalVerify -FailPlatformAction FinalVerify
+        Assert-True ($firstFailure.ExitCode -ne 0) 'Initial injected FinalVerify failure unexpectedly succeeded.'
+        $firstFailedJournal = Get-GpuFixtureJournal -Fixture $fixture
+        $firstIntent = $firstFailedJournal.InProgress
+        $secondFailure = Invoke-GpuFixtureAction -Fixture $fixture -Action FinalVerify -FailPlatformAction FinalVerify
+        Assert-True ($secondFailure.ExitCode -ne 0) 'Injected FinalVerify retry unexpectedly succeeded.'
+        Assert-True ($secondFailure.StdErr -match 'FIXTURE_INJECTED_FAILURE:FinalVerify') 'Retry failure reason was lost.'
+        $failedJournal = Get-GpuFixtureJournal -Fixture $fixture
+        Assert-Equal 'Disarmed' $failedJournal.Phase 'Failed FinalVerify retry changed the Disarmed phase.'
+        Assert-Equal 'FinalVerify' $failedJournal.InProgress.Action 'Failed retry evidence was not retained.'
+        $latestFailurePath = Join-Path $failedJournal.InProgress.Directory 'failure.json'
+        Assert-True (Test-Path -LiteralPath $latestFailurePath -PathType Leaf) 'Failed retry receipt was not saved.'
+        $firstIntentHistory = @($failedJournal.RecoveryHistory | Where-Object {
+            $_.Action -ceq 'FinalVerify' -and $_.Directory -ceq $firstIntent.Directory
+        })
+        Assert-Equal 1 $firstIntentHistory.Count 'Failed retry discarded the first FinalVerify failure evidence.'
+        $platformCalls = @(Get-GpuFixturePlatformCalls -Fixture $fixture).Count
+
+        foreach ($blockedAction in @('Archive', 'Arm', 'Stage')) {
+            $blocked = Invoke-GpuFixtureAction -Fixture $fixture -Action $blockedAction
+            Assert-True ($blocked.ExitCode -ne 0) "$blockedAction was allowed after a failed FinalVerify retry."
+            Assert-Equal $platformCalls @(Get-GpuFixturePlatformCalls -Fixture $fixture).Count "$blockedAction reached the platform after retry failure."
+            $current = Get-GpuFixtureJournal -Fixture $fixture
+            Assert-Equal 'Disarmed' $current.Phase "$blockedAction changed the failed retry phase."
+            Assert-Equal 'FinalVerify' $current.InProgress.Action "$blockedAction changed the failed retry intent."
+        }
+        Assert-True (Test-Path -LiteralPath $latestFailurePath -PathType Leaf) 'Blocked actions erased retry failure evidence.'
+        Assert-True (Test-Path -LiteralPath $fixture.SelectorPath -PathType Leaf) 'Blocked actions removed the active selector.'
     }
 
     Invoke-TestCase 'Hermetic dispatcher rejects source-pin drift before platform execution' {

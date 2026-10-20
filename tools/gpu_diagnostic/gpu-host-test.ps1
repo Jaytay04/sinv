@@ -251,7 +251,8 @@ try {
         $RunDirectory = Assert-GpuPathWithin -Path $RunDirectory -Root $RunsRoot -MustExist
         $State = Read-GpuJson -Path (Join-Path $RunDirectory 'journal.json')
         Assert-GpuRecordedState $State $RunDirectory
-        if ($null -ne $State.InProgress -and $Action -notin @('Status','Disarm','Rollback')) {
+        if ($null -ne $State.InProgress -and $Action -notin @('Status','Disarm','Rollback') -and
+            -not (Test-GpuFinalVerifyRetry -Action $Action -Phase $State.Phase -InProgress $State.InProgress)) {
             throw "An earlier action is incomplete: $($State.InProgress.Action). Preserve its evidence; use Status or rollback."
         }
         if ($Action -eq 'Archive') {

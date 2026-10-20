@@ -158,7 +158,7 @@ Check the recorded phase without guessing a run:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Status
 ```
 
-If an action fails or is interrupted, stop before another forward action. Preserve its stdout, stderr, exit receipt, selector, and journal. Run rollback, which selects the exact saved run:
+If a mutating action fails or is interrupted, stop before another forward action. Preserve its stdout, stderr, exit receipt, selector, and journal. Run rollback, which selects the exact saved run. Read-only FinalVerify retries after disarm are described below.
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-rollback.ps1
@@ -173,7 +173,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees
 
 Rollback does not automatically power-cycle the machine. After an Arm intent, it can return `RECOVERY_PENDING_USER_POWER_CYCLE`; follow the recorded recovery result, shut down/power-cycle manually, and run `FinalVerify` only where the action state permits it. Rollback does not remove staged ESP files automatically. Do not delete them recursively; preserve them for exact, reviewed cleanup.
 
-If FinalVerify fails, preserve its receipts and use Rollback before retrying verification. Repeating recovery for an already `Disarmed` run rechecks owned boot-state cleanup while preserving the original `DisarmedBootId`. If the recorded boot identifier has changed since that successful disarm, it reports `DISARMED_RESET_OBSERVED`; another reset is not required solely because verification failed. An initial disarm or a run that has not crossed its reset boundary still requires a full shutdown/power cycle. No journal edits or automatic retry bypass this sequence.
+If FinalVerify fails or is interrupted after the run reached `Disarmed`, preserve its receipts, correct the identified prerequisite or verification defect, then run FinalVerify again. The same read-only retry is allowed for an interrupted Disarm/Rollback only when the saved phase is already `Disarmed`. The runner retains the previous intent in `RecoveryHistory`; every live verification check must still pass. Other in-progress actions remain blocked. Do not edit the journal or repeat cleanup merely to clear a failed verification intent: an older pinned installer can reject a second cleanup because its owned Boot#### entry has already been removed.
+
+Repeating recovery for an already `Disarmed` run preserves the original `DisarmedBootId`. If cleanup succeeds and the recorded boot identifier has changed since that successful disarm, it reports `DISARMED_RESET_OBSERVED`; another reset is not required solely because verification failed. An initial disarm or a run that has not crossed its reset boundary still requires a full shutdown/power cycle. An installer error remains a failure, including when its owned entry is absent; it is never converted to success by parsing its error message.
 
 If Prepare, Build, Sign, or Backup failed and the saved run has neither an Arm intent nor an ESP backup, rollback reports `DISARMED_NO_ACTIVATION` without invoking the installer or mounting the ESP. After a failed Backup that acquired the temporary ESP mount, first require a successful `unmount-owned-system-esp` receipt and verify the owned `S:` mapping is gone. If cleanup failed, preserve the receipts and stop for reviewed mount recovery; do not remove an unrelated assignment. When the probe has been built and pinned, FinalVerify requires its per-CPU `ABSENT` result; an unbuilt probe is allowed only for an earlier abort. Close that exact run with the following checks, one successful action at a time:
 

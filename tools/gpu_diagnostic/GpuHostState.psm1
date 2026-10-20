@@ -482,6 +482,19 @@ function Get-GpuHealthVerdict {
     }
 }
 
+function Test-GpuFinalVerifyRetry {
+    [CmdletBinding()]
+    param([string]$Action, [string]$Phase, [AllowNull()][object]$InProgress)
+
+    if ($Action -cne 'FinalVerify' -or $Phase -cne 'Disarmed' -or $null -eq $InProgress) { return $false }
+    $interruptedAction = $null
+    if ($InProgress -is [string]) { $interruptedAction = $InProgress }
+    elseif ($null -ne $InProgress.PSObject.Properties['Action']) { $interruptedAction = [string]$InProgress.Action }
+    # Verification performs observations, never firmware cleanup or activation.
+    # Its own live checks must still establish recovery before Complete is set.
+    return ($interruptedAction -cin @('FinalVerify', 'Disarm', 'Rollback'))
+}
+
 function Assert-GpuActionAllowed {
     [CmdletBinding()]
     param(
@@ -516,7 +529,7 @@ function Assert-GpuActionAllowed {
     }
 
     $hasIntent = ($null -ne $InProgress) -and -not (($InProgress -is [string]) -and ($InProgress -ceq ''))
-    if ($hasIntent) {
+    if ($hasIntent -and -not (Test-GpuFinalVerifyRetry -Action $Action -Phase $Phase -InProgress $InProgress)) {
         throw "Action $Action is blocked while another action is in progress."
     }
     if ($Phase -ne $forwardPhases[$Action]) {
@@ -532,5 +545,6 @@ Export-ModuleMember -Function @(
     'Assert-GpuFilePin',
     'Assert-GpuEspIdentity',
     'Get-GpuHealthVerdict',
+    'Test-GpuFinalVerifyRetry',
     'Assert-GpuActionAllowed'
 )
