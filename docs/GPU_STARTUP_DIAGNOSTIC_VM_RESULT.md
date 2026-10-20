@@ -69,7 +69,9 @@ state were not changed during this VM validation.
 ## Preserved evidence
 
 Paths are relative to the main workspace. The independent VM copy verified
-all 93 files, totaling 58,094,667,483 bytes. Earlier VMs remain on disk.
+all 93 files, totaling 58,094,667,483 bytes. The default and this validated VM
+remain on disk. Older copies were later retired during the user-requested
+[workspace cleanup](WORKSPACE_CLEANUP_20261020.md), with their evidence retained.
 
 - VMX: `.codex-build/gpu_payload_vm/vm-20261020T184950Z-3845cd62/clone/hsinv-Windows-25H2.vmx`.
 - Workflow: `.analysis/gpu-payload-diagnostic/runs/gpu-payload-20261020T185534Z-f8492b4e91a744639d8617dd3978dfed/`.

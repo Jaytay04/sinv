@@ -1,5 +1,10 @@
 # Signed native payload VM result
 
+The local disposable VM copy from this historical run was retired during the
+user-requested [workspace cleanup](WORKSPACE_CLEANUP_20261020.md). Its saved
+results, signed artifacts, logs, and copied configuration metadata remain;
+the test-copy disks and snapshots have been removed.
+
 The controller passed the signed EFI boot and Windows health test on
 2026-10-20 UTC. The outer workflow initially rejected the successful result
 because it expected an `EfiMarkers` array that the controller does not emit.
@@ -48,7 +53,8 @@ identify its original cause retrospectively.
 ## Preserved VM and evidence
 
 All paths below are relative to the main repository workspace, not the feature
-worktree. Keep both VM folders on disk.
+worktree. The test-copy path records its location at validation time; the
+cleanup note above describes its later retirement. The default VM is retained.
 
 - Test copy: `.codex-build/gpu_payload_vm/vm-20261020T044842Z-6c60e35d/clone/hsinv-Windows-25H2.vmx`.
 - Retained default: `.codex-build/gpu_windows_vm/run-01/standalone/hsinv-Windows-25H2.vmx`.
