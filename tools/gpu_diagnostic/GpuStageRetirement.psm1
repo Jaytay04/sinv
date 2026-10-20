@@ -21,6 +21,38 @@ $script:GpuRetirementReviewedFirmwareSha256 = 'ECB8F364A0058CB7D60B313E3941FCF61
 $script:GpuRetirementReviewedFirmwareBytes = 4336L
 $script:GpuRetirementNames = @('grubx64.efi', 'handoff-status.txt', 'manifest.sha256', 'payload-diagnostic.txt', 'payload.efi', 'shimx64.efi', 'tcglog.ib')
 
+# A second, closed retirement profile is admitted only after the caller supplies
+# a fresh readiness report explicitly. The values below describe immutable
+# evidence from the completed 201140 run; the audit pin is supplied by that
+# explicit readiness report and is captured again immediately before deletion.
+$script:GpuRetirement201140RunId = 'gpu-20261020T201140Z-6e6e86230a2549b28be3274dfe56cec7'
+$script:GpuRetirement201140JournalSha256 = '7C5D643B05604954E5C03142177AF52F98044A440D3D8979632409BC2438A9ED'
+$script:GpuRetirement201140JournalBytes = 52423L
+$script:GpuRetirement201140ArchiveSha256 = 'A7416148825A6ABC3603681C45F6A8277AFEE432D4B503BDEC89D34F58D34FFB'
+$script:GpuRetirement201140ArchiveBytes = 533L
+$script:GpuRetirement201140SourceCommit = '933b4c676318f26396cdf2c66de01c3ccbf1a950'
+$script:GpuRetirement201140ProbeSha256 = 'E3E46729304B18226FBA708C1D319FDDC96A05C6BE13AA43C468EDE83C238D47'
+$script:GpuRetirement201140ProbeBytes = 172544L
+$script:GpuRetirement201140ReferenceLogSha256 = '8876361480AC4D7A7E1FFD89AD830D3A601EE6323E0695C2A7FB6DE7A9F2EDF0'
+$script:GpuRetirement201140ReferenceLogBytes = 40838L
+$script:GpuRetirement201140ReferenceLogRelativePath = '.analysis\gpu-baremetal\runs\gpu-20261020T201140Z-6e6e86230a2549b28be3274dfe56cec7\actions\20261020T201533358Z-Backup-479329a8e70a4124964be17cc597ad61\tcglog.ib'
+$script:GpuRetirement201140ProbeRelativePath = '.codex-build\gb\8be3274dfe56cec7\l\ib-tcg-dump.exe'
+$script:GpuRetirement201140OriginalFirmwareRelativePath = '.analysis\gpu-baremetal\runs\gpu-20261020T201140Z-6e6e86230a2549b28be3274dfe56cec7\actions\20261020T201533358Z-Backup-479329a8e70a4124964be17cc597ad61\firmware-enumeration-backup-4196e13c22604293a54688532c15cff6.stdout.txt'
+$script:GpuRetirement201140ReviewReceiptRelativePath = '.analysis\gpu-final-firmware-review\8abb7b84ca644a7c84019a1f29b35bb4\result.json'
+$script:GpuRetirement201140ReviewReceiptSha256 = 'BEA6DCA1FC904B13830908471D6239A906F71AA6937630B32CBA6DC3C2C023D9'
+$script:GpuRetirement201140ReviewReceiptBytes = 16924L
+$script:GpuRetirement201140OriginalFirmwareSha256 = 'ECB8F364A0058CB7D60B313E3941FCF61760F0C8F814EA188FD9BE5122C478CE'
+$script:GpuRetirement201140CurrentFirmwareSha256 = '4A1535FACBC5A6E66F7BFA80275D70B63BEC583F779B734D668B48109A723FAE'
+$script:GpuRetirement201140FirmwareBytes = 4336L
+$script:GpuRetirement201140RawCaptureSha256 = 'B5D4EB51A58A2170EBCA905749E2BDAD177CFD71629A1079A14934F3F5BF63D0'
+$script:GpuRetirement201140RawCaptureBytes = 259L
+$script:GpuRetirement201140BootManagerSha256 = '3F8A4CBBC97B89836DF92C4895236BE1FAC4A127665420D90509E897A7298511'
+$script:GpuRetirement201140ReviewActionRelativePath = '.analysis\gpu-baremetal\runs\gpu-20261020T201140Z-6e6e86230a2549b28be3274dfe56cec7\actions\20261020T213747018Z-FinalVerify-1c98befbf8344c0188af1178737b723a\fw-review'
+$script:GpuRetirement201140ReviewedFirmwareRelativePath = '.analysis\gpu-baremetal\runs\gpu-20261020T201140Z-6e6e86230a2549b28be3274dfe56cec7\actions\20261020T205030359Z-FinalVerify-7ab6d4cba68941c4b3b89ed7553c8534\firmware-enumeration-final-7a5347fd0bc4452eb06340ba1e614a92.stdout.txt'
+$script:GpuRetirement201140FreshFirmwareRelativePath = $script:GpuRetirement201140ReviewActionRelativePath + '\final-firmware-review-733d15b0a2254fc2ba94a5a0178bea28.stdout.txt'
+$script:GpuRetirement201140ProfileSelected = $false
+$script:GpuRetirementProfile = '150318'
+
 function Get-GpuStageRetirementPin {
     param([Parameter(Mandatory = $true)][string]$Path)
 
@@ -75,6 +107,502 @@ function Assert-GpuRetirementEqual {
     }
 }
 
+function Assert-GpuRetirementSafeWorkspaceFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$WorkspaceRoot
+    )
+
+    $root = [IO.Path]::GetFullPath($WorkspaceRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $full = [IO.Path]::GetFullPath($Path)
+    $prefix = $root + [IO.Path]::DirectorySeparatorChar
+    if (-not $full.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Reviewed evidence path is outside the workspace.'
+    }
+    if (-not [IO.Directory]::Exists($root)) { throw 'Workspace root is missing.' }
+    $rootAttributes = [IO.File]::GetAttributes($root)
+    if (($rootAttributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+        ($rootAttributes -band [IO.FileAttributes]::Directory) -eq 0) {
+        throw 'Workspace root is not a regular directory.'
+    }
+
+    $relative = $full.Substring($prefix.Length)
+    $segments = @($relative -split '[\\/]')
+    if ($segments.Count -lt 2 -or @($segments | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -in @('.', '..') }).Count -gt 0) {
+        throw 'Reviewed evidence path is malformed.'
+    }
+    $cursor = $root
+    for ($index = 0; $index -lt $segments.Count; $index++) {
+        $cursor = Join-Path $cursor $segments[$index]
+        if (-not [IO.File]::Exists($cursor) -and -not [IO.Directory]::Exists($cursor)) {
+            throw "Reviewed evidence path is missing: $cursor"
+        }
+        $attributes = [IO.File]::GetAttributes($cursor)
+        if (($attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Reviewed evidence path contains a reparse point: $cursor"
+        }
+        $isLast = ($index -eq ($segments.Count - 1))
+        if ($isLast -and ($attributes -band [IO.FileAttributes]::Directory) -ne 0) {
+            throw "Reviewed evidence is not a regular file: $cursor"
+        }
+        if (-not $isLast -and ($attributes -band [IO.FileAttributes]::Directory) -eq 0) {
+            throw "Reviewed evidence parent is not a directory: $cursor"
+        }
+    }
+    return $full
+}
+
+function Assert-GpuRetirementProfilePin {
+    param(
+        [Parameter(Mandatory = $true)][object]$Pin,
+        [Parameter(Mandatory = $true)][string]$ExpectedPath,
+        [Parameter(Mandatory = $true)][string]$ExpectedSha256,
+        [Parameter(Mandatory = $true)][long]$ExpectedBytes,
+        [Parameter(Mandatory = $true)][string]$WorkspaceRoot,
+        [Parameter(Mandatory = $true)][string]$Description
+    )
+
+    if ($null -eq $Pin -or $null -eq $Pin.PSObject.Properties['Path']) { throw "$Description pin is missing." }
+    $actualPath = Assert-GpuRetirementSafeWorkspaceFile -Path ([string]$Pin.Path) -WorkspaceRoot $WorkspaceRoot
+    $expectedFullPath = [IO.Path]::GetFullPath($ExpectedPath)
+    Assert-GpuRetirementEqual -Expected $expectedFullPath -Actual $actualPath -Description "$Description path"
+    if ([string]$Pin.Sha256 -cne $ExpectedSha256 -or [long]$Pin.Bytes -ne $ExpectedBytes) {
+        throw "$Description pin differs from its fixed reviewed value."
+    }
+    $actual = Get-GpuStageRetirementPin -Path $actualPath
+    if ($actual.Sha256 -cne $ExpectedSha256 -or $actual.Bytes -ne $ExpectedBytes) {
+        throw "$Description file differs from its fixed reviewed value."
+    }
+    return $actual
+}
+
+function Assert-GpuStageRetirement201140Proof {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][object]$Journal,
+        [Parameter(Mandatory = $true)][string]$WorkspaceRoot
+    )
+
+    $workspace = [IO.Path]::GetFullPath($WorkspaceRoot)
+    $runDirectory = Join-Path (Join-Path $workspace '.analysis\gpu-baremetal\runs') $script:GpuRetirement201140RunId
+    $last = $Journal.LastAction
+    $verification = $Journal.FinalVerification
+    $enumeration = $verification.FirmwareEnumeration
+    $review = $enumeration.ReviewedDifference
+    if ([string]$Journal.RunId -cne $script:GpuRetirement201140RunId -or
+        [IO.Path]::GetFullPath([string]$Journal.RunDirectory) -cne [IO.Path]::GetFullPath($runDirectory) -or
+        [string]$Journal.SourceCommit -cne $script:GpuRetirement201140SourceCommit -or
+        [string]$Journal.Phase -cne 'Complete' -or $null -ne $Journal.InProgress -or
+        $null -eq $last -or [string]$last.Action -cne 'FinalVerify' -or $last.Succeeded -ne $true -or
+        [string]$last.Status -cne 'FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED') {
+        throw 'The 201140 journal lacks the exact successful reviewed FinalVerify action.'
+    }
+    if ($null -eq $verification -or $verification.ResetBoundaryPassed -ne $true -or
+        $verification.ActivationAttempted -ne $true -or $verification.SecureBoot -ne $true -or
+        $verification.ActiveGpuProof -ne $false -or [string]$verification.GpuAttestation -cne 'UNATTESTED' -or
+        @($verification.Errors).Count -ne 0 -or $null -eq $verification.Health -or
+        $verification.Health.Passed -ne $true -or [string]$verification.Health.ExpectedResult -cne 'ABSENT' -or
+        [string]$verification.Health.Aggregate -cne 'ABSENT' -or
+        [int]$verification.Health.CpuCount -ne 20 -or [int]$verification.Health.ExpectedCpus -ne 20 -or
+        $null -eq $verification.Esp -or $verification.Esp.MatchesBaseline -ne $true) {
+        throw 'The 201140 final verification does not satisfy the reviewed reset, ABSENT health, Secure Boot, ESP, and unattested-GPU gates.'
+    }
+    if ($null -eq $enumeration -or $enumeration.TextEqual -ne $false -or
+        $enumeration.ReviewedDifferenceAccepted -ne $true -or
+        [string]$enumeration.BaselineSha256 -cne $script:GpuRetirement201140OriginalFirmwareSha256 -or
+        [string]$enumeration.CurrentSha256 -cne $script:GpuRetirement201140CurrentFirmwareSha256 -or
+        [string]$enumeration.CaptureContext -cne 'SystemEspMountedAtS' -or
+        $null -eq $review -or $review.Accepted -ne $true -or
+        $review.HistoricalRawBootOrderUnchangedProven -ne $false -or
+        $review.FullBootVariableNamespaceAttested -ne $false) {
+        throw 'The journal does not contain the exact accepted 201140 firmware-difference review.'
+    }
+
+    $reviewReceiptPath = Join-Path $workspace $script:GpuRetirement201140ReviewReceiptRelativePath
+    $reviewReceiptPin = Assert-GpuRetirementProfilePin -Pin $review.ReceiptPin -ExpectedPath $reviewReceiptPath `
+        -ExpectedSha256 $script:GpuRetirement201140ReviewReceiptSha256 -ExpectedBytes $script:GpuRetirement201140ReviewReceiptBytes `
+        -WorkspaceRoot $workspace -Description 'Read-only firmware review receipt'
+    $reviewReceipt = Get-Content -LiteralPath $reviewReceiptPin.Path -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
+    if ($reviewReceipt.SchemaVersion -ne 1 -or [string]$reviewReceipt.Status -cne 'READONLY_FIRMWARE_REVIEW_CAPTURED' -or
+        $reviewReceipt.Succeeded -ne $true -or $reviewReceipt.RecoveryCompleted -ne $false -or
+        $reviewReceipt.SelectorAndJournalUnchanged -ne $true -or $reviewReceipt.EspFilesChanged -ne $false -or
+        $reviewReceipt.FirmwareWritten -ne $false -or $reviewReceipt.CleanupSucceeded -ne $true -or
+        $reviewReceipt.EspUnmounted -ne $true -or $reviewReceipt.RawBootSelectionStable -ne $true -or
+        $reviewReceipt.FirmwareTextStable -ne $true -or
+        $reviewReceipt.HistoricalRawBootOrderUnchangedProven -ne $false -or
+        @($reviewReceipt.CleanupErrors).Count -ne 0 -or @($reviewReceipt.Errors).Count -ne 0 -or
+        $null -eq $reviewReceipt.CurrentHost -or $reviewReceipt.CurrentHost.SecureBoot -ne $true -or
+        [int]$reviewReceipt.CurrentHost.LogicalCpus -ne 20 -or
+        [string]$reviewReceipt.CurrentHost.BootId -cne [string]$verification.BootId -or
+        $null -eq $reviewReceipt.Esp -or
+        [string]$reviewReceipt.Esp.Volume -cne [string]$Journal.Backup.EspVolume -or
+        [int]$reviewReceipt.Esp.DiskNumber -ne [int]$Journal.Backup.EspDiskNumber -or
+        [string]$reviewReceipt.Esp.PartitionGuid -cne [string]$Journal.Backup.EspPartitionGuid -or
+        [string]$reviewReceipt.Esp.BootManagerSha256 -cne $script:GpuRetirement201140BootManagerSha256) {
+        throw 'The pinned read-only firmware review receipt does not prove its required host, ESP, cleanup, and raw stability observations.'
+    }
+    $receiptRawCaptures = @($reviewReceipt.BootSelectionCaptures)
+    if ($receiptRawCaptures.Count -ne 2 -or @($reviewReceipt.FirmwareObservations).Count -ne 2) {
+        throw 'The read-only firmware review receipt must contain two raw captures and two stable firmware observations.'
+    }
+
+    $backupFirmware = $Journal.Backup.FirmwareEnumeration
+    if ($null -eq $backupFirmware) { throw 'The original firmware baseline pin is missing from the 201140 journal.' }
+    $expectedOriginalPath = Join-Path $workspace $script:GpuRetirement201140OriginalFirmwareRelativePath
+    if ([IO.Path]::GetFullPath([string]$backupFirmware.Path) -cne [IO.Path]::GetFullPath($expectedOriginalPath)) {
+        throw 'The archived original firmware baseline path differs from the fixed 201140 Backup action.'
+    }
+    $originalFirmwarePin = Assert-GpuRetirementProfilePin -Pin $review.OriginalBaselinePin -ExpectedPath $expectedOriginalPath `
+        -ExpectedSha256 $script:GpuRetirement201140OriginalFirmwareSha256 -ExpectedBytes $script:GpuRetirement201140FirmwareBytes `
+        -WorkspaceRoot $workspace -Description 'Original backup firmware baseline'
+    if ([string]$backupFirmware.Sha256 -cne $script:GpuRetirement201140OriginalFirmwareSha256 -or
+        [long]$backupFirmware.Bytes -ne $script:GpuRetirement201140FirmwareBytes) {
+        throw 'The archived original firmware baseline no longer has its reviewed ECB8 pin.'
+    }
+    $reviewedFirmwarePath = Join-Path $workspace $script:GpuRetirement201140ReviewedFirmwareRelativePath
+    $reviewedFirmwarePin = Assert-GpuRetirementProfilePin -Pin $review.ReviewedFirmwarePin -ExpectedPath $reviewedFirmwarePath `
+        -ExpectedSha256 $script:GpuRetirement201140CurrentFirmwareSha256 -ExpectedBytes $script:GpuRetirement201140FirmwareBytes `
+        -WorkspaceRoot $workspace -Description 'First observed changed firmware capture'
+    $freshFirmwarePath = Join-Path $workspace $script:GpuRetirement201140FreshFirmwareRelativePath
+    $freshFirmwarePin = Assert-GpuRetirementProfilePin -Pin $review.FreshFirmwarePin -ExpectedPath $freshFirmwarePath `
+        -ExpectedSha256 $script:GpuRetirement201140CurrentFirmwareSha256 -ExpectedBytes $script:GpuRetirement201140FirmwareBytes `
+        -WorkspaceRoot $workspace -Description 'Successful final-review firmware capture'
+    if ([string]$Journal.Backup.BootManagerSha256 -cne $script:GpuRetirement201140BootManagerSha256 -or
+        [string]$reviewReceipt.Esp.BootManagerSha256 -cne [string]$Journal.Backup.BootManagerSha256) {
+        throw 'The review receipt or journal boot-manager pin differs from the fixed reviewed value.'
+    }
+
+    $referenceLog = $Journal.Backup.ReferenceLog
+    if ($null -eq $referenceLog -or [string]$referenceLog.Sha256 -cne $script:GpuRetirement201140ReferenceLogSha256 -or
+        [long]$referenceLog.Bytes -ne $script:GpuRetirement201140ReferenceLogBytes) {
+        throw 'The 201140 journal does not preserve the fixed reviewed TPM reference log.'
+    }
+    $auditToolPath = Join-Path $workspace $script:GpuRetirementAuditToolRelativePath
+    $auditToolPin = Get-GpuStageRetirementPin -Path (Assert-GpuRetirementSafeWorkspaceFile -Path $auditToolPath -WorkspaceRoot $workspace)
+    if ($auditToolPin.Sha256 -cne $script:GpuRetirementAuditToolSha256 -or $auditToolPin.Bytes -ne $script:GpuRetirementAuditToolBytes) {
+        throw 'The fixed read-only firmware audit tool has changed.'
+    }
+
+    $referenceLogPath = Join-Path $workspace $script:GpuRetirement201140ReferenceLogRelativePath
+    if ([IO.Path]::GetFullPath([string]$referenceLog.Path) -cne [IO.Path]::GetFullPath($referenceLogPath)) {
+        throw 'The 201140 TPM reference log path differs from the fixed Backup action.'
+    }
+    $referenceLogPin = Assert-GpuRetirementProfilePin -Pin $referenceLog -ExpectedPath $referenceLogPath `
+        -ExpectedSha256 $script:GpuRetirement201140ReferenceLogSha256 -ExpectedBytes $script:GpuRetirement201140ReferenceLogBytes `
+        -WorkspaceRoot $workspace -Description 'Pinned TPM reference log'
+    $probePath = Join-Path $workspace $script:GpuRetirement201140ProbeRelativePath
+    if ([IO.Path]::GetFullPath([string]$Journal.Tools.Probe.Path) -cne [IO.Path]::GetFullPath($probePath)) {
+        throw 'The 201140 health probe path differs from the fixed build output.'
+    }
+    $probePin = Assert-GpuRetirementProfilePin -Pin $Journal.Tools.Probe -ExpectedPath $probePath `
+        -ExpectedSha256 $script:GpuRetirement201140ProbeSha256 -ExpectedBytes $script:GpuRetirement201140ProbeBytes `
+        -WorkspaceRoot $workspace -Description 'Pinned health probe'
+    $rawCaptures = @($review.RawCaptures)
+    if ($rawCaptures.Count -ne 2) { throw 'The accepted review must contain exactly two raw boot-selection captures.' }
+    $reviewActionDirectory = Join-Path $workspace $script:GpuRetirement201140ReviewActionRelativePath
+    $extraPins = New-Object 'System.Collections.Generic.List[object]'
+    foreach ($pin in @($reviewReceiptPin,$originalFirmwarePin,$reviewedFirmwarePin,$freshFirmwarePin,$referenceLogPin,$probePin,$auditToolPin)) { $extraPins.Add($pin) }
+    $reviewedFirmwareText = [IO.File]::ReadAllText($freshFirmwarePin.Path)
+    if (-not [string]::Equals($reviewedFirmwareText, [IO.File]::ReadAllText($reviewedFirmwarePin.Path), [StringComparison]::Ordinal)) {
+        throw 'The pinned firmware captures do not match their expected reviewed content.'
+    }
+
+    $inspectionDirectory = Join-Path (Split-Path -Parent $reviewReceiptPin.Path) 'observations'
+    $firmwareObservationNames = @('before','after')
+    $firmwareObservations = @($reviewReceipt.FirmwareObservations)
+    for ($index = 0; $index -lt 2; $index++) {
+        $observation = $firmwareObservations[$index]
+        $checkpoint = $firmwareObservationNames[$index]
+        if ([string]$observation.Checkpoint -cne $checkpoint -or $observation.Succeeded -ne $true -or
+            -not [string]::Equals([string]$observation.Text, $reviewedFirmwareText, [StringComparison]::Ordinal)) {
+            throw "The read-only $checkpoint firmware observation differs from the exact reviewed final capture."
+        }
+        $stdoutPin = $observation.Pin
+        if ($null -eq $stdoutPin -or [string]$stdoutPin.Sha256 -cne $script:GpuRetirement201140CurrentFirmwareSha256 -or
+            [long]$stdoutPin.Bytes -ne $script:GpuRetirement201140FirmwareBytes -or
+            [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath([string]$stdoutPin.Path)) -cne [IO.Path]::GetFullPath($inspectionDirectory) -or
+            [IO.Path]::GetFileName([string]$stdoutPin.Path) -notmatch '^stage-retirement-firmware-[0-9a-f]{32}\.stdout\.txt$') {
+            throw "The read-only $checkpoint firmware output pin does not match the fixed review observation directory."
+        }
+        $stdoutFullPath = Assert-GpuRetirementSafeWorkspaceFile -Path ([string]$stdoutPin.Path) -WorkspaceRoot $workspace
+        $checkedStdout = Assert-GpuRetirementProfilePin -Pin $stdoutPin -ExpectedPath $stdoutFullPath `
+            -ExpectedSha256 $script:GpuRetirement201140CurrentFirmwareSha256 -ExpectedBytes $script:GpuRetirement201140FirmwareBytes `
+            -WorkspaceRoot $workspace -Description "$checkpoint read-only firmware stdout"
+        if (-not [string]::Equals([IO.File]::ReadAllText($checkedStdout.Path), [string]$observation.Text, [StringComparison]::Ordinal)) {
+            throw "The read-only $checkpoint firmware stdout differs from its pinned observation text."
+        }
+
+        $stdoutLeaf = [IO.Path]::GetFileName($checkedStdout.Path)
+        $receiptLeaf = $stdoutLeaf.Substring(0, $stdoutLeaf.Length - '.stdout.txt'.Length) + '.receipt.json'
+        $expectedReceiptPath = Join-Path $inspectionDirectory $receiptLeaf
+        if ([IO.Path]::GetFullPath([string]$observation.ReceiptPath) -cne [IO.Path]::GetFullPath($expectedReceiptPath)) {
+            throw "The read-only $checkpoint firmware receipt path differs from its pinned observation."
+        }
+        $firmwareReceiptPath = Assert-GpuRetirementSafeWorkspaceFile -Path $expectedReceiptPath -WorkspaceRoot $workspace
+        $firmwareReceiptPin = Get-GpuStageRetirementPin -Path $firmwareReceiptPath
+        $firmwareReceipt = Get-Content -LiteralPath $firmwareReceiptPath -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
+        if ($firmwareReceipt.SchemaVersion -ne 1 -or $firmwareReceipt.Succeeded -ne $true -or
+            [int]$firmwareReceipt.ExitCode -ne 0 -or @($firmwareReceipt.AllowedExitCodes).Count -ne 1 -or
+            [int]$firmwareReceipt.AllowedExitCodes[0] -ne 0 -or $null -ne $firmwareReceipt.LaunchError -or
+            [IO.Path]::GetFileName([string]$firmwareReceipt.Program) -ine 'bcdedit.exe' -or
+            @($firmwareReceipt.Arguments).Count -ne 3 -or
+            [string]$firmwareReceipt.Arguments[0] -cne '/enum' -or
+            [string]$firmwareReceipt.Arguments[1] -cne 'firmware' -or
+            [string]$firmwareReceipt.Arguments[2] -cne '/v' -or
+            [IO.Path]::GetFullPath([string]$firmwareReceipt.StdoutPath) -cne [IO.Path]::GetFullPath($checkedStdout.Path)) {
+            throw "The read-only $checkpoint firmware command receipt is unsuccessful or does not match its capture."
+        }
+        $stderrPath = [string]$firmwareReceipt.StderrPath
+        if ([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($stderrPath)) -cne [IO.Path]::GetFullPath($inspectionDirectory) -or
+            [IO.Path]::GetFileName($stderrPath) -cne ($stdoutLeaf.Substring(0, $stdoutLeaf.Length - '.stdout.txt'.Length) + '.stderr.txt')) {
+            throw "The read-only $checkpoint firmware stderr path differs from its review observation."
+        }
+        $stderrFullPath = Assert-GpuRetirementSafeWorkspaceFile -Path $stderrPath -WorkspaceRoot $workspace
+        $stderrPin = Get-GpuStageRetirementPin -Path $stderrFullPath
+        if ([IO.File]::ReadAllText($stderrFullPath).Length -ne 0) {
+            throw "The read-only $checkpoint firmware command wrote unexpected stderr."
+        }
+        $extraPins.Add($checkedStdout)
+        $extraPins.Add($firmwareReceiptPin)
+        $extraPins.Add($stderrPin)
+    }
+
+    $expectedIntegrity = 'BootmgfwSha256=' + $script:GpuRetirement201140BootManagerSha256 + ' Findings=0x00000000'
+    for ($index = 0; $index -lt 2; $index++) {
+        $capture = $rawCaptures[$index]
+        $checkpoint = if ($index -eq 0) { 'before' } else { 'after' }
+        $rawRelativePath = $script:GpuRetirement201140ReviewActionRelativePath + '\' + $checkpoint + '-boot-selection.json'
+        $rawPath = Join-Path $workspace $rawRelativePath
+        $rawPin = Assert-GpuRetirementProfilePin -Pin $capture.BaselinePin -ExpectedPath $rawPath `
+            -ExpectedSha256 $script:GpuRetirement201140RawCaptureSha256 -ExpectedBytes $script:GpuRetirement201140RawCaptureBytes `
+            -WorkspaceRoot $workspace -Description "$checkpoint raw boot-selection capture"
+        if ([IO.Path]::GetFullPath([string]$capture.BaselinePath) -cne [IO.Path]::GetFullPath($rawPath)) {
+            throw "$checkpoint raw capture path does not match the closed profile."
+        }
+        $rawDocument = Get-Content -LiteralPath $rawPin.Path -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
+        $baseline = $capture.Baseline
+        $order = @($baseline.BootOrder)
+        if ($null -eq $baseline -or $null -eq $baseline.PSObject.Properties['Schema'] -or
+            $null -eq $baseline.PSObject.Properties['BootNext'] -or $null -eq $baseline.PSObject.Properties['BootOrder'] -or
+            $null -eq $baseline.PSObject.Properties['BootManagerSha256'] -or $null -eq $baseline.PSObject.Properties['ReferenceLogSha256'] -or
+            $null -eq $baseline.PSObject.Properties['IntegrityFindings'] -or
+            $null -eq $rawDocument.PSObject.Properties['boot_next'] -or $null -eq $rawDocument.PSObject.Properties['boot_order'] -or
+            $null -eq $rawDocument.PSObject.Properties['bootmgfw_sha256'] -or $null -eq $rawDocument.PSObject.Properties['log_sha256'] -or
+            $null -eq $rawDocument.PSObject.Properties['findings'] -or
+            $baseline.Schema -ne 1 -or $baseline.BootNext -ne $null -or
+            $order.Count -ne 6 -or @($rawDocument.boot_order).Count -ne 6 -or
+            $null -ne $rawDocument.boot_next -or $rawDocument.schema -ne 1 -or
+            [string]$rawDocument.kind -cne 'boot-selection' -or [int]$rawDocument.findings -ne 0 -or
+            [string]$rawDocument.bootmgfw_sha256 -cne $script:GpuRetirement201140BootManagerSha256 -or
+            [string]$rawDocument.log_sha256 -cne $script:GpuRetirement201140ReferenceLogSha256 -or
+            [string]$baseline.BootManagerSha256 -cne $script:GpuRetirement201140BootManagerSha256 -or
+            [string]$baseline.ReferenceLogSha256 -cne $script:GpuRetirement201140ReferenceLogSha256 -or
+            [string]$baseline.IntegrityFindings -cne '00000000' -or
+            -not [string]::Equals([string]$capture.IntegrityOutput, $expectedIntegrity, [StringComparison]::Ordinal)) {
+            throw "$checkpoint raw boot-selection capture lacks the fixed BootNext, BootOrder, boot-manager, reference-log, or integrity proof."
+        }
+        for ($orderIndex = 0; $orderIndex -lt 6; $orderIndex++) {
+            if ([int]$order[$orderIndex] -ne $orderIndex -or [int]$rawDocument.boot_order[$orderIndex] -ne $orderIndex) {
+                throw "$checkpoint raw capture BootOrder differs from the fixed reviewed sequence 0 through 5."
+            }
+        }
+        $extraPins.Add($rawPin)
+
+        $receiptLeaf = if ($index -eq 0) { 'before-bootmgr-integrity-c41a875847f8486587886b4862e35f7d' } else { 'after-bootmgr-integrity-8cd4ff8e1bc64012a73dfcee197557d3' }
+        $receiptPath = Join-Path $reviewActionDirectory ($receiptLeaf + '.receipt.json')
+        if ([IO.Path]::GetFullPath([string]$capture.IntegrityReceipt) -cne [IO.Path]::GetFullPath($receiptPath)) {
+            throw "$checkpoint integrity receipt path does not match the successful final review record."
+        }
+        $receiptFullPath = Assert-GpuRetirementSafeWorkspaceFile -Path $receiptPath -WorkspaceRoot $workspace
+        $integrityReceiptPin = Get-GpuStageRetirementPin -Path $receiptFullPath
+        $integrityReceipt = Get-Content -LiteralPath $receiptFullPath -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
+        $expectedArguments = @('bootmgr-integrity','--expected-hash',$script:GpuRetirement201140BootManagerSha256,'--esp-root','S:\')
+        if ($integrityReceipt.SchemaVersion -ne 1 -or $integrityReceipt.Succeeded -ne $true -or
+            [int]$integrityReceipt.ExitCode -ne 0 -or @($integrityReceipt.AllowedExitCodes).Count -ne 1 -or
+            [int]$integrityReceipt.AllowedExitCodes[0] -ne 0 -or $null -ne $integrityReceipt.LaunchError -or
+            [string]$integrityReceipt.Program -cne [IO.Path]::GetFullPath($auditToolPath) -or
+            @($integrityReceipt.Arguments).Count -ne $expectedArguments.Count) {
+            throw "$checkpoint integrity command receipt is incomplete or unsuccessful."
+        }
+        for ($argumentIndex = 0; $argumentIndex -lt $expectedArguments.Count; $argumentIndex++) {
+            if ([string]$integrityReceipt.Arguments[$argumentIndex] -cne $expectedArguments[$argumentIndex]) {
+                throw "$checkpoint integrity command receipt has unexpected arguments."
+            }
+        }
+        $stdoutPath = [string]$integrityReceipt.StdoutPath
+        $stderrPath = [string]$integrityReceipt.StderrPath
+        $expectedOutputLeaf = $receiptLeaf + '.stdout.txt'
+        $expectedErrorLeaf = $receiptLeaf + '.stderr.txt'
+        if ([IO.Path]::GetFileName($stdoutPath) -cne $expectedOutputLeaf -or
+            [IO.Path]::GetFileName($stderrPath) -cne $expectedErrorLeaf -or
+            [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($stdoutPath)) -cne [IO.Path]::GetDirectoryName($receiptFullPath) -or
+            [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($stderrPath)) -cne [IO.Path]::GetDirectoryName($receiptFullPath)) {
+            throw "$checkpoint integrity output paths do not match the fixed review observation directory."
+        }
+        $stdoutFullPath = Assert-GpuRetirementSafeWorkspaceFile -Path $stdoutPath -WorkspaceRoot $workspace
+        $stderrFullPath = Assert-GpuRetirementSafeWorkspaceFile -Path $stderrPath -WorkspaceRoot $workspace
+        $stdoutPin = Get-GpuStageRetirementPin -Path $stdoutFullPath
+        $stderrPin = Get-GpuStageRetirementPin -Path $stderrFullPath
+        if (-not [string]::Equals(([IO.File]::ReadAllText($stdoutFullPath)).Trim(), $expectedIntegrity, [StringComparison]::Ordinal) -or
+            [IO.File]::ReadAllText($stderrFullPath).Length -ne 0) {
+            throw "$checkpoint integrity stdout/stderr differ from the successful reviewed result."
+        }
+        $extraPins.Add($integrityReceiptPin)
+        $extraPins.Add($stdoutPin)
+        $extraPins.Add($stderrPin)
+    }
+
+    # The pinned read-only review receipt cites a second pair of raw captures.
+    # Validate those exact files too; their directory and integrity receipts are
+    # distinct from the successful FinalVerify action captures above.
+    $inspectionReceiptLeaves = @('before-bootmgr-integrity-2bcf37ea725f4989ac915a7f3f125ac7','after-bootmgr-integrity-89d06c81ce664fb198fc3bef47f784eb')
+    for ($index = 0; $index -lt 2; $index++) {
+        $capture = $receiptRawCaptures[$index]
+        $checkpoint = if ($index -eq 0) { 'before' } else { 'after' }
+        $rawPath = Join-Path $inspectionDirectory ($checkpoint + '-boot-selection.json')
+        $rawPin = Assert-GpuRetirementProfilePin -Pin $capture.BaselinePin -ExpectedPath $rawPath `
+            -ExpectedSha256 $script:GpuRetirement201140RawCaptureSha256 -ExpectedBytes $script:GpuRetirement201140RawCaptureBytes `
+            -WorkspaceRoot $workspace -Description "$checkpoint inspection raw boot-selection capture"
+        if ([IO.Path]::GetFullPath([string]$capture.BaselinePath) -cne [IO.Path]::GetFullPath($rawPath)) {
+            throw "$checkpoint inspection raw capture path does not match the pinned review receipt."
+        }
+        $rawDocument = Get-Content -LiteralPath $rawPin.Path -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
+        $baseline = $capture.Baseline
+        $order = @($baseline.BootOrder)
+        if ($null -eq $baseline -or $null -ne $baseline.BootNext -or $order.Count -ne 6 -or
+            $null -ne $rawDocument.boot_next -or @($rawDocument.boot_order).Count -ne 6 -or
+            $rawDocument.schema -ne 1 -or [string]$rawDocument.kind -cne 'boot-selection' -or
+            [int]$rawDocument.findings -ne 0 -or
+            [string]$baseline.BootManagerSha256 -cne $script:GpuRetirement201140BootManagerSha256 -or
+            [string]$baseline.ReferenceLogSha256 -cne $script:GpuRetirement201140ReferenceLogSha256 -or
+            [string]$baseline.IntegrityFindings -cne '00000000' -or
+            [string]$rawDocument.bootmgfw_sha256 -cne $script:GpuRetirement201140BootManagerSha256 -or
+            [string]$rawDocument.log_sha256 -cne $script:GpuRetirement201140ReferenceLogSha256 -or
+            -not [string]::Equals(([string]$capture.IntegrityOutput).Trim(), $expectedIntegrity, [StringComparison]::Ordinal)) {
+            throw "$checkpoint inspection raw capture differs from the exact reviewed BootNext, BootOrder, boot-manager, reference-log, or integrity state."
+        }
+        for ($orderIndex = 0; $orderIndex -lt 6; $orderIndex++) {
+            if ([int]$order[$orderIndex] -ne $orderIndex -or [int]$rawDocument.boot_order[$orderIndex] -ne $orderIndex) {
+                throw "$checkpoint inspection BootOrder differs from the fixed reviewed sequence 0 through 5."
+            }
+        }
+        $extraPins.Add($rawPin)
+
+        $receiptLeaf = $inspectionReceiptLeaves[$index]
+        $receiptPath = Join-Path $inspectionDirectory ($receiptLeaf + '.receipt.json')
+        if ([IO.Path]::GetFullPath([string]$capture.IntegrityReceipt) -cne [IO.Path]::GetFullPath($receiptPath)) {
+            throw "$checkpoint inspection integrity receipt path differs from the pinned review receipt."
+        }
+        $receiptFullPath = Assert-GpuRetirementSafeWorkspaceFile -Path $receiptPath -WorkspaceRoot $workspace
+        $integrityReceiptPin = Get-GpuStageRetirementPin -Path $receiptFullPath
+        $integrityReceipt = Get-Content -LiteralPath $receiptFullPath -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
+        $expectedArguments = @('bootmgr-integrity','--expected-hash',$script:GpuRetirement201140BootManagerSha256,'--esp-root','S:\')
+        if ($integrityReceipt.SchemaVersion -ne 1 -or $integrityReceipt.Succeeded -ne $true -or
+            [int]$integrityReceipt.ExitCode -ne 0 -or @($integrityReceipt.AllowedExitCodes).Count -ne 1 -or
+            [int]$integrityReceipt.AllowedExitCodes[0] -ne 0 -or $null -ne $integrityReceipt.LaunchError -or
+            [string]$integrityReceipt.Program -cne [IO.Path]::GetFullPath($auditToolPath) -or
+            @($integrityReceipt.Arguments).Count -ne $expectedArguments.Count) {
+            throw "$checkpoint inspection integrity command receipt is incomplete or unsuccessful."
+        }
+        for ($argumentIndex = 0; $argumentIndex -lt $expectedArguments.Count; $argumentIndex++) {
+            if ([string]$integrityReceipt.Arguments[$argumentIndex] -cne $expectedArguments[$argumentIndex]) {
+                throw "$checkpoint inspection integrity command receipt has unexpected arguments."
+            }
+        }
+        $stdoutPath = [string]$integrityReceipt.StdoutPath
+        $stderrPath = [string]$integrityReceipt.StderrPath
+        if ([IO.Path]::GetFileName($stdoutPath) -cne ($receiptLeaf + '.stdout.txt') -or
+            [IO.Path]::GetFileName($stderrPath) -cne ($receiptLeaf + '.stderr.txt') -or
+            [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($stdoutPath)) -cne [IO.Path]::GetFullPath($inspectionDirectory) -or
+            [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($stderrPath)) -cne [IO.Path]::GetFullPath($inspectionDirectory)) {
+            throw "$checkpoint inspection integrity output paths do not match the pinned review receipt."
+        }
+        $stdoutFullPath = Assert-GpuRetirementSafeWorkspaceFile -Path $stdoutPath -WorkspaceRoot $workspace
+        $stderrFullPath = Assert-GpuRetirementSafeWorkspaceFile -Path $stderrPath -WorkspaceRoot $workspace
+        $stdoutPin = Get-GpuStageRetirementPin -Path $stdoutFullPath
+        $stderrPin = Get-GpuStageRetirementPin -Path $stderrFullPath
+        if (-not [string]::Equals(([IO.File]::ReadAllText($stdoutFullPath)).Trim(), $expectedIntegrity, [StringComparison]::Ordinal) -or
+            [IO.File]::ReadAllText($stderrFullPath).Length -ne 0) {
+            throw "$checkpoint inspection integrity stdout/stderr differ from the pinned review receipt."
+        }
+        $extraPins.Add($integrityReceiptPin)
+        $extraPins.Add($stdoutPin)
+        $extraPins.Add($stderrPin)
+    }
+
+    return @($extraPins.ToArray())
+}
+
+function Select-GpuStageRetirement201140Profile {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$WorkspaceRoot,
+        [Parameter(Mandatory = $true)][string]$ReadinessPath
+    )
+
+    $workspace = [IO.Path]::GetFullPath($WorkspaceRoot)
+    $readinessRoot = Join-Path $workspace '.analysis\gpu-baremetal-readiness'
+    if (-not [IO.Directory]::Exists($readinessRoot)) { throw 'The workspace readiness evidence directory is missing.' }
+    $readinessRootFull = [IO.Path]::GetFullPath($readinessRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $readinessFull = Assert-GpuRetirementSafeWorkspaceFile -Path $ReadinessPath -WorkspaceRoot $workspace
+    $prefix = $readinessRootFull + [IO.Path]::DirectorySeparatorChar
+    if (-not $readinessFull.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'ReadinessPath must name a report under .analysis\gpu-baremetal-readiness.'
+    }
+    $relative = $readinessFull.Substring($prefix.Length)
+    if ($relative -notmatch '^([0-9a-fA-F]{32})\\readiness\.json$') {
+        throw 'ReadinessPath must explicitly name <guid>\readiness.json under .analysis\gpu-baremetal-readiness.'
+    }
+    $readinessGuid = $Matches[1].ToLowerInvariant()
+    $readinessDirectory = Join-Path $readinessRootFull $readinessGuid
+    if ([IO.Path]::GetFullPath([IO.Path]::GetDirectoryName($readinessFull)) -cne [IO.Path]::GetFullPath($readinessDirectory)) {
+        throw 'Readiness report directory does not match its GUID path.'
+    }
+    $readinessPin = Get-GpuStageRetirementPin -Path $readinessFull
+    $readiness = Get-Content -LiteralPath $readinessFull -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
+    if ($readiness.SchemaVersion -ne 1 -or [string]$readiness.Status -cne 'BLOCKED_READINESS' -or
+        $readiness.Succeeded -ne $false -or
+        [IO.Path]::GetFullPath([string]$readiness.EvidencePath) -cne $readinessFull -or
+        [IO.Path]::GetFullPath([string]$readiness.EvidenceDirectory) -cne [IO.Path]::GetFullPath($readinessDirectory) -or
+        $null -eq $readiness.Selector -or $readiness.Selector.Exists -ne $false -or $readiness.Selector.Valid -ne $true -or
+        $null -ne $readiness.Selector.Error -or $null -eq $readiness.Cleanup -or $readiness.Cleanup.Succeeded -ne $true -or
+        @($readiness.Cleanup.Errors).Count -ne 0 -or $null -eq $readiness.Esp -or
+        $readiness.Esp.Inspected -ne $true -or [string]$readiness.Esp.MountStateAfterCleanup -cne 'Unmounted' -or
+        $null -eq $readiness.Effects -or $readiness.Effects.EspFilesChanged -ne $false -or
+        $readiness.Effects.FirmwareChanged -ne $false -or $readiness.Effects.BootStateChanged -ne $false -or
+        $readiness.Effects.EspTemporarilyMounted -ne $true -or $null -eq $readiness.ExistingStage -or
+        $readiness.ExistingStage.Exists -ne $true -or $readiness.ExistingStage.Complete -ne $true) {
+        throw 'The explicit readiness report is not a complete, cleanly unmounted BLOCKED_READINESS capture with no host changes and no active selector.'
+    }
+    $script:GpuRetirement201140ProfileSelected = $true
+    $script:GpuRetirementProfile = '201140'
+    $script:GpuRetirementRunId = $script:GpuRetirement201140RunId
+    $script:GpuRetirementAuditRelativePath = '.analysis\gpu-baremetal-readiness\' + $readinessGuid + '\readiness.json'
+    $script:GpuRetirementAuditSha256 = $readinessPin.Sha256
+    $script:GpuRetirementAuditBytes = [long]$readinessPin.Bytes
+    $script:GpuRetirementJournalSha256 = $script:GpuRetirement201140JournalSha256
+    $script:GpuRetirementJournalBytes = $script:GpuRetirement201140JournalBytes
+    $script:GpuRetirementArchiveSha256 = $script:GpuRetirement201140ArchiveSha256
+    $script:GpuRetirementArchiveBytes = $script:GpuRetirement201140ArchiveBytes
+    $script:GpuRetirementSourceCommit = $script:GpuRetirement201140SourceCommit
+    $script:GpuRetirementProbeSha256 = $script:GpuRetirement201140ProbeSha256
+    $script:GpuRetirementProbeBytes = $script:GpuRetirement201140ProbeBytes
+    $script:GpuRetirementReferenceLogSha256 = $script:GpuRetirement201140ReferenceLogSha256
+    $script:GpuRetirementReferenceLogBytes = $script:GpuRetirement201140ReferenceLogBytes
+    $script:GpuRetirementReviewedFirmwareRelativePath = $script:GpuRetirement201140FreshFirmwareRelativePath
+    $script:GpuRetirementReviewedFirmwareSha256 = $script:GpuRetirement201140CurrentFirmwareSha256
+    $script:GpuRetirementReviewedFirmwareBytes = $script:GpuRetirement201140FirmwareBytes
+    return [pscustomobject]@{
+        Profile = '201140'
+        RunId = $script:GpuRetirementRunId
+        ReadinessPath = $readinessFull
+        ReadinessPin = $readinessPin
+        JournalSha256 = $script:GpuRetirementJournalSha256
+        ArchiveSha256 = $script:GpuRetirementArchiveSha256
+        SourceCommit = $script:GpuRetirementSourceCommit
+    }
+}
+
 function Assert-GpuStageRetirementEvidence {
     [CmdletBinding()]
     param(
@@ -115,6 +643,16 @@ function Assert-GpuStageRetirementEvidence {
     if ([string]::IsNullOrWhiteSpace([string]$Journal.DisarmedBootId)) { throw 'The run has no recorded disarm boot boundary.' }
 
     $verification = $Journal.FinalVerification
+    $firmwareBaselineValid = if ($script:GpuRetirement201140ProfileSelected) {
+        $null -ne $verification -and $null -ne $verification.FirmwareEnumeration -and
+        $verification.FirmwareEnumeration.TextEqual -eq $false -and
+        $verification.FirmwareEnumeration.ReviewedDifferenceAccepted -eq $true -and
+        [string]$verification.FirmwareEnumeration.BaselineSha256 -ceq $script:GpuRetirement201140OriginalFirmwareSha256 -and
+        [string]$verification.FirmwareEnumeration.CurrentSha256 -ceq $script:GpuRetirement201140CurrentFirmwareSha256
+    } else {
+        $null -ne $verification -and $null -ne $verification.FirmwareEnumeration -and
+        $verification.FirmwareEnumeration.TextEqual -eq $true
+    }
     if ($null -eq $verification -or $verification.ResetBoundaryPassed -ne $true -or
         $verification.SecureBoot -ne $true -or $verification.ActivationAttempted -ne $true -or
         $null -eq $verification.Health -or $verification.Health.Passed -ne $true -or
@@ -123,9 +661,9 @@ function Assert-GpuStageRetirementEvidence {
         [int]$verification.Health.CpuCount -ne [int]$Journal.Host.LogicalCpus -or
         [int]$verification.Health.ExpectedCpus -ne [int]$Journal.Host.LogicalCpus -or
         $null -eq $verification.Esp -or $verification.Esp.MatchesBaseline -ne $true -or
-        $null -eq $verification.FirmwareEnumeration -or $verification.FirmwareEnumeration.TextEqual -ne $true -or
+        -not $firmwareBaselineValid -or
         @($verification.Errors).Count -ne 0) {
-        throw 'Final verification does not prove the required reset, ABSENT health, Secure Boot, ESP, and firmware baseline gates.'
+        throw 'Final verification does not prove the required reset, ABSENT health, Secure Boot, ESP, and approved firmware gates.'
     }
 
     if ($ArchivedSelector.SchemaVersion -ne 1 -or [string]$ArchivedSelector.RunId -cne $ExpectedRunId) {
@@ -321,6 +859,23 @@ function Assert-GpuStageRetirementBootSelectionStable {
         $Before.ReferenceLogSha256 -cne $Current.ReferenceLogSha256 -or
         $Before.IntegrityFindings -cne $Current.IntegrityFindings) {
         throw "Raw boot-selection baseline changed $Checkpoint."
+    }
+}
+
+function Assert-GpuStageRetirement201140BootSelection {
+    param([Parameter(Mandatory = $true)][object]$Capture, [Parameter(Mandatory = $true)][string]$Checkpoint)
+
+    if ($null -eq $Capture -or $null -eq $Capture.Baseline) { throw "$Checkpoint raw firmware capture is missing." }
+    $baseline = $Capture.Baseline
+    $order = @($baseline.BootOrder)
+    if ($null -ne $baseline.BootNext -or $order.Count -ne 6 -or
+        [string]$baseline.BootManagerSha256 -cne $script:GpuRetirement201140BootManagerSha256 -or
+        [string]$baseline.ReferenceLogSha256 -cne $script:GpuRetirement201140ReferenceLogSha256 -or
+        [string]$baseline.IntegrityFindings -cne '00000000') {
+        throw "$Checkpoint raw boot-selection differs from the closed 201140 reviewed state."
+    }
+    for ($index = 0; $index -lt 6; $index++) {
+        if ([int]$order[$index] -ne $index) { throw "$Checkpoint raw BootOrder differs from the reviewed sequence 0 through 5." }
     }
 }
 
@@ -525,7 +1080,7 @@ function Invoke-GpuStageRetirement {
         RunId = $ExpectedRunId; ApplyRequested = [bool]$Apply; ApplyApproved = $false
         RemovedFiles = @(); Copies = @(); Errors = @(); CleanupErrors = @()
         LocalReceiptDirectory = $null; ExternalReceiptDirectory = $null
-        OriginalEvidencePins = $null; RetirementAuditTool = $null; ReviewedStagePins = $null; Esp = $null
+        OriginalEvidencePins = $null; RetirementAuditTool = $null; ReviewedStagePins = $null; ProfileEvidencePins = @(); Esp = $null
         FirmwareBaselineEqual = $false; FirmwareBaselineSource = $null
         OriginalFirmwareBaselinePin = $null; OriginalFirmwareBaselineEqual = $false; ReviewedFirmwareBaselinePin = $null
         Health = $null; NextAction = 'blocked; preserve the stage and all evidence'
@@ -549,7 +1104,7 @@ function Invoke-GpuStageRetirement {
     $sourcePins = @()
     $auditPin = $null; $journalPin = $null; $archivePin = $null
     $journal = $null; $audit = $null; $archive = $null
-    $expectedStage = @(); $mountedIdentity = $null
+    $expectedStage = @(); $profileEvidencePins = @(); $mountedIdentity = $null
     $beforeFirmware = $null
 
     try {
@@ -579,6 +1134,9 @@ function Invoke-GpuStageRetirement {
         $expectedStage = @(Assert-GpuStageRetirementEvidence -Audit $audit -Journal $journal -ArchivedSelector $archive `
             -ExpectedAuditSha256 $ExpectedAuditSha256 -ExpectedRunId $ExpectedRunId `
             -ExpectedRunDirectory $runDirectory -ExpectedJournalPath $journalPath -ExpectedSourceRoot $SourceRoot)
+        if ($script:GpuRetirement201140ProfileSelected) {
+            $profileEvidencePins = @(Assert-GpuStageRetirement201140Proof -Journal $journal -WorkspaceRoot $WorkspaceRoot)
+        }
         $probePath = [IO.Path]::GetFullPath((Join-Path ([string]$journal.Paths.LoaderBuild) 'ib-tcg-dump.exe'))
         if ([IO.Path]::GetFullPath([string]$journal.Tools.Probe.Path) -cne $probePath -or
             [string]$journal.Tools.Probe.Sha256 -cne $ExpectedProbeSha256 -or [long]$journal.Tools.Probe.Bytes -ne $ExpectedProbeBytes) {
@@ -595,7 +1153,8 @@ function Invoke-GpuStageRetirement {
             [string]$journal.Backup.ReferenceLog.Sha256 -cne $ExpectedReferenceLogSha256 -or [long]$journal.Backup.ReferenceLog.Bytes -ne $ExpectedReferenceLogBytes) {
             throw 'The archived TPM reference log differs from the fixed reviewed evidence.'
         }
-        $report.OriginalEvidencePins = [pscustomobject]@{ Audit=$auditPin; Journal=$journalPin; ArchivedSelector=$archivePin; Source=$sourcePins; ReferenceLog=$referenceLogPin; Probe=$journal.Tools.Probe }
+        $report.OriginalEvidencePins = [pscustomobject]@{ Audit=$auditPin; Journal=$journalPin; ArchivedSelector=$archivePin; Source=$sourcePins; ReferenceLog=$referenceLogPin; Probe=$journal.Tools.Probe; ProfileEvidence=$profileEvidencePins }
+        $report.ProfileEvidencePins = $profileEvidencePins
         $report.RetirementAuditTool = $auditToolPin
         $report.ReviewedStagePins = $expectedStage
 
@@ -655,7 +1214,28 @@ function Invoke-GpuStageRetirement {
         $report.FirmwareObservations += [pscustomobject]@{ Checkpoint='initial'; Text=$beforeFirmwareText; Pin=$beforeFirmware.Pin; ReceiptPath=$beforeFirmware.ReceiptPath }
         $report.OriginalFirmwareBaselinePin = $firmwareBaseline
         $report.OriginalFirmwareBaselineEqual = [string]::Equals([string]$beforeFirmwareText, [string]$archivedBaselineText, [StringComparison]::Ordinal)
-        if ($report.OriginalFirmwareBaselineEqual) {
+        if ($script:GpuRetirement201140ProfileSelected) {
+            $reviewedFirmwarePath = Join-Path $WorkspaceRoot $ExpectedReviewedFirmwareRelativePath
+            try {
+                & $Operations['AssertPathWithin'] $reviewedFirmwarePath $WorkspaceRoot $true | Out-Null
+                $reviewedFirmwarePin = Get-GpuStageRetirementPin -Path $reviewedFirmwarePath
+            }
+            catch {
+                throw "Current firmware text differs from the fixed 201140 final-review capture or it could not be verified: $($_.Exception.Message)"
+            }
+            if ($reviewedFirmwarePin.Sha256 -cne $ExpectedReviewedFirmwareSha256 -or
+                $reviewedFirmwarePin.Bytes -ne $ExpectedReviewedFirmwareBytes) {
+                throw 'The fixed 201140 final-review firmware capture has changed.'
+            }
+            $reviewedFirmwareText = [IO.File]::ReadAllText($reviewedFirmwarePath)
+            if (-not [string]::Equals([string]$beforeFirmwareText, [string]$reviewedFirmwareText, [StringComparison]::Ordinal)) {
+                throw 'Current firmware enumeration differs from the successful 201140 final-review capture.'
+            }
+            $baselineText = $reviewedFirmwareText
+            $report.FirmwareBaselineSource = 'REVIEWED_201140_FINAL_CAPTURE'
+            $report.ReviewedFirmwareBaselinePin = $reviewedFirmwarePin
+        }
+        elseif ($report.OriginalFirmwareBaselineEqual) {
             $baselineText = $archivedBaselineText
             $report.FirmwareBaselineSource = 'ARCHIVED_BACKUP'
         }
@@ -691,6 +1271,9 @@ function Invoke-GpuStageRetirement {
         $report.Health = $liveHealth.Verdict
         $report.HealthReceipt = $liveHealth.ReceiptPath
         $bootSelectionBefore = & $Operations['CaptureBootSelection'] $journal $actions 'before-removal-checkpoint'
+        if ($script:GpuRetirement201140ProfileSelected) {
+            Assert-GpuStageRetirement201140BootSelection -Capture $bootSelectionBefore -Checkpoint 'Initial retirement checkpoint'
+        }
         $report.BootSelectionBefore = $bootSelectionBefore.Baseline
         $report.BootSelectionCaptures += $bootSelectionBefore
         $report.FirmwareBaselineEqual = $true
@@ -760,7 +1343,7 @@ function Invoke-GpuStageRetirement {
         else {
             $report.ApplyApproved = $true
             # Re-pin copied evidence and review/intent records immediately before removal.
-            foreach ($pin in @($auditPin,$journalPin,$archivePin,$auditToolPin,$referenceLogPin) + @($sourcePins)) { Assert-GpuStageRetirementPin -Pin $pin | Out-Null }
+            foreach ($pin in @($auditPin,$journalPin,$archivePin,$auditToolPin,$referenceLogPin) + @($sourcePins) + @($profileEvidencePins)) { Assert-GpuStageRetirementPin -Pin $pin | Out-Null }
             $probeCurrent = Get-GpuStageRetirementPin -Path ([string]$journal.Tools.Probe.Path)
             if ($probeCurrent.Sha256 -cne $ExpectedProbeSha256 -or $probeCurrent.Bytes -ne $ExpectedProbeBytes) { throw 'Pinned health probe changed before deletion.' }
             foreach ($copySet in $report.Copies) {

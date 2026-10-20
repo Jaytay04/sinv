@@ -1,6 +1,8 @@
 [CmdletBinding(SupportsShouldProcess = $true, ConfirmImpact = 'Medium')]
 param(
     [switch]$Apply,
+    [switch]$CompletedRun201140,
+    [string]$ReadinessPath,
     [string]$ToolRoot
 )
 
@@ -30,18 +32,31 @@ if ($WhatIfPreference) {
         FilesystemChangesPerformed = $false
         NativeCommandsExecuted = $false
         EspMounted = $false
+        CompletedRun201140 = [bool]$CompletedRun201140
         Note = 'No probes, commands, or filesystem operations were executed. Default mode reviews and records evidence; -Apply requests removal of only the seven pinned files after all gates pass.'
     } | ConvertTo-Json -Depth 5
     return
 }
 
-Import-Module (Join-Path $ToolRoot 'GpuStageRetirement.psm1') -Force -DisableNameChecking -ErrorAction Stop
+if ($CompletedRun201140 -and [string]::IsNullOrWhiteSpace($ReadinessPath)) {
+    throw 'The completed 201140 profile requires the explicit EvidencePath from a fresh Get-GpuBaremetalReadiness.ps1 report.'
+}
+if (-not $CompletedRun201140 -and -not [string]::IsNullOrWhiteSpace($ReadinessPath)) {
+    throw 'ReadinessPath is supported only with the fixed -CompletedRun201140 profile.'
+}
+$retirementModule = Import-Module (Join-Path $ToolRoot 'GpuStageRetirement.psm1') -Force -DisableNameChecking -PassThru -ErrorAction Stop | Select-Object -First 1
 $invokeParameters = @{
     ToolRoot = $ToolRoot
     WorkspaceRoot = $WorkspaceRoot
     Apply = [bool]$Apply
 }
 if ($PSBoundParameters.ContainsKey('Confirm')) { $invokeParameters.Confirm = [bool]$PSBoundParameters['Confirm'] }
-$result = Invoke-GpuStageRetirement @invokeParameters
+$result = & $retirementModule {
+    param($parameters, $useCompleted201140, $workspace, $readiness)
+    if ($useCompleted201140) {
+        $null = Select-GpuStageRetirement201140Profile -WorkspaceRoot $workspace -ReadinessPath $readiness
+    }
+    Invoke-GpuStageRetirement @parameters
+} $invokeParameters ([bool]$CompletedRun201140) $WorkspaceRoot $ReadinessPath
 $result | ConvertTo-Json -Depth 24
 if (-not $result.Succeeded) { exit 1 }

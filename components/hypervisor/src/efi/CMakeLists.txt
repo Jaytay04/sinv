@@ -590,6 +590,10 @@ if(WIN32)
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
             -File "${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/gpu_diagnostic/tests/Test-GpuStageRetirement.ps1"
             -ToolRoot "${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/gpu_diagnostic")
+    add_test(NAME uefi_hypervisor_gpu_stage_retirement_201140_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/gpu_diagnostic/tests/Test-GpuStageRetirement201140.ps1"
+            -ToolRoot "${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/gpu_diagnostic")
     add_test(NAME uefi_hypervisor_vmexit_asm_contracts
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
             -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/Test-EfiVmExitContracts.ps1"
