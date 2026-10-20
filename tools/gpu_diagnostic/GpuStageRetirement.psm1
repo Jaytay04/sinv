@@ -16,6 +16,9 @@ $script:GpuRetirementReferenceLogBytes = 40838L
 $script:GpuRetirementAuditBytes = 12050L
 $script:GpuRetirementJournalBytes = 44878L
 $script:GpuRetirementArchiveBytes = 533L
+$script:GpuRetirementReviewedFirmwareRelativePath = '.analysis\gpu-stage-retirement\0851536237dd4f6a9ff5df72b0c36848\observations\stage-retirement-firmware-214f7cdb11a647beb09fd271978cca83.stdout.txt'
+$script:GpuRetirementReviewedFirmwareSha256 = 'ECB8F364A0058CB7D60B313E3941FCF61760F0C8F814EA188FD9BE5122C478CE'
+$script:GpuRetirementReviewedFirmwareBytes = 4336L
 $script:GpuRetirementNames = @('grubx64.efi', 'handoff-status.txt', 'manifest.sha256', 'payload-diagnostic.txt', 'payload.efi', 'shimx64.efi', 'tcglog.ib')
 
 function Get-GpuStageRetirementPin {
@@ -490,7 +493,10 @@ function Invoke-GpuStageRetirement {
         [long]$ExpectedAuditToolBytes = $script:GpuRetirementAuditToolBytes,
         [string]$ExpectedAuditToolRelativePath = $script:GpuRetirementAuditToolRelativePath,
         [string]$ExpectedReferenceLogSha256 = $script:GpuRetirementReferenceLogSha256,
-        [long]$ExpectedReferenceLogBytes = $script:GpuRetirementReferenceLogBytes
+        [long]$ExpectedReferenceLogBytes = $script:GpuRetirementReferenceLogBytes,
+        [string]$ExpectedReviewedFirmwareRelativePath = $script:GpuRetirementReviewedFirmwareRelativePath,
+        [string]$ExpectedReviewedFirmwareSha256 = $script:GpuRetirementReviewedFirmwareSha256,
+        [long]$ExpectedReviewedFirmwareBytes = $script:GpuRetirementReviewedFirmwareBytes
     )
 
     $ErrorActionPreference = 'Stop'
@@ -505,7 +511,10 @@ function Invoke-GpuStageRetirement {
             $ExpectedArchiveBytes -ne $script:GpuRetirementArchiveBytes -or $ExpectedProbeSha256 -cne $script:GpuRetirementProbeSha256 -or
             $ExpectedProbeBytes -ne $script:GpuRetirementProbeBytes -or $ExpectedAuditToolSha256 -cne $script:GpuRetirementAuditToolSha256 -or
             $ExpectedAuditToolBytes -ne $script:GpuRetirementAuditToolBytes -or $ExpectedAuditToolRelativePath -cne $script:GpuRetirementAuditToolRelativePath -or $ExpectedReferenceLogSha256 -cne $script:GpuRetirementReferenceLogSha256 -or
-            $ExpectedReferenceLogBytes -ne $script:GpuRetirementReferenceLogBytes) {
+            $ExpectedReferenceLogBytes -ne $script:GpuRetirementReferenceLogBytes -or
+            $ExpectedReviewedFirmwareRelativePath -cne $script:GpuRetirementReviewedFirmwareRelativePath -or
+            $ExpectedReviewedFirmwareSha256 -cne $script:GpuRetirementReviewedFirmwareSha256 -or
+            $ExpectedReviewedFirmwareBytes -ne $script:GpuRetirementReviewedFirmwareBytes) {
             throw 'Production retirement evidence pins are immutable; test-only overrides require an explicit mock operations table.'
         }
         $Operations = New-GpuStageRetirementPlatformOperations -ToolRoot $ToolRoot -AuditToolPath (Join-Path $WorkspaceRoot $ExpectedAuditToolRelativePath)
@@ -517,7 +526,9 @@ function Invoke-GpuStageRetirement {
         RemovedFiles = @(); Copies = @(); Errors = @(); CleanupErrors = @()
         LocalReceiptDirectory = $null; ExternalReceiptDirectory = $null
         OriginalEvidencePins = $null; RetirementAuditTool = $null; ReviewedStagePins = $null; Esp = $null
-        FirmwareBaselineEqual = $false; Health = $null; NextAction = 'blocked; preserve the stage and all evidence'
+        FirmwareBaselineEqual = $false; FirmwareBaselineSource = $null
+        OriginalFirmwareBaselinePin = $null; OriginalFirmwareBaselineEqual = $false; ReviewedFirmwareBaselinePin = $null
+        Health = $null; NextAction = 'blocked; preserve the stage and all evidence'
         FirmwareObservations = @(); BootSelectionCaptures = @(); HealthReceipt = $null
         EspUnmounted = $false; EspFilesChanged = $false; HostBootStateChanged = $false
     }
@@ -638,12 +649,36 @@ function Invoke-GpuStageRetirement {
         if ($firmwareBaseline.Sha256 -cne [string]$backup.FirmwareEnumeration.Sha256 -or $firmwareBaseline.Bytes -ne [long]$backup.FirmwareEnumeration.Bytes) {
             throw 'Saved firmware enumeration baseline pin is invalid.'
         }
-        $baselineText = [IO.File]::ReadAllText([string]$backup.FirmwareEnumeration.Path)
+        $archivedBaselineText = [IO.File]::ReadAllText([string]$backup.FirmwareEnumeration.Path)
         $beforeFirmware = & $Operations['CaptureFirmware'] $actions
         $beforeFirmwareText = Get-GpuStageRetirementFirmwareText -Observation $beforeFirmware
         $report.FirmwareObservations += [pscustomobject]@{ Checkpoint='initial'; Text=$beforeFirmwareText; Pin=$beforeFirmware.Pin; ReceiptPath=$beforeFirmware.ReceiptPath }
-        if (-not [string]::Equals([string]$beforeFirmwareText, [string]$baselineText, [StringComparison]::Ordinal)) {
-            throw 'Current firmware text differs from the saved mounted-ESP baseline.'
+        $report.OriginalFirmwareBaselinePin = $firmwareBaseline
+        $report.OriginalFirmwareBaselineEqual = [string]::Equals([string]$beforeFirmwareText, [string]$archivedBaselineText, [StringComparison]::Ordinal)
+        if ($report.OriginalFirmwareBaselineEqual) {
+            $baselineText = $archivedBaselineText
+            $report.FirmwareBaselineSource = 'ARCHIVED_BACKUP'
+        }
+        else {
+            $reviewedFirmwarePath = Join-Path $WorkspaceRoot $ExpectedReviewedFirmwareRelativePath
+            try {
+                & $Operations['AssertPathWithin'] $reviewedFirmwarePath $WorkspaceRoot $true | Out-Null
+                $reviewedFirmwarePin = Get-GpuStageRetirementPin -Path $reviewedFirmwarePath
+            }
+            catch {
+                throw "Current firmware text differs from the archived baseline and the pinned reviewed later capture could not be verified: $($_.Exception.Message)"
+            }
+            if ($reviewedFirmwarePin.Sha256 -cne $ExpectedReviewedFirmwareSha256 -or
+                $reviewedFirmwarePin.Bytes -ne $ExpectedReviewedFirmwareBytes) {
+                throw 'Current firmware text differs from the archived baseline and the pinned reviewed later capture has changed.'
+            }
+            $reviewedFirmwareText = [IO.File]::ReadAllText($reviewedFirmwarePath)
+            if (-not [string]::Equals([string]$beforeFirmwareText, [string]$reviewedFirmwareText, [StringComparison]::Ordinal)) {
+                throw 'Current firmware text differs from the archived baseline and the exact pinned reviewed later capture text does not match.'
+            }
+            $baselineText = $reviewedFirmwareText
+            $report.FirmwareBaselineSource = 'REVIEWED_LATER_CAPTURE'
+            $report.ReviewedFirmwareBaselinePin = $reviewedFirmwarePin
         }
         $liveHealth = & $Operations['CaptureHealth'] $journal $actions
         if ($liveHealth.CommandSucceeded -ne $true -or $null -eq $liveHealth.Verdict -or
@@ -696,7 +731,10 @@ function Invoke-GpuStageRetirement {
             SchemaVersion=1; Kind=$intentKind; RunId=$ExpectedRunId; ReceiptId=$receiptId
             AuditPin=$auditPin; JournalPin=$journalPin; ArchivedSelectorPin=$archivePin; SourcePins=$sourcePins
             EspIdentity=$mountedIdentity; BootManagerSha256=[string]$backup.BootManagerSha256
-            FirmwareBaseline=$firmwareBaseline; StagePins=$expectedStage; Copies=$report.Copies
+            FirmwareBaseline=$firmwareBaseline; FirmwareBaselineSource=$report.FirmwareBaselineSource
+            OriginalFirmwareBaselineEqual=$report.OriginalFirmwareBaselineEqual
+            ReviewedFirmwareBaselinePin=$report.ReviewedFirmwareBaselinePin
+            StagePins=$expectedStage; Copies=$report.Copies
             Health=$liveHealth.Verdict; CreatedUtc=[DateTime]::UtcNow.ToString('o')
         }
         $recordLeaf = if ($Apply) { 'intent.json' } else { 'review.json' }

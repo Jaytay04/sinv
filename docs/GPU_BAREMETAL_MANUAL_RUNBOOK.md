@@ -107,6 +107,18 @@ and no referenced boot entry may target the stage. A changed hash, unknown
 file, failed read, changed boot selection, or unavailable recovery copy stops
 the operation.
 
+The original firmware text remains preserved. The script also admits one
+exact, hash-pinned later capture reviewed after the first retirement attempt:
+it adds the generic CD/DVD, Removable, and Network entries and their firmware
+display-order references, with the existing Windows and USB blocks unchanged.
+For that capture, `FirmwareBaselineSource` is `REVIEWED_LATER_CAPTURE` and
+`OriginalFirmwareBaselineEqual` is false. `FirmwareBaselineEqual` must still
+be true for the selected capture after the live health and raw boot checks.
+Every later checkpoint must match that same selected text and raw boot order;
+other changes still stop retirement. See the
+[firmware comparison review](GPU_STAGE_RETIREMENT_150318_REVIEW.md) for evidence
+and limits. Do not delete firmware entries to force the old text to match.
+
 Only after that successful review, perform the bounded removal:
 
 ```powershell

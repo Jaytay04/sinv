@@ -80,6 +80,12 @@ function New-TestFixture {
     $firmwarePath = Join-Path $recoveryDirectory 'firmware-enumeration-before.txt'
     [IO.File]::WriteAllText($firmwarePath, "Firmware baseline context=S:`nBootOrder: {fixture}`n", [Text.UTF8Encoding]::new($false))
     $firmwarePin = Get-TestPin $firmwarePath
+    $reviewedFirmwareRelativePath = '.analysis\gpu-stage-retirement\0851536237dd4f6a9ff5df72b0c36848\observations\stage-retirement-firmware-214f7cdb11a647beb09fd271978cca83.stdout.txt'
+    $reviewedFirmwarePath = Join-Path $root $reviewedFirmwareRelativePath
+    [void][IO.Directory]::CreateDirectory((Split-Path -Parent $reviewedFirmwarePath))
+    $reviewedFirmwareText = "Firmware Boot Manager`n---------------------`nidentifier {fixture-reviewed-later-capture}`n"
+    [IO.File]::WriteAllText($reviewedFirmwarePath, $reviewedFirmwareText, [Text.UTF8Encoding]::new($false))
+    $reviewedFirmwarePin = Get-TestPin $reviewedFirmwarePath
 
     $auditEntries = @($stagePins | ForEach-Object { [pscustomobject]@{ RelativePath=$_.RelativePath; Kind='File'; Bytes=$_.Bytes; Sha256=$_.Sha256; Hashed=$true } })
     $audit = [pscustomobject]@{
@@ -124,6 +130,8 @@ function New-TestFixture {
         BuildDirectory=$buildDirectory; EspRoot=$espRoot; StageDirectory=$stageDirectory; BootManagerPath=$bootManagerPath; BootManagerSha256=$bootPin.Sha256
         AuditPath=$auditPath; Audit=$audit; JournalPath=$journalPath; Journal=$journal; ArchivePath=$archivePath; Archive=$selector
         StagePins=$stagePins; ProbePin=$probePin; ReferenceLogPin=$logPin; FirmwareText=[IO.File]::ReadAllText($firmwarePath)
+        ReviewedFirmwareText=$reviewedFirmwareText; ReviewedFirmwarePath=$reviewedFirmwarePath
+        ReviewedFirmwareRelativePath=$reviewedFirmwareRelativePath; ReviewedFirmwarePin=$reviewedFirmwarePin
     }
 }
 function New-MockOperations {
@@ -145,8 +153,24 @@ function New-MockOperations {
     $ops.MountEsp = { param($Actions) return [pscustomobject]@{ Root=$Fixture.EspRoot; Acquired=$true; ActionDirectory=$Actions; Identity=[pscustomobject]@{ Volume='fixture-volume'; DiskNumber=7; DiskUniqueId='fixture-disk-id'; PartitionGuid='FIXTURE-PARTITION' } } }.GetNewClosure()
     $ops.DismountEsp = { param($Mount) if ($Behavior.DismountFails) { throw 'mock unmount failed' }; $Behavior.UnmountCount++ }.GetNewClosure()
     $ops.AssertMountedEsp = { param($Mount,$Backup) if ($Behavior.WrongEsp) { throw 'mock wrong ESP' } }.GetNewClosure()
-    $ops.CaptureFirmware = { param($Actions) $Behavior.FirmwareCaptureCount++; if ($Behavior.FirmwareChanges -or ($Behavior.FirmwareChangesAt -gt 0 -and $Behavior.FirmwareCaptureCount -ge $Behavior.FirmwareChangesAt)) { return [pscustomobject]@{ Text='foreign firmware entry' } }; return [pscustomobject]@{ Text=$Fixture.FirmwareText; Pin=$null; ReceiptPath='mock-bcdedit.receipt.json' } }.GetNewClosure()
-    $ops.CaptureHealth = { param($State,$Actions) return [pscustomobject]@{ CommandSucceeded=$true; Verdict=[pscustomobject]@{ Passed=$true; ExpectedResult='ABSENT'; Aggregate='ABSENT'; CpuCount=2; ExpectedCpus=2 }; ReceiptPath='mock-health.receipt.json' } }
+    $ops.CaptureFirmware = { param($Actions)
+        $Behavior.FirmwareCaptureCount++
+        $captureIndex = [int]$Behavior.FirmwareCaptureCount
+        if ($Behavior.ContainsKey('FirmwareSequence') -and $Behavior.FirmwareSequence.Count -ge $captureIndex) {
+            $text = [string]$Behavior.FirmwareSequence[$captureIndex - 1]
+        } elseif ($Behavior.FirmwareChanges -or ($Behavior.FirmwareChangesAt -gt 0 -and $captureIndex -ge $Behavior.FirmwareChangesAt)) {
+            $text = 'foreign firmware entry'
+        } elseif ($Behavior.ContainsKey('UseReviewedFirmware') -and $Behavior.UseReviewedFirmware) {
+            $text = $Fixture.ReviewedFirmwareText
+        } else {
+            $text = $Fixture.FirmwareText
+        }
+        return [pscustomobject]@{ Text=$text; Pin=$null; ReceiptPath='mock-bcdedit.receipt.json' }
+    }.GetNewClosure()
+    $ops.CaptureHealth = { param($State,$Actions)
+        $passed = -not ($Behavior.ContainsKey('HealthFails') -and $Behavior.HealthFails)
+        return [pscustomobject]@{ CommandSucceeded=$true; Verdict=[pscustomobject]@{ Passed=$passed; ExpectedResult='ABSENT'; Aggregate='ABSENT'; CpuCount=2; ExpectedCpus=2 }; ReceiptPath='mock-health.receipt.json' }
+    }.GetNewClosure()
     $ops.CaptureBootSelection = { param($State,$Actions,$Checkpoint)
         $Behavior.BootCaptureCount++
         if ($Behavior.BootNextPresent) { throw 'BootNext is set; refusing stage retirement.' }
@@ -181,6 +205,9 @@ function Invoke-FixtureRetirement {
         ExpectedAuditToolBytes=(Get-TestPin (Join-Path $Fixture.BuildDirectory 'ibaudit.exe')).Bytes
         ExpectedAuditToolRelativePath='build\loader\ibaudit.exe'
         ExpectedReferenceLogSha256=$Fixture.ReferenceLogPin.Sha256; ExpectedReferenceLogBytes=$Fixture.ReferenceLogPin.Bytes
+        ExpectedReviewedFirmwareRelativePath=$Fixture.ReviewedFirmwareRelativePath
+        ExpectedReviewedFirmwareSha256=$Fixture.ReviewedFirmwarePin.Sha256
+        ExpectedReviewedFirmwareBytes=$Fixture.ReviewedFirmwarePin.Bytes
     }
     if ($Apply) { $parameters.Apply = $true }
     if ($null -ne $Pins) { foreach ($key in $Pins.Keys) { $parameters[$key]=$Pins[$key] } }
@@ -206,6 +233,9 @@ try {
                 ArchiveSha256=$script:GpuRetirementArchiveSha256; ArchiveBytes=$script:GpuRetirementArchiveBytes
                 ProbeSha256=$script:GpuRetirementProbeSha256; ProbeBytes=$script:GpuRetirementProbeBytes
                 ReferenceLogSha256=$script:GpuRetirementReferenceLogSha256; ReferenceLogBytes=$script:GpuRetirementReferenceLogBytes
+                ReviewedFirmwareRelativePath=$script:GpuRetirementReviewedFirmwareRelativePath
+                ReviewedFirmwareSha256=$script:GpuRetirementReviewedFirmwareSha256
+                ReviewedFirmwareBytes=$script:GpuRetirementReviewedFirmwareBytes
                 AuditToolSha256=$script:GpuRetirementAuditToolSha256; AuditToolBytes=$script:GpuRetirementAuditToolBytes
                 Names=@($script:GpuRetirementNames)
             }
@@ -217,6 +247,7 @@ try {
         Assert-True ($profile.ArchiveSha256 -ceq 'ABC00DBDFFC570B1EC78255426F3145CC12438DE023CFD5877D9B6248F363CA7' -and $profile.ArchiveBytes -eq 533) 'Immutable profile archive pin differs from the reviewed selector.'
         Assert-True ($profile.ProbeSha256 -ceq '49CCB02124E6536F4F107B83C4E79D31C5DA71993585DFD48139726F11C79D5E' -and $profile.ProbeBytes -eq 172544) 'Immutable profile probe pin differs from the reviewed build.'
         Assert-True ($profile.ReferenceLogSha256 -ceq '22B1F571E7572C1D1448B14504AF18435EB487B39DB9E87C9592A95432A5C447' -and $profile.ReferenceLogBytes -eq 40838) 'Immutable profile reference-log pin differs from the reviewed backup.'
+        Assert-True ($profile.ReviewedFirmwareRelativePath -ceq '.analysis\gpu-stage-retirement\0851536237dd4f6a9ff5df72b0c36848\observations\stage-retirement-firmware-214f7cdb11a647beb09fd271978cca83.stdout.txt' -and $profile.ReviewedFirmwareSha256 -ceq 'ECB8F364A0058CB7D60B313E3941FCF61760F0C8F814EA188FD9BE5122C478CE' -and $profile.ReviewedFirmwareBytes -eq 4336) 'Immutable profile later firmware capture pin differs from reviewed evidence.'
         Assert-True ($profile.AuditToolSha256 -ceq 'C16517939C887A7991DF4A0CDF05604AEC030141D9DA1FC45FDE8E989EC599A4' -and $profile.AuditToolBytes -eq 246784) 'Immutable profile audit-tool pin changed unexpectedly.'
         Assert-True ($profile.Names.Count -eq 7 -and $profile.Names -contains 'payload-diagnostic.txt') 'Immutable profile must include the retained payload diagnostic.'
     }
@@ -415,7 +446,44 @@ try {
         $ops=New-MockOperations $fixture $behavior
         $result=Invoke-FixtureRetirement $fixture $ops
         Assert-True ($result.Status -ceq 'REVIEWED_STAGE_READY_FOR_RETIREMENT' -and $result.Succeeded -and $result.Copies.Count -eq 7 -and $behavior.DeleteCount -eq 0 -and $result.EspUnmounted) "Review did not preserve stage, create seven copies, and unmount. status=$($result.Status) succeeded=$($result.Succeeded) copies=$(@($result.Copies).Count) deleted=$($behavior.DeleteCount) unmounted=$($result.EspUnmounted) errors=$($result.Errors -join '; ') cleanup=$($result.CleanupErrors -join '; ')"
+        Assert-True ($result.FirmwareBaselineSource -ceq 'ARCHIVED_BACKUP' -and $result.OriginalFirmwareBaselineEqual -and $result.FirmwareBaselineEqual) 'Exact archived firmware text did not remain the chosen baseline.'
+        Assert-True ($result.OriginalFirmwareBaselinePin.Sha256 -ceq $fixture.Journal.Backup.FirmwareEnumeration.Sha256 -and $null -eq $result.ReviewedFirmwareBaselinePin) 'Archived baseline provenance is incorrect.'
         foreach ($copy in $result.Copies) { Assert-True ((Get-TestPin $copy.Local.Path).Sha256 -ceq $copy.Source.Sha256 -and (Get-TestPin $copy.External.Path).Sha256 -ceq $copy.Source.Sha256) "Review copy mismatch: $($copy.Name)" }
+    }
+    Invoke-TestCase 'exact pinned later firmware capture is accepted for review and Apply' {
+        $fixture=New-TestFixture
+        $reviewBehavior=@{CopyCount=0;DeleteCount=0;BootCaptureCount=0;UnmountCount=0;FirmwareCaptureCount=0;FirmwareChangesAt=0;FailCopyAt=0;FailDeleteAt=0;DismountFails=$false;FirmwareChanges=$false;BootNextPresent=$false;BootReadFails=$false;BootOrderChanges=$false;WrongEsp=$false;UseReviewedFirmware=$true}
+        $review=Invoke-FixtureRetirement $fixture (New-MockOperations $fixture $reviewBehavior)
+        Assert-True ($review.Succeeded -and $review.Status -ceq 'REVIEWED_STAGE_READY_FOR_RETIREMENT' -and $review.FirmwareBaselineSource -ceq 'REVIEWED_LATER_CAPTURE' -and -not $review.OriginalFirmwareBaselineEqual -and $review.FirmwareBaselineEqual) 'Exact pinned later capture was not accepted as a stable review baseline.'
+        Assert-True ($review.ReviewedFirmwareBaselinePin.Sha256 -ceq $fixture.ReviewedFirmwarePin.Sha256 -and $review.ReviewedFirmwareBaselinePin.Bytes -eq $fixture.ReviewedFirmwarePin.Bytes -and [IO.Path]::GetFullPath($review.ReviewedFirmwareBaselinePin.Path) -ceq [IO.Path]::GetFullPath($fixture.ReviewedFirmwarePath)) 'Review did not record the exact approved later capture pin.'
+        Assert-True ($review.Copies.Count -eq 7 -and $reviewBehavior.DeleteCount -eq 0) 'Later-capture review did not preserve the seven-file stage.'
+
+        $applyBehavior=@{CopyCount=0;DeleteCount=0;BootCaptureCount=0;UnmountCount=0;FirmwareCaptureCount=0;FirmwareChangesAt=0;FailCopyAt=0;FailDeleteAt=0;DismountFails=$false;FirmwareChanges=$false;BootNextPresent=$false;BootReadFails=$false;BootOrderChanges=$false;WrongEsp=$false;UseReviewedFirmware=$true}
+        $applied=Invoke-FixtureRetirement $fixture (New-MockOperations $fixture $applyBehavior) -Apply
+        Assert-True ($applied.Succeeded -and $applied.Status -ceq 'STAGE_RETIRED' -and $applied.FirmwareBaselineSource -ceq 'REVIEWED_LATER_CAPTURE' -and -not $applied.OriginalFirmwareBaselineEqual -and $applied.FirmwareBaselineEqual) 'Apply did not use the same exact pinned later-capture baseline.'
+        Assert-True ($applied.RemovedFiles.Count -eq 7 -and $applied.Copies.Count -eq 7 -and $applyBehavior.DeleteCount -eq 7 -and -not (Test-Path -LiteralPath $fixture.StageDirectory)) 'Apply did not copy then remove exactly the seven reviewed files.'
+    }
+    Invoke-TestCase 'invalid later firmware captures and baseline drift fail before deletion' {
+        foreach ($failure in @('tampered-capture','missing-capture','different-text','baseline-drift','health-failure','bootnext','boot-read-failure','boot-order-change')) {
+            $fixture=New-TestFixture
+            $behavior=@{CopyCount=0;DeleteCount=0;BootCaptureCount=0;UnmountCount=0;FirmwareCaptureCount=0;FirmwareChangesAt=0;FailCopyAt=0;FailDeleteAt=0;DismountFails=$false;FirmwareChanges=$false;BootNextPresent=$false;BootReadFails=$false;BootOrderChanges=$false;WrongEsp=$false;UseReviewedFirmware=$true}
+            if ($failure -eq 'tampered-capture') { [IO.File]::AppendAllText($fixture.ReviewedFirmwarePath,'tampered') }
+            if ($failure -eq 'missing-capture') { [IO.File]::Delete($fixture.ReviewedFirmwarePath) }
+            if ($failure -eq 'different-text') { $behavior.FirmwareSequence=@('different current firmware text') }
+            if ($failure -eq 'baseline-drift') { $behavior.FirmwareSequence=@($fixture.ReviewedFirmwareText,$fixture.FirmwareText) }
+            if ($failure -eq 'health-failure') { $behavior.HealthFails=$true }
+            if ($failure -eq 'bootnext') { $behavior.BootNextPresent=$true }
+            if ($failure -eq 'boot-read-failure') { $behavior.BootReadFails=$true }
+            if ($failure -eq 'boot-order-change') { $behavior.BootOrderChanges=$true }
+
+            $result=Invoke-FixtureRetirement $fixture (New-MockOperations $fixture $behavior) -Apply
+            Assert-True ($result.Status -ceq 'STAGE_RETIREMENT_FAILED' -and -not $result.Succeeded -and $behavior.DeleteCount -eq 0 -and (Test-Path -LiteralPath $fixture.StageDirectory)) "$failure did not fail closed before ESP deletion. errors=$($result.Errors -join '; ')"
+            if ($failure -eq 'baseline-drift') { Assert-True ($behavior.FirmwareCaptureCount -ge 2 -and $result.FirmwareBaselineSource -ceq 'REVIEWED_LATER_CAPTURE' -and ($result.Errors -join '; ') -match 'immediately before stage removal') 'Checkpoint drift switched to another baseline or was not rejected.' }
+            if ($failure -eq 'health-failure') { Assert-True ($behavior.BootCaptureCount -eq 0) 'A later firmware baseline bypassed the ABSENT health gate.' }
+            if ($failure -eq 'bootnext') { Assert-True ($behavior.BootCaptureCount -eq 1) 'A later firmware baseline bypassed raw BootNext ownership checks.' }
+            if ($failure -eq 'boot-read-failure') { Assert-True ($behavior.BootCaptureCount -eq 1) 'A later firmware baseline bypassed the raw boot-selection read gate.' }
+            if ($failure -eq 'boot-order-change') { Assert-True ($behavior.BootCaptureCount -eq 2) 'A later firmware baseline bypassed the raw BootOrder stability checkpoint.' }
+        }
     }
     Invoke-TestCase 'Apply removes only the seven pinned files after evidence copies and all gates pass' {
         $fixture=New-TestFixture
@@ -467,6 +535,7 @@ try {
     Invoke-TestCase 'production evidence-pin overrides require explicit mock operations' {
         Assert-Throws { & $retirementModule { param($root) Invoke-GpuStageRetirement -ToolRoot (Join-Path $root 'tools\gpu_diagnostic') -WorkspaceRoot $root -ExpectedAuditSha256 ('0'*64) } $fixture.Root } 'immutable|mock operations' 'Production pin override was accepted.'
         Assert-Throws { & $retirementModule { param($root) Invoke-GpuStageRetirement -ToolRoot (Join-Path $root 'tools\gpu_diagnostic') -WorkspaceRoot $root -ExpectedAuditToolRelativePath 'build\loader\ibaudit.exe' } $fixture.Root } 'immutable|mock operations' 'Production audit tool path override was accepted.'
+        Assert-Throws { & $retirementModule { param($root) Invoke-GpuStageRetirement -ToolRoot (Join-Path $root 'tools\gpu_diagnostic') -WorkspaceRoot $root -ExpectedReviewedFirmwareRelativePath 'reviewed-firmware.txt' } $fixture.Root } 'immutable|mock operations' 'Production later firmware capture override was accepted.'
     }
     Invoke-TestCase 'WhatIf exits before importing helpers or touching filesystem/host state' {
         $before=(Get-ChildItem -LiteralPath $fixtureRoot -Force -Recurse -ErrorAction SilentlyContinue | Measure-Object).Count
