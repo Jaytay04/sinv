@@ -9,8 +9,9 @@ this guide does not change `AGENTS.md`.
 Use **`gpu-host-test.ps1` for this guide**, not `gpu-payload-test.ps1`.
 The latter's `Complete` result belongs to the VM, not your physical machine.
 
-The [signed VM test](GPU_PAYLOAD_SIGNED_VM_RESULT.md) passed signed EFI boot
-and four CPU health checks. It used Windows 26200.9457, versus the host's
+The [startup diagnostic VM test](GPU_STARTUP_DIAGNOSTIC_VM_RESULT.md) passed
+signed EFI boot, the version-1 startup record, and four CPU health checks.
+It used Windows 26200.9457, versus the host's
 26200.9711, and needed a hard-stop fallback after graceful shutdown timed out.
 It did not exercise the physical Intel GPU, native VT-d enforcement, native
 framebuffer mapping, or host MOK acceptance. This is a diagnostic experiment,
@@ -22,6 +23,8 @@ Use elevated **64-bit Windows PowerShell**, and run each command separately.
 Do not paste the entire guide into a terminal. Wait for a successful result
 before the next forward action. All paths below start at the main workspace;
 the scripts operate on the feature worktree and leave `main` untouched.
+After your normal Windows restart, confirm that audio and displays work at
+baseline before starting the new experiment.
 
 ```powershell
 Set-Location 'C:\Users\jayli\OneDrive\Documents\Projects\hsinv'
@@ -73,70 +76,29 @@ a boot. `S:` must be free. Require `READY_FOR_FRESH_PREPARE` before step 2.
 This result is a preparation gate, not proof of MOK trust, GOP suitability,
 GPU isolation, or framebuffer ownership.
 
-**Current retry concern:** the earlier physical run
-`gpu-20261020T031023Z-9a2a92a17bf54b4faf4b60c6b7231ec7` completed recovery
-and its selector is archived. That does not remove its retained
-`EFI\insecure-boot` files. If inspection finds them, it reports
-`BLOCKED_READINESS`. Stop here and preserve the report: `Backup` and `Stage`
-intentionally reject an existing stage. The installer has no generic unstage
-action. For the six files already reviewed from this specific completed run,
-use the retirement procedure below. Other files or runs require a separate
-review. Do not delete/rename the directory, repeat old rollback, or reuse the
-old stage. Do not spend another build/sign cycle while this gate is blocked.
+**Current retry prerequisite:** the latest physical run
+`gpu-20261020T150318Z-59a346ed3cb8422bafe4be60268b7df1` completed
+reset verification and its selector is archived. Archive preserved its stage.
+The recorded collection contains seven files: the five installed files,
+`handoff-status.txt`, and `payload-diagnostic.txt`.
 
-### Retire the reviewed previous stage
+If inspection finds that stage, stop at `BLOCKED_READINESS` and preserve the
+printed report path. Do not start Prepare, Build, Backup, Stage, or Arm yet.
+The current `Retire-GpuCompletedStage.ps1` is hard-pinned to the older
+`gpu-20261020T031023Z-9a2a92a17bf54b4faf4b60c6b7231ec7` six-file stage;
+its `-Apply` command is not a cleanup command for this latest run.
 
-The inspection saved at
-`.analysis\gpu-baremetal-readiness\334426c80d1d47b2bb454d2c25e65d41\readiness.json`
-matched all six files to the archived run's Stage/Collection records. Its
-source-pin error was a script bug: it searched the main workspace instead of
-the feature worktree. The corrected script hashes the feature files. That bug
-does not establish readiness or authorize cleanup by itself.
+A retirement procedure for the seven-file stage must first bind the fresh
+readiness inventory to the latest archived journal and collected file hashes,
+verify the external recovery copies, and verify that no boot selection still
+references the stage. That review has not yet been performed for the live
+state after your restart. Do not delete or rename the directory, reuse the
+stage, edit a journal, or rerun old rollback to get around this gate.
 
-The retirement script is bound to that exact audit, completed journal, archived
-selector, ESP identity, and six hashes. First review the live state:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1
-```
-
-Require `REVIEWED_STAGE_READY_FOR_RETIREMENT`. Review does not remove ESP files.
-It saves local and external copies and receipts, checks health `ABSENT`, and
-uses a separately built, pinned `ibaudit.exe` to read BootNext/BootOrder and check
-referenced boot entries. The tool is under
-`.codex-build\gpu-stage-retirement-audit\readonly-v1\ibaudit.exe` in the main
-workspace; it does not replace the archived run's audit tool or alter its journal.
-Its focused `boot-selection` command does not capture TPM PCRs or MOK databases.
-Firmware-reading commands enable the existing process privilege and restore it
-before exit; they do not assign account rights or write firmware variables.
-The earlier `ibaudit baseline failed` review result used a broader capture and
-lacked explicit privilege setup; it did not identify which variable failed.
-The corrected check still fails closed if raw boot selection cannot be read,
-and its error identifies the command receipt and stderr file.
-BootNext must be absent. The full `bcdedit` firmware
-enumeration must also match the saved baseline with `S:` mounted. A variable
-read failure, active boot reference, unknown file, changed hash, or missing
-recovery copy stops the operation; no installer `off` operation is used as a
-read-only check.
-
-To perform the reviewed removal, run the explicit apply command yourself:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -Apply
-```
-
-Apply repeats the live checks, verifies a fresh external checkpoint under the
-original recovery run directory, and saves an intent before removal. It removes
-only the six matching files and their now-empty directory, without recursive
-deletion. Windows Boot Manager, BCD, firmware variables, the old journal, and
-the archived selector are preserved. Require `STAGE_RETIRED` and successful
-owned-mount cleanup. If anything fails, preserve the receipt and copies; do
-not retry a partial removal or restore files automatically.
-
-After successful retirement, repeat the readiness command above. Only a new
-`READY_FOR_FRESH_PREPARE` result permits step 2. Retirement is file maintenance;
-it does not test GPU isolation or scanout. This script cannot retire a future
-run or an unreviewed stage.
+Only after the matching stage has been reviewed and retired should you repeat
+the readiness command. Require a fresh `READY_FOR_FRESH_PREPARE` before step 2.
+The commands below describe the complete forward test and recovery sequence
+once that prerequisite is satisfied; they do not bypass a blocked first step.
 
 If inspection instead finds an active selector, inspect its saved state:
 
@@ -259,8 +221,14 @@ to pass, Secure Boot on, and the same Windows Boot Manager hash. Collection
 also saves available `handoff-status.txt` and `payload-diagnostic.txt` as
 `esp-handoff-status.txt` and `esp-payload-diagnostic.txt` in its action directory.
 Preserve the exact `payload_launch`, `payload_status`, `shim_load_phase`, and
-`shim_load_status` values. A file can be unavailable if boot stopped before
-writing it; preserve the console capture in that case.
+`shim_load_status` values. The new loader also captures `startup_record` and,
+when valid, `startup_stage`, `startup_reason`, `startup_status`, processor,
+CPU counts, and preparation/activation failure fields. Preserve the entire
+file. A valid returned-error record narrows the internal startup failure;
+`unavailable` or `invalid` does not identify a stage. A file can be unavailable
+if boot stopped before writing it; preserve the console capture in that case.
+This record cannot persist a nonreturning fail-stop or guarantee a fresh file
+when writing fails. Do not clear TPM PCRs to bypass the replay guard.
 
 `replay=ABORTED` alone does not explain a payload failure: the loader is
 replay-independent. A healthy hypervisor or a visible pattern also does not
@@ -308,9 +276,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees
 
 Keep the journal, signed hashes, CTest/audit logs, console captures, monitor
 photograph, and external recovery copy. Stage files remain evidence until
-separately reviewed and retired; Archive does not remove them. The retirement
-script above is limited to the previous run, not this future run. Keep both repository VM
-folders on disk as well.
+separately reviewed and retired; Archive does not remove them. A retirement
+procedure must match that exact completed run and its files. Keep all retained
+repository VM folders on disk as well.
 
 ## Recovery after a failed or interrupted action
 
