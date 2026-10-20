@@ -61,13 +61,17 @@ primary host.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\New-GpuPayloadVm.ps1
 ```
 
-This makes a full clone from the reviewed
-`hsinv-default-25h2-26200.9457` snapshot. It does not move the retained VM at
+This makes an independent offline copy of the stopped VM at the reviewed
+`hsinv-default-25h2-26200.9457` snapshot and verifies the copied files. It does not move the retained VM at
 `.codex-build\gpu_windows_vm\run-01\standalone\hsinv-Windows-25H2.vmx`.
 The clone, disks, and test NVRAM stay under `.codex-build\gpu_payload_vm`.
 The script publishes its exact path/hash in `vm-prepared.json`; later actions
 never select the newest directory. An existing prepared receipt blocks another
 clone instead of silently switching targets.
+
+The offline-copy path avoids the VMware encrypted-snapshot clone operation
+that failed during validation. A failed preparation keeps its partial output
+and evidence; it does not alter the retained VM or publish a usable receipt.
 
 Only the new clone receives the public certificate as an appended firmware
 `db` default, with Secure Boot configured on. The trust setup is unverified

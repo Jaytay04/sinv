@@ -67,6 +67,34 @@ $script:FixtureGitFunctionInstalled = $false
 try {
     [void](New-Item -ItemType Directory -Path $FixtureRoot -ErrorAction Stop)
 
+    Invoke-TestCase 'offline copy requires the unique reviewed snapshot to be current' {
+        $tokens = $null
+        $errors = $null
+        $cloneAst = [Management.Automation.Language.Parser]::ParseFile($CloneScriptPath, [ref]$tokens, [ref]$errors)
+        if ($errors.Count -ne 0) { throw 'VM preparation script did not parse.' }
+        $snapshotFunction = @($cloneAst.FindAll({ param($node)
+            $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+                $node.Name -ceq 'Get-GpuVmSnapshotSelection'
+        }, $true))
+        if ($snapshotFunction.Count -ne 1) { throw 'Snapshot parser function was not found exactly once.' }
+        . ([scriptblock]::Create($snapshotFunction[0].Extent.Text))
+        $snapshotPath = Join-Path $FixtureRoot 'reviewed.vmsd'
+        $reviewedName = 'hsinv-default-25h2-26200.9457'
+        $validSnapshot = @('snapshot.current = "39"', 'snapshot.numSnapshots = "39"',
+            'snapshot38.uid = "39"', ('snapshot38.displayName = "' + $reviewedName + '"'))
+        [IO.File]::WriteAllLines($snapshotPath, $validSnapshot)
+        $proof = Get-GpuVmSnapshotSelection -VmsdPath $snapshotPath -ExpectedName $reviewedName
+        Assert-True ($proof.CurrentUid -ceq '39' -and $proof.SnapshotIndex -ceq '38' -and
+            $proof.UniqueCurrentMatch -eq $true) 'valid VMware snapshotN metadata did not select the reviewed state'
+        [IO.File]::WriteAllLines($snapshotPath, @($validSnapshot -replace 'snapshot.current = "39"', 'snapshot.current = "38"'))
+        Assert-Throws { Get-GpuVmSnapshotSelection -VmsdPath $snapshotPath -ExpectedName $reviewedName } `
+            'not already at the uniquely identified' 'a different current snapshot must be rejected'
+        [IO.File]::WriteAllLines($snapshotPath, @($validSnapshot + 'snapshot39.uid = "40"' +
+            ('snapshot39.displayName = "' + $reviewedName + '"')))
+        Assert-Throws { Get-GpuVmSnapshotSelection -VmsdPath $snapshotPath -ExpectedName $reviewedName } `
+            'not already at the uniquely identified' 'ambiguous reviewed snapshot names must be rejected'
+    }
+
     Invoke-TestCase 'generated paths are deterministic and confined to their run identity' {
         $runId = 'gpu-payload-20261019T120000Z-0123456789abcdef0123456789abcdef'
         $runDirectory = Join-Path $FixtureRoot $runId

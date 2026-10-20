@@ -56,7 +56,7 @@ if ($SafetyCommands.Count -ne 1 -or
 $FunctionNames = @(
     'Get-FullPath', 'Test-PathWithin', 'Assert-NoReparsePoint',
     'Assert-NoReparsePathChain', 'Get-WindowsHardLinkCount',
-    'Assert-SingleHardLink', 'Resolve-VmxRelativePath',
+    'Assert-SingleHardLink', 'Get-SafeRelativePath', 'Resolve-VmxRelativePath',
     'Assert-StandaloneDisk', 'Get-VmxSetting', 'Assert-PreparedClone',
     'Set-VmxSetting', 'Get-SafeVmxSummary', 'Test-ConstantHex',
     'Get-AuthenticatedWindowsResult', 'Write-CommandRecord',
@@ -631,6 +631,113 @@ RW 8 SPARSE "standalone-flat.vmdk"
         Assert-Check $true 'standalone private VMDK is accepted'
     }
     catch { Assert-Check $false "standalone private VMDK is accepted ($($_.Exception.Message))" }
+
+    $ModelMissingConfiguredNvramVmx = Join-Path $VmxFixtureRoot 'model-missing-configured-nvram.vmx'
+    [IO.File]::WriteAllText($ModelMissingConfiguredNvramVmx,
+        "vhv.enable = `"TRUE`"`r`nscsi0:0.fileName = `"standalone.vmdk`"`r`nnvram = `"missing-configured.nvram`"")
+    Assert-Throws {
+        Assert-PreparedClone -Root $RepositoryRoot -BuildRoot $VmxFixtureRoot `
+            -Vmx $ModelMissingConfiguredNvramVmx -ValidationProfile Model
+    } 'Model rejects an explicitly configured missing NVRAM file' 'references a missing NVRAM file'
+
+    $PinnedPublicCertificate = Join-Path $VmxFixtureRoot 'pinned-public-certificate.cer'
+    $PinnedPublicCertificateBytes = [byte[]]@(0x30, 0x05, 0x02, 0x01, 0x01, 0x04, 0x01)
+    [IO.File]::WriteAllBytes($PinnedPublicCertificate, $PinnedPublicCertificateBytes)
+    function New-TestSignedNativeClone {
+        param(
+            [string]$CaseName,
+            [string]$SecureBoot = 'TRUE',
+            [string]$DbCertificate = 'hypersinv-public.cer',
+            [string]$DbAppend = 'TRUE',
+            [switch]$OmitDbCertificate,
+            [switch]$WrongCertificateBytes,
+            [ValidateSet('None', 'File', 'Directory', 'Junction')][string]$NvramCollision = 'None'
+        )
+        $vmIdentity = ([Guid]::NewGuid().ToString('N')).Substring(0, 8)
+        $cloneRoot = Join-Path $VmxFixtureRoot ("gpu_payload_vm\vm-20261020T123456Z-$vmIdentity\clone")
+        [void](New-Item -ItemType Directory -Path $cloneRoot -Force)
+        $vmxPath = Join-Path $cloneRoot 'hsinv-Windows-25H2.vmx'
+        $diskPath = Join-Path $cloneRoot 'test.vmdk'
+        [IO.File]::WriteAllText($diskPath, @'
+# Disk DescriptorFile
+CID=12345678
+parentCID=ffffffff
+createType="monolithicSparse"
+RW 8 SPARSE "test-flat.vmdk"
+'@)
+        [IO.File]::WriteAllText((Join-Path $cloneRoot 'test-flat.vmdk'), 'synthetic extent')
+        $vmxLines = [Collections.Generic.List[string]]::new()
+        $vmxLines.Add('vhv.enable = "TRUE"')
+        $vmxLines.Add('scsi0:0.fileName = "test.vmdk"')
+        $vmxLines.Add('nvram = "gpu-payload-test.nvram"')
+        $vmxLines.Add("uefi.secureBoot.enabled = `"$SecureBoot`"")
+        if (-not $OmitDbCertificate) {
+            $vmxLines.Add("uefi.secureBoot.dbDefault.file0 = `"$DbCertificate`"")
+        }
+        $vmxLines.Add("uefi.secureBoot.dbDefault.append = `"$DbAppend`"")
+        [IO.File]::WriteAllLines($vmxPath, $vmxLines.ToArray(), [Text.UTF8Encoding]::new($false))
+
+        $cloneCertificate = Join-Path $cloneRoot 'hypersinv-public.cer'
+        $certificateBytes = if ($WrongCertificateBytes) {
+            [byte[]]@(0x30, 0x05, 0x02, 0x01, 0x02, 0x04, 0x01)
+        } else { $PinnedPublicCertificateBytes }
+        [IO.File]::WriteAllBytes($cloneCertificate, $certificateBytes)
+        $nvramPath = Join-Path $cloneRoot 'gpu-payload-test.nvram'
+        switch ($NvramCollision) {
+            'File' { [IO.File]::WriteAllBytes($nvramPath, [byte[]]@(1, 2, 3)) }
+            'Directory' { [void](New-Item -ItemType Directory -Path $nvramPath) }
+            'Junction' {
+                $target = Join-Path $OutsideFixtureRoot ("nvram-target-$vmIdentity")
+                [void](New-Item -ItemType Directory -Path $target)
+                [void](New-Item -ItemType Junction -Path $nvramPath -Target $target)
+                $JunctionPaths.Add($nvramPath)
+            }
+        }
+        return [pscustomobject]@{ VmxPath = $vmxPath; CloneRoot = $cloneRoot; NvramPath = $nvramPath }
+    }
+
+    $ValidSignedNativeClone = New-TestSignedNativeClone -CaseName 'valid'
+    try {
+        $null = Assert-PreparedClone -Root $RepositoryRoot -BuildRoot $VmxFixtureRoot `
+            -Vmx $ValidSignedNativeClone.VmxPath -ValidationProfile SignedNative `
+            -CertificatePath $PinnedPublicCertificate
+        Assert-Check $true 'SignedNative accepts pinned Secure Boot defaults and an absent fresh test NVRAM'
+    }
+    catch { Assert-Check $false "SignedNative accepts pinned Secure Boot defaults and an absent fresh test NVRAM ($($_.Exception.Message))" }
+
+    $InvalidSignedNativeClones = @()
+    $InvalidSignedNativeClones += [pscustomobject]@{
+        Name = 'Secure Boot disabled'; Clone = (New-TestSignedNativeClone -CaseName 'secureboot-off' -SecureBoot 'FALSE')
+    }
+    $InvalidSignedNativeClones += [pscustomobject]@{
+        Name = 'dbDefault certificate setting missing'; Clone = (New-TestSignedNativeClone -CaseName 'missing-cert-setting' -OmitDbCertificate)
+    }
+    $InvalidSignedNativeClones += [pscustomobject]@{
+        Name = 'dbDefault certificate path changed'; Clone = (New-TestSignedNativeClone -CaseName 'wrong-cert-setting' -DbCertificate 'other.cer')
+    }
+    $InvalidSignedNativeClones += [pscustomobject]@{
+        Name = 'dbDefault append disabled'; Clone = (New-TestSignedNativeClone -CaseName 'append-disabled' -DbAppend 'FALSE')
+    }
+    $InvalidSignedNativeClones += [pscustomobject]@{
+        Name = 'dbDefault certificate does not match its pin'; Clone = (New-TestSignedNativeClone -CaseName 'certificate-mismatch' -WrongCertificateBytes)
+    }
+    $InvalidSignedNativeClones += [pscustomobject]@{
+        Name = 'fresh NVRAM file collision'; Clone = (New-TestSignedNativeClone -CaseName 'nvram-file-collision' -NvramCollision File)
+    }
+    $InvalidSignedNativeClones += [pscustomobject]@{
+        Name = 'fresh NVRAM directory collision'; Clone = (New-TestSignedNativeClone -CaseName 'nvram-directory-collision' -NvramCollision Directory)
+    }
+    $InvalidSignedNativeClones += [pscustomobject]@{
+        Name = 'fresh NVRAM reparse collision'; Clone = (New-TestSignedNativeClone -CaseName 'nvram-junction-collision' -NvramCollision Junction)
+    }
+    foreach ($InvalidSignedNative in $InvalidSignedNativeClones) {
+        Assert-Throws {
+            Assert-PreparedClone -Root $RepositoryRoot -BuildRoot $VmxFixtureRoot `
+                -Vmx $InvalidSignedNative.Clone.VmxPath -ValidationProfile SignedNative `
+                -CertificatePath $PinnedPublicCertificate
+        } "SignedNative rejects $($InvalidSignedNative.Name)" `
+            'SignedNative|NVRAM|certificate|Secure Boot|reparse|path boundary'
+    }
 
     $ParentChainDisk = Join-Path $VmxFixtureRoot 'backing-child.vmdk'
     [IO.File]::WriteAllText((Join-Path $VmxFixtureRoot 'backing-parent.vmdk'), @'

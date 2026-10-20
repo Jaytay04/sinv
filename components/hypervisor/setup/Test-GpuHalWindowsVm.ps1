@@ -662,7 +662,13 @@ function Assert-StandaloneDisk {
 }
 
 function Assert-PreparedClone {
-    param([string]$Root, [string]$BuildRoot, [string]$Vmx)
+    param(
+        [string]$Root,
+        [string]$BuildRoot,
+        [string]$Vmx,
+        [ValidateSet('Model', 'SignedNative')][string]$ValidationProfile = 'Model',
+        [string]$CertificatePath
+    )
     if (-not (Test-Path -LiteralPath $Vmx -PathType Leaf) -or
         -not (Test-PathWithin $BuildRoot $Vmx)) {
         throw 'VmxPath must name a prepared disposable clone under WorkspaceRoot\.codex-build.'
@@ -671,6 +677,66 @@ function Assert-PreparedClone {
     Assert-NoReparsePoint $Vmx 'Disposable VMX'
     Assert-SingleHardLink $Vmx 'Disposable VMX'
     $Lines = [IO.File]::ReadAllLines($Vmx)
+    $CloneRoot = Split-Path -Parent $Vmx
+    if ($ValidationProfile -ceq 'SignedNative') {
+        $RelativeVmx = Get-SafeRelativePath $BuildRoot $Vmx
+        if ($RelativeVmx -cnotmatch '^gpu_payload_vm\\vm-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}\\clone\\hsinv-Windows-25H2\.vmx$') {
+            throw 'SignedNative requires the reviewed VMX basename in a bounded private gpu_payload_vm clone directory.'
+        }
+
+        $RequiredSettings = [ordered]@{
+            'nvram' = 'gpu-payload-test.nvram'
+            'uefi.secureBoot.enabled' = 'TRUE'
+            'uefi.secureBoot.dbDefault.file0' = 'hypersinv-public.cer'
+            'uefi.secureBoot.dbDefault.append' = 'TRUE'
+        }
+        foreach ($Key in $RequiredSettings.Keys) {
+            $AssignmentPattern = '^\s*' + [regex]::Escape([string]$Key) + '\s*='
+            $Assignments = @($Lines | Where-Object { $_ -match $AssignmentPattern })
+            if ($Assignments.Count -ne 1 -or
+                (Get-VmxSetting $Lines $Key) -cne [string]$RequiredSettings[$Key]) {
+                throw "SignedNative VMX setting is missing, malformed, duplicated, or unapproved: $Key"
+            }
+        }
+        if (@($Lines | Where-Object {
+                    $_ -match '^\s*uefi\.secureBoot\.dbDefault\.file[0-9]+\s*=' -and
+                    $_ -notmatch '^\s*uefi\.secureBoot\.dbDefault\.file0\s*='
+                }).Count -ne 0 -or
+            @($Lines | Where-Object { $_ -match '^\s*uefi\.secureBoot\.allowAuthBypass\s*=' }).Count -ne 0) {
+            throw 'SignedNative VMX contains an unapproved Secure Boot default or authentication bypass setting.'
+        }
+
+        if ([string]::IsNullOrWhiteSpace($CertificatePath) -or
+            -not (Test-Path -LiteralPath $CertificatePath -PathType Leaf)) {
+            throw 'SignedNative requires the pinned public certificate input.'
+        }
+        Assert-NoReparsePathChain -Boundary $Root -Path $CertificatePath -Label 'Pinned public certificate path'
+        Assert-NoReparsePoint $CertificatePath 'Pinned public certificate'
+        $Certificate = Get-Item -LiteralPath $CertificatePath -Force
+        if ($Certificate.Length -lt 1 -or $Certificate.Length -gt 65536) {
+            throw 'Pinned public certificate length is outside its 64 KiB bound.'
+        }
+
+        $NvramPath = Resolve-VmxRelativePath $CloneRoot 'gpu-payload-test.nvram'
+        Assert-NoReparsePathChain -Boundary $CloneRoot -Path $NvramPath -Label 'Fresh test NVRAM path'
+        $NvramCollision = @(Get-ChildItem -LiteralPath $CloneRoot -Force |
+            Where-Object { [string]::Equals($_.Name, 'gpu-payload-test.nvram', [StringComparison]::OrdinalIgnoreCase) })
+        if ($NvramCollision.Count -ne 0) {
+            throw 'SignedNative fresh NVRAM path already has a file, directory, or reparse-point entry.'
+        }
+
+        $DbDefaultPath = Resolve-VmxRelativePath $CloneRoot 'hypersinv-public.cer'
+        if (-not (Test-Path -LiteralPath $DbDefaultPath -PathType Leaf)) {
+            throw 'SignedNative dbDefault certificate is missing from the private clone directory.'
+        }
+        Assert-NoReparsePathChain -Boundary $CloneRoot -Path $DbDefaultPath -Label 'dbDefault certificate path'
+        Assert-NoReparsePoint $DbDefaultPath 'dbDefault certificate'
+        Assert-SingleHardLink $DbDefaultPath 'dbDefault certificate'
+        if ((Get-Item -LiteralPath $DbDefaultPath -Force).Length -ne $Certificate.Length -or
+            (Get-Sha256 $DbDefaultPath) -cne (Get-Sha256 $CertificatePath)) {
+            throw 'SignedNative dbDefault certificate does not match the pinned public certificate input.'
+        }
+    }
     if ((Get-VmxSetting $Lines 'vhv.enable') -cne 'TRUE') {
         throw 'The prepared clone must have vhv.enable = "TRUE".'
     }
@@ -701,23 +767,25 @@ function Assert-PreparedClone {
             }
         }
     }
-    $NvramSetting = Get-VmxSetting $Lines 'nvram'
-    if ($null -eq $NvramSetting) {
-        $NvramPath = [IO.Path]::ChangeExtension($Vmx, '.nvram')
-    }
-    else {
-        $NvramPath = Resolve-VmxRelativePath (Split-Path -Parent $Vmx) ([string]$NvramSetting)
-    }
-    if (Test-Path -LiteralPath $NvramPath -PathType Leaf) {
-        if (-not (Test-PathWithin $BuildRoot $NvramPath)) {
-            throw 'The clone NVRAM file must remain under WorkspaceRoot\.codex-build.'
+    if ($ValidationProfile -ceq 'Model') {
+        $NvramSetting = Get-VmxSetting $Lines 'nvram'
+        if ($null -eq $NvramSetting) {
+            $NvramPath = [IO.Path]::ChangeExtension($Vmx, '.nvram')
         }
-        Assert-NoReparsePathChain -Boundary $BuildRoot -Path $NvramPath -Label 'VM NVRAM path'
-        Assert-NoReparsePoint $NvramPath 'VM NVRAM file'
-        Assert-SingleHardLink $NvramPath 'VM NVRAM file'
-    }
-    elseif ($null -ne $NvramSetting) {
-        throw 'The clone references a missing NVRAM file.'
+        else {
+            $NvramPath = Resolve-VmxRelativePath $CloneRoot ([string]$NvramSetting)
+        }
+        if (Test-Path -LiteralPath $NvramPath -PathType Leaf) {
+            if (-not (Test-PathWithin $BuildRoot $NvramPath)) {
+                throw 'The clone NVRAM file must remain under WorkspaceRoot\.codex-build.'
+            }
+            Assert-NoReparsePathChain -Boundary $BuildRoot -Path $NvramPath -Label 'VM NVRAM path'
+            Assert-NoReparsePoint $NvramPath 'VM NVRAM file'
+            Assert-SingleHardLink $NvramPath 'VM NVRAM file'
+        }
+        elseif ($null -ne $NvramSetting) {
+            throw 'The clone references a missing NVRAM file.'
+        }
     }
     return ,([Collections.Generic.List[string]]::new([string[]]$Lines))
 }
@@ -1876,7 +1944,8 @@ try {
     }
     $VmBefore = Get-FileHash -LiteralPath $VmxPath -Algorithm SHA256
     Write-Output "Prepared clone VMX SHA256 before run config: $($VmBefore.Hash.ToUpperInvariant())"
-    $Lines = Assert-PreparedClone -Root $WorkspaceRoot -BuildRoot $BuildRoot -Vmx $VmxPath
+    $Lines = Assert-PreparedClone -Root $WorkspaceRoot -BuildRoot $BuildRoot -Vmx $VmxPath `
+        -ValidationProfile $script:ValidationProfile -CertificatePath $CertificatePath
     $SafeVmxSummary = Get-SafeVmxSummary -Lines $Lines -Vmx $VmxPath -BuildRoot $BuildRoot
     Configure-DisposableClone -Lines $Lines
 
