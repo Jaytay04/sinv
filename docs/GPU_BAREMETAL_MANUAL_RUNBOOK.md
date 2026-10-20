@@ -388,6 +388,23 @@ reported verification issue and retry **FinalVerify**, not the already
 completed cleanup. Keep every previous receipt. A cleanup error is not success
 just because an entry is absent; do not reinterpret an installer's exit code.
 
+Windows [disk numbers can change across restarts](https://learn.microsoft.com/en-us/windows-hardware/drivers/storage/msft-disk).
+Recovery verification checks the manifest and journal against the current
+recovery disk's stable identity, verifies their recorded disk numbers agree
+with each other, and requires the recovery disk to remain separate from the
+Windows disk. The backup files and their hashes must still match.
+
+Run `gpu-20261020T224018Z-31b7c15e56584f84a68d89b7b3ecb1a1` exposed an
+incorrect comparison of the saved recovery disk number with its current
+number: the same USB disk changed from 1 to 2, with unchanged unique ID and
+serial number. Its first FinalVerify passed the reset, Secure Boot, adapter,
+and 20-CPU ABSENT checks, then stopped before ESP verification. After updating
+the helper, retry ordinary `FinalVerify` directly from `Disarmed`; the saved
+reset boundary does not require another rollback or power cycle. Do not edit
+the journal or manifest to replace the old disk number. All remaining ESP,
+boot-manager, backup-file, and firmware checks still have to pass before
+Archive.
+
 ### Historical 201140 recovery: already complete
 
 The following records the completed recovery of the old run. Do not repeat

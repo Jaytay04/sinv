@@ -240,6 +240,180 @@ function Get-GpuPlatformTestMountedHashCalls {
     return $isolatedModule
 }
 
+function New-GpuRecoveryManifestFixtureModule {
+    param([string]$ModulePath, [string]$StatePath)
+
+    $functionNames = @(
+        'Get-GpuObjectProperty',
+        'Assert-GpuNoReparseAncestors',
+        'Get-GpuDiskPhysicalClassification',
+        'Test-GpuDiskIdentityMatch',
+        'Get-GpuDiskForDrivePath',
+        'Assert-GpuRecoveryLocation',
+        'Assert-GpuSystemBcdBackup',
+        'Assert-GpuRecoveryManifest'
+    )
+    $definitions = @(Get-PlatformFunctionTexts -Path $ModulePath -Names $functionNames)
+    $stateTokens = $null
+    $stateParseErrors = $null
+    $stateAst = [System.Management.Automation.Language.Parser]::ParseFile($StatePath, [ref]$stateTokens, [ref]$stateParseErrors)
+    if ($null -ne $stateParseErrors -and $stateParseErrors.Count -gt 0) {
+        throw "State helper module does not parse: $($stateParseErrors[0].Message)"
+    }
+    $stateFunctions = @($stateAst.FindAll({
+        param($node)
+        return ($node -is [System.Management.Automation.Language.FunctionDefinitionAst])
+    }, $true))
+    if ($stateFunctions.Count -eq 0) { throw 'No pure state helper functions were found for the recovery-manifest fixture.' }
+    $stateDefinitions = @($stateFunctions | ForEach-Object { $_.Extent.Text })
+
+    # These query mocks return the fixture's current physical-disk identity.
+    # They make disk renumbering testable without consulting host storage.
+    $mockDefinitions = @'
+$script:GpuRecoveryManifestFixtureDisk = $null
+$script:GpuRecoveryManifestFixtureDiskQueryCount = 0
+
+function Set-GpuRecoveryManifestFixtureDisk {
+    param([Parameter(Mandatory = $true)][object]$Disk)
+    $script:GpuRecoveryManifestFixtureDisk = $Disk
+    $script:GpuRecoveryManifestFixtureDiskQueryCount = 0
+}
+
+function Get-GpuRecoveryManifestFixtureDiskQueryCount {
+    return $script:GpuRecoveryManifestFixtureDiskQueryCount
+}
+
+function Get-Partition {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][string]$DriveLetter)
+    $script:GpuRecoveryManifestFixtureDiskQueryCount++
+    if ($null -eq $script:GpuRecoveryManifestFixtureDisk -or $DriveLetter -notmatch '^[A-Za-z]$') {
+        throw 'TEST MOCK DENIED: unexpected recovery partition query.'
+    }
+    return [pscustomobject]@{ DiskNumber = [int]$script:GpuRecoveryManifestFixtureDisk.Number }
+}
+
+function Get-Disk {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][int]$Number)
+    $script:GpuRecoveryManifestFixtureDiskQueryCount++
+    if ($null -eq $script:GpuRecoveryManifestFixtureDisk -or [int]$script:GpuRecoveryManifestFixtureDisk.Number -ne $Number) {
+        throw 'TEST MOCK DENIED: unexpected recovery disk query.'
+    }
+    return $script:GpuRecoveryManifestFixtureDisk
+}
+'@
+
+    $exports = @('Set-GpuRecoveryManifestFixtureDisk', 'Get-GpuRecoveryManifestFixtureDiskQueryCount')
+    $exportLine = 'Export-ModuleMember -Function @(' + (($exports | ForEach-Object { "'$_'" }) -join ',') + ')'
+    $source = @(
+        'Set-StrictMode -Version 2.0'
+        $stateDefinitions
+        $definitions
+        $mockDefinitions
+        $exportLine
+    ) -join "`r`n"
+
+    $fixtureModule = New-Module -Name ('GpuRecoveryManifestFixture' + [guid]::NewGuid().ToString('N')) `
+        -ScriptBlock ([scriptblock]::Create($source))
+    Import-Module -ModuleInfo $fixtureModule -Force -ErrorAction Stop
+    return $fixtureModule
+}
+
+function New-PlatformRecoveryManifestFixture {
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [int]$BackupRecoveryDiskNumber = 1,
+        [int]$ManifestRecoveryDiskNumber = 1,
+        [string]$ManifestUniqueId = 'USBSTOR\DISK&VEN_FIXTURE&PROD_RECOVERY\FIXTURE-USB-001',
+        [string]$ManifestSerialNumber = 'FIXTURE-USB-001'
+    )
+
+    $recoveryBase = Join-Path $Root 'recovery-base'
+    $recoveryRun = Join-Path $recoveryBase 'gpu-fixture-run'
+    $tree = Join-Path $recoveryRun 'esp-efi-before'
+    $treeDirectory = Join-Path $tree 'Microsoft\Boot'
+    [void](New-Item -ItemType Directory -Path $treeDirectory -Force)
+    $bootManagerPath = Join-Path $treeDirectory 'bootmgfw.efi'
+    [System.IO.File]::WriteAllBytes($bootManagerPath, [byte[]](1, 2, 3, 4, 5))
+
+    $bcdExportPath = Join-Path $recoveryRun 'system-bcd-export.bcd'
+    [System.IO.File]::WriteAllBytes($bcdExportPath, [byte[]](9, 8, 7, 6))
+    $bcdExportPin = Get-GpuFilePin -Path $bcdExportPath
+    $treePin = Get-GpuFilePin -Path $bootManagerPath
+    $bootManagerHash = ('A' * 64)
+    $espVolume = '\\?\Volume{00000000-0000-0000-0000-000000000001}\'
+    $uniqueId = 'USBSTOR\DISK&VEN_FIXTURE&PROD_RECOVERY\FIXTURE-USB-001'
+    $serialNumber = 'FIXTURE-USB-001'
+    $manifest = [pscustomobject]@{
+        SchemaVersion = 2
+        EspVolume = $espVolume
+        EspDiskNumber = 0
+        BootManagerSha256 = $bootManagerHash
+        RecoveryDiskNumber = $ManifestRecoveryDiskNumber
+        RecoveryDiskUniqueId = $ManifestUniqueId
+        RecoveryDiskSerialNumber = $ManifestSerialNumber
+        Files = @([pscustomobject]@{
+            RelativePath = 'Microsoft\Boot\bootmgfw.efi'
+            Sha256 = $treePin.Sha256
+            Bytes = [long]$treePin.Bytes
+        })
+        OmittedFiles = @([pscustomobject]@{
+            RelativePath = 'Microsoft\Boot\BCD'
+            Reason = 'SystemBcdLogicalExport'
+        })
+        SystemBcdExport = [pscustomobject]@{
+            Kind = 'BcdeditSystemStoreExport'
+            RelativePath = 'system-bcd-export.bcd'
+            Sha256 = $bcdExportPin.Sha256
+            Bytes = [long]$bcdExportPin.Bytes
+        }
+    }
+    $manifestPath = Join-Path $recoveryRun 'esp-manifest.json'
+    $manifestJson = $manifest | ConvertTo-Json -Depth 8
+    [System.IO.File]::WriteAllText($manifestPath, $manifestJson, (New-Object System.Text.UTF8Encoding($false)))
+    $manifestPin = Get-GpuFilePin -Path $manifestPath
+
+    $backup = [pscustomobject]@{
+        EspVolume = $espVolume
+        EspDiskNumber = 0
+        BootManagerSha256 = $bootManagerHash
+        RecoveryDiskNumber = $BackupRecoveryDiskNumber
+        RecoveryDiskUniqueId = $uniqueId
+        RecoveryDiskSerialNumber = $serialNumber
+        ExternalManifest = $manifestPin
+        SystemBcdExport = $bcdExportPin
+    }
+    $state = [pscustomobject]@{
+        RecoveryBase = $recoveryBase
+        RecoveryRunDirectory = $recoveryRun
+        Host = [pscustomobject]@{
+            SystemDiskNumber = 0
+            RecoveryDiskNumber = 1
+            RecoveryDiskUniqueId = $uniqueId
+            RecoveryDiskSerialNumber = $serialNumber
+        }
+        Backup = $backup
+    }
+    return [pscustomobject]@{
+        RecoveryBase = $recoveryBase
+        RecoveryRunDirectory = $recoveryRun
+        ManifestPath = $manifestPath
+        Manifest = $manifest
+        Backup = $backup
+        State = $state
+        TreeFilePath = $bootManagerPath
+        Disk = [pscustomobject]@{
+            Number = 2
+            UniqueId = $uniqueId
+            SerialNumber = $serialNumber
+            FriendlyName = 'Fixture USB recovery disk'
+            BusType = 'USB'
+            IsVirtual = $false
+        }
+    }
+}
+
 function New-GpuEspFixtureModule {
     param([string]$ModulePath, [string]$StatePath)
 
@@ -677,11 +851,13 @@ $junctionPath = $null
 $isolatedModule = $null
 $bcdExportFixtureModule = $null
 $finalVerifyFixtureModule = $null
+$recoveryManifestFixtureModule = $null
 
 try {
     $isolatedModule = New-PlatformHelperModule -ModulePath $platformPath -StatePath $stateModulePath
     $bcdExportFixtureModule = New-GpuSystemBcdExportFixtureModule -ModulePath $platformPath -StatePath $stateModulePath
     $finalVerifyFixtureModule = New-GpuFinalVerifyFixtureModule -ModulePath $platformPath -StatePath $stateModulePath
+    $recoveryManifestFixtureModule = New-GpuRecoveryManifestFixtureModule -ModulePath $platformPath -StatePath $stateModulePath
 
     Invoke-PlatformTestCase 'Stage evidence captures optional payload diagnostics without changing legacy output' {
         $fixtureEsp = Join-Path $runRoot 'evidence-esp'
@@ -1081,6 +1257,92 @@ catch {
             $classification = Get-GpuDiskPhysicalClassification -Disk $disk
             Assert-PlatformTrue ([bool]$classification.SupportedPhysical) "Known physical bus type '$busType' was rejected."
         }
+    }
+
+    Invoke-PlatformTestCase 'Recovery manifest accepts a stable physical disk after renumbering and rejects identity or snapshot drift' {
+        $successRoot = Join-Path $runRoot 'recovery-manifest-renumbered'
+        [void](New-Item -ItemType Directory -Path $successRoot -Force)
+        $successFixture = New-PlatformRecoveryManifestFixture -Root $successRoot
+        Set-GpuRecoveryManifestFixtureDisk -Disk $successFixture.Disk
+        $verified = & $recoveryManifestFixtureModule {
+            param($State)
+            Assert-GpuRecoveryManifest -State $State
+        } $successFixture.State
+        Assert-PlatformEqual 2 $verified.Location.Disk.Number 'Recovery manifest did not follow the live disk number after stable identity matched.'
+        Assert-PlatformEqual 1 ([int]$successFixture.Backup.RecoveryDiskNumber) 'The fixture backup snapshot did not preserve its original disk number.'
+        Assert-PlatformEqual 2 (Get-GpuRecoveryManifestFixtureDiskQueryCount) 'Renumbered disk verification did not use exactly the two mocked storage queries.'
+
+        $manifestIdRoot = Join-Path $runRoot 'recovery-manifest-id-drift'
+        [void](New-Item -ItemType Directory -Path $manifestIdRoot -Force)
+        $manifestIdFixture = New-PlatformRecoveryManifestFixture -Root $manifestIdRoot `
+            -ManifestUniqueId 'USBSTOR\DISK&VEN_FIXTURE&PROD_OTHER\OTHER-USB-002' `
+            -ManifestSerialNumber 'FIXTURE-USB-001'
+        Set-GpuRecoveryManifestFixtureDisk -Disk $manifestIdFixture.Disk
+        Assert-PlatformThrows {
+            & $recoveryManifestFixtureModule { param($State) Assert-GpuRecoveryManifest -State $State } $manifestIdFixture.State
+        } 'Mismatched saved unique ID was accepted because the serial matched.' 'manifest disk identities differ'
+
+        $backupIdRoot = Join-Path $runRoot 'recovery-backup-id-drift'
+        [void](New-Item -ItemType Directory -Path $backupIdRoot -Force)
+        $backupIdFixture = New-PlatformRecoveryManifestFixture -Root $backupIdRoot
+        $backupIdFixture.Backup.RecoveryDiskUniqueId = 'USBSTOR\DISK&VEN_FIXTURE&PROD_OTHER\OTHER-USB-002'
+        Set-GpuRecoveryManifestFixtureDisk -Disk $backupIdFixture.Disk
+        Assert-PlatformThrows {
+            & $recoveryManifestFixtureModule { param($State) Assert-GpuRecoveryManifest -State $State } $backupIdFixture.State
+        } 'Mismatched backup unique ID was accepted because the serial matched.' 'manifest disk identities differ'
+
+        $missingIdentityRoot = Join-Path $runRoot 'recovery-manifest-missing-id'
+        [void](New-Item -ItemType Directory -Path $missingIdentityRoot -Force)
+        $missingIdentityFixture = New-PlatformRecoveryManifestFixture -Root $missingIdentityRoot `
+            -ManifestUniqueId '' -ManifestSerialNumber ''
+        Set-GpuRecoveryManifestFixtureDisk -Disk $missingIdentityFixture.Disk
+        Assert-PlatformThrows {
+            & $recoveryManifestFixtureModule { param($State) Assert-GpuRecoveryManifest -State $State } $missingIdentityFixture.State
+        } 'Manifest without a stable identity was accepted.' 'manifest disk identities differ'
+
+        $numberMismatchRoot = Join-Path $runRoot 'recovery-manifest-number-drift'
+        [void](New-Item -ItemType Directory -Path $numberMismatchRoot -Force)
+        $numberMismatchFixture = New-PlatformRecoveryManifestFixture -Root $numberMismatchRoot -ManifestRecoveryDiskNumber 2
+        Set-GpuRecoveryManifestFixtureDisk -Disk $numberMismatchFixture.Disk
+        Assert-PlatformThrows {
+            & $recoveryManifestFixtureModule { param($State) Assert-GpuRecoveryManifest -State $State } $numberMismatchFixture.State
+        } 'Manifest and journal recovery disk-number snapshots were allowed to disagree.' 'disk-number snapshot differs'
+
+        $invalidNumberRoot = Join-Path $runRoot 'recovery-manifest-invalid-number'
+        [void](New-Item -ItemType Directory -Path $invalidNumberRoot -Force)
+        $invalidNumberFixture = New-PlatformRecoveryManifestFixture -Root $invalidNumberRoot
+        $invalidNumberFixture.Backup.RecoveryDiskNumber = -1
+        Set-GpuRecoveryManifestFixtureDisk -Disk $invalidNumberFixture.Disk
+        Assert-PlatformThrows {
+            & $recoveryManifestFixtureModule { param($State) Assert-GpuRecoveryManifest -State $State } $invalidNumberFixture.State
+        } 'Negative journal recovery disk-number snapshot was accepted.' 'snapshot is missing or invalid'
+
+        $systemDiskRoot = Join-Path $runRoot 'recovery-manifest-system-disk'
+        [void](New-Item -ItemType Directory -Path $systemDiskRoot -Force)
+        $systemDiskFixture = New-PlatformRecoveryManifestFixture -Root $systemDiskRoot
+        $systemDiskFixture.Disk.Number = 0
+        Set-GpuRecoveryManifestFixtureDisk -Disk $systemDiskFixture.Disk
+        Assert-PlatformThrows {
+            & $recoveryManifestFixtureModule { param($State) Assert-GpuRecoveryManifest -State $State } $systemDiskFixture.State
+        } 'Recovery storage mapped to the system disk was accepted.' 'Windows system disk'
+
+        $treeDriftRoot = Join-Path $runRoot 'recovery-manifest-tree-drift'
+        [void](New-Item -ItemType Directory -Path $treeDriftRoot -Force)
+        $treeDriftFixture = New-PlatformRecoveryManifestFixture -Root $treeDriftRoot
+        [System.IO.File]::WriteAllBytes($treeDriftFixture.TreeFilePath, [byte[]](5, 4, 3, 2, 1))
+        Set-GpuRecoveryManifestFixtureDisk -Disk $treeDriftFixture.Disk
+        Assert-PlatformThrows {
+            & $recoveryManifestFixtureModule { param($State) Assert-GpuRecoveryManifest -State $State } $treeDriftFixture.State
+        } 'Changed recovery backup file was accepted.' 'failed manifest verification'
+
+        $manifestPinDriftRoot = Join-Path $runRoot 'recovery-manifest-pin-drift'
+        [void](New-Item -ItemType Directory -Path $manifestPinDriftRoot -Force)
+        $manifestPinDriftFixture = New-PlatformRecoveryManifestFixture -Root $manifestPinDriftRoot
+        [System.IO.File]::AppendAllText($manifestPinDriftFixture.ManifestPath, "`n")
+        Set-GpuRecoveryManifestFixtureDisk -Disk $manifestPinDriftFixture.Disk
+        Assert-PlatformThrows {
+            & $recoveryManifestFixtureModule { param($State) Assert-GpuRecoveryManifest -State $State } $manifestPinDriftFixture.State
+        } 'Changed external recovery manifest pin was accepted.' 'Pinned file has drifted'
     }
 
     Invoke-PlatformTestCase 'Synthetic preflight adapter inventory validates exact Intel and NVIDIA candidates' {
@@ -1857,6 +2119,9 @@ exit $Code
     Write-Output ("GPU_HOST_PLATFORM_TESTS:PASS cases={0} assertions={1} skipped=0" -f $script:PassedCases, $script:Assertions)
 }
 finally {
+    if ($null -ne $recoveryManifestFixtureModule) {
+        Remove-Module -ModuleInfo $recoveryManifestFixtureModule -Force -ErrorAction SilentlyContinue
+    }
     if ($null -ne $bcdExportFixtureModule) {
         Remove-Module -ModuleInfo $bcdExportFixtureModule -Force -ErrorAction SilentlyContinue
     }

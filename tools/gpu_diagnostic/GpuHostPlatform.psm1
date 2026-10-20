@@ -970,10 +970,27 @@ function Assert-GpuRecoveryManifest {
         -ExpectedSerialNumber ([string](Get-GpuObjectProperty -Object $manifest -Name 'RecoveryDiskSerialNumber')) `
         -ActualUniqueId ([string]$location.Disk.UniqueId) `
         -ActualSerialNumber ([string]$location.Disk.SerialNumber)
+    $backupRecoveryDiskNumberValue = Get-GpuObjectProperty -Object $backup -Name 'RecoveryDiskNumber'
+    $manifestRecoveryDiskNumberValue = Get-GpuObjectProperty -Object $manifest -Name 'RecoveryDiskNumber'
+    $backupRecoveryDiskNumber = 0
+    $manifestRecoveryDiskNumber = 0
+    $diskNumberStyle = [System.Globalization.NumberStyles]::None
+    $invariantCulture = [System.Globalization.CultureInfo]::InvariantCulture
+    if ($null -eq $backupRecoveryDiskNumberValue -or
+        -not [int]::TryParse([string]$backupRecoveryDiskNumberValue, $diskNumberStyle, $invariantCulture, [ref]$backupRecoveryDiskNumber) -or
+        $backupRecoveryDiskNumber -lt 0) {
+        throw 'Journal recovery disk-number snapshot is missing or invalid.'
+    }
+    if ($null -eq $manifestRecoveryDiskNumberValue -or
+        -not [int]::TryParse([string]$manifestRecoveryDiskNumberValue, $diskNumberStyle, $invariantCulture, [ref]$manifestRecoveryDiskNumber) -or
+        $manifestRecoveryDiskNumber -lt 0) {
+        throw 'External recovery manifest disk-number snapshot is missing or invalid.'
+    }
+    if ($manifestRecoveryDiskNumber -ne $backupRecoveryDiskNumber) {
+        throw 'External recovery manifest disk-number snapshot differs from the journal backup.'
+    }
     if ([int]$manifest.EspDiskNumber -ne [int]$backup.EspDiskNumber -or
-        [int]$manifest.RecoveryDiskNumber -ne [int]$location.Disk.Number -or
         -not $manifestDiskMatches -or
-        [int](Get-GpuObjectProperty -Object $backup -Name 'RecoveryDiskNumber' -Default -1) -ne [int]$location.Disk.Number -or
         -not (Test-GpuDiskIdentityMatch `
             -ExpectedUniqueId ([string](Get-GpuObjectProperty -Object $backup -Name 'RecoveryDiskUniqueId')) `
             -ExpectedSerialNumber ([string](Get-GpuObjectProperty -Object $backup -Name 'RecoveryDiskSerialNumber')) `
