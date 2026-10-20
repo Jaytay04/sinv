@@ -93,7 +93,7 @@ function New-TestFixture {
     $collectedStage = @($stagePins | ForEach-Object { [pscustomobject]@{ Name=$_.Name; Pin=$_.Pin } })
     $journal = [pscustomobject]@{
         SchemaVersion=1; RunId=$runId; SourceCommit='c6e65a2b265d1f3c13ac83bfe61c69281907c003'; SourceRoot=$root
-        RunDirectory=$runDirectory; JournalPath=(Join-Path $runDirectory 'journal.json'); Phase='Complete'; InProgress=$null; DisarmedBootId='old-boot-id'; RecoveryRunDirectory=$recoveryDirectory
+        RunDirectory=$runDirectory; Phase='Complete'; InProgress=$null; DisarmedBootId='old-boot-id'; RecoveryRunDirectory=$recoveryDirectory
         LastAction=[pscustomobject]@{ Action='FinalVerify'; Succeeded=$true }
         FinalVerification=[pscustomobject]@{
             ResetBoundaryPassed=$true; SecureBoot=$true; ActivationAttempted=$true
@@ -199,6 +199,26 @@ try {
     Invoke-TestCase 'complete reviewed evidence yields six immutable file pins' {
         Assert-True ($stageSpec.Count -eq 6 -and @($stageSpec | Where-Object Name -eq 'handoff-status.txt').Count -eq 1) 'Expected exactly six reviewed files including handoff status.'
     }
+    Invoke-TestCase 'schema 1 journal uses RunDirectory and selector JournalPath remains mandatory' {
+        $savedJournal = Get-Content -LiteralPath $fixture.JournalPath -Raw | ConvertFrom-Json
+        $savedSelector = Get-Content -LiteralPath $fixture.ArchivePath -Raw | ConvertFrom-Json
+        Assert-True ($null -eq $savedJournal.PSObject.Properties['JournalPath']) 'Fixture invented a JournalPath field absent from schema 1 journals.'
+        Assert-True ($savedSelector.JournalPath -ceq $fixture.JournalPath) 'Selector must record the journal path.'
+        $validation = @{
+            Audit=$fixture.Audit; Journal=$savedJournal; ArchivedSelector=$savedSelector
+            ExpectedAuditSha256=$auditPin.Sha256; ExpectedRunId=$fixture.RunId
+            ExpectedRunDirectory=$fixture.RunDirectory; ExpectedJournalPath=$fixture.JournalPath; ExpectedSourceRoot=$fixture.Root
+        }
+        $accepted = @(Assert-GpuStageRetirementEvidence @validation)
+        Assert-True ($accepted.Count -eq 6) 'Valid serialized schema 1 evidence was rejected.'
+        $validation.ExpectedJournalPath = Join-Path $fixture.RunDirectory 'wrong-journal.json'
+        Assert-Throws { Assert-GpuStageRetirementEvidence @validation } 'Journal path' 'A journal path outside its recorded run directory was accepted.'
+        $validation.ExpectedJournalPath = $fixture.JournalPath
+        $savedSelector.JournalPath = Join-Path $fixture.RunDirectory 'wrong-journal.json'
+        Assert-Throws { Assert-GpuStageRetirementEvidence @validation } 'Archived selector journal path' 'A selector pointing at another journal was accepted.'
+        $savedSelector.PSObject.Properties.Remove('JournalPath')
+        Assert-Throws { Assert-GpuStageRetirementEvidence @validation } 'JournalPath' 'A selector without JournalPath was accepted.'
+    }
     Invoke-TestCase 'audit rejects an added unknown entry' {
         $bad = ($fixture.Audit | ConvertTo-Json -Depth 30 | ConvertFrom-Json)
         $bad.ExistingStage.Entries += [pscustomobject]@{ RelativePath='EFI\insecure-boot\foreign.bin'; Kind='File'; Bytes=1; Sha256=('A'*64); Hashed=$true }
@@ -272,6 +292,20 @@ try {
         $productionOps=& $retirementModule { param($a) New-GpuStageRetirementPlatformOperations @a } $operationArgs
         $capture=& $productionOps.CaptureBootSelection $state $nativeRoot 'before'
         Assert-True ($capture.Baseline.BootOrder.Count -eq 2 -and $capture.Baseline.IntegrityFindings -ceq '00000000') 'Production capture callback failed to parse raw baseline or integrity output.'
+    }
+    Invoke-TestCase 'production copy callback verifies ordinary fixture files and refuses overwrites or changed sources' {
+        $copyRoot=Join-Path $fixtureRoot 'copy-callback'; [void][IO.Directory]::CreateDirectory($copyRoot)
+        $source=Join-Path $copyRoot 'source.bin'; $destination=Join-Path $copyRoot 'copy.bin'
+        [IO.File]::WriteAllBytes($source, [byte[]]@(0,1,2,127,128,255))
+        $pin=Get-TestPin $source
+        $productionOps=& $retirementModule { param($root) New-GpuStageRetirementPlatformOperations -ToolRoot $root } $ToolRoot
+        $copy=& $productionOps.CopyFile $source $destination $pin
+        Assert-True ($copy.Copy.Sha256 -ceq $pin.Sha256 -and $copy.Copy.Bytes -eq $pin.Bytes -and $copy.Source.Sha256 -ceq $pin.Sha256) 'Production copy did not preserve and verify fixture bytes.'
+        Assert-Throws { & $productionOps.CopyFile $source $destination $pin } 'already exists' 'Production copy overwrote an existing destination.'
+        [IO.File]::WriteAllBytes($source, [byte[]]@(9,8,7))
+        $blocked=Join-Path $copyRoot 'blocked.bin'
+        Assert-Throws { & $productionOps.CopyFile $source $blocked $pin } 'Source changed' 'Production copy accepted a changed source.'
+        Assert-True (-not [IO.File]::Exists($blocked)) 'Changed source created a destination.'
     }
     Invoke-TestCase 'default review creates verified local and external copies without deleting ESP files' {
         $fixture=New-TestFixture

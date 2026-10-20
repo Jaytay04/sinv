@@ -99,7 +99,7 @@ function Assert-GpuStageRetirementEvidence {
     }
     Assert-GpuRetirementEqual -Expected $ExpectedRunDirectory -Actual ([string]$Journal.RunDirectory) -Description 'Journal run directory'
     Assert-GpuRetirementEqual -Expected $ExpectedSourceRoot -Actual ([string]$Journal.SourceRoot) -Description 'Journal source root'
-    Assert-GpuRetirementEqual -Expected ([IO.Path]::GetFullPath($ExpectedJournalPath)) -Actual ([IO.Path]::GetFullPath([string]$Journal.JournalPath)) -Description 'Journal recorded path'
+    # Schema 1 records JournalPath on the selector; the journal records RunDirectory.
     Assert-GpuRetirementEqual -Expected ([IO.Path]::GetFullPath($ExpectedJournalPath)) -Actual ([IO.Path]::GetFullPath([string]$Journal.RunDirectory + '\journal.json')) -Description 'Journal path'
     if ([string]$Journal.Phase -cne 'Complete' -or $null -ne $Journal.InProgress) {
         throw 'The reviewed run is not complete or has an action in progress.'
