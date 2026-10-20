@@ -179,6 +179,7 @@ function Invoke-FixtureRetirement {
         ExpectedProbeSha256=$Fixture.ProbePin.Sha256; ExpectedProbeBytes=$Fixture.ProbePin.Bytes
         ExpectedAuditToolSha256=(Get-TestPin (Join-Path $Fixture.BuildDirectory 'ibaudit.exe')).Sha256
         ExpectedAuditToolBytes=(Get-TestPin (Join-Path $Fixture.BuildDirectory 'ibaudit.exe')).Bytes
+        ExpectedAuditToolRelativePath='build\loader\ibaudit.exe'
         ExpectedReferenceLogSha256=$Fixture.ReferenceLogPin.Sha256; ExpectedReferenceLogBytes=$Fixture.ReferenceLogPin.Bytes
     }
     if ($Apply) { $parameters.Apply = $true }
@@ -261,13 +262,15 @@ try {
         Assert-Throws { Assert-GpuStageRetirementLivePins -LivePins $live -ExpectedPins $stageSpec } 'differs' 'Modified live file was accepted.'
     }
     Invoke-TestCase 'raw boot selection rejects BootNext, empty order, changed order, bad integrity, and command failure' {
-        $baseline=[pscustomobject]@{schema=1;boot_next=$null;boot_order=[uint16[]]@(1,2);bootmgfw_sha256=$fixture.BootManagerSha256;log_sha256=$fixture.ReferenceLogPin.Sha256}
+        $baseline=[pscustomobject]@{schema=1;kind='boot-selection';findings=0;boot_next=$null;boot_order=[uint16[]]@(1,2);bootmgfw_sha256=$fixture.BootManagerSha256;log_sha256=$fixture.ReferenceLogPin.Sha256}
         $integrity="BootmgfwSha256=$($fixture.BootManagerSha256) Findings=0x00000000"
         $valid=& $retirementModule { param($b,$i,$bm,$log) Assert-GpuStageRetirementBootSelection -Baseline $b -IntegrityOutput $i -ExpectedBootManagerSha256 $bm -ExpectedReferenceLogSha256 $log -CommandSucceeded $true } $baseline $integrity $fixture.BootManagerSha256 $fixture.ReferenceLogPin.Sha256
         Assert-True ($valid.BootOrder.Count -eq 2) 'Valid raw boot selection was not parsed.'
         foreach ($bad in @(
-            [pscustomobject]@{schema=1;boot_next=42;boot_order=[uint16[]]@(1,2);bootmgfw_sha256=$fixture.BootManagerSha256;log_sha256=$fixture.ReferenceLogPin.Sha256},
-            [pscustomobject]@{schema=1;boot_next=$null;boot_order=@();bootmgfw_sha256=$fixture.BootManagerSha256;log_sha256=$fixture.ReferenceLogPin.Sha256}
+            [pscustomobject]@{schema=1;kind='boot-selection';findings=0;boot_next=42;boot_order=[uint16[]]@(1,2);bootmgfw_sha256=$fixture.BootManagerSha256;log_sha256=$fixture.ReferenceLogPin.Sha256},
+            [pscustomobject]@{schema=1;kind='boot-selection';findings=0;boot_next=$null;boot_order=@();bootmgfw_sha256=$fixture.BootManagerSha256;log_sha256=$fixture.ReferenceLogPin.Sha256},
+            [pscustomobject]@{schema=1;kind='baseline';findings=0;boot_next=$null;boot_order=[uint16[]]@(1,2);bootmgfw_sha256=$fixture.BootManagerSha256;log_sha256=$fixture.ReferenceLogPin.Sha256},
+            [pscustomobject]@{schema=1;kind='boot-selection';findings=64;boot_next=$null;boot_order=[uint16[]]@(1,2);bootmgfw_sha256=$fixture.BootManagerSha256;log_sha256=$fixture.ReferenceLogPin.Sha256}
         )) { Assert-Throws { & $retirementModule { param($b,$i,$bm,$log) Assert-GpuStageRetirementBootSelection -Baseline $b -IntegrityOutput $i -ExpectedBootManagerSha256 $bm -ExpectedReferenceLogSha256 $log -CommandSucceeded $true } $bad $integrity $fixture.BootManagerSha256 $fixture.ReferenceLogPin.Sha256 } '.' 'Bad BootNext/BootOrder was accepted.' }
         $changed=[pscustomobject]@{ BootNext=$null;BootOrder=[uint16[]]@(1,3);BootManagerSha256=$valid.BootManagerSha256;ReferenceLogSha256=$valid.ReferenceLogSha256;IntegrityFindings='00000000' }
         Assert-Throws { & $retirementModule { param($b,$c) Assert-GpuStageRetirementBootSelectionStable -Before $b -Current $c -Checkpoint 'test' } $valid $changed } 'BootOrder changed' 'Changed BootOrder was accepted.'
@@ -277,21 +280,56 @@ try {
     Invoke-TestCase 'production raw-capture callback resolves its own helpers and invokes only the injected native runner' {
         $nativeRoot=Join-Path $fixtureRoot 'native-callback'; [void][IO.Directory]::CreateDirectory($nativeRoot)
         $state=[pscustomobject]@{ Paths=[pscustomobject]@{LoaderBuild=$fixture.BuildDirectory}; Backup=[pscustomobject]@{BootManagerSha256=$fixture.BootManagerSha256;ReferenceLog=$fixture.ReferenceLogPin} }
+        $nativeCalls=[Collections.Generic.List[string]]::new()
         $native={ param($Program,[string[]]$Arguments,$ActionDirectory,$Label)
-            if ($Arguments[0] -eq 'baseline') {
-                $out=$Arguments[4]; $payload=[pscustomobject]@{schema=1;boot_next=$null;boot_order=[uint16[]]@(1,2);bootmgfw_sha256=$fixture.BootManagerSha256;log_sha256=$fixture.ReferenceLogPin.Sha256}
+            $nativeCalls.Add($Arguments[0])
+            if ($Arguments[0] -eq 'boot-selection') {
+                if ($Arguments.Count -ne 9 -or $Arguments[7] -cne '--expected-hash' -or $Arguments[8] -cne $fixture.BootManagerSha256) { throw 'Focused command did not receive the expected boot-manager hash.' }
+                $out=$Arguments[4]; $payload=[pscustomobject]@{schema=1;kind='boot-selection';findings=0;boot_next=$null;boot_order=[uint16[]]@(1,2);bootmgfw_sha256=$fixture.BootManagerSha256;log_sha256=$fixture.ReferenceLogPin.Sha256}
                 Write-TestJson $out $payload
                 $stdout=Join-Path $ActionDirectory ($Label+'.stdout'); $stderr=Join-Path $ActionDirectory ($Label+'.stderr'); [IO.File]::WriteAllText($stdout,'');[IO.File]::WriteAllText($stderr,'')
-            } else {
+            } elseif ($Arguments[0] -eq 'bootmgr-integrity') {
                 $stdout=Join-Path $ActionDirectory ($Label+'.stdout'); $stderr=Join-Path $ActionDirectory ($Label+'.stderr')
                 [IO.File]::WriteAllText($stdout,"BootmgfwSha256=$($fixture.BootManagerSha256) Findings=0x00000000`n");[IO.File]::WriteAllText($stderr,'')
-            }
+            } else { throw "Unexpected audit command: $($Arguments[0])" }
             return [pscustomobject]@{Succeeded=$true;StdoutPath=$stdout;StderrPath=$stderr;ReceiptPath=($Label+'.receipt')}
         }.GetNewClosure()
-        $operationArgs=@{ToolRoot=$ToolRoot;NativeCommand=$native;ExpectedAuditToolSha256=(Get-TestPin (Join-Path $fixture.BuildDirectory 'ibaudit.exe')).Sha256;ExpectedAuditToolBytes=(Get-TestPin (Join-Path $fixture.BuildDirectory 'ibaudit.exe')).Bytes;ExpectedReferenceLogSha256=$fixture.ReferenceLogPin.Sha256;ExpectedReferenceLogBytes=$fixture.ReferenceLogPin.Bytes}
+        $operationArgs=@{ToolRoot=$ToolRoot;AuditToolPath=(Join-Path $fixture.BuildDirectory 'ibaudit.exe');NativeCommand=$native;ExpectedAuditToolSha256=(Get-TestPin (Join-Path $fixture.BuildDirectory 'ibaudit.exe')).Sha256;ExpectedAuditToolBytes=(Get-TestPin (Join-Path $fixture.BuildDirectory 'ibaudit.exe')).Bytes;ExpectedReferenceLogSha256=$fixture.ReferenceLogPin.Sha256;ExpectedReferenceLogBytes=$fixture.ReferenceLogPin.Bytes}
         $productionOps=& $retirementModule { param($a) New-GpuStageRetirementPlatformOperations @a } $operationArgs
         $capture=& $productionOps.CaptureBootSelection $state $nativeRoot 'before'
         Assert-True ($capture.Baseline.BootOrder.Count -eq 2 -and $capture.Baseline.IntegrityFindings -ceq '00000000') 'Production capture callback failed to parse raw baseline or integrity output.'
+        Assert-True (($nativeCalls -join ',') -ceq 'boot-selection,bootmgr-integrity') 'Retirement invoked a full TPM/MOK baseline or skipped integrity validation.'
+        $workingNative=$operationArgs.NativeCommand
+        $operationArgs.NativeCommand={ param($Program,$Arguments,$ActionDirectory,$Label)
+            if ($Arguments[0] -eq 'boot-selection') { return & $workingNative $Program $Arguments $ActionDirectory $Label }
+            return [pscustomobject]@{Succeeded=$false;ReceiptPath='integrity-denied.receipt.json';StderrPath='integrity-denied.stderr.txt'}
+        }.GetNewClosure()
+        $integrityDeniedOps=& $retirementModule { param($a) New-GpuStageRetirementPlatformOperations @a } $operationArgs
+        Assert-Throws { & $integrityDeniedOps.CaptureBootSelection $state $nativeRoot 'integrity-denied' } 'integrity failed.*integrity-denied.receipt.json.*integrity-denied.stderr.txt' 'Integrity failure did not expose its evidence paths.'
+        $operationArgs.NativeCommand={ param($Program,$Arguments,$ActionDirectory,$Label)
+            $result=& $workingNative $Program $Arguments $ActionDirectory $Label
+            if ($Arguments[0] -eq 'boot-selection') { $payload=Get-Content -LiteralPath $Arguments[4] -Raw | ConvertFrom-Json; $payload.boot_next=42; Write-TestJson $Arguments[4] $payload }
+            return $result
+        }.GetNewClosure()
+        $setNextOps=& $retirementModule { param($a) New-GpuStageRetirementPlatformOperations @a } $operationArgs
+        Assert-Throws { & $setNextOps.CaptureBootSelection $state $nativeRoot 'set-next' } 'BootNext is set.*Capture:.*set-next-boot-selection.json.*Integrity evidence:' 'Rejected capture did not preserve discoverable evidence paths.'
+        $operationArgs.NativeCommand={ param($Program,$Arguments,$ActionDirectory,$Label) [pscustomobject]@{Succeeded=$false;ReceiptPath='denied.receipt.json';StderrPath='denied.stderr.txt'} }
+        $deniedOps=& $retirementModule { param($a) New-GpuStageRetirementPlatformOperations @a } $operationArgs
+        Assert-Throws { & $deniedOps.CaptureBootSelection $state $nativeRoot 'denied' } 'boot-selection failed.*denied.receipt.json.*denied.stderr.txt' 'Native read failure did not expose its evidence paths.'
+    }
+    Invoke-TestCase 'focused capture requires every field and an integer zero finding count' {
+        $valid=[pscustomobject]@{schema=1;kind='boot-selection';findings=0;boot_next=$null;boot_order=@(1,2);bootmgfw_sha256=$fixture.BootManagerSha256;log_sha256=$fixture.ReferenceLogPin.Sha256}
+        $integrity="BootmgfwSha256=$($fixture.BootManagerSha256) Findings=0x00000000"
+        $check={ param($b) & $retirementModule { param($b,$i,$bm,$log) Assert-GpuStageRetirementBootSelection -Baseline $b -IntegrityOutput $i -ExpectedBootManagerSha256 $bm -ExpectedReferenceLogSha256 $log -CommandSucceeded $true } $b $integrity $fixture.BootManagerSha256 $fixture.ReferenceLogPin.Sha256 }
+        foreach ($name in @('schema','kind','findings','boot_next','boot_order','bootmgfw_sha256','log_sha256')) {
+            $bad=$valid | ConvertTo-Json | ConvertFrom-Json
+            $bad.PSObject.Properties.Remove($name)
+            Assert-Throws { & $check $bad } ('missing.*'+$name) "Missing $name was accepted as an observation."
+        }
+        foreach ($findings in @('0',$false,$null)) {
+            $bad=$valid | ConvertTo-Json | ConvertFrom-Json; $bad.findings=$findings
+            Assert-Throws { & $check $bad } 'unsupported|failed boot-selection' 'Malformed findings were coerced to zero.'
+        }
     }
     Invoke-TestCase 'production copy callback verifies ordinary fixture files and refuses overwrites or changed sources' {
         $copyRoot=Join-Path $fixtureRoot 'copy-callback'; [void][IO.Directory]::CreateDirectory($copyRoot)
@@ -327,6 +365,17 @@ try {
         $result=Invoke-FixtureRetirement $fixture (New-MockOperations $fixture $behavior) -Apply
         Assert-True ($result.Status -ceq 'STAGE_RETIREMENT_FAILED' -and $behavior.DeleteCount -eq 0 -and (Test-Path -LiteralPath $fixture.StageDirectory)) 'Copy failure did not fail closed before deletion.'
     }
+    Invoke-TestCase 'replacement audit image pin mismatch blocks before host inspection or ESP mount' {
+        $fixture=New-TestFixture
+        $behavior=@{CopyCount=0;DeleteCount=0;BootCaptureCount=0;UnmountCount=0;FirmwareCaptureCount=0;FirmwareChangesAt=0;FailCopyAt=0;FailDeleteAt=0;DismountFails=$false;FirmwareChanges=$false;BootNextPresent=$false;BootReadFails=$false;BootOrderChanges=$false;WrongEsp=$false}
+        $ops=New-MockOperations $fixture $behavior
+        $ops.AssertAdministrator={ throw 'Host inspection must not be reached for a bad audit image.' }
+        $ops.MountEsp={ throw 'ESP mount must not be reached for a bad audit image.' }
+        $path=Join-Path $fixture.BuildDirectory 'ibaudit.exe'; $pin=Get-TestPin $path
+        [IO.File]::AppendAllText($path, 'changed')
+        $result=Invoke-FixtureRetirement $fixture $ops -Pins @{ExpectedAuditToolSha256=$pin.Sha256;ExpectedAuditToolBytes=$pin.Bytes}
+        Assert-True (-not $result.Succeeded -and ($result.Errors -join '; ') -match 'read-only retirement ibaudit.exe differs' -and $behavior.DeleteCount -eq 0 -and $null -eq $result.LocalReceiptDirectory) 'Changed audit image reached host inspection or a receipt/mutation step.'
+    }
     Invoke-TestCase 'partial delete remains failed, keeps verified copies, and cannot resume on a later apply' {
         $fixture=New-TestFixture
         $behavior=@{CopyCount=0;DeleteCount=0;BootCaptureCount=0;UnmountCount=0;FirmwareCaptureCount=0;FirmwareChangesAt=0;FailCopyAt=0;FailDeleteAt=2;DismountFails=$false;FirmwareChanges=$false;BootNextPresent=$false;BootReadFails=$false;BootOrderChanges=$false;WrongEsp=$false}
@@ -353,6 +402,7 @@ try {
     }
     Invoke-TestCase 'production evidence-pin overrides require explicit mock operations' {
         Assert-Throws { & $retirementModule { param($root) Invoke-GpuStageRetirement -ToolRoot (Join-Path $root 'tools\gpu_diagnostic') -WorkspaceRoot $root -ExpectedAuditSha256 ('0'*64) } $fixture.Root } 'immutable|mock operations' 'Production pin override was accepted.'
+        Assert-Throws { & $retirementModule { param($root) Invoke-GpuStageRetirement -ToolRoot (Join-Path $root 'tools\gpu_diagnostic') -WorkspaceRoot $root -ExpectedAuditToolRelativePath 'build\loader\ibaudit.exe' } $fixture.Root } 'immutable|mock operations' 'Production audit tool path override was accepted.'
     }
     Invoke-TestCase 'WhatIf exits before importing helpers or touching filesystem/host state' {
         $before=(Get-ChildItem -LiteralPath $fixtureRoot -Force -Recurse -ErrorAction SilentlyContinue | Measure-Object).Count

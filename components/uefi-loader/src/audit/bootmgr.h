@@ -52,12 +52,17 @@ typedef struct {
 } ib_audit_bootmgr_request_t;
 
 #define IB_AUDIT_BOOTMGR_MAX_STAGED_ENTRIES 16u
+#define IB_AUDIT_BOOTMGR_MAX_BOOT_ORDER 128u
 typedef struct {
     uint32_t findings;
     uint32_t residue_mask;
     uint8_t bootmgfw_sha256[SHA256_DIGEST_SIZE];
     uint16_t staged_entries[IB_AUDIT_BOOTMGR_MAX_STAGED_ENTRIES];
     uint32_t staged_entry_count;
+    uint16_t boot_order[IB_AUDIT_BOOTMGR_MAX_BOOT_ORDER];
+    uint32_t boot_order_count;
+    uint16_t boot_next;
+    uint8_t boot_next_present;
 } ib_audit_bootmgr_report_t;
 
 typedef enum {

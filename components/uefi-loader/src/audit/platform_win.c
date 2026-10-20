@@ -316,6 +316,221 @@ int ib_audit_windows_path_exists(const wchar_t *path, void *context)
            GetLastError() == ERROR_PATH_NOT_FOUND ? 0 : -1;
 }
 
+static HANDLE firmware_get_current_process(void *context)
+{
+    (void)context;
+    return GetCurrentProcess();
+}
+
+static BOOL firmware_open_process_token(void *context, HANDLE process,
+                                        DWORD access, PHANDLE token)
+{
+    (void)context;
+    return OpenProcessToken(process, access, token);
+}
+
+static BOOL firmware_lookup_privilege_value(void *context,
+                                           LPCWSTR system_name, LPCWSTR name,
+                                           PLUID luid)
+{
+    (void)context;
+    return LookupPrivilegeValueW(system_name, name, luid);
+}
+
+static BOOL firmware_adjust_token_privileges(
+    void *context, HANDLE token, BOOL disable_all,
+    PTOKEN_PRIVILEGES new_state, DWORD buffer_length,
+    PTOKEN_PRIVILEGES previous_state, PDWORD return_length)
+{
+    (void)context;
+    return AdjustTokenPrivileges(token, disable_all, new_state, buffer_length,
+                                 previous_state, return_length);
+}
+
+static BOOL firmware_close_handle(void *context, HANDLE handle)
+{
+    (void)context;
+    return CloseHandle(handle);
+}
+
+static DWORD firmware_get_last_error(void *context)
+{
+    (void)context;
+    return GetLastError();
+}
+
+static void firmware_set_last_error(void *context, DWORD error)
+{
+    (void)context;
+    SetLastError(error);
+}
+
+static const ib_audit_firmware_privilege_api_t g_firmware_privilege_api = {
+    NULL,
+    firmware_get_current_process,
+    firmware_open_process_token,
+    firmware_lookup_privilege_value,
+    firmware_adjust_token_privileges,
+    firmware_close_handle,
+    firmware_get_last_error,
+    firmware_set_last_error
+};
+
+static int firmware_privilege_api_valid(
+    const ib_audit_firmware_privilege_api_t *api)
+{
+    return api != NULL && api->get_current_process != NULL &&
+           api->open_process_token != NULL &&
+           api->lookup_privilege_value != NULL &&
+           api->adjust_token_privileges != NULL &&
+           api->close_handle != NULL && api->get_last_error != NULL &&
+           api->set_last_error != NULL;
+}
+
+static DWORD firmware_restore_previous(
+    const ib_audit_firmware_privilege_api_t *api, HANDLE token,
+    PTOKEN_PRIVILEGES previous)
+{
+    api->set_last_error(api->context, ERROR_SUCCESS);
+    if (!api->adjust_token_privileges(api->context, token, FALSE, previous,
+                                      0u, NULL, NULL)) {
+        return api->get_last_error(api->context);
+    }
+    return api->get_last_error(api->context);
+}
+
+int ib_audit_windows_firmware_privilege_begin_with_api(
+    ib_audit_firmware_privilege_t *privilege,
+    const ib_audit_firmware_privilege_api_t *api, DWORD *error_code)
+{
+    TOKEN_PRIVILEGES requested;
+    LUID luid;
+    DWORD returned = 0u;
+    DWORD error;
+    HANDLE process;
+
+    if (error_code != NULL) *error_code = ERROR_SUCCESS;
+    if (privilege == NULL || !firmware_privilege_api_valid(api)) {
+        if (error_code != NULL) *error_code = ERROR_INVALID_PARAMETER;
+        return 0;
+    }
+    memset(privilege, 0, sizeof(*privilege));
+    privilege->api = api;
+    process = api->get_current_process(api->context);
+    if (!api->open_process_token(api->context, process,
+                                 TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY,
+                                 &privilege->token)) {
+        if (error_code != NULL) *error_code = api->get_last_error(api->context);
+        privilege->token = NULL;
+        privilege->api = NULL;
+        return 0;
+    }
+    if (!api->lookup_privilege_value(api->context, NULL,
+                                    L"SeSystemEnvironmentPrivilege", &luid)) {
+        error = api->get_last_error(api->context);
+        (void)api->close_handle(api->context, privilege->token);
+        privilege->token = NULL;
+        privilege->api = NULL;
+        if (error_code != NULL) *error_code = error;
+        return 0;
+    }
+    memset(&requested, 0, sizeof(requested));
+    requested.PrivilegeCount = 1u;
+    requested.Privileges[0].Luid = luid;
+    requested.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+    api->set_last_error(api->context, ERROR_SUCCESS);
+    if (!api->adjust_token_privileges(
+            api->context, privilege->token, FALSE, &requested,
+            sizeof(privilege->previous), &privilege->previous, &returned)) {
+        error = api->get_last_error(api->context);
+        (void)api->close_handle(api->context, privilege->token);
+        privilege->token = NULL;
+        privilege->api = NULL;
+        if (error_code != NULL) *error_code = error;
+        return 0;
+    }
+    error = api->get_last_error(api->context);
+    if (privilege->previous.PrivilegeCount > 1u) {
+        (void)api->close_handle(api->context, privilege->token);
+        privilege->token = NULL;
+        privilege->api = NULL;
+        if (error_code != NULL) *error_code = ERROR_INVALID_DATA;
+        return 0;
+    }
+    if (error == ERROR_NOT_ALL_ASSIGNED) {
+        if (privilege->previous.PrivilegeCount != 0u) {
+            DWORD restore_error = firmware_restore_previous(
+                api, privilege->token, &privilege->previous);
+            if (restore_error != ERROR_SUCCESS) error = restore_error;
+        }
+        (void)api->close_handle(api->context, privilege->token);
+        privilege->token = NULL;
+        privilege->api = NULL;
+        if (error_code != NULL) *error_code = error;
+        return 0;
+    }
+    if (privilege->previous.PrivilegeCount != 0u &&
+        returned != (DWORD)sizeof(privilege->previous)) {
+        DWORD restore_error = firmware_restore_previous(
+            api, privilege->token, &privilege->previous);
+        (void)api->close_handle(api->context, privilege->token);
+        privilege->token = NULL;
+        privilege->api = NULL;
+        if (error_code != NULL) {
+            *error_code = restore_error != ERROR_SUCCESS ? restore_error :
+                          ERROR_INSUFFICIENT_BUFFER;
+        }
+        return 0;
+    }
+    privilege->previous_size = privilege->previous.PrivilegeCount != 0u
+        ? (DWORD)sizeof(privilege->previous) : 0u;
+    privilege->restore_required = privilege->previous.PrivilegeCount != 0u;
+    privilege->active = 1;
+    return 1;
+}
+
+int ib_audit_windows_firmware_privilege_begin(
+    ib_audit_firmware_privilege_t *privilege, DWORD *error_code)
+{
+    return ib_audit_windows_firmware_privilege_begin_with_api(
+        privilege, &g_firmware_privilege_api, error_code);
+}
+
+int ib_audit_windows_firmware_privilege_end(
+    ib_audit_firmware_privilege_t *privilege, DWORD *error_code)
+{
+    DWORD error = ERROR_SUCCESS;
+    int success = 1;
+    const ib_audit_firmware_privilege_api_t *api;
+
+    if (error_code != NULL) *error_code = ERROR_SUCCESS;
+    if (privilege == NULL || !privilege->active ||
+        privilege->token == NULL || !firmware_privilege_api_valid(privilege->api) ||
+        (privilege->restore_required && privilege->previous_size == 0u) ||
+        privilege->previous_size > sizeof(privilege->previous)) {
+        if (error_code != NULL) *error_code = ERROR_INVALID_PARAMETER;
+        return 0;
+    }
+    api = privilege->api;
+    if (privilege->restore_required) {
+        error = firmware_restore_previous(api, privilege->token,
+                                           &privilege->previous);
+        if (error != ERROR_SUCCESS) {
+            success = 0;
+        }
+    }
+    privilege->active = 0;
+    if (!api->close_handle(api->context, privilege->token) && success) {
+        error = api->get_last_error(api->context);
+        success = 0;
+    }
+    privilege->token = NULL;
+    privilege->previous_size = 0u;
+    privilege->api = NULL;
+    if (!success && error_code != NULL) *error_code = error;
+    return success;
+}
+
 int ib_audit_windows_read_bank(void *context, uint16_t algorithm,
                                uint8_t *pcrs, size_t pcrs_capacity,
                                size_t digest_size)

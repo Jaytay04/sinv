@@ -357,7 +357,24 @@ target_include_directories(audit_bootmgr_platform_test PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tcgdump
 )
 target_link_libraries(audit_bootmgr_platform_test PRIVATE
-    reference_log divergence replay sha256 Tbs Bcrypt Crypt32 Wintrust)
+    reference_log divergence replay sha256 Tbs Bcrypt Crypt32 Wintrust Advapi32)
+
+add_executable(audit_firmware_privilege_test
+    src/fixtures/tests/audit_firmware_privilege_test.c
+    src/audit/pcr.c
+    src/audit/platform_win.c
+    src/audit/vars.c
+    src/tcgdump/tbs_tcgdump.c
+)
+target_include_directories(audit_firmware_privilege_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/audit
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/common
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/loader
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/tcgdump
+)
+target_link_libraries(audit_firmware_privilege_test PRIVATE
+    reference_log divergence replay sha256 Tbs Bcrypt Crypt32 Wintrust Advapi32)
+add_test(NAME audit_firmware_privilege_test COMMAND audit_firmware_privilege_test)
 
 add_executable(audit_baseline_test
     src/fixtures/tests/audit_baseline_test.c
@@ -470,7 +487,7 @@ target_include_directories(ibaudit PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/tcgdump
 )
 target_link_libraries(ibaudit PRIVATE
-    reference_log divergence replay sha256 Tbs Bcrypt Crypt32 Wintrust)
+    reference_log divergence replay sha256 Tbs Bcrypt Crypt32 Wintrust Advapi32)
 
 # --- UEFI smoke app (dual-target compile/link proof) ------------------------
 # Same src/common/tcglog.c (+ tcglog_ib.c) compiled with TCGLOG_UEFI and
@@ -823,7 +840,8 @@ if(IB_STATIC_RUNTIME AND MSVC)
                                install_bootnext_test
                                audit_dump_test audit_pcr_test audit_vars_test
                                audit_tcg_version_test audit_bootmgr_test
-                               audit_bootmgr_platform_test audit_baseline_test
+                               audit_bootmgr_platform_test audit_firmware_privilege_test
+                               audit_baseline_test
                                handoff_fixture_gen fixture_gen fixture_suite_test
                                ib-tcg-dump hypervisor_health_test ib-install
                                ib-nested-e2e-service

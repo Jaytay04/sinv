@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
+#include <stdarg.h>
 
 #include "audit_io.h"
 #include "baseline.h"
@@ -25,11 +26,14 @@ static void usage(const char *program)
             "  %s tcg-version\n"
             "  %s bootmgr-integrity --expected-hash <sha256> "
             "[--esp-root <path>]\n"
+            "  %s boot-selection --expected-hash <sha256> --log <tcglog.ib> "
+            "--output <new-json> --esp-root <path>\n"
             "  %s baseline --log <tcglog.ib> --output <baseline.json> "
             "[--esp-root <path>]\n"
             "  %s diff --baseline <baseline.json> --log <tcglog.ib> "
             "[--esp-root <path>]\n",
-            program, program, program, program, program, program, program);
+            program, program, program, program, program, program, program,
+            program);
 }
 
 static int parse_sha256(const char *text, uint8_t digest[SHA256_DIGEST_SIZE])
@@ -159,6 +163,50 @@ static int argument_to_wide(const char *argument, wchar_t *wide, size_t count)
     return needed != 0;
 }
 
+static int begin_firmware_privilege(
+    const char *command, ib_audit_firmware_privilege_t *privilege)
+{
+    DWORD error = ERROR_SUCCESS;
+
+    if (ib_audit_windows_firmware_privilege_begin(privilege, &error)) {
+        return 1;
+    }
+    if (error == ERROR_NOT_ALL_ASSIGNED) {
+        fprintf(stderr,
+                "%s: SeSystemEnvironmentPrivilege is not assigned to this "
+                "process token (Windows error %lu: ERROR_NOT_ALL_ASSIGNED)\n",
+                command, (unsigned long)error);
+    } else {
+        fprintf(stderr,
+                "%s: could not enable SeSystemEnvironmentPrivilege in this "
+                "process token (Windows error %lu)\n",
+                command, (unsigned long)error);
+    }
+    return 0;
+}
+
+static int end_firmware_privilege(
+    const char *command, ib_audit_firmware_privilege_t *privilege)
+{
+    DWORD error = ERROR_SUCCESS;
+
+    if (ib_audit_windows_firmware_privilege_end(privilege, &error)) {
+        return 1;
+    }
+    if (error == ERROR_NOT_ALL_ASSIGNED) {
+        fprintf(stderr,
+                "%s: could not restore SeSystemEnvironmentPrivilege "
+                "(Windows error %lu: ERROR_NOT_ALL_ASSIGNED)\n",
+                command, (unsigned long)error);
+    } else {
+        fprintf(stderr,
+                "%s: could not restore SeSystemEnvironmentPrivilege "
+                "(Windows error %lu)\n",
+                command, (unsigned long)error);
+    }
+    return 0;
+}
+
 static void print_sha256(const uint8_t digest[SHA256_DIGEST_SIZE])
 {
     size_t index;
@@ -177,6 +225,7 @@ static int bootmgr_integrity_command(int argc, char **argv)
     ib_audit_bootmgr_ops_t ops;
     ib_audit_bootmgr_request_t request;
     ib_audit_bootmgr_report_t report;
+    ib_audit_firmware_privilege_t privilege;
     uint32_t index;
 
     if (!bootmgr_options(argc, argv, &expected_text, &root_text) ||
@@ -204,9 +253,18 @@ static int bootmgr_integrity_command(int argc, char **argv)
     request.esp_root = root;
     request.expected_bootmgfw_sha256 = expected;
     request.ops = &ops;
-    if (ib_audit_bootmgr_integrity(&request, &report) != IB_AUDIT_BOOTMGR_OK) {
-        fprintf(stderr, "bootmgr-integrity: observation failed\n");
+    if (!begin_firmware_privilege("bootmgr-integrity", &privilege)) {
         return 2;
+    }
+    {
+        ib_audit_bootmgr_status_t status =
+            ib_audit_bootmgr_integrity(&request, &report);
+        int restored = end_firmware_privilege("bootmgr-integrity", &privilege);
+        if (!restored) return 2;
+        if (status != IB_AUDIT_BOOTMGR_OK) {
+            fprintf(stderr, "bootmgr-integrity: observation failed\n");
+            return 2;
+        }
     }
     printf("BootmgfwSha256=");
     print_sha256(report.bootmgfw_sha256);
@@ -228,6 +286,239 @@ static int bootmgr_integrity_command(int argc, char **argv)
                (unsigned int)report.staged_entries[index]);
     }
     return report.findings == 0u ? 0 : 1;
+}
+
+static int boot_selection_options(int argc, char **argv,
+                                  const char **expected, const char **log,
+                                  const char **output, const char **esp_root)
+{
+    int index;
+
+    *expected = NULL;
+    *log = NULL;
+    *output = NULL;
+    *esp_root = NULL;
+    for (index = 2; index < argc; ++index) {
+        const char **destination;
+
+        if (strcmp(argv[index], "--expected-hash") == 0) {
+            destination = expected;
+        } else if (strcmp(argv[index], "--log") == 0) {
+            destination = log;
+        } else if (strcmp(argv[index], "--output") == 0) {
+            destination = output;
+        } else if (strcmp(argv[index], "--esp-root") == 0) {
+            destination = esp_root;
+        } else {
+            return 0;
+        }
+        if (*destination != NULL || index + 1 >= argc) return 0;
+        *destination = argv[++index];
+    }
+    return *expected != NULL && *log != NULL && *output != NULL &&
+           *esp_root != NULL;
+}
+
+static int append_json_text(char *json, size_t capacity, size_t *used,
+                            const char *format, ...)
+{
+    va_list arguments;
+    int written;
+
+    if (json == NULL || used == NULL || *used >= capacity) return 0;
+    va_start(arguments, format);
+    written = vsnprintf(json + *used, capacity - *used, format, arguments);
+    va_end(arguments);
+    if (written < 0 || (size_t)written >= capacity - *used) return 0;
+    *used += (size_t)written;
+    return 1;
+}
+
+static int encode_boot_selection(
+    const ib_audit_bootmgr_report_t *report,
+    const uint8_t log_sha256[SHA256_DIGEST_SIZE], char *json,
+    size_t capacity, size_t *json_size)
+{
+    size_t used = 0u;
+    uint32_t index;
+
+    if (report == NULL || log_sha256 == NULL || json == NULL ||
+        json_size == NULL || report->boot_order_count >
+                             IB_AUDIT_BOOTMGR_MAX_BOOT_ORDER) {
+        return 0;
+    }
+    if (!append_json_text(json, capacity, &used,
+                          "{\"schema\":1,\"kind\":\"boot-selection\","
+                          "\"boot_next\":")) {
+        return 0;
+    }
+    if (report->boot_next_present != 0u) {
+        if (!append_json_text(json, capacity, &used, "%u",
+                              (unsigned int)report->boot_next)) return 0;
+    } else if (!append_json_text(json, capacity, &used, "null")) {
+        return 0;
+    }
+    if (!append_json_text(json, capacity, &used, ",\"boot_order\":[")) {
+        return 0;
+    }
+    for (index = 0u; index < report->boot_order_count; ++index) {
+        if (!append_json_text(json, capacity, &used, "%s%u",
+                              index == 0u ? "" : ",",
+                              (unsigned int)report->boot_order[index])) {
+            return 0;
+        }
+    }
+    if (!append_json_text(json, capacity, &used,
+                          "],\"bootmgfw_sha256\":\"")) {
+        return 0;
+    }
+    for (index = 0u; index < SHA256_DIGEST_SIZE; ++index) {
+        if (!append_json_text(json, capacity, &used, "%02X",
+                              (unsigned int)report->bootmgfw_sha256[index])) {
+            return 0;
+        }
+    }
+    if (!append_json_text(json, capacity, &used, "\",\"log_sha256\":\"")) {
+        return 0;
+    }
+    for (index = 0u; index < SHA256_DIGEST_SIZE; ++index) {
+        if (!append_json_text(json, capacity, &used, "%02X",
+                              (unsigned int)log_sha256[index])) {
+            return 0;
+        }
+    }
+    if (!append_json_text(json, capacity, &used, "\",\"findings\":0}\n")) {
+        return 0;
+    }
+    *json_size = used;
+    return 1;
+}
+
+static int write_new_file(const wchar_t *path, const char *bytes, size_t size,
+                          DWORD *error_code)
+{
+    HANDLE file;
+    DWORD written = 0u;
+    DWORD error = ERROR_SUCCESS;
+    int success = 0;
+
+    if (error_code != NULL) *error_code = ERROR_SUCCESS;
+    if (path == NULL || bytes == NULL || size > MAXDWORD) {
+        if (error_code != NULL) *error_code = ERROR_INVALID_PARAMETER;
+        return 0;
+    }
+    file = CreateFileW(path, GENERIC_WRITE, 0u, NULL, CREATE_NEW,
+                       FILE_ATTRIBUTE_NORMAL, NULL);
+    if (file == INVALID_HANDLE_VALUE) {
+        if (error_code != NULL) *error_code = GetLastError();
+        return 0;
+    }
+    if (!WriteFile(file, bytes, (DWORD)size, &written, NULL)) {
+        error = GetLastError();
+    } else if (written != (DWORD)size) {
+        error = ERROR_WRITE_FAULT;
+    } else if (!FlushFileBuffers(file)) {
+        error = GetLastError();
+    } else {
+        success = 1;
+    }
+    if (!CloseHandle(file) && success) {
+        error = GetLastError();
+        success = 0;
+    }
+    if (!success) {
+        (void)DeleteFileW(path);
+        if (error_code != NULL) *error_code = error;
+    }
+    return success;
+}
+
+static int boot_selection_command(int argc, char **argv)
+{
+    const char *expected_text;
+    const char *log_path;
+    const char *output_text;
+    const char *root_text;
+    uint8_t expected[SHA256_DIGEST_SIZE];
+    uint8_t log_sha256[SHA256_DIGEST_SIZE];
+    uint8_t *log_bytes = NULL;
+    size_t log_size = 0u;
+    wchar_t root[1024];
+    wchar_t output[1024];
+    ib_audit_variable_ops_t variable_ops;
+    ib_audit_bootmgr_ops_t ops;
+    ib_audit_bootmgr_request_t request;
+    ib_audit_bootmgr_report_t report;
+    ib_audit_firmware_privilege_t privilege;
+    ib_audit_bootmgr_status_t status;
+    char json[4096];
+    size_t json_size = 0u;
+    DWORD write_error = ERROR_SUCCESS;
+    int restored;
+
+    if (!boot_selection_options(argc, argv, &expected_text, &log_path,
+                                &output_text, &root_text) ||
+        !parse_sha256(expected_text, expected)) {
+        fprintf(stderr,
+                "boot-selection: expected hash must be 64 hex digits and "
+                "all four options are required\n");
+        return 2;
+    }
+    if (!argument_to_wide(root_text, root, sizeof(root) / sizeof(root[0])) ||
+        !argument_to_wide(output_text, output,
+                          sizeof(output) / sizeof(output[0]))) {
+        fprintf(stderr,
+                "boot-selection: ESP root or output path is invalid\n");
+        return 2;
+    }
+    if (!ib_audit_read_file(log_path, &log_bytes, &log_size) ||
+        sha256_hash(log_bytes, log_size, log_sha256) != SHA256_OK) {
+        fprintf(stderr, "boot-selection: reference log cannot be read and hashed\n");
+        free(log_bytes);
+        return 2;
+    }
+    free(log_bytes);
+
+    variable_ops.read_variable = ib_audit_windows_read_variable;
+    variable_ops.context = NULL;
+    ops.hash_file = ib_audit_windows_hash_file;
+    ops.verify_microsoft_authenticode = ib_audit_windows_verify_microsoft;
+    ops.path_exists = ib_audit_windows_path_exists;
+    ops.variables = &variable_ops;
+    ops.context = NULL;
+    request.esp_root = root;
+    request.expected_bootmgfw_sha256 = expected;
+    request.ops = &ops;
+
+    if (!begin_firmware_privilege("boot-selection", &privilege)) return 2;
+    status = ib_audit_bootmgr_integrity(&request, &report);
+    restored = end_firmware_privilege("boot-selection", &privilege);
+    if (!restored) return 2;
+    if (status != IB_AUDIT_BOOTMGR_OK) {
+        fprintf(stderr, "boot-selection: firmware observation failed\n");
+        return 2;
+    }
+    if (report.findings != 0u) {
+        fprintf(stderr,
+                "boot-selection: refusing capture with findings=0x%08X\n",
+                (unsigned int)report.findings);
+        return 1;
+    }
+    if (!encode_boot_selection(&report, log_sha256, json, sizeof(json),
+                               &json_size)) {
+        fprintf(stderr, "boot-selection: JSON encoding failed\n");
+        return 2;
+    }
+    if (!write_new_file(output, json, json_size, &write_error)) {
+        fprintf(stderr,
+                "boot-selection: output was not created (Windows error %lu)\n",
+                (unsigned long)write_error);
+        return 2;
+    }
+    printf("BootSelection=%s BootOrder=%u BootNext=%s\n", output_text,
+           (unsigned int)report.boot_order_count,
+           report.boot_next_present != 0u ? "present" : "absent");
+    return 0;
 }
 
 static int option_value(int argc, char **argv, const char *name,
@@ -466,6 +757,7 @@ static int audit_vars_command(int argc, char **argv)
     ib_audit_variable_ops_t ops;
     ib_audit_report_t report;
     ib_audit_status_t status;
+    ib_audit_firmware_privilege_t privilege;
     uint32_t index;
 
     if (!option_value(argc, argv, "--expected-mok", &path) ||
@@ -475,7 +767,9 @@ static int audit_vars_command(int argc, char **argv)
     }
     ops.read_variable = ib_audit_windows_read_variable;
     ops.context = NULL;
+    if (!begin_firmware_privilege("audit-vars", &privilege)) return 2;
     status = ib_audit_variables(&ops, expected, expected_count, &report);
+    if (!end_firmware_privilege("audit-vars", &privilege)) return 2;
     if (status != IB_AUDIT_OK) {
         fprintf(stderr, "audit-vars failed: status=%u\n",
                 (unsigned int)status);
@@ -590,10 +884,18 @@ static int baseline_command(int argc, char **argv)
     const char *log_path;
     const char *root_text;
     ib_audit_baseline_t state;
+    ib_audit_firmware_privilege_t privilege;
+    int captured;
+    int restored;
 
-    if (!baseline_options(argc, argv, 0, &output_path, &log_path, &root_text) ||
-        !capture_state(log_path, root_text, &state) ||
-        !write_baseline_file(output_path, &state)) {
+    if (!baseline_options(argc, argv, 0, &output_path, &log_path, &root_text)) {
+        fprintf(stderr, "baseline: snapshot was not written\n");
+        return 2;
+    }
+    if (!begin_firmware_privilege("baseline", &privilege)) return 2;
+    captured = capture_state(log_path, root_text, &state);
+    restored = end_firmware_privilege("baseline", &privilege);
+    if (!captured || !restored || !write_baseline_file(output_path, &state)) {
         fprintf(stderr, "baseline: snapshot was not written\n");
         return 2;
     }
@@ -613,6 +915,9 @@ static int diff_command(int argc, char **argv)
     ib_audit_baseline_t before;
     ib_audit_baseline_t after;
     ib_audit_baseline_diff_t diff;
+    ib_audit_firmware_privilege_t privilege;
+    int captured;
+    int restored;
 
     if (!baseline_options(argc, argv, 1, &baseline_path, &log_path, &root_text) ||
         !ib_audit_read_file(baseline_path, &json, &json_size) ||
@@ -622,7 +927,10 @@ static int diff_command(int argc, char **argv)
         free(json); return 2;
     }
     free(json);
-    if (!capture_state(log_path, root_text, &after) ||
+    if (!begin_firmware_privilege("diff", &privilege)) return 2;
+    captured = capture_state(log_path, root_text, &after);
+    restored = end_firmware_privilege("diff", &privilege);
+    if (!captured || !restored ||
         ib_audit_baseline_diff(&before, &after, &diff) !=
             IB_AUDIT_BASELINE_OK) {
         fprintf(stderr, "diff: current state could not be compared\n");
@@ -671,6 +979,8 @@ int main(int argc, char **argv)
         result = tcg_version_command(argc, argv);
     } else if (strcmp(argv[1], "bootmgr-integrity") == 0) {
         result = bootmgr_integrity_command(argc, argv);
+    } else if (strcmp(argv[1], "boot-selection") == 0) {
+        result = boot_selection_command(argc, argv);
     } else if (strcmp(argv[1], "baseline") == 0) {
         result = baseline_command(argc, argv);
     } else if (strcmp(argv[1], "diff") == 0) {

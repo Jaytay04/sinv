@@ -102,8 +102,18 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees
 
 Require `REVIEWED_STAGE_READY_FOR_RETIREMENT`. Review does not remove ESP files.
 It saves local and external copies and receipts, checks health `ABSENT`, and
-uses the existing pinned `ibaudit.exe` to read BootNext/BootOrder and check
-referenced boot entries. BootNext must be absent. The full `bcdedit` firmware
+uses a separately built, pinned `ibaudit.exe` to read BootNext/BootOrder and check
+referenced boot entries. The tool is under
+`.codex-build\gpu-stage-retirement-audit\readonly-v1\ibaudit.exe` in the main
+workspace; it does not replace the archived run's audit tool or alter its journal.
+Its focused `boot-selection` command does not capture TPM PCRs or MOK databases.
+Firmware-reading commands enable the existing process privilege and restore it
+before exit; they do not assign account rights or write firmware variables.
+The earlier `ibaudit baseline failed` review result used a broader capture and
+lacked explicit privilege setup; it did not identify which variable failed.
+The corrected check still fails closed if raw boot selection cannot be read,
+and its error identifies the command receipt and stderr file.
+BootNext must be absent. The full `bcdedit` firmware
 enumeration must also match the saved baseline with `S:` mounted. A variable
 read failure, active boot reference, unknown file, changed hash, or missing
 recovery copy stops the operation; no installer `off` operation is used as a

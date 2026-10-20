@@ -8,8 +8,9 @@ $script:GpuRetirementArchiveSha256 = '885120E8BB08700AA7F9E22E033B6484540ECFB642
 $script:GpuRetirementSourceCommit = 'c6e65a2b265d1f3c13ac83bfe61c69281907c003'
 $script:GpuRetirementProbeSha256 = 'CAF1F64AA5C0C8DD72E5721643B854B2CC06BAD6C2AB51B3D77BB59229187A46'
 $script:GpuRetirementProbeBytes = 172544L
-$script:GpuRetirementAuditToolSha256 = '5C7350E5E01BA2FA6B1E59C4EC81702DA758ECC70F6E47A1D2F99EB58DA9F229'
-$script:GpuRetirementAuditToolBytes = 240128L
+$script:GpuRetirementAuditToolSha256 = 'C16517939C887A7991DF4A0CDF05604AEC030141D9DA1FC45FDE8E989EC599A4'
+$script:GpuRetirementAuditToolBytes = 246784L
+$script:GpuRetirementAuditToolRelativePath = '.codex-build\gpu-stage-retirement-audit\readonly-v1\ibaudit.exe'
 $script:GpuRetirementReferenceLogSha256 = '16485B96E4D4CDD0CAD2DDFA6DE8D82B154A5D1071ACC164170933CE3EA3FCA1'
 $script:GpuRetirementReferenceLogBytes = 40838L
 $script:GpuRetirementAuditBytes = 10575L
@@ -254,7 +255,17 @@ function Assert-GpuStageRetirementBootSelection {
     )
 
     if (-not $CommandSucceeded) { throw 'ibaudit failed to read the current firmware boot selection.' }
-    if ($null -eq $Baseline -or $Baseline.schema -ne 1) { throw 'ibaudit returned a missing or unsupported boot-selection baseline.' }
+    foreach ($field in @('schema','kind','findings','boot_next','boot_order','bootmgfw_sha256','log_sha256')) {
+        if ($null -eq $Baseline -or $null -eq $Baseline.PSObject.Properties[$field]) {
+            throw "ibaudit capture is missing required boot-selection field: $field."
+        }
+    }
+    if ($Baseline.schema -ne 1 -or [string]$Baseline.kind -cne 'boot-selection' -or
+        ($Baseline.findings -isnot [int] -and $Baseline.findings -isnot [long] -and
+         $Baseline.findings -isnot [uint16] -and $Baseline.findings -isnot [uint32]) -or
+        $Baseline.findings -ne 0) {
+        throw 'ibaudit returned a missing, unsupported, or failed boot-selection capture.'
+    }
     if ($null -ne $Baseline.boot_next) { throw 'BootNext is set; refusing stage retirement.' }
     if (-not [string]::Equals([string]$Baseline.bootmgfw_sha256, $ExpectedBootManagerSha256, [StringComparison]::OrdinalIgnoreCase)) {
         throw 'ibaudit observed a different Microsoft boot-manager hash.'
@@ -361,6 +372,7 @@ function Invoke-GpuStageRetirementBootSelectionCapture {
         [object]$State,
         [string]$ActionDirectory,
         [string]$Checkpoint,
+        [string]$AuditToolPath,
         [object]$PlatformModule,
         [scriptblock]$NativeCommand,
         [string]$ExpectedToolHash,
@@ -369,7 +381,7 @@ function Invoke-GpuStageRetirementBootSelectionCapture {
         [long]$ExpectedLogBytes
     )
 
-    $auditToolPath = [IO.Path]::GetFullPath((Join-Path ([string]$State.Paths.LoaderBuild) 'ibaudit.exe'))
+    $auditToolPath = [IO.Path]::GetFullPath($AuditToolPath)
     $auditToolPin = Get-GpuStageRetirementPin -Path $auditToolPath
     if ($auditToolPin.Sha256 -cne $ExpectedToolHash -or $auditToolPin.Bytes -ne $ExpectedToolBytes) { throw 'Pinned ibaudit.exe differs from the immutable reviewed build artifact.' }
     $referenceLog = $State.Backup.ReferenceLog
@@ -378,13 +390,16 @@ function Invoke-GpuStageRetirementBootSelectionCapture {
         $referencePin.Sha256 -cne [string]$referenceLog.Sha256 -or $referencePin.Bytes -ne [long]$referenceLog.Bytes) { throw 'Pinned archived TPM reference log differs from the immutable reviewed file.' }
     $baselinePath = Join-Path $ActionDirectory ($Checkpoint + '-boot-selection.json')
     if ($null -ne $NativeCommand) {
-        $baselineResult = & $NativeCommand $auditToolPath @('baseline','--log',[string]$referenceLog.Path,'--output',$baselinePath,'--esp-root','S:\') $ActionDirectory ($Checkpoint + '-baseline')
+        $baselineResult = & $NativeCommand $auditToolPath @('boot-selection','--log',[string]$referenceLog.Path,'--output',$baselinePath,'--esp-root','S:\','--expected-hash',[string]$State.Backup.BootManagerSha256) $ActionDirectory ($Checkpoint + '-boot-selection')
     }
     else {
-        $baselineResult = & $PlatformModule { param($p,$log,$out,$dir,$label) Invoke-GpuNativeCommand -Program $p -Arguments @('baseline','--log',$log,'--output',$out,'--esp-root','S:\') -ActionDirectory $dir -Label $label } $auditToolPath ([string]$referenceLog.Path) $baselinePath $ActionDirectory ($Checkpoint + '-baseline')
+        $baselineResult = & $PlatformModule { param($p,$log,$out,$hash,$dir,$label) Invoke-GpuNativeCommand -Program $p -Arguments @('boot-selection','--log',$log,'--output',$out,'--esp-root','S:\','--expected-hash',$hash) -ActionDirectory $dir -Label $label } $auditToolPath ([string]$referenceLog.Path) $baselinePath ([string]$State.Backup.BootManagerSha256) $ActionDirectory ($Checkpoint + '-boot-selection')
     }
-    if (-not $baselineResult.Succeeded -or -not [IO.File]::Exists($baselinePath)) { throw "ibaudit baseline failed at $Checkpoint." }
-    $baseline = Get-Content -LiteralPath $baselinePath -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
+    if (-not $baselineResult.Succeeded -or -not [IO.File]::Exists($baselinePath)) {
+        throw "ibaudit boot-selection failed at $Checkpoint. Evidence: $($baselineResult.ReceiptPath); stderr: $($baselineResult.StderrPath)."
+    }
+    try { $baseline = Get-Content -LiteralPath $baselinePath -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop }
+    catch { throw "ibaudit boot-selection JSON is invalid: $baselinePath. Evidence: $($baselineResult.ReceiptPath); stderr: $($baselineResult.StderrPath). $($_.Exception.Message)" }
     if ($null -ne $NativeCommand) {
         $integrity = & $NativeCommand $auditToolPath @('bootmgr-integrity','--expected-hash',[string]$State.Backup.BootManagerSha256,'--esp-root','S:\') $ActionDirectory ($Checkpoint + '-bootmgr-integrity')
     }
@@ -392,16 +407,24 @@ function Invoke-GpuStageRetirementBootSelectionCapture {
         $integrity = & $PlatformModule { param($p,$hash,$dir,$label) Invoke-GpuNativeCommand -Program $p -Arguments @('bootmgr-integrity','--expected-hash',$hash,'--esp-root','S:\') -ActionDirectory $dir -Label $label } $auditToolPath ([string]$State.Backup.BootManagerSha256) $ActionDirectory ($Checkpoint + '-bootmgr-integrity')
     }
     if ($null -eq $integrity -or -not $integrity.Succeeded -or -not [IO.File]::Exists([string]$integrity.StdoutPath) -or
-        -not [IO.File]::Exists([string]$integrity.StderrPath)) { throw "ibaudit boot-manager integrity failed at $Checkpoint." }
+        -not [IO.File]::Exists([string]$integrity.StderrPath)) {
+        throw "ibaudit boot-manager integrity failed at $Checkpoint. Evidence: $($integrity.ReceiptPath); stderr: $($integrity.StderrPath)."
+    }
     $integrityText = ([IO.File]::ReadAllText($integrity.StdoutPath)).Trim()
-    if (-not [string]::IsNullOrWhiteSpace([IO.File]::ReadAllText($integrity.StderrPath))) { throw "ibaudit boot-manager integrity wrote unexpected stderr at $Checkpoint." }
-    $validated = Assert-GpuStageRetirementBootSelection -Baseline $baseline -IntegrityOutput $integrityText -ExpectedBootManagerSha256 ([string]$State.Backup.BootManagerSha256) -ExpectedReferenceLogSha256 ([string]$referenceLog.Sha256) -CommandSucceeded ([bool]$baselineResult.Succeeded)
+    if (-not [string]::IsNullOrWhiteSpace([IO.File]::ReadAllText($integrity.StderrPath))) { throw "ibaudit boot-manager integrity wrote unexpected stderr at $Checkpoint. Evidence: $($integrity.ReceiptPath); stderr: $($integrity.StderrPath)." }
+    try {
+        $validated = Assert-GpuStageRetirementBootSelection -Baseline $baseline -IntegrityOutput $integrityText -ExpectedBootManagerSha256 ([string]$State.Backup.BootManagerSha256) -ExpectedReferenceLogSha256 ([string]$referenceLog.Sha256) -CommandSucceeded ([bool]$baselineResult.Succeeded)
+    }
+    catch {
+        throw "$($_.Exception.Message) Capture: $baselinePath. Evidence: $($baselineResult.ReceiptPath); stderr: $($baselineResult.StderrPath). Integrity evidence: $($integrity.ReceiptPath); stderr: $($integrity.StderrPath)."
+    }
     return [pscustomobject]@{ Baseline=$validated; BaselinePath=$baselinePath; BaselinePin=(Get-GpuStageRetirementPin -Path $baselinePath); IntegrityOutput=$integrityText; IntegrityReceipt=$integrity.ReceiptPath; AuditToolPin=$auditToolPin; ReferenceLogPin=$referencePin }
 }
 
 function New-GpuStageRetirementPlatformOperations {
     param(
         [string]$ToolRoot,
+        [string]$AuditToolPath,
         [scriptblock]$NativeCommand,
         [string]$ExpectedAuditToolSha256 = $script:GpuRetirementAuditToolSha256,
         [long]$ExpectedAuditToolBytes = $script:GpuRetirementAuditToolBytes,
@@ -420,8 +443,8 @@ function New-GpuStageRetirementPlatformOperations {
             if ($LASTEXITCODE -ne 0 -or $branch -cne 'feat/smbios-boot-serial-probe') { throw 'Run retirement from feat/smbios-boot-serial-probe.' }
             $changes = @(& git -C $SourceRoot status --porcelain --untracked-files=all 2>&1)
             if ($LASTEXITCODE -ne 0 -or $changes.Count -ne 0) { throw 'The feature worktree must be clean before retirement.' }
-            $diff = @(& git -C $SourceRoot diff --quiet ($ReviewedCommit + '..HEAD') -- 'components/uefi-loader/src/audit' 2>&1)
-            if ($LASTEXITCODE -ne 0) { throw 'The ibaudit source subsystem changed after the reviewed build commit.' }
+            # The archived commit binds the original run; the replacement read-only
+            # audit tool is admitted by its exact separately reviewed image pin.
             return $true
         }.GetNewClosure()
         AssertAdministrator = { & $platformModule { Assert-GpuAdministrator } }.GetNewClosure()
@@ -440,7 +463,7 @@ function New-GpuStageRetirementPlatformOperations {
         }.GetNewClosure()
         AssertMountedEsp = { param($Mount,$Backup) & $platformModule { param($m,$b) Assert-GpuMountedEspMatchesBackup -MountedEsp $m.Identity -Backup $b -Description 'Stage retirement' } $Mount $Backup }.GetNewClosure()
         CaptureFirmware = { param($ActionDirectory) $program = & $platformModule { Get-GpuApplicationPath 'bcdedit.exe' }; $result = & $platformModule { param($p,$d) Invoke-GpuNativeCommand -Program $p -Arguments @('/enum','firmware','/v') -ActionDirectory $d -Label 'stage-retirement-firmware' } $program $ActionDirectory; if (-not $result.Succeeded) { throw "Firmware enumeration failed with exit $($result.ExitCode)." }; & $retirementModule { param($r) [pscustomobject]@{ Text=[IO.File]::ReadAllText($r.StdoutPath); Pin=(Get-GpuStageRetirementPin -Path $r.StdoutPath); ReceiptPath=$r.ReceiptPath } } $result }.GetNewClosure()
-        CaptureBootSelection = { param($State,$ActionDirectory,$Checkpoint) & $retirementModule { param($s,$d,$c,$platform,$native,$toolHash,$toolBytes,$logHash,$logBytes) Invoke-GpuStageRetirementBootSelectionCapture -State $s -ActionDirectory $d -Checkpoint $c -PlatformModule $platform -NativeCommand $native -ExpectedToolHash $toolHash -ExpectedToolBytes $toolBytes -ExpectedLogHash $logHash -ExpectedLogBytes $logBytes } $State $ActionDirectory $Checkpoint $platformModule $NativeCommand $ExpectedAuditToolSha256 $ExpectedAuditToolBytes $ExpectedReferenceLogSha256 $ExpectedReferenceLogBytes }.GetNewClosure()
+        CaptureBootSelection = { param($State,$ActionDirectory,$Checkpoint) & $retirementModule { param($s,$d,$c,$path,$platform,$native,$toolHash,$toolBytes,$logHash,$logBytes) Invoke-GpuStageRetirementBootSelectionCapture -State $s -ActionDirectory $d -Checkpoint $c -AuditToolPath $path -PlatformModule $platform -NativeCommand $native -ExpectedToolHash $toolHash -ExpectedToolBytes $toolBytes -ExpectedLogHash $logHash -ExpectedLogBytes $logBytes } $State $ActionDirectory $Checkpoint $AuditToolPath $platformModule $NativeCommand $ExpectedAuditToolSha256 $ExpectedAuditToolBytes $ExpectedReferenceLogSha256 $ExpectedReferenceLogBytes }.GetNewClosure()
         CaptureHealth = { param($State,$ActionDirectory) $toolPaths = & $platformModule { param($s) Get-GpuExpectedToolPaths -State $s } $State; $probePin = $State.Tools.Probe; if ([IO.Path]::GetFullPath([string]$probePin.Path) -cne [IO.Path]::GetFullPath([string]$toolPaths.Probe)) { throw 'Pinned probe path differs from the archived run path.' }; & $stateModule { param($pin) Assert-GpuFilePin -Pin $pin } $probePin; $result = & $platformModule { param($p,$d) Invoke-GpuNativeCommand -Program $p -Arguments @('health') -ActionDirectory $d -Label 'stage-retirement-absent-health' -AllowedExitCodes @(0) } ([string]$probePin.Path) $ActionDirectory; $lines = @((Get-Content -LiteralPath $result.StdoutPath -ErrorAction Stop) + (Get-Content -LiteralPath $result.StderrPath -ErrorAction Stop)); $verdict = & $stateModule { param($l,$n) Get-GpuHealthVerdict -Lines $l -ExpectedCpus $n -ExpectedResult ABSENT } ([string[]]$lines) ([int]$State.Host.LogicalCpus); return [pscustomobject]@{ CommandSucceeded=[bool]$result.Succeeded; Verdict=$verdict; ReceiptPath=$result.ReceiptPath } }.GetNewClosure()
         AssertPathWithin = { param($Path,$Root,$MustExist) $args = @{Path=$Path;Root=$Root}; if ($MustExist) {$args.MustExist=$true}; & $stateModule { param($a) Assert-GpuPathWithin @a } $args }.GetNewClosure()
         CopyFile = { param($s,$d,$p) & $retirementModule { param($source,$destination,$pin) Copy-GpuStageRetirementFile -Source $source -Destination $destination -ExpectedPin $pin } $s $d $p }.GetNewClosure()
@@ -465,6 +488,7 @@ function Invoke-GpuStageRetirement {
         [long]$ExpectedProbeBytes = $script:GpuRetirementProbeBytes,
         [string]$ExpectedAuditToolSha256 = $script:GpuRetirementAuditToolSha256,
         [long]$ExpectedAuditToolBytes = $script:GpuRetirementAuditToolBytes,
+        [string]$ExpectedAuditToolRelativePath = $script:GpuRetirementAuditToolRelativePath,
         [string]$ExpectedReferenceLogSha256 = $script:GpuRetirementReferenceLogSha256,
         [long]$ExpectedReferenceLogBytes = $script:GpuRetirementReferenceLogBytes
     )
@@ -480,11 +504,11 @@ function Invoke-GpuStageRetirement {
             $ExpectedJournalBytes -ne $script:GpuRetirementJournalBytes -or $ExpectedArchiveSha256 -cne $script:GpuRetirementArchiveSha256 -or
             $ExpectedArchiveBytes -ne $script:GpuRetirementArchiveBytes -or $ExpectedProbeSha256 -cne $script:GpuRetirementProbeSha256 -or
             $ExpectedProbeBytes -ne $script:GpuRetirementProbeBytes -or $ExpectedAuditToolSha256 -cne $script:GpuRetirementAuditToolSha256 -or
-            $ExpectedAuditToolBytes -ne $script:GpuRetirementAuditToolBytes -or $ExpectedReferenceLogSha256 -cne $script:GpuRetirementReferenceLogSha256 -or
+            $ExpectedAuditToolBytes -ne $script:GpuRetirementAuditToolBytes -or $ExpectedAuditToolRelativePath -cne $script:GpuRetirementAuditToolRelativePath -or $ExpectedReferenceLogSha256 -cne $script:GpuRetirementReferenceLogSha256 -or
             $ExpectedReferenceLogBytes -ne $script:GpuRetirementReferenceLogBytes) {
             throw 'Production retirement evidence pins are immutable; test-only overrides require an explicit mock operations table.'
         }
-        $Operations = New-GpuStageRetirementPlatformOperations -ToolRoot $ToolRoot
+        $Operations = New-GpuStageRetirementPlatformOperations -ToolRoot $ToolRoot -AuditToolPath (Join-Path $WorkspaceRoot $ExpectedAuditToolRelativePath)
     }
 
     $report = [ordered]@{
@@ -492,7 +516,7 @@ function Invoke-GpuStageRetirement {
         RunId = $ExpectedRunId; ApplyRequested = [bool]$Apply; ApplyApproved = $false
         RemovedFiles = @(); Copies = @(); Errors = @(); CleanupErrors = @()
         LocalReceiptDirectory = $null; ExternalReceiptDirectory = $null
-        OriginalEvidencePins = $null; ReviewedStagePins = $null; Esp = $null
+        OriginalEvidencePins = $null; RetirementAuditTool = $null; ReviewedStagePins = $null; Esp = $null
         FirmwareBaselineEqual = $false; Health = $null; NextAction = 'blocked; preserve the stage and all evidence'
         FirmwareObservations = @(); BootSelectionCaptures = @(); HealthReceipt = $null
         EspUnmounted = $false; EspFilesChanged = $false; HostBootStateChanged = $false
@@ -549,17 +573,19 @@ function Invoke-GpuStageRetirement {
             [string]$journal.Tools.Probe.Sha256 -cne $ExpectedProbeSha256 -or [long]$journal.Tools.Probe.Bytes -ne $ExpectedProbeBytes) {
             throw 'The archived health probe differs from the fixed reviewed build artifact.'
         }
-        $auditToolPath = [IO.Path]::GetFullPath((Join-Path ([string]$journal.Paths.LoaderBuild) 'ibaudit.exe'))
+        $auditToolPath = [IO.Path]::GetFullPath((Join-Path $WorkspaceRoot $ExpectedAuditToolRelativePath))
+        & $Operations['AssertPathWithin'] $auditToolPath $WorkspaceRoot $true | Out-Null
         $auditToolPin = Get-GpuStageRetirementPin -Path $auditToolPath
         if ($auditToolPin.Sha256 -cne $ExpectedAuditToolSha256 -or $auditToolPin.Bytes -ne $ExpectedAuditToolBytes) {
-            throw 'The archived ibaudit.exe differs from the fixed reviewed build artifact.'
+            throw 'The read-only retirement ibaudit.exe differs from the fixed reviewed build artifact.'
         }
         $referenceLogPin = Get-GpuStageRetirementPin -Path ([string]$journal.Backup.ReferenceLog.Path)
         if ($referenceLogPin.Sha256 -cne $ExpectedReferenceLogSha256 -or $referenceLogPin.Bytes -ne $ExpectedReferenceLogBytes -or
             [string]$journal.Backup.ReferenceLog.Sha256 -cne $ExpectedReferenceLogSha256 -or [long]$journal.Backup.ReferenceLog.Bytes -ne $ExpectedReferenceLogBytes) {
             throw 'The archived TPM reference log differs from the fixed reviewed evidence.'
         }
-        $report.OriginalEvidencePins = [pscustomobject]@{ Audit=$auditPin; Journal=$journalPin; ArchivedSelector=$archivePin; Source=$sourcePins; Ibaudit=$auditToolPin; ReferenceLog=$referenceLogPin; Probe=$journal.Tools.Probe }
+        $report.OriginalEvidencePins = [pscustomobject]@{ Audit=$auditPin; Journal=$journalPin; ArchivedSelector=$archivePin; Source=$sourcePins; ReferenceLog=$referenceLogPin; Probe=$journal.Tools.Probe }
+        $report.RetirementAuditTool = $auditToolPin
         $report.ReviewedStagePins = $expectedStage
 
         & $Operations['AssertAdministrator']

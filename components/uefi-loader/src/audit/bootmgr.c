@@ -152,6 +152,7 @@ static int inspect_boot_variables(const ib_audit_variable_ops_t *ops,
     bootmgr_buffer_t order;
     size_t index;
     int status;
+    int staged;
 
     status = read_variable(ops, L"BootNext", &next);
     if (status == -2) return -2;
@@ -160,7 +161,9 @@ static int inspect_boot_variables(const ib_audit_variable_ops_t *ops,
         if (next.size != 2u) {
             report->findings |= IB_AUDIT_BOOTMGR_BOOT_VARIABLE_MALFORMED;
         } else {
-            int staged = inspect_entry(ops, read_u16(next.bytes), report);
+            report->boot_next_present = 1u;
+            report->boot_next = read_u16(next.bytes);
+            staged = inspect_entry(ops, report->boot_next, report);
             if (staged == -2) { free(next.bytes); return -2; }
             if (staged < 0) report->findings |= IB_AUDIT_BOOTMGR_READ_FAILURE;
             if (staged > 0) report->findings |= IB_AUDIT_BOOTMGR_STAGED_BOOTNEXT;
@@ -172,12 +175,17 @@ static int inspect_boot_variables(const ib_audit_variable_ops_t *ops,
     if (status == -2) return -2;
     if (status < 0) report->findings |= IB_AUDIT_BOOTMGR_READ_FAILURE;
     if (status > 0) {
-        if ((order.size & 1u) != 0u) {
+        if ((order.size & 1u) != 0u ||
+            order.size / 2u > IB_AUDIT_BOOTMGR_MAX_BOOT_ORDER) {
             report->findings |= IB_AUDIT_BOOTMGR_BOOT_VARIABLE_MALFORMED;
         } else {
+            report->boot_order_count = (uint32_t)(order.size / 2u);
             for (index = 0u; index < order.size; index += 2u) {
-                int staged = inspect_entry(ops, read_u16(order.bytes + index),
-                                           report);
+                uint16_t number;
+
+                number = read_u16(order.bytes + index);
+                report->boot_order[index / 2u] = number;
+                staged = inspect_entry(ops, number, report);
                 if (staged == -2) { free(order.bytes); return -2; }
                 if (staged < 0) report->findings |= IB_AUDIT_BOOTMGR_READ_FAILURE;
                 if (staged > 0) report->findings |= IB_AUDIT_BOOTMGR_STAGED_BOOTORDER;
