@@ -48,7 +48,7 @@ function New-TestFixture {
     $root = Join-Path $fixtureRoot 'workspace'
     $tools = Join-Path $root 'tools\gpu_diagnostic'
     $stateRoot = Join-Path $root '.analysis\gpu-baremetal'
-    $runId = 'gpu-20261020T031023Z-9a2a92a17bf54b4faf4b60c6b7231ec7'
+    $runId = 'gpu-20261020T150318Z-59a346ed3cb8422bafe4be60268b7df1'
     $runDirectory = Join-Path $stateRoot ('runs\' + $runId)
     $archiveDirectory = Join-Path $stateRoot 'archive'
     $recoveryDirectory = Join-Path $root ('recovery\' + $runId)
@@ -62,7 +62,7 @@ function New-TestFixture {
     foreach ($file in @('Retire-GpuCompletedStage.ps1','GpuStageRetirement.psm1','GpuHostState.psm1','GpuHostPlatform.psm1','Get-GpuBaremetalReadiness.ps1')) {
         [IO.File]::WriteAllText((Join-Path $tools $file), "fixture source $file`n", [Text.UTF8Encoding]::new($false))
     }
-    $names = @('grubx64.efi','handoff-status.txt','manifest.sha256','payload.efi','shimx64.efi','tcglog.ib')
+    $names = @('grubx64.efi','handoff-status.txt','manifest.sha256','payload.efi','payload-diagnostic.txt','shimx64.efi','tcglog.ib')
     $stagePins = @()
     foreach ($name in $names) {
         $path = Join-Path $stageDirectory $name
@@ -85,14 +85,14 @@ function New-TestFixture {
     $audit = [pscustomobject]@{
         SchemaVersion=1; Status='BLOCKED_READINESS'
         Esp=[pscustomobject]@{ Identity=[pscustomobject]@{ Volume='fixture-volume'; DiskNumber=7; DiskUniqueId='fixture-disk-id'; PartitionGuid='FIXTURE-PARTITION' }; BootManagerPin=[pscustomobject]@{ Sha256=$bootPin.Sha256; Bytes=$bootPin.Bytes } ; MountStateAfterCleanup='Unmounted' }
-        ExistingStage=[pscustomobject]@{ Exists=$true; Complete=$true; EntryCount=6; FileCount=6; Entries=$auditEntries; UnknownEntries=@(); UnsafeEntries=@(); Errors=@() }
+        ExistingStage=[pscustomobject]@{ Exists=$true; Complete=$true; EntryCount=7; FileCount=7; Entries=$auditEntries; UnknownEntries=@(); UnsafeEntries=@(); Errors=@() }
         ExistingResidue=[pscustomobject]@{ Clear=$true; Residues=@() }
     }
 
-    $stageFiles = @($stagePins | Where-Object Name -ne 'handoff-status.txt' | ForEach-Object { [pscustomobject]@{ RelativePath=$_.RelativePath; Sha256=$_.Sha256; Bytes=$_.Bytes } })
+    $stageFiles = @($stagePins | Where-Object { $_.Name -notin @('handoff-status.txt','payload-diagnostic.txt') } | ForEach-Object { [pscustomobject]@{ RelativePath=$_.RelativePath; Sha256=$_.Sha256; Bytes=$_.Bytes } })
     $collectedStage = @($stagePins | ForEach-Object { [pscustomobject]@{ Name=$_.Name; Pin=$_.Pin } })
     $journal = [pscustomobject]@{
-        SchemaVersion=1; RunId=$runId; SourceCommit='c6e65a2b265d1f3c13ac83bfe61c69281907c003'; SourceRoot=$root
+        SchemaVersion=1; RunId=$runId; SourceCommit='d79806d51187963cd81578b7287076e17558c2e2'; SourceRoot=$root
         RunDirectory=$runDirectory; Phase='Complete'; InProgress=$null; DisarmedBootId='old-boot-id'; RecoveryRunDirectory=$recoveryDirectory
         LastAction=[pscustomobject]@{ Action='FinalVerify'; Succeeded=$true }
         FinalVerification=[pscustomobject]@{
@@ -112,7 +112,7 @@ function New-TestFixture {
         Collection=[pscustomobject]@{ Esp=[pscustomobject]@{ StageFiles=$collectedStage } }
     }
     $selector = [pscustomobject]@{ SchemaVersion=1; RunId=$runId; RunDirectory=$runDirectory; JournalPath=(Join-Path $runDirectory 'journal.json'); SourceRoot=$root }
-    $auditPath = Join-Path $root '.analysis\gpu-baremetal-readiness\334426c80d1d47b2bb454d2c25e65d41\readiness.json'
+    $auditPath = Join-Path $root '.analysis\gpu-baremetal-readiness\7216b61c2c11467f851d6b3192ed5dc6\readiness.json'
     [void][IO.Directory]::CreateDirectory((Split-Path -Parent $auditPath))
     Write-TestJson $auditPath $audit
     $journalPath = Join-Path $runDirectory 'journal.json'
@@ -197,8 +197,31 @@ try {
         -ExpectedAuditSha256 $auditPin.Sha256 -ExpectedRunId $fixture.RunId -ExpectedRunDirectory $fixture.RunDirectory `
         -ExpectedJournalPath $fixture.JournalPath -ExpectedSourceRoot $fixture.Root)
 
-    Invoke-TestCase 'complete reviewed evidence yields six immutable file pins' {
-        Assert-True ($stageSpec.Count -eq 6 -and @($stageSpec | Where-Object Name -eq 'handoff-status.txt').Count -eq 1) 'Expected exactly six reviewed files including handoff status.'
+    Invoke-TestCase 'immutable production profile pins the reviewed seven-file run' {
+        $profile = & $retirementModule {
+            [pscustomobject]@{
+                RunId=$script:GpuRetirementRunId; SourceCommit=$script:GpuRetirementSourceCommit
+                AuditRelativePath=$script:GpuRetirementAuditRelativePath; AuditSha256=$script:GpuRetirementAuditSha256; AuditBytes=$script:GpuRetirementAuditBytes
+                JournalSha256=$script:GpuRetirementJournalSha256; JournalBytes=$script:GpuRetirementJournalBytes
+                ArchiveSha256=$script:GpuRetirementArchiveSha256; ArchiveBytes=$script:GpuRetirementArchiveBytes
+                ProbeSha256=$script:GpuRetirementProbeSha256; ProbeBytes=$script:GpuRetirementProbeBytes
+                ReferenceLogSha256=$script:GpuRetirementReferenceLogSha256; ReferenceLogBytes=$script:GpuRetirementReferenceLogBytes
+                AuditToolSha256=$script:GpuRetirementAuditToolSha256; AuditToolBytes=$script:GpuRetirementAuditToolBytes
+                Names=@($script:GpuRetirementNames)
+            }
+        }
+        Assert-True ($profile.RunId -ceq 'gpu-20261020T150318Z-59a346ed3cb8422bafe4be60268b7df1') 'Immutable profile points at the wrong run.'
+        Assert-True ($profile.SourceCommit -ceq 'd79806d51187963cd81578b7287076e17558c2e2') 'Immutable profile points at the wrong source commit.'
+        Assert-True ($profile.AuditRelativePath -ceq '.analysis\gpu-baremetal-readiness\7216b61c2c11467f851d6b3192ed5dc6\readiness.json' -and $profile.AuditSha256 -ceq '05D4B6FCB5831CAC81A3E1C77EC7B4E852F0AA11C3FCA83C837676577C2F86C0' -and $profile.AuditBytes -eq 12050) 'Immutable profile audit pin differs from reviewed readiness evidence.'
+        Assert-True ($profile.JournalSha256 -ceq 'F53925C27953EA695BE0DCA94105611571D08F7877AABFB95F00513AAF6F46C9' -and $profile.JournalBytes -eq 44878) 'Immutable profile journal pin differs from reviewed run evidence.'
+        Assert-True ($profile.ArchiveSha256 -ceq 'ABC00DBDFFC570B1EC78255426F3145CC12438DE023CFD5877D9B6248F363CA7' -and $profile.ArchiveBytes -eq 533) 'Immutable profile archive pin differs from the reviewed selector.'
+        Assert-True ($profile.ProbeSha256 -ceq '49CCB02124E6536F4F107B83C4E79D31C5DA71993585DFD48139726F11C79D5E' -and $profile.ProbeBytes -eq 172544) 'Immutable profile probe pin differs from the reviewed build.'
+        Assert-True ($profile.ReferenceLogSha256 -ceq '22B1F571E7572C1D1448B14504AF18435EB487B39DB9E87C9592A95432A5C447' -and $profile.ReferenceLogBytes -eq 40838) 'Immutable profile reference-log pin differs from the reviewed backup.'
+        Assert-True ($profile.AuditToolSha256 -ceq 'C16517939C887A7991DF4A0CDF05604AEC030141D9DA1FC45FDE8E989EC599A4' -and $profile.AuditToolBytes -eq 246784) 'Immutable profile audit-tool pin changed unexpectedly.'
+        Assert-True ($profile.Names.Count -eq 7 -and $profile.Names -contains 'payload-diagnostic.txt') 'Immutable profile must include the retained payload diagnostic.'
+    }
+    Invoke-TestCase 'complete reviewed evidence yields seven immutable file pins' {
+        Assert-True ($stageSpec.Count -eq 7 -and @($stageSpec | Where-Object Name -eq 'handoff-status.txt').Count -eq 1 -and @($stageSpec | Where-Object Name -eq 'payload-diagnostic.txt').Count -eq 1) 'Expected exactly seven reviewed files including handoff status and payload diagnostic.'
     }
     Invoke-TestCase 'schema 1 journal uses RunDirectory and selector JournalPath remains mandatory' {
         $savedJournal = Get-Content -LiteralPath $fixture.JournalPath -Raw | ConvertFrom-Json
@@ -211,7 +234,7 @@ try {
             ExpectedRunDirectory=$fixture.RunDirectory; ExpectedJournalPath=$fixture.JournalPath; ExpectedSourceRoot=$fixture.Root
         }
         $accepted = @(Assert-GpuStageRetirementEvidence @validation)
-        Assert-True ($accepted.Count -eq 6) 'Valid serialized schema 1 evidence was rejected.'
+        Assert-True ($accepted.Count -eq 7) 'Valid serialized schema 1 evidence was rejected.'
         $validation.ExpectedJournalPath = Join-Path $fixture.RunDirectory 'wrong-journal.json'
         Assert-Throws { Assert-GpuStageRetirementEvidence @validation } 'Journal path' 'A journal path outside its recorded run directory was accepted.'
         $validation.ExpectedJournalPath = $fixture.JournalPath
@@ -224,7 +247,7 @@ try {
         $bad = ($fixture.Audit | ConvertTo-Json -Depth 30 | ConvertFrom-Json)
         $bad.ExistingStage.Entries += [pscustomobject]@{ RelativePath='EFI\insecure-boot\foreign.bin'; Kind='File'; Bytes=1; Sha256=('A'*64); Hashed=$true }
         $bad.ExistingStage.EntryCount++ ; $bad.ExistingStage.FileCount++
-        Assert-Throws { Assert-GpuStageRetirementEvidence -Audit $bad -Journal $fixture.Journal -ArchivedSelector $fixture.Archive -ExpectedAuditSha256 $auditPin.Sha256 -ExpectedRunId $fixture.RunId -ExpectedRunDirectory $fixture.RunDirectory -ExpectedJournalPath $fixture.JournalPath -ExpectedSourceRoot $fixture.Root } 'complete|unknown|exactly six' 'Unknown audit entry was accepted.'
+        Assert-Throws { Assert-GpuStageRetirementEvidence -Audit $bad -Journal $fixture.Journal -ArchivedSelector $fixture.Archive -ExpectedAuditSha256 $auditPin.Sha256 -ExpectedRunId $fixture.RunId -ExpectedRunDirectory $fixture.RunDirectory -ExpectedJournalPath $fixture.JournalPath -ExpectedSourceRoot $fixture.Root } 'complete|unknown|exactly seven' 'Unknown audit entry was accepted.'
     }
     Invoke-TestCase 'audit rejects missing, directory, and un-hashed entries' {
         foreach ($mutation in @('missing','directory','unhashed')) {
@@ -235,13 +258,45 @@ try {
             Assert-Throws { Assert-GpuStageRetirementEvidence -Audit $bad -Journal $fixture.Journal -ArchivedSelector $fixture.Archive -ExpectedAuditSha256 $auditPin.Sha256 -ExpectedRunId $fixture.RunId -ExpectedRunDirectory $fixture.RunDirectory -ExpectedJournalPath $fixture.JournalPath -ExpectedSourceRoot $fixture.Root } '.' "Audit $mutation mutation was accepted."
         }
     }
+    Invoke-TestCase 'payload diagnostic is mandatory in the seven-file audit and collection' {
+        $badAudit = ($fixture.Audit | ConvertTo-Json -Depth 30 | ConvertFrom-Json)
+        $badAudit.ExistingStage.Entries = @($badAudit.ExistingStage.Entries | Where-Object RelativePath -ne 'EFI\insecure-boot\payload-diagnostic.txt')
+        $badAudit.ExistingStage.EntryCount = 6
+        $badAudit.ExistingStage.FileCount = 6
+        Assert-Throws { Assert-GpuStageRetirementEvidence -Audit $badAudit -Journal $fixture.Journal -ArchivedSelector $fixture.Archive -ExpectedAuditSha256 $auditPin.Sha256 -ExpectedRunId $fixture.RunId -ExpectedRunDirectory $fixture.RunDirectory -ExpectedJournalPath $fixture.JournalPath -ExpectedSourceRoot $fixture.Root } 'seven-file|exactly seven|missing payload-diagnostic' 'Audit without payload diagnostic was accepted.'
+
+        $badJournal = ($fixture.Journal | ConvertTo-Json -Depth 30 | ConvertFrom-Json)
+        $badJournal.Collection.Esp.StageFiles = @($badJournal.Collection.Esp.StageFiles | Where-Object Name -ne 'payload-diagnostic.txt')
+        Assert-Throws { Assert-GpuStageRetirementEvidence -Audit $fixture.Audit -Journal $badJournal -ArchivedSelector $fixture.Archive -ExpectedAuditSha256 $auditPin.Sha256 -ExpectedRunId $fixture.RunId -ExpectedRunDirectory $fixture.RunDirectory -ExpectedJournalPath $fixture.JournalPath -ExpectedSourceRoot $fixture.Root } 'exactly seven|missing payload-diagnostic' 'Collection without payload diagnostic was accepted.'
+    }
+    Invoke-TestCase 'tampered collected payload diagnostic pin is rejected' {
+        $badJournal = ($fixture.Journal | ConvertTo-Json -Depth 30 | ConvertFrom-Json)
+        $diagnostic = @($badJournal.Collection.Esp.StageFiles | Where-Object Name -ceq 'payload-diagnostic.txt')[0]
+        $diagnostic.Pin.Sha256 = 'A' * 64
+        Assert-Throws { Assert-GpuStageRetirementEvidence -Audit $fixture.Audit -Journal $badJournal -ArchivedSelector $fixture.Archive -ExpectedAuditSha256 $auditPin.Sha256 -ExpectedRunId $fixture.RunId -ExpectedRunDirectory $fixture.RunDirectory -ExpectedJournalPath $fixture.JournalPath -ExpectedSourceRoot $fixture.Root } 'Collected stage pin differs' 'Tampered payload diagnostic pin was accepted.'
+    }
+    Invoke-TestCase 'payload diagnostic cannot masquerade as an installer-staged artifact' {
+        $badJournal = ($fixture.Journal | ConvertTo-Json -Depth 30 | ConvertFrom-Json)
+        $auditDiagnostic = @($fixture.Audit.ExistingStage.Entries | Where-Object RelativePath -ceq 'EFI\insecure-boot\payload-diagnostic.txt')[0]
+        $badJournal.Stage.Files = @($badJournal.Stage.Files | Where-Object RelativePath -ne 'EFI\insecure-boot\tcglog.ib')
+        $badJournal.Stage.Files += [pscustomobject]@{ RelativePath=$auditDiagnostic.RelativePath; Sha256=$auditDiagnostic.Sha256; Bytes=$auditDiagnostic.Bytes }
+        Assert-Throws { Assert-GpuStageRetirementEvidence -Audit $fixture.Audit -Journal $badJournal -ArchivedSelector $fixture.Archive -ExpectedAuditSha256 $auditPin.Sha256 -ExpectedRunId $fixture.RunId -ExpectedRunDirectory $fixture.RunDirectory -ExpectedJournalPath $fixture.JournalPath -ExpectedSourceRoot $fixture.Root } 'unexpected staged file' 'Collected diagnostic was accepted as a staged installer artifact.'
+        Assert-True (@($fixture.Journal.Stage.Files | Where-Object RelativePath -eq 'EFI\insecure-boot\payload-diagnostic.txt').Count -eq 0) 'Valid fixture incorrectly records payload diagnostic in installer Stage.Files.'
+    }
     Invoke-TestCase 'evidence rejects incomplete run, failed reset, and wrong archived selector' {
         $badJournal = ($fixture.Journal | ConvertTo-Json -Depth 30 | ConvertFrom-Json); $badJournal.Phase='Staged'
         Assert-Throws { Assert-GpuStageRetirementEvidence -Audit $fixture.Audit -Journal $badJournal -ArchivedSelector $fixture.Archive -ExpectedAuditSha256 $auditPin.Sha256 -ExpectedRunId $fixture.RunId -ExpectedRunDirectory $fixture.RunDirectory -ExpectedJournalPath $fixture.JournalPath -ExpectedSourceRoot $fixture.Root } 'complete|action' 'Incomplete run was accepted.'
         $badJournal = ($fixture.Journal | ConvertTo-Json -Depth 30 | ConvertFrom-Json); $badJournal.FinalVerification.ResetBoundaryPassed=$false
         Assert-Throws { Assert-GpuStageRetirementEvidence -Audit $fixture.Audit -Journal $badJournal -ArchivedSelector $fixture.Archive -ExpectedAuditSha256 $auditPin.Sha256 -ExpectedRunId $fixture.RunId -ExpectedRunDirectory $fixture.RunDirectory -ExpectedJournalPath $fixture.JournalPath -ExpectedSourceRoot $fixture.Root } 'Final verification' 'Failed reset boundary was accepted.'
+        $badJournal = ($fixture.Journal | ConvertTo-Json -Depth 30 | ConvertFrom-Json); $badJournal.RunId='gpu-20261020T031023Z-9a2a92a17bf54b4faf4b60c6b7231ec7'
+        Assert-Throws { Assert-GpuStageRetirementEvidence -Audit $fixture.Audit -Journal $badJournal -ArchivedSelector $fixture.Archive -ExpectedAuditSha256 $auditPin.Sha256 -ExpectedRunId $fixture.RunId -ExpectedRunDirectory $fixture.RunDirectory -ExpectedJournalPath $fixture.JournalPath -ExpectedSourceRoot $fixture.Root } 'fixed reviewed retirement target' 'Journal from the prior six-file run was accepted.'
         $badArchive = ($fixture.Archive | ConvertTo-Json -Depth 10 | ConvertFrom-Json); $badArchive.RunId='other-run'
         Assert-Throws { Assert-GpuStageRetirementEvidence -Audit $fixture.Audit -Journal $fixture.Journal -ArchivedSelector $badArchive -ExpectedAuditSha256 $auditPin.Sha256 -ExpectedRunId $fixture.RunId -ExpectedRunDirectory $fixture.RunDirectory -ExpectedJournalPath $fixture.JournalPath -ExpectedSourceRoot $fixture.Root } 'archived selector' 'Wrong archived run was accepted.'
+        $badArchive = ($fixture.Archive | ConvertTo-Json -Depth 10 | ConvertFrom-Json); $badArchive.RunId='gpu-20261020T031023Z-9a2a92a17bf54b4faf4b60c6b7231ec7'
+        Assert-Throws { Assert-GpuStageRetirementEvidence -Audit $fixture.Audit -Journal $fixture.Journal -ArchivedSelector $badArchive -ExpectedAuditSha256 $auditPin.Sha256 -ExpectedRunId $fixture.RunId -ExpectedRunDirectory $fixture.RunDirectory -ExpectedJournalPath $fixture.JournalPath -ExpectedSourceRoot $fixture.Root } 'archived selector' 'Archived selector from the prior six-file run was accepted.'
+        $oldJournal = ($fixture.Journal | ConvertTo-Json -Depth 30 | ConvertFrom-Json); $oldJournal.RunId='gpu-20261020T031023Z-9a2a92a17bf54b4faf4b60c6b7231ec7'
+        $oldArchive = ($fixture.Archive | ConvertTo-Json -Depth 10 | ConvertFrom-Json); $oldArchive.RunId=$oldJournal.RunId
+        Assert-Throws { Assert-GpuStageRetirementEvidence -Audit $fixture.Audit -Journal $oldJournal -ArchivedSelector $oldArchive -ExpectedAuditSha256 $auditPin.Sha256 -ExpectedRunId $oldJournal.RunId -ExpectedRunDirectory $fixture.RunDirectory -ExpectedJournalPath $fixture.JournalPath -ExpectedSourceRoot $fixture.Root } 'fixed reviewed retirement target' 'The prior run was accepted when its journal and selector agreed.'
     }
     Invoke-TestCase 'ESP and boot-manager evidence must match the archived backup' {
         $badAudit = ($fixture.Audit | ConvertTo-Json -Depth 30 | ConvertFrom-Json); $badAudit.Esp.Identity.DiskNumber++
@@ -251,15 +306,24 @@ try {
     }
     Invoke-TestCase 'live inventory refuses missing, extra, directory, and modified files' {
         $valid = Get-GpuStageRetirementLiveInventory -StageDirectory $fixture.StageDirectory
-        Assert-True ($valid.Count -eq 6) 'Expected six live stage files.'
+        Assert-True ($valid.Count -eq 7 -and $valid.ContainsKey('payload-diagnostic.txt')) 'Expected seven live stage files including payload diagnostic.'
         [IO.File]::Delete((Join-Path $fixture.StageDirectory 'shimx64.efi'))
-        Assert-Throws { Get-GpuStageRetirementLiveInventory -StageDirectory $fixture.StageDirectory } 'exactly six|missing' 'Missing live file was accepted.'
+        Assert-Throws { Get-GpuStageRetirementLiveInventory -StageDirectory $fixture.StageDirectory } 'exactly seven|missing' 'Missing live file was accepted.'
         [IO.File]::WriteAllText((Join-Path $fixture.StageDirectory 'shimx64.efi'),'restored')
+        [IO.File]::Delete((Join-Path $fixture.StageDirectory 'payload-diagnostic.txt'))
+        Assert-Throws { Get-GpuStageRetirementLiveInventory -StageDirectory $fixture.StageDirectory } 'exactly seven|missing payload-diagnostic' 'Missing live payload diagnostic was accepted.'
+        [IO.File]::WriteAllText((Join-Path $fixture.StageDirectory 'payload-diagnostic.txt'), "reviewed stage file payload-diagnostic.txt`n", [Text.UTF8Encoding]::new($false))
         [void][IO.Directory]::CreateDirectory((Join-Path $fixture.StageDirectory 'foreign'))
-        Assert-Throws { Get-GpuStageRetirementLiveInventory -StageDirectory $fixture.StageDirectory } 'directory|exactly six' 'Directory entry was accepted.'
+        Assert-Throws { Get-GpuStageRetirementLiveInventory -StageDirectory $fixture.StageDirectory } 'directory|exactly seven' 'Directory entry was accepted.'
         [IO.Directory]::Delete((Join-Path $fixture.StageDirectory 'foreign'))
         $live=Get-GpuStageRetirementLiveInventory -StageDirectory $fixture.StageDirectory
         Assert-Throws { Assert-GpuStageRetirementLivePins -LivePins $live -ExpectedPins $stageSpec } 'differs' 'Modified live file was accepted.'
+        [IO.File]::WriteAllText((Join-Path $fixture.StageDirectory 'shimx64.efi'), "reviewed stage file shimx64.efi`n", [Text.UTF8Encoding]::new($false))
+        $live=Get-GpuStageRetirementLiveInventory -StageDirectory $fixture.StageDirectory
+        Assert-GpuStageRetirementLivePins -LivePins $live -ExpectedPins $stageSpec
+        [IO.File]::WriteAllText((Join-Path $fixture.StageDirectory 'payload-diagnostic.txt'),'tampered diagnostic')
+        $live=Get-GpuStageRetirementLiveInventory -StageDirectory $fixture.StageDirectory
+        Assert-Throws { Assert-GpuStageRetirementLivePins -LivePins $live -ExpectedPins $stageSpec } 'differs' 'Tampered live payload diagnostic was accepted.'
     }
     Invoke-TestCase 'raw boot selection rejects BootNext, empty order, changed order, bad integrity, and command failure' {
         $baseline=[pscustomobject]@{schema=1;kind='boot-selection';findings=0;boot_next=$null;boot_order=[uint16[]]@(1,2);bootmgfw_sha256=$fixture.BootManagerSha256;log_sha256=$fixture.ReferenceLogPin.Sha256}
@@ -350,14 +414,14 @@ try {
         $behavior=@{CopyCount=0;DeleteCount=0;BootCaptureCount=0;UnmountCount=0;FirmwareCaptureCount=0;FirmwareChangesAt=0;FailCopyAt=0;FailDeleteAt=0;DismountFails=$false;FirmwareChanges=$false;BootNextPresent=$false;BootReadFails=$false;BootOrderChanges=$false;WrongEsp=$false}
         $ops=New-MockOperations $fixture $behavior
         $result=Invoke-FixtureRetirement $fixture $ops
-        Assert-True ($result.Status -ceq 'REVIEWED_STAGE_READY_FOR_RETIREMENT' -and $result.Succeeded -and $result.Copies.Count -eq 6 -and $behavior.DeleteCount -eq 0 -and $result.EspUnmounted) "Review did not preserve stage, create six copies, and unmount. status=$($result.Status) succeeded=$($result.Succeeded) copies=$(@($result.Copies).Count) deleted=$($behavior.DeleteCount) unmounted=$($result.EspUnmounted) errors=$($result.Errors -join '; ') cleanup=$($result.CleanupErrors -join '; ')"
+        Assert-True ($result.Status -ceq 'REVIEWED_STAGE_READY_FOR_RETIREMENT' -and $result.Succeeded -and $result.Copies.Count -eq 7 -and $behavior.DeleteCount -eq 0 -and $result.EspUnmounted) "Review did not preserve stage, create seven copies, and unmount. status=$($result.Status) succeeded=$($result.Succeeded) copies=$(@($result.Copies).Count) deleted=$($behavior.DeleteCount) unmounted=$($result.EspUnmounted) errors=$($result.Errors -join '; ') cleanup=$($result.CleanupErrors -join '; ')"
         foreach ($copy in $result.Copies) { Assert-True ((Get-TestPin $copy.Local.Path).Sha256 -ceq $copy.Source.Sha256 -and (Get-TestPin $copy.External.Path).Sha256 -ceq $copy.Source.Sha256) "Review copy mismatch: $($copy.Name)" }
     }
-    Invoke-TestCase 'Apply removes only the six pinned files after evidence copies and all gates pass' {
+    Invoke-TestCase 'Apply removes only the seven pinned files after evidence copies and all gates pass' {
         $fixture=New-TestFixture
         $behavior=@{CopyCount=0;DeleteCount=0;BootCaptureCount=0;UnmountCount=0;FirmwareCaptureCount=0;FirmwareChangesAt=0;FailCopyAt=0;FailDeleteAt=0;DismountFails=$false;FirmwareChanges=$false;BootNextPresent=$false;BootReadFails=$false;BootOrderChanges=$false;WrongEsp=$false}
         $result=Invoke-FixtureRetirement $fixture (New-MockOperations $fixture $behavior) -Apply
-        Assert-True ($result.Status -ceq 'STAGE_RETIRED' -and $result.Succeeded -and $result.RemovedFiles.Count -eq 6 -and $result.EspFilesChanged -and -not (Test-Path -LiteralPath $fixture.StageDirectory) -and (Test-Path -LiteralPath $fixture.BootManagerPath) -and $result.EspUnmounted) 'Apply did not retire exactly the stage or preserve the boot manager.'
+        Assert-True ($result.Status -ceq 'STAGE_RETIRED' -and $result.Succeeded -and $result.RemovedFiles.Count -eq 7 -and $result.EspFilesChanged -and -not (Test-Path -LiteralPath $fixture.StageDirectory) -and (Test-Path -LiteralPath $fixture.BootManagerPath) -and $result.EspUnmounted) 'Apply did not retire exactly the stage or preserve the boot manager.'
     }
     Invoke-TestCase 'external evidence-copy failure blocks before any ESP deletion' {
         $fixture=New-TestFixture
@@ -380,7 +444,7 @@ try {
         $fixture=New-TestFixture
         $behavior=@{CopyCount=0;DeleteCount=0;BootCaptureCount=0;UnmountCount=0;FirmwareCaptureCount=0;FirmwareChangesAt=0;FailCopyAt=0;FailDeleteAt=2;DismountFails=$false;FirmwareChanges=$false;BootNextPresent=$false;BootReadFails=$false;BootOrderChanges=$false;WrongEsp=$false}
         $result=Invoke-FixtureRetirement $fixture (New-MockOperations $fixture $behavior) -Apply
-        Assert-True ($result.Status -ceq 'STAGE_RETIREMENT_FAILED' -and $result.RemovedFiles.Count -eq 2 -and $result.Copies.Count -eq 6 -and (Test-Path -LiteralPath $fixture.StageDirectory)) 'Partial deletion was hidden or copies were lost.'
+        Assert-True ($result.Status -ceq 'STAGE_RETIREMENT_FAILED' -and $result.RemovedFiles.Count -eq 2 -and $result.Copies.Count -eq 7 -and (Test-Path -LiteralPath $fixture.StageDirectory)) 'Partial deletion was hidden or copies were lost.'
         $before=$behavior.DeleteCount
         $retry=Invoke-FixtureRetirement $fixture (New-MockOperations $fixture $behavior) -Apply
         Assert-True ($retry.Status -ceq 'STAGE_RETIREMENT_FAILED' -and $behavior.DeleteCount -eq $before) 'A later Apply resumed against a missing stage file.'

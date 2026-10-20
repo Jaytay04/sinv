@@ -30,7 +30,7 @@ if ($WhatIfPreference) {
         FilesystemChangesPerformed = $false
         NativeCommandsExecuted = $false
         EspMounted = $false
-        Note = 'No probes, commands, or filesystem operations were executed. Default mode reviews and records evidence; -Apply requests removal of only the six pinned files after all gates pass.'
+        Note = 'No probes, commands, or filesystem operations were executed. Default mode reviews and records evidence; -Apply requests removal of only the seven pinned files after all gates pass.'
     } | ConvertTo-Json -Depth 5
     return
 }

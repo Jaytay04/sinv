@@ -82,23 +82,48 @@ reset verification and its selector is archived. Archive preserved its stage.
 The recorded collection contains seven files: the five installed files,
 `handoff-status.txt`, and `payload-diagnostic.txt`.
 
-If inspection finds that stage, stop at `BLOCKED_READINESS` and preserve the
-printed report path. Do not start Prepare, Build, Backup, Stage, or Arm yet.
-The current `Retire-GpuCompletedStage.ps1` is hard-pinned to the older
-`gpu-20261020T031023Z-9a2a92a17bf54b4faf4b60c6b7231ec7` six-file stage;
-its `-Apply` command is not a cleanup command for this latest run.
+If inspection finds that stage, stop at `BLOCKED_READINESS` before Prepare,
+Build, Backup, Stage, or Arm. The reviewed audit
+`.analysis\gpu-baremetal-readiness\7216b61c2c11467f851d6b3192ed5dc6\readiness.json`
+matches all seven hashes to that archived run's Stage and Collection records.
+The retirement script now targets this exact seven-file stage. It does not
+target the already-retired six-file stage from run `031023`.
 
-A retirement procedure for the seven-file stage must first bind the fresh
-readiness inventory to the latest archived journal and collected file hashes,
-verify the external recovery copies, and verify that no boot selection still
-references the stage. That review has not yet been performed for the live
-state after your restart. Do not delete or rename the directory, reuse the
-stage, edit a journal, or rerun old rollback to get around this gate.
+### Retire the matched completed stage
 
-Only after the matching stage has been reviewed and retired should you repeat
-the readiness command. Require a fresh `READY_FOR_FRESH_PREPARE` before step 2.
-The commands below describe the complete forward test and recovery sequence
-once that prerequisite is satisfied; they do not bypass a blocked first step.
+First run the live review from elevated PowerShell:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1
+```
+
+Require `REVIEWED_STAGE_READY_FOR_RETIREMENT`, `Succeeded: true`,
+`EspUnmounted: true`, and no cleanup errors. Review does not remove ESP files.
+It saves and verifies local and external copies of all seven files, confirms
+health `ABSENT` on the expected CPUs, and checks the saved firmware baseline.
+The separately pinned read-only audit tool checks raw BootNext/BootOrder and
+referenced entries without a broad TPM/MOK capture. BootNext must be absent
+and no referenced boot entry may target the stage. A changed hash, unknown
+file, failed read, changed boot selection, or unavailable recovery copy stops
+the operation.
+
+Only after that successful review, perform the bounded removal:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -Apply
+```
+
+Apply repeats the checks, saves fresh verified copies and a removal intent,
+and removes only the seven matching files and their now-empty directory.
+Windows Boot Manager, BCD, firmware variables, the completed journal, and its
+archive are preserved. Require `STAGE_RETIRED`, `Succeeded: true`,
+`EspUnmounted: true`, and no cleanup errors. If any removal or cleanup fails,
+preserve its receipt and do not retry a partial removal.
+
+Repeat the readiness command after successful retirement. Require a fresh
+`READY_FOR_FRESH_PREPARE` before step 2. Do not delete or rename the directory
+generically, reuse the old stage, or rerun old rollback. This retirement
+profile cannot remove a future run's files.
 
 If inspection instead finds an active selector, inspect its saved state:
 

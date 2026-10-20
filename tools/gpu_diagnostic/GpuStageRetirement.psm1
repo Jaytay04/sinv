@@ -1,22 +1,22 @@
 Set-StrictMode -Version 2.0
 
-$script:GpuRetirementRunId = 'gpu-20261020T031023Z-9a2a92a17bf54b4faf4b60c6b7231ec7'
-$script:GpuRetirementAuditRelativePath = '.analysis\gpu-baremetal-readiness\334426c80d1d47b2bb454d2c25e65d41\readiness.json'
-$script:GpuRetirementAuditSha256 = '2F85A1B86522193941D7A447F5C5187D25C15F2B4FC06773F142885F3C175E3F'
-$script:GpuRetirementJournalSha256 = 'AE27720BC55501DD92E0C5B8A34800AF1CA0C479787AA8DBF68C0A0D5FF33EA0'
-$script:GpuRetirementArchiveSha256 = '885120E8BB08700AA7F9E22E033B6484540ECFB64234536EBC8149163A80FB99'
-$script:GpuRetirementSourceCommit = 'c6e65a2b265d1f3c13ac83bfe61c69281907c003'
-$script:GpuRetirementProbeSha256 = 'CAF1F64AA5C0C8DD72E5721643B854B2CC06BAD6C2AB51B3D77BB59229187A46'
+$script:GpuRetirementRunId = 'gpu-20261020T150318Z-59a346ed3cb8422bafe4be60268b7df1'
+$script:GpuRetirementAuditRelativePath = '.analysis\gpu-baremetal-readiness\7216b61c2c11467f851d6b3192ed5dc6\readiness.json'
+$script:GpuRetirementAuditSha256 = '05D4B6FCB5831CAC81A3E1C77EC7B4E852F0AA11C3FCA83C837676577C2F86C0'
+$script:GpuRetirementJournalSha256 = 'F53925C27953EA695BE0DCA94105611571D08F7877AABFB95F00513AAF6F46C9'
+$script:GpuRetirementArchiveSha256 = 'ABC00DBDFFC570B1EC78255426F3145CC12438DE023CFD5877D9B6248F363CA7'
+$script:GpuRetirementSourceCommit = 'd79806d51187963cd81578b7287076e17558c2e2'
+$script:GpuRetirementProbeSha256 = '49CCB02124E6536F4F107B83C4E79D31C5DA71993585DFD48139726F11C79D5E'
 $script:GpuRetirementProbeBytes = 172544L
 $script:GpuRetirementAuditToolSha256 = 'C16517939C887A7991DF4A0CDF05604AEC030141D9DA1FC45FDE8E989EC599A4'
 $script:GpuRetirementAuditToolBytes = 246784L
 $script:GpuRetirementAuditToolRelativePath = '.codex-build\gpu-stage-retirement-audit\readonly-v1\ibaudit.exe'
-$script:GpuRetirementReferenceLogSha256 = '16485B96E4D4CDD0CAD2DDFA6DE8D82B154A5D1071ACC164170933CE3EA3FCA1'
+$script:GpuRetirementReferenceLogSha256 = '22B1F571E7572C1D1448B14504AF18435EB487B39DB9E87C9592A95432A5C447'
 $script:GpuRetirementReferenceLogBytes = 40838L
-$script:GpuRetirementAuditBytes = 10575L
-$script:GpuRetirementJournalBytes = 44826L
+$script:GpuRetirementAuditBytes = 12050L
+$script:GpuRetirementJournalBytes = 44878L
 $script:GpuRetirementArchiveBytes = 533L
-$script:GpuRetirementNames = @('grubx64.efi', 'handoff-status.txt', 'manifest.sha256', 'payload.efi', 'shimx64.efi', 'tcglog.ib')
+$script:GpuRetirementNames = @('grubx64.efi', 'handoff-status.txt', 'manifest.sha256', 'payload-diagnostic.txt', 'payload.efi', 'shimx64.efi', 'tcglog.ib')
 
 function Get-GpuStageRetirementPin {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -133,16 +133,16 @@ function Assert-GpuStageRetirementEvidence {
     Assert-GpuRetirementEqual -Expected $ExpectedSourceRoot -Actual ([string]$ArchivedSelector.SourceRoot) -Description 'Archived selector source root'
 
     if ($Audit.ExistingStage.Exists -ne $true -or $Audit.ExistingStage.Complete -ne $true -or
-        [int]$Audit.ExistingStage.EntryCount -ne 6 -or [int]$Audit.ExistingStage.FileCount -ne 6 -or
+        [int]$Audit.ExistingStage.EntryCount -ne 7 -or [int]$Audit.ExistingStage.FileCount -ne 7 -or
         @($Audit.ExistingStage.UnknownEntries).Count -ne 0 -or
         @($Audit.ExistingStage.UnsafeEntries).Count -ne 0 -or @($Audit.ExistingStage.Errors).Count -ne 0 -or
         $Audit.Esp.MountStateAfterCleanup -cne 'Unmounted' -or
         $Audit.ExistingResidue.Clear -ne $true -or @($Audit.ExistingResidue.Residues).Count -ne 0) {
-        throw 'Readiness audit does not contain a complete, safe six-file stage inventory and clean mount/residue state.'
+        throw 'Readiness audit does not contain the complete, safe seven-file stage inventory and clean mount/residue state.'
     }
 
     $auditEntries = @($Audit.ExistingStage.Entries)
-    if ($auditEntries.Count -ne 6) { throw 'Readiness audit entry count is not exactly six.' }
+    if ($auditEntries.Count -ne 7) { throw 'Readiness audit entry count is not exactly seven.' }
     $entryMap = @{}
     foreach ($entry in $auditEntries) {
         $relativePath = [string]$entry.RelativePath
@@ -168,7 +168,7 @@ function Assert-GpuStageRetirementEvidence {
         $path = [string]$file.RelativePath
         if ($path -notmatch '^EFI\\insecure-boot\\([A-Za-z0-9._-]+)$') { throw 'Journal stage path is malformed.' }
         $name = $Matches[1]
-        if ($name -ceq 'handoff-status.txt' -or $recordedMap.ContainsKey($name) -or -not $entryMap.ContainsKey($name)) {
+        if ($name -cin @('handoff-status.txt', 'payload-diagnostic.txt') -or $recordedMap.ContainsKey($name) -or -not $entryMap.ContainsKey($name)) {
             throw "Journal has an unexpected staged file: $path"
         }
         if ([string]$file.Sha256 -cne $entryMap[$name].Sha256 -or [long]$file.Bytes -ne $entryMap[$name].Bytes) {
@@ -177,11 +177,11 @@ function Assert-GpuStageRetirementEvidence {
         $recordedMap[$name] = $true
     }
     foreach ($name in $script:GpuRetirementNames) {
-        if ($name -cne 'handoff-status.txt' -and -not $recordedMap.ContainsKey($name)) { throw "Journal stage is missing $name." }
+        if ($name -cnotin @('handoff-status.txt', 'payload-diagnostic.txt') -and -not $recordedMap.ContainsKey($name)) { throw "Journal stage is missing $name." }
     }
 
     $collectionFiles = @($Journal.Collection.Esp.StageFiles)
-    if ($collectionFiles.Count -ne 6) { throw 'The archived collection must record exactly six stage files.' }
+    if ($collectionFiles.Count -ne 7) { throw 'The archived collection must record exactly seven stage files.' }
     $collectionMap = @{}
     foreach ($file in $collectionFiles) {
         $name = [string]$file.Name
@@ -214,7 +214,7 @@ function Get-GpuStageRetirementLiveInventory {
     $directoryAttributes = [IO.File]::GetAttributes($directory)
     if (($directoryAttributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw 'The stage directory is a reparse point.' }
     $items = @([IO.Directory]::EnumerateFileSystemEntries($directory))
-    if ($items.Count -ne 6) { throw "The live stage contains $($items.Count) entries; exactly six reviewed files are required." }
+    if ($items.Count -ne 7) { throw "The live stage contains $($items.Count) entries; exactly seven reviewed files are required." }
     $found = @{}
     foreach ($itemPath in $items) {
         $attributes = [IO.File]::GetAttributes($itemPath)
@@ -673,7 +673,7 @@ function Invoke-GpuStageRetirement {
         $externalReceipt = $externalDirectory
 
         # Review mode also makes independently verified local and external copies.
-        # Only explicit -Apply followed by ShouldProcess can remove the six files.
+        # Only explicit -Apply followed by ShouldProcess can remove the seven pinned files.
         $localCopies = Join-Path $localDirectory 'copies'
         $externalCopies = Join-Path $externalDirectory 'copies'
         & $Operations['AssertPathWithin'] $localCopies $localDirectory $false | Out-Null
@@ -712,9 +712,9 @@ function Invoke-GpuStageRetirement {
         if (-not $Apply) {
             $report.Status = 'REVIEWED_STAGE_READY_FOR_RETIREMENT'
             $report.Succeeded = $true
-            $report.NextAction = 'review both verified-copy receipts, then rerun with -Apply to retire only the six pinned files'
+            $report.NextAction = 'review both verified-copy receipts, then rerun with -Apply to retire only the seven pinned files'
         }
-        elseif (-not $PSCmdlet.ShouldProcess('S:\EFI\insecure-boot', 'Retire the exact six reviewed files from the completed archived stage')) {
+        elseif (-not $PSCmdlet.ShouldProcess('S:\EFI\insecure-boot', 'Retire the exact seven reviewed files from the completed archived stage')) {
             $report.Status = 'REVIEWED_STAGE_READY_FOR_RETIREMENT'
             $report.Succeeded = $true
             $report.NextAction = 'review the saved evidence, then rerun this command with -Apply'
@@ -776,7 +776,7 @@ function Invoke-GpuStageRetirement {
                 $report.RemovedFiles += $expected.Name
                 $report.EspFilesChanged = $true
             }
-            if (@([IO.Directory]::EnumerateFileSystemEntries($stageDirectory)).Count -ne 0) { throw 'The reviewed stage directory is not empty after the six file removals.' }
+            if (@([IO.Directory]::EnumerateFileSystemEntries($stageDirectory)).Count -ne 0) { throw 'The reviewed stage directory is not empty after the seven file removals.' }
             & $Operations['AssertPathWithin'] $stageDirectory ([string]$mount.Root) $true | Out-Null
             [IO.Directory]::Delete($stageDirectory, $false)
             if ([IO.Directory]::Exists($stageDirectory)) { throw 'The exact stage directory remains after nonrecursive removal.' }
