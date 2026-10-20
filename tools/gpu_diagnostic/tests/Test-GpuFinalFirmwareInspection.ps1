@@ -27,23 +27,24 @@ function Invoke-TestCase {
     catch { $script:FailedCases.Add("$Name`: $($_.Exception.Message)"); Write-Output "FAIL: $Name`: $($_.Exception.Message)" }
 }
 function New-ValidJournalFixture {
-    param([string]$Root)
-    $runId = 'gpu-20261020T201140Z-6e6e86230a2549b28be3274dfe56cec7'
+    param([string]$Root, [switch]$Run224018)
+    $profile = Get-GpuFinalFirmwareInspectionProfile -Run224018:$Run224018
+    $runId = $profile.RunId
     $run = Join-Path $Root ('.analysis\gpu-baremetal\runs\' + $runId)
-    $action = Join-Path (Join-Path $run 'actions') '20261020T205030359Z-FinalVerify-7ab6d4cba68941c4b3b89ed7553c8534'
+    $action = Join-Path (Join-Path $run 'actions') $profile.FailedAction
     $selector = [pscustomobject]@{ SchemaVersion=1; RunId=$runId; RunDirectory=$run; SourceRoot=$Root }
     $journal = [pscustomobject]@{
-        SchemaVersion=1; RunId=$runId; SourceCommit='933b4c676318f26396cdf2c66de01c3ccbf1a950'
-        SourceRoot=$Root; RunDirectory=$run; Phase='Disarmed'; EverArmIntent=$true; DisarmedBootId='old-boot'
+        SchemaVersion=1; RunId=$runId; SourceCommit=$profile.SourceCommit
+        SourceRoot=$Root; RunDirectory=$run; Phase='Disarmed'; EverArmIntent=$true; DisarmedBootId=$profile.DisarmedBootId
         LastAction=[pscustomobject]@{ Action='FinalVerify'; Succeeded=$false; Directory=$action }
         InProgress=[pscustomobject]@{ Action='FinalVerify'; Directory=$action }
         FinalVerification=[pscustomobject]@{
-            ResetBoundaryPassed=$true; SecureBoot=$true; ActivationAttempted=$true
-            Health=[pscustomobject]@{ Passed=$true; ExpectedResult='ABSENT'; Aggregate='ABSENT'; ExpectedCpus=20; CpuCount=20 }
+            BootId=$profile.CurrentBootId; ResetBoundaryPassed=$true; SecureBoot=$true; ActivationAttempted=$true
+            Health=[pscustomobject]@{ Passed=$true; ExpectedResult='ABSENT'; Aggregate='ABSENT'; ExpectedCpus=20; CpuCount=20; CpuPassCount=0; Reason='PASS' }
             Esp=[pscustomobject]@{ MatchesBaseline=$true; BootManagerSha256='3F8A4CBBC97B89836DF92C4895236BE1FAC4A127665420D90509E897A7298511' }
             FirmwareEnumeration=[pscustomobject]@{
-                TextEqual=$false; BaselineSha256='ECB8F364A0058CB7D60B313E3941FCF61760F0C8F814EA188FD9BE5122C478CE'
-                CurrentSha256='4A1535FACBC5A6E66F7BFA80275D70B63BEC583F779B734D668B48109A723FAE'; CaptureContext='SystemEspMountedAtS'
+                TextEqual=$false; BaselineSha256=$profile.BaselineSha256
+                CurrentSha256=$profile.CurrentSha256; CaptureContext='SystemEspMountedAtS'
             }
             Errors=@('Firmware enumeration differs from the saved textual baseline.')
         }
@@ -81,9 +82,27 @@ Invoke-TestCase 'WhatIf guard precedes imports and evidence writes' {
     $reviewRoot = Join-Path $workspaceRoot '.analysis\gpu-final-firmware-review'
     $before = if (Test-Path -LiteralPath $reviewRoot) { @(Get-ChildItem -LiteralPath $reviewRoot -Force | ForEach-Object Name | Sort-Object) -join ';' } else { '<missing>' }
     $preview = (& $ScriptPath -WhatIf | Out-String | ConvertFrom-Json -ErrorAction Stop)
-    Assert-True ($preview.Status -ceq 'PREVIEW_ONLY' -and $preview.NativeCommandsExecuted -eq $false -and $preview.FilesystemChangesPerformed -eq $false) 'WhatIf did not return the no-effects preview.'
+    $preview224018 = (& $ScriptPath -Run224018 -WhatIf | Out-String | ConvertFrom-Json -ErrorAction Stop)
+    Assert-True ($preview.Status -ceq 'PREVIEW_ONLY' -and $preview.Profile -ceq '201140' -and $preview.RunId -ceq 'gpu-20261020T201140Z-6e6e86230a2549b28be3274dfe56cec7' -and $preview.NativeCommandsExecuted -eq $false -and $preview.FilesystemChangesPerformed -eq $false) 'The default profile WhatIf did not return its no-effects preview.'
+    Assert-True ($preview224018.Status -ceq 'PREVIEW_ONLY' -and $preview224018.Profile -ceq '224018' -and $preview224018.RunId -ceq 'gpu-20261020T224018Z-31b7c15e56584f84a68d89b7b3ecb1a1' -and $preview224018.NativeCommandsExecuted -eq $false -and $preview224018.FilesystemChangesPerformed -eq $false) 'The 224018 WhatIf did not return its no-effects preview.'
     $after = if (Test-Path -LiteralPath $reviewRoot) { @(Get-ChildItem -LiteralPath $reviewRoot -Force | ForEach-Object Name | Sort-Object) -join ';' } else { '<missing>' }
     Assert-True ($before -ceq $after) 'WhatIf changed the evidence directory contents.'
+}
+
+Invoke-TestCase 'pure profile data preserves both fixed closed-run identities' {
+    . $ScriptPath -WhatIf | Out-Null
+    $legacy = Get-GpuFinalFirmwareInspectionProfile
+    $current = Get-GpuFinalFirmwareInspectionProfile -Run224018
+    Assert-True ($legacy.Name -ceq '201140' -and $legacy.RunId -ceq 'gpu-20261020T201140Z-6e6e86230a2549b28be3274dfe56cec7' -and $legacy.SourceCommit -ceq '933b4c676318f26396cdf2c66de01c3ccbf1a950') 'The default 201140 profile changed.'
+    Assert-True ($current.Name -ceq '224018' -and $current.RunId -ceq 'gpu-20261020T224018Z-31b7c15e56584f84a68d89b7b3ecb1a1' -and $current.SourceCommit -ceq '69a3c3d94f33d1903778ef5ec5b0a1f015b1be29') 'The 224018 profile data is not fixed to its reviewed run.'
+    Assert-True ($current.SelectorSha256 -ceq 'A996B969394113B052010129563BF3EAE35443B0B452B0C66D0B7B69FF9D75B3' -and $current.SelectorBytes -eq 533 -and $current.JournalSha256 -ceq 'A1513F12AFCD2932E4DE2D9A6069C7A2CED6F969BF1AC82E6942D6818F319E07' -and $current.JournalBytes -eq 45568 -and $current.BaselineBytes -eq 4336 -and $current.CurrentBytes -eq 2890 -and $current.CurrentBootId -ceq '2026-10-20T22:51:15.5000000Z') 'The 224018 selector, journal, firmware-length, or reset pins are incomplete.'
+    $goodSelector = [pscustomobject]@{ Sha256=$current.SelectorSha256; Bytes=$current.SelectorBytes }
+    $goodJournal = [pscustomobject]@{ Sha256=$current.JournalSha256; Bytes=$current.JournalBytes }
+    Assert-GpuFinalFirmwareInspectionEntryPins -Profile $current -SelectorPin $goodSelector -JournalPin $goodJournal
+    $badSelector = [pscustomobject]@{ Sha256='wrong'; Bytes=$current.SelectorBytes }
+    Assert-Throws { Assert-GpuFinalFirmwareInspectionEntryPins -Profile $current -SelectorPin $badSelector -JournalPin $goodJournal } 'selector.*pin' 'A selector hash mismatch was accepted.'
+    $badJournal = [pscustomobject]@{ Sha256=$current.JournalSha256; Bytes=1 }
+    Assert-Throws { Assert-GpuFinalFirmwareInspectionEntryPins -Profile $current -SelectorPin $goodSelector -JournalPin $badJournal } 'journal.*pin' 'A failed journal length mismatch was accepted.'
 }
 
 Invoke-TestCase 'journal validator accepts only the pinned failed FinalVerify evidence' {
@@ -94,6 +113,50 @@ Invoke-TestCase 'journal validator accepts only the pinned failed FinalVerify ev
     $fixture = New-ValidJournalFixture -Root ([IO.Path]::GetFullPath((Join-Path $ToolRoot '..\..')))
     $fixture.Journal.FinalVerification.Errors=@('unrelated error')
     Assert-Throws { Assert-GpuFinalFirmwareInspectionJournal -Selector $fixture.Selector -Journal $fixture.Journal -ExpectedSourceRoot $fixture.SourceRoot -ExpectedRunDirectory $fixture.RunDirectory } 'single firmware-text mismatch' 'Different FinalVerify error was accepted'
+}
+
+Invoke-TestCase '224018 journal accepts the closed failure and rejects identity, source, action, reset, hash, and error drift' {
+    . $ScriptPath -Run224018 -WhatIf | Out-Null
+    $root = [IO.Path]::GetFullPath((Join-Path $ToolRoot '..\..'))
+    $fixture = New-ValidJournalFixture -Root $root -Run224018
+    Assert-GpuFinalFirmwareInspectionJournal -Selector $fixture.Selector -Journal $fixture.Journal -ExpectedSourceRoot $root -ExpectedRunDirectory $fixture.RunDirectory -Run224018
+
+    $fixture = New-ValidJournalFixture -Root $root -Run224018
+    $fixture.Selector.RunId = 'gpu-20261020T201140Z-6e6e86230a2549b28be3274dfe56cec7'
+    Assert-Throws { Assert-GpuFinalFirmwareInspectionJournal -Selector $fixture.Selector -Journal $fixture.Journal -ExpectedSourceRoot $root -ExpectedRunDirectory $fixture.RunDirectory -Run224018 } 'fixed 224018' 'A wrong selector run was accepted.'
+
+    $fixture = New-ValidJournalFixture -Root $root -Run224018
+    $fixture.Journal.RunId = 'gpu-20261020T201140Z-6e6e86230a2549b28be3274dfe56cec7'
+    Assert-Throws { Assert-GpuFinalFirmwareInspectionJournal -Selector $fixture.Selector -Journal $fixture.Journal -ExpectedSourceRoot $root -ExpectedRunDirectory $fixture.RunDirectory -Run224018 } 'journal identity' 'A wrong journal run was accepted.'
+
+    $fixture = New-ValidJournalFixture -Root $root -Run224018
+    $fixture.Journal.SourceCommit = 'wrong-source'
+    Assert-Throws { Assert-GpuFinalFirmwareInspectionJournal -Selector $fixture.Selector -Journal $fixture.Journal -ExpectedSourceRoot $root -ExpectedRunDirectory $fixture.RunDirectory -Run224018 } 'source revision' 'A wrong source commit was accepted.'
+
+    $fixture = New-ValidJournalFixture -Root $root -Run224018
+    $fixture.Journal.LastAction.Directory = Join-Path (Split-Path -Parent $fixture.Journal.LastAction.Directory) 'other-final-verify'
+    $fixture.Journal.InProgress.Directory = $fixture.Journal.LastAction.Directory
+    Assert-Throws { Assert-GpuFinalFirmwareInspectionJournal -Selector $fixture.Selector -Journal $fixture.Journal -ExpectedSourceRoot $root -ExpectedRunDirectory $fixture.RunDirectory -Run224018 } 'fixed failed FinalVerify' 'A wrong failed action was accepted.'
+
+    $fixture = New-ValidJournalFixture -Root $root -Run224018
+    $fixture.Journal.DisarmedBootId = 'wrong-disarm-boot'
+    Assert-Throws { Assert-GpuFinalFirmwareInspectionJournal -Selector $fixture.Selector -Journal $fixture.Journal -ExpectedSourceRoot $root -ExpectedRunDirectory $fixture.RunDirectory -Run224018 } 'disarmed state' 'A wrong disarm BootId was accepted.'
+
+    $fixture = New-ValidJournalFixture -Root $root -Run224018
+    $fixture.Journal.FinalVerification.BootId = 'wrong-current-boot'
+    Assert-Throws { Assert-GpuFinalFirmwareInspectionJournal -Selector $fixture.Selector -Journal $fixture.Journal -ExpectedSourceRoot $root -ExpectedRunDirectory $fixture.RunDirectory -Run224018 } 'reset, health, ESP' 'A wrong current BootId was accepted.'
+
+    $fixture = New-ValidJournalFixture -Root $root -Run224018
+    $fixture.Journal.FinalVerification.Health.CpuPassCount = 1
+    Assert-Throws { Assert-GpuFinalFirmwareInspectionJournal -Selector $fixture.Selector -Journal $fixture.Journal -ExpectedSourceRoot $root -ExpectedRunDirectory $fixture.RunDirectory -Run224018 } 'absent-state result' 'A changed CPU preparation count was accepted.'
+
+    $fixture = New-ValidJournalFixture -Root $root -Run224018
+    $fixture.Journal.FinalVerification.FirmwareEnumeration.CurrentSha256 = 'wrong-firmware'
+    Assert-Throws { Assert-GpuFinalFirmwareInspectionJournal -Selector $fixture.Selector -Journal $fixture.Journal -ExpectedSourceRoot $root -ExpectedRunDirectory $fixture.RunDirectory -Run224018 } 'single firmware-text mismatch' 'A changed failed firmware hash was accepted.'
+
+    $fixture = New-ValidJournalFixture -Root $root -Run224018
+    $fixture.Journal.FinalVerification.Errors += 'extra error'
+    Assert-Throws { Assert-GpuFinalFirmwareInspectionJournal -Selector $fixture.Selector -Journal $fixture.Journal -ExpectedSourceRoot $root -ExpectedRunDirectory $fixture.RunDirectory -Run224018 } 'single firmware-text mismatch' 'Extra journal errors were accepted.'
 }
 
 Invoke-TestCase 'observation success captures before and after and always dismounts' {
@@ -142,6 +205,15 @@ Invoke-TestCase 'second firmware capture failure still dismounts the owned ESP' 
     $result=Invoke-GpuFinalFirmwareObservation -State ([pscustomobject]@{ Backup=[pscustomobject]@{} }) -ActionDirectory 'fixture-actions' -Operations $operations
     Assert-True (-not $result.Succeeded -and $result.Errors[0] -match 'firmware capture failure') 'Second firmware capture failure was not retained.'
     Assert-True ($result.EspUnmounted -and $behavior.DismountCount -eq 1 -and [object]::ReferenceEquals($behavior.Mount,$behavior.DismountMount)) 'Firmware capture failure did not dismount the exact owned mount.'
+}
+
+Invoke-TestCase 'firmware text drift between observations fails and dismounts the owned ESP' {
+    . $ScriptPath -WhatIf | Out-Null
+    $behavior=@{ MountCount=0; FirmwareCount=0; BootCount=0; DismountCount=0; HealthFails=$false; BootChanges=$false; FirmwareFails=$false; FirmwareChanges=$true; DismountFails=$false }
+    $operations=New-MockObservationOperations $behavior
+    $result=Invoke-GpuFinalFirmwareObservation -State ([pscustomobject]@{ Backup=[pscustomobject]@{} }) -ActionDirectory 'fixture-actions' -Operations $operations
+    Assert-True (-not $result.Succeeded -and $result.Errors[0] -match 'firmware text changed') 'Firmware text drift did not fail the observation.'
+    Assert-True ($result.EspUnmounted -and $behavior.DismountCount -eq 1) 'Firmware text drift did not clean up the owned ESP mount.'
 }
 
 $summary = [pscustomobject]@{ PassedCases=$script:PassedCases; FailedCases=$script:FailedCases.ToArray(); Assertions=$script:Assertions }

@@ -54,6 +54,12 @@ must already exist on a different physical disk from Windows:
 `E:\CodexBackup\Recovery\hsinv-gpu-test`. A folder or an ESP copy alone is
 not a full-system backup.
 
+Choose the attached USB media before readiness and Prepare. Keep that device
+configuration through the test boot, rollback, and recovery verification.
+Record any necessary insertion or removal; preserve the original firmware
+baseline and review the actual difference if FinalVerify reports a mismatch.
+Do not reuse a reviewed-difference approval from another run.
+
 Keep the main display and firmware console on NVIDIA. Connect the diagnostic
 display to the motherboard's Intel HDMI/DP output. Windows detecting that
 monitor does not prove an active Intel firmware/GOP mode or exclusive ownership.
@@ -404,6 +410,41 @@ reset boundary does not require another rollback or power cycle. Do not edit
 the journal or manifest to replace the old disk number. All remaining ESP,
 boot-manager, backup-file, and firmware checks still have to pass before
 Archive.
+
+### Current 224018 firmware inspection
+
+The next FinalVerify for
+`gpu-20261020T224018Z-31b7c15e56584f84a68d89b7b3ecb1a1` passed the external
+backup, reset, Secure Boot, 20-CPU ABSENT health, adapter, and original Windows
+Boot Manager checks. Its only remaining error is the firmware-text mismatch.
+The saved mounted-ESP baseline is `4A1535FA...A723FAE` (4336 bytes); the new
+capture is `66786928...AA5007` (2890 bytes). The text removes the three generic
+CD/DVD, removable-device, and network blocks and their display-order
+references. The Windows and two USB blocks are unchanged. This comparison
+does not establish historical raw BootOrder equality or the cause of the
+enumeration change.
+
+Before any further boot test, run the fixed-run read-only inspection:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Inspect-GpuFinalFirmware.ps1 -Run224018
+```
+
+Require `READONLY_FIRMWARE_REVIEW_CAPTURED`, `Succeeded: true`,
+`SelectorAndJournalUnchanged: true`, `EspUnmounted: true`, and no cleanup
+errors. The helper checks the exact failed journal and text captures, then
+captures fresh ABSENT health, Windows Boot Manager integrity, raw BootNext
+and BootOrder, and stable mounted firmware text. It requires BootNext absent,
+no referenced staged entry, zero integrity findings, and unchanged raw boot
+selection during its observation window. It does not assume the old run's
+BootOrder or modify firmware.
+
+Preserve the complete result and its evidence path for review. This capture
+reports `RecoveryCompleted: false`; it does not authorize Archive or another
+Arm. The legacy `-ReviewedFirmwareDifference` approval remains pinned to run
+`201140` and must not be used for `224018`. A completion review must first be
+bound to this run's successful fresh inspection evidence. Do not rerun
+rollback or rewrite the baseline to resolve this textual mismatch.
 
 ### Historical 201140 recovery: already complete
 
