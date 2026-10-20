@@ -4,7 +4,9 @@ $stateModulePath = Join-Path $PSScriptRoot 'GpuHostState.psm1'
 if (-not (Test-Path -LiteralPath $stateModulePath -PathType Leaf)) {
     throw "Required state helper module is missing: $stateModulePath"
 }
-Import-Module -Name $stateModulePath -Force -ErrorAction Stop
+# Reuse the state module already imported by the dispatcher. Forcing a nested
+# reload removes its exported commands from the caller, including failure logging.
+Import-Module -Name $stateModulePath -ErrorAction Stop
 
 function Get-GpuObjectProperty {
     param(
@@ -461,7 +463,7 @@ function Assert-GpuRecoveryLocation {
     $recoveryBase = [string](Get-GpuObjectProperty -Object $State -Name 'RecoveryBase')
     if ([string]::IsNullOrWhiteSpace($recoveryBase) -or
         -not (Test-Path -LiteralPath $recoveryBase -PathType Container)) {
-        throw 'RecoveryBase must be an existing directory on a local disk.'
+        throw "Recovery directory does not exist: '$recoveryBase'. Before a new Prepare, create a dedicated directory on the verified separate recovery disk, or supply its existing directory with -RecoveryDirectory. Close any saved failed run with Status/rollback first."
     }
     $fullBase = [System.IO.Path]::GetFullPath($recoveryBase)
     Assert-GpuNoReparseAncestors -Path $fullBase

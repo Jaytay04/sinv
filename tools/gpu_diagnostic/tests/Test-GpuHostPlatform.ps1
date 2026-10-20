@@ -209,6 +209,116 @@ $isolatedModule = $null
 try {
     $isolatedModule = New-PlatformHelperModule -ModulePath $platformPath -StatePath $stateModulePath
 
+    Invoke-PlatformTestCase 'Real module force imports preserve caller State commands and failure receipt writes' {
+        $powershellPath = Join-Path $PSHOME 'powershell.exe'
+        if (-not [System.IO.File]::Exists($powershellPath)) { throw "Windows PowerShell child is unavailable: $powershellPath" }
+
+        # Use a clean process and caller script scope. Force-importing Platform
+        # must preserve State exports already available to the caller.
+        $childScript = Join-Path $runRoot 'module-scope-regression.ps1'
+        $childSource = @'
+param(
+    [Parameter(Mandatory = $true)][string]$StateModulePath,
+    [Parameter(Mandatory = $true)][string]$PlatformModulePath,
+    [Parameter(Mandatory = $true)][string]$FixtureRoot
+)
+$ErrorActionPreference = 'Stop'
+$assertions = 0
+function Assert-ChildCondition([bool]$Condition, [string]$Message) {
+    $script:assertions++
+    if (-not $Condition) { throw $Message }
+}
+try {
+    Import-Module -Name $StateModulePath -Force -ErrorAction Stop
+    Assert-ChildCondition ($null -ne (Get-Command Write-GpuJson -ErrorAction SilentlyContinue)) 'Write-GpuJson is unavailable after the initial State import.'
+    Assert-ChildCondition ($null -ne (Get-Command Read-GpuJson -ErrorAction SilentlyContinue)) 'Read-GpuJson is unavailable after the initial State import.'
+
+    Import-Module -Name $PlatformModulePath -Force -ErrorAction Stop
+    Assert-ChildCondition ($null -ne (Get-Command Write-GpuJson -ErrorAction SilentlyContinue)) 'Platform import removed caller Write-GpuJson.'
+    Assert-ChildCondition ($null -ne (Get-Command Read-GpuJson -ErrorAction SilentlyContinue)) 'Platform import removed caller Read-GpuJson.'
+    Import-Module -Name $PlatformModulePath -Force -ErrorAction Stop
+    Assert-ChildCondition ($null -ne (Get-Command Write-GpuJson -ErrorAction SilentlyContinue)) 'Repeated Platform force import removed caller Write-GpuJson.'
+    Assert-ChildCondition ($null -ne (Get-Command Read-GpuJson -ErrorAction SilentlyContinue)) 'Repeated Platform force import removed caller Read-GpuJson.'
+
+    $runDirectory = Join-Path $FixtureRoot 'module-scope-run'
+    $actionDirectory = Join-Path $runDirectory 'actions\prepare-fixture'
+    [void](New-Item -ItemType Directory -Path $actionDirectory -Force)
+    $fixtureState = [pscustomobject]@{
+        RunDirectory = $runDirectory
+        SourceRoot = ''
+        Phase = 'Preparing'
+        InProgress = [pscustomobject]@{ Action = 'Prepare' }
+        LastFailure = $null
+    }
+    $failureMessage = $null
+    try {
+        Invoke-GpuHostPlatformAction -Action Prepare -State $fixtureState -ActionDirectory $actionDirectory
+        throw 'Synthetic platform action unexpectedly succeeded.'
+    }
+    catch {
+        $failureMessage = $_.Exception.Message
+        if ($failureMessage -eq 'Synthetic platform action unexpectedly succeeded.') { throw }
+    }
+    Assert-ChildCondition ($failureMessage -match 'State\.SourceRoot is empty') 'The harmless synthetic platform failure did not stop at the expected local validation.'
+
+    $fixtureState.LastFailure = $failureMessage
+    $journalPath = Join-Path $runDirectory 'journal.json'
+    $receiptPath = Join-Path $actionDirectory 'failure.json'
+    Write-GpuJson -Path $journalPath -Value $fixtureState
+    Write-GpuJson -Path $receiptPath -NoOverwrite -Value ([ordered]@{
+        Action = 'Prepare'
+        Failure = $failureMessage
+        RunDirectory = $runDirectory
+        InProgress = $fixtureState.InProgress
+    })
+    $journal = Read-GpuJson -Path $journalPath
+    $receipt = Read-GpuJson -Path $receiptPath
+    Assert-ChildCondition ($journal.LastFailure -match 'State\.SourceRoot is empty') 'Fixture journal did not preserve the platform failure.'
+    Assert-ChildCondition ($receipt.Action -ceq 'Prepare' -and $receipt.Failure -match 'State\.SourceRoot is empty') 'Fixture failure receipt did not round-trip.'
+
+    $platformModule = Get-Module | Where-Object {
+        $_.Path -and [string]::Equals([System.IO.Path]::GetFullPath($_.Path), [System.IO.Path]::GetFullPath($PlatformModulePath), [System.StringComparison]::OrdinalIgnoreCase)
+    } | Select-Object -First 1
+    Assert-ChildCondition ($null -ne $platformModule) 'The real Platform module instance was not available for the recovery-path check.'
+    $missingRecoveryBase = Join-Path $FixtureRoot 'does-not-exist-recovery-directory'
+    $recoveryState = [pscustomobject]@{ RecoveryBase = $missingRecoveryBase }
+    $recoveryProbe = & $platformModule {
+        param($State)
+        $script:GpuFixtureDiskQueries = 0
+        function Get-GpuDiskForDrivePath {
+            $script:GpuFixtureDiskQueries++
+            throw 'Fixture disk-query guard: missing-directory check queried a disk.'
+        }
+        $message = $null
+        try { Assert-GpuRecoveryLocation -State $State }
+        catch { $message = $_.Exception.Message }
+        [pscustomobject]@{ Message = $message; DiskQueries = $script:GpuFixtureDiskQueries }
+    } $recoveryState
+    Assert-ChildCondition ($recoveryProbe.DiskQueries -eq 0) 'Missing recovery directory reached physical disk lookup.'
+    Assert-ChildCondition ($recoveryProbe.Message.Contains($missingRecoveryBase)) 'Missing recovery directory error did not identify the configured path.'
+    Assert-ChildCondition ($recoveryProbe.Message -match '(?i)create|existing directory') 'Missing recovery directory error omitted actionable setup guidance.'
+
+    Write-Output ("GPU_MODULE_SCOPE_RESULT:PASS assertions={0}" -f $assertions)
+}
+catch {
+    [Console]::Error.WriteLine(("GPU_MODULE_SCOPE_RESULT:FAIL assertions={0} error={1}" -f $assertions, $_.Exception.Message))
+    exit 1
+}
+'@
+        [System.IO.File]::WriteAllText($childScript, $childSource, (New-Object System.Text.UTF8Encoding($false)))
+
+        $childOutput = @(& $powershellPath -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $childScript `
+            -StateModulePath $stateModulePath -PlatformModulePath $platformPath -FixtureRoot $runRoot 2>&1 | ForEach-Object { [string]$_ })
+        $childExitCode = $LASTEXITCODE
+        $childText = $childOutput -join "`n"
+        if ($childExitCode -ne 0) { throw "Fresh-process module scope regression failed (exit $childExitCode): $childText" }
+
+        $scopeMarker = @($childOutput | Where-Object { $_ -match '^GPU_MODULE_SCOPE_RESULT:PASS assertions=(\d+)$' })
+        Assert-PlatformEqual 1 $scopeMarker.Count "Fresh-process module scope regression omitted its PASS marker: $childText"
+        $scopeMarkerMatch = [regex]::Match([string]$scopeMarker[0], '^GPU_MODULE_SCOPE_RESULT:PASS assertions=(\d+)$')
+        $script:Assertions += [int]$scopeMarkerMatch.Groups[1].Value
+    }
+
     Invoke-PlatformTestCase 'Physical disk classifier handles normal MSFT_Disk shape and rejects virtual aliases and codes' {
         $normalDisk = [pscustomobject]@{
             Number = 3

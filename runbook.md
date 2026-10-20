@@ -38,7 +38,15 @@ Admission requires the expected Intel PCI function (`8086:4680`, segment 0, `00:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Prepare -WhatIf
 ```
 
-### 2. Capture the read-only host gate
+### 2. Prepare the recovery directory and capture the read-only host gate
+
+The recovery base directory must already exist; Prepare creates only its run-specific child. After verifying that `E:` is the intended recovery disk, physically separate from Windows, create the dedicated directory if it is missing:
+
+```powershell
+New-Item -ItemType Directory -Path 'E:\CodexBackup\Recovery\hsinv-gpu-test' -Force
+```
+
+This creates a folder, not a full-system backup or recovery USB. If using another verified recovery directory, pass its existing absolute path with `-RecoveryDirectory` to Prepare. Do not change a saved run's recovery path or retry an interrupted Prepare; close that run through the recovery sequence below first.
 
 Only after manually checking the prerequisites, declare the physical output and recovery media ready. These switches are operator assertions; they do not verify a connector, GOP mode, or MOK state. Prepare checks Secure Boot, the Intel/NVIDIA devices, OS and machine identity, CPU count, firmware enumeration, and BitLocker status. It creates the run record and recovery evidence; it does not mount or write the ESP, build or sign binaries, stop drivers, or arm boot state.
 
@@ -160,6 +168,15 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees
 ```
 
 Rollback does not automatically power-cycle the machine. After an Arm intent, it can return `RECOVERY_PENDING_USER_POWER_CYCLE`; follow the recorded recovery result, shut down/power-cycle manually, and run `FinalVerify` only where the action state permits it. Rollback does not remove staged ESP files automatically. Do not delete them recursively; preserve them for exact, reviewed cleanup.
+
+If Prepare failed before activation and the saved run has no Arm intent, tool pins, or ESP backup, rollback reports `DISARMED_NO_ACTIVATION` without invoking the installer or mounting the ESP. Close that exact run with the following checks, one successful action at a time:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 FinalVerify
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Archive
+```
+
+Require `VERIFIED_ABORTED_NO_ACTIVATION` from FinalVerify before Archive. This no-activation abort needs no reboot; an Arm intent still requires the reset boundary described above. Archive preserves the failed run and its receipts. Correct the missing prerequisite, then start a fresh Prepare so it pins the current reviewed source. Never remove the selector or edit its journal to bypass a failure.
 
 If Windows cannot boot, these Windows scripts cannot run. Use the verified firmware boot menu to choose the original Windows Boot Manager or boot the prepared recovery media and restore the full-system backup. Use the offline BitLocker recovery key if requested. Do not format an ESP, clear Secure Boot keys, or run `bcdboot` against an unidentified partition. Keep the external recovery copy and all run evidence.
 
