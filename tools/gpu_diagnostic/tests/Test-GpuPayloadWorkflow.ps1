@@ -16,7 +16,7 @@ foreach ($RequiredPath in @($WorkflowModulePath, $WorkflowScriptPath, $CloneScri
     }
 }
 Import-Module (Join-Path $ToolRoot 'GpuHostState.psm1') -Force -ErrorAction Stop
-Import-Module $WorkflowModulePath -Force -ErrorAction Stop
+$WorkflowModule = Import-Module $WorkflowModulePath -Force -PassThru -ErrorAction Stop | Select-Object -First 1
 
 $script:Assertions = 0
 $script:PassedCases = 0
@@ -256,6 +256,17 @@ try {
             }
             $argumentsText = $GitArguments[1..($GitArguments.Count - 1)] -join ' '
             $global:LASTEXITCODE = 0
+            if ($GitArguments[2] -ceq 'merge-base' -and $GitArguments[3] -ceq '--is-ancestor') {
+                if (-not $script:MockPreparationIsAncestor) { $global:LASTEXITCODE = 1 }
+                return
+            }
+            if ($GitArguments[2] -ceq 'rev-parse' -and $GitArguments.Count -eq 4 -and
+                [string]$GitArguments[3] -match '^[0-9a-f]{40}:.+$') {
+                $spec = [string]$GitArguments[3]
+                if ($script:MockPreparationBlobs.ContainsKey($spec)) { return [string]$script:MockPreparationBlobs[$spec] }
+                $global:LASTEXITCODE = 1
+                return
+            }
             if ($argumentsText -match 'rev-parse --show-toplevel$') { return [IO.Path]::GetFullPath($GitArguments[1]) }
             if ($argumentsText -match 'branch --show-current$') { return 'feat/smbios-boot-serial-probe' }
             if ($argumentsText -match 'rev-parse HEAD$') { return '0123456789abcdef0123456789abcdef01234567' }
@@ -281,6 +292,154 @@ try {
         Assert-Throws {
             Assert-GpuPayloadSourcePins -SourceRoot $sourceFixture -ExpectedPins $sourcePins
         } 'clean|porcelain|changed' 'a dirty source tree is rejected even when pinned file bytes match'
+    }
+
+    Invoke-TestCase 'VM preparation is reusable only across an ancestor with identical preparation blobs' {
+        $compatibilityGitCommand = Get-Command -Name git -CommandType Function -ErrorAction SilentlyContinue
+        $compatibilityGit = if ($null -ne $compatibilityGitCommand) { [string]$compatibilityGitCommand.Definition } else { $null }
+        function global:git {
+            param([Parameter(ValueFromRemainingArguments = $true)][string[]]$GitArguments)
+            if ($GitArguments.Count -lt 4 -or $GitArguments[0] -cne '-C') {
+                throw 'Unexpected VM preparation compatibility Git invocation.'
+            }
+            $global:LASTEXITCODE = 0
+            if ($GitArguments[2] -ceq 'merge-base' -and $GitArguments[3] -ceq '--is-ancestor') {
+                if (-not $script:MockPreparationIsAncestor) { $global:LASTEXITCODE = 1 }
+                return
+            }
+            if ($GitArguments[2] -ceq 'rev-parse' -and $GitArguments.Count -eq 4) {
+                $spec = [string]$GitArguments[3]
+                if ($script:MockPreparationBlobs.ContainsKey($spec)) { return [string]$script:MockPreparationBlobs[$spec] }
+                $global:LASTEXITCODE = 1
+                return
+            }
+            $global:LASTEXITCODE = 1
+            throw 'Unexpected VM preparation compatibility Git arguments.'
+        }
+        try {
+            $sourceFixture = Join-Path $FixtureRoot 'compatibility-source'
+            [void](New-Item -ItemType Directory -Path $sourceFixture -Force)
+            $preparationCommit = '1' * 40
+            $currentCommit = '2' * 40
+            $script:MockPreparationIsAncestor = $true
+            $script:MockPreparationBlobs = @{}
+            $blobIndex = 1
+            foreach ($relativePath in @(
+                'tools\gpu_diagnostic\New-GpuPayloadVm.ps1',
+                'tools\gpu_diagnostic\GpuHostState.psm1',
+                'tools\host-runner\HostRunner.Core.psm1',
+                'tools\host-runner\Invoke-UEFILoaderHostRunner.ps1'
+            )) {
+                $blob = ('{0:x40}' -f $blobIndex)
+                $gitPath = $relativePath.Replace('\', '/')
+                $script:MockPreparationBlobs[('{0}:{1}' -f $preparationCommit, $gitPath)] = $blob
+                $script:MockPreparationBlobs[('{0}:{1}' -f $currentCommit, $gitPath)] = $blob
+                $blobIndex++
+            }
+            $proof = Test-GpuPayloadPreparationCompatibility -SourceRoot $sourceFixture `
+                -PreparationCommit $preparationCommit -CurrentCommit $currentCommit
+            Assert-True ($proof.Status -ceq 'PREPARATION_CODE_COMPATIBLE' -and
+                $proof.PreparationIsAncestor -eq $true -and $proof.Files.Count -eq 4 -and
+                @($proof.Files | Where-Object { -not $_.Identical }).Count -eq 0) `
+                'compatible preparation proof did not accept the unchanged blob set across a newer commit'
+
+            $changedSpec = '{0}:{1}' -f $currentCommit, 'tools/host-runner/HostRunner.Core.psm1'
+            $script:MockPreparationBlobs[$changedSpec] = 'f' * 40
+            Assert-Throws {
+                Test-GpuPayloadPreparationCompatibility -SourceRoot $sourceFixture `
+                    -PreparationCommit $preparationCommit -CurrentCommit $currentCommit
+            } 'preparation code changed' 'changed preparation code must block copy reuse'
+
+            $script:MockPreparationBlobs.Remove($changedSpec)
+            Assert-Throws {
+                Test-GpuPayloadPreparationCompatibility -SourceRoot $sourceFixture `
+                    -PreparationCommit $preparationCommit -CurrentCommit $currentCommit
+            } 'could not resolve.*blob IDs' 'missing preparation blob must block copy reuse'
+
+            $script:MockPreparationIsAncestor = $false
+            Assert-Throws {
+                Test-GpuPayloadPreparationCompatibility -SourceRoot $sourceFixture `
+                    -PreparationCommit $preparationCommit -CurrentCommit $currentCommit
+            } 'not an ancestor' 'unrelated source history must block copy reuse'
+        }
+        finally {
+            if ($null -ne $compatibilityGit) {
+                Set-Item -Path Function:\global:git -Value ([scriptblock]::Create($compatibilityGit))
+            } else {
+                Remove-Item -Path Function:\global:git -Force -ErrorAction SilentlyContinue
+            }
+            Remove-Variable MockPreparationIsAncestor, MockPreparationBlobs -Scope Script -ErrorAction SilentlyContinue
+        }
+    }
+
+    Invoke-TestCase 'ValidateVm mutation intent persists all writable evidence fields before execution' {
+        $runId = 'gpu-payload-20261019T120002Z-1234567890abcdef1234567890abcdef'
+        $runDirectory = Join-Path (Join-Path $FixtureRoot 'mutation-workspace') $runId
+        $paths = Get-GpuPayloadPaths -WorkspaceRoot (Split-Path -Parent $runDirectory) -RunDirectory $runDirectory
+        [void](New-Item -ItemType Directory -Path $paths.ActionsRoot -Force)
+        $state = [pscustomobject]@{ Phase = 'Signed'; InProgress = $null; LastFailure = $null; UpdatedUtc = $null }
+        $actionDirectory = & $WorkflowModule {
+            param($testState, $testPaths)
+            Start-GpuPayloadMutation -State $testState -Paths $testPaths -Action 'ValidateVm'
+        } $state $paths
+        $intentNames = @($state.InProgress.PSObject.Properties | ForEach-Object { $_.Name })
+        foreach ($name in @('ControllerRunDirectory', 'VmxPath', 'VmxSha256', 'VmPreparationCompatibility')) {
+            Assert-True ($intentNames -contains $name -and $null -eq $state.InProgress.$name) `
+                "ValidateVm intent did not initialize writable evidence property $name"
+        }
+        Assert-True ($intentNames -contains 'ControllerInvocationStarted' -and
+            $state.InProgress.ControllerInvocationStarted -is [bool] -and
+            -not $state.InProgress.ControllerInvocationStarted) `
+            'ValidateVm intent did not persist the pre-launch state before any controller invocation'
+        Assert-True (-not (Test-Path -LiteralPath (Join-Path $actionDirectory 'result.json') -PathType Leaf)) `
+            'mutation setup must not fabricate a completed result receipt'
+    }
+
+    Invoke-TestCase 'pre-controller failure archival requires pinned VMX and absent NVRAM proof' {
+        $workspace = Join-Path $FixtureRoot 'pre-controller-workspace'
+        $runId = 'gpu-payload-20261019T120003Z-abcdefabcdefabcdefabcdefabcdefab'
+        $runDirectory = Join-Path $workspace ('.analysis\gpu-payload-diagnostic\runs\' + $runId)
+        $paths = Get-GpuPayloadPaths -WorkspaceRoot $workspace -RunDirectory $runDirectory
+        $vmxDirectory = Join-Path $workspace '.codex-build\gpu_payload_vm\vm-20261019T120000Z-1234abcd\clone'
+        $sourceDirectory = Join-Path $workspace '.codex-build\retained-vm'
+        [void](New-Item -ItemType Directory -Path $paths.StateRoot -Force)
+        [void](New-Item -ItemType Directory -Path $vmxDirectory -Force)
+        [void](New-Item -ItemType Directory -Path $sourceDirectory -Force)
+        [void](New-Item -ItemType Directory -Path $paths.ControllerRunsRoot -Force)
+        $vmxPath = Join-Path $vmxDirectory 'hsinv-Windows-25H2.vmx'
+        $sourceVmxPath = Join-Path $sourceDirectory 'hsinv-Windows-25H2.vmx'
+        [IO.File]::WriteAllText($vmxPath, 'diagnostic-vmx-fixture')
+        [IO.File]::WriteAllText($sourceVmxPath, 'retained-vmx-fixture')
+        $vmxPin = Get-TestFilePin $vmxPath
+        $sourceVmxPin = Get-TestFilePin $sourceVmxPath
+        $commit = '3' * 40
+        $receiptPath = Join-Path $paths.StateRoot 'vm-prepared.json'
+        [IO.File]::WriteAllText($receiptPath, (ConvertTo-Json -InputObject ([pscustomobject]@{
+            SchemaVersion = 1; Status = 'CLONE_PREPARED_TRUST_UNVERIFIED'; SourceCommit = $commit
+            VmxPath = $vmxPath; VmxSha256 = $vmxPin.Sha256
+            SourceVmx = $sourceVmxPath; SourceVmxSha256 = $sourceVmxPin.Sha256
+            HostBootChanges = $false; RetainedVmMoved = $false; TrustValidated = $false
+            TrustMechanism = 'VM firmware db append, not MOK enrollment'
+        }) -Depth 5), [Text.UTF8Encoding]::new($false))
+        $state = [pscustomobject]@{
+            RunId = $runId; WorkspaceRoot = $workspace; SourceCommit = $commit; Phase = 'Signed'
+            LastFailure = [pscustomobject]@{
+                Action = 'ValidateVm'
+                Failure = "The property 'ControllerRunDirectory' cannot be found on this object. Verify that the property exists and can be set."
+                Intent = [pscustomobject]@{ Action = 'ValidateVm' }
+            }
+        }
+        $archiveProof = Get-GpuPayloadArchiveDisposition -State $state -Paths $paths
+        Assert-True ($archiveProof.Status -ceq 'ABORTED_ARCHIVED' -and
+            $archiveProof.PreControllerFailureProof.Status -ceq 'PRE_CONTROLLER_FAILURE_NO_VM_STARTED' -and
+            $archiveProof.PreControllerFailureProof.LegacyRecovery -eq $true -and
+            $archiveProof.PreControllerFailureProof.FreshNvramAbsent -eq $true) `
+            'the exact legacy pre-controller failure should archive only with matching VMX pins and no controller/NVRAM evidence'
+
+        $nvramPath = Join-Path $vmxDirectory 'gpu-payload-test.nvram'
+        [IO.File]::WriteAllBytes($nvramPath, [byte[]]@(1))
+        Assert-Throws { Get-GpuPayloadArchiveDisposition -State $state -Paths $paths } `
+            'NVRAM exists|may have started' 'diagnostic NVRAM existence must block the pre-controller archive proof'
     }
 
     Invoke-TestCase 'VM admission requires authenticated SignedNative evidence and cleanup gates' {

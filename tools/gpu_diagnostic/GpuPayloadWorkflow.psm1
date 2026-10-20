@@ -3,6 +3,12 @@ $ErrorActionPreference = 'Stop'
 
 $script:PayloadStateModulePath = Join-Path $PSScriptRoot 'GpuHostState.psm1'
 $script:PayloadPlatformModulePath = Join-Path $PSScriptRoot 'GpuHostPlatform.psm1'
+$script:GpuPayloadPreparationFiles = @(
+    'tools\gpu_diagnostic\New-GpuPayloadVm.ps1',
+    'tools\gpu_diagnostic\GpuHostState.psm1',
+    'tools\host-runner\HostRunner.Core.psm1',
+    'tools\host-runner\Invoke-UEFILoaderHostRunner.ps1'
+)
 if (-not (Test-Path -LiteralPath $script:PayloadStateModulePath -PathType Leaf) -or
     -not (Test-Path -LiteralPath $script:PayloadPlatformModulePath -PathType Leaf)) {
     throw 'GPU payload workflow dependencies are missing.'
@@ -166,6 +172,56 @@ function Get-GpuPayloadSourcePins {
         Commit = $snapshot.Commit
         Branch = $snapshot.Branch
         Files = [pscustomobject]$pins
+    }
+}
+
+function Test-GpuPayloadPreparationCompatibility {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$SourceRoot,
+        [Parameter(Mandatory = $true)][string]$PreparationCommit,
+        [Parameter(Mandatory = $true)][string]$CurrentCommit
+    )
+
+    $source = [IO.Path]::GetFullPath($SourceRoot)
+    if ($PreparationCommit -cnotmatch '^[0-9a-f]{40}$' -or $CurrentCommit -cnotmatch '^[0-9a-f]{40}$') {
+        throw 'VM preparation compatibility requires full SHA-1 Git commit IDs.'
+    }
+
+    $null = & git -C $source merge-base --is-ancestor $PreparationCommit $CurrentCommit 2>$null
+    $ancestorExit = $LASTEXITCODE
+    if ($ancestorExit -eq 1) { throw 'VM preparation commit is not an ancestor of the current source commit.' }
+    if ($ancestorExit -ne 0) { throw 'Git could not prove the VM preparation commit lineage.' }
+
+    $fileProofs = [Collections.Generic.List[object]]::new()
+    foreach ($relativePath in $script:GpuPayloadPreparationFiles) {
+        $gitPath = $relativePath.Replace('\', '/')
+        $preparationSpec = '{0}:{1}' -f $PreparationCommit, $gitPath
+        $currentSpec = '{0}:{1}' -f $CurrentCommit, $gitPath
+        $preparationBlob = (@(& git -C $source rev-parse $preparationSpec 2>$null) -join '').Trim()
+        $preparationExit = $LASTEXITCODE
+        $currentBlob = (@(& git -C $source rev-parse $currentSpec 2>$null) -join '').Trim()
+        $currentExit = $LASTEXITCODE
+        if ($preparationExit -ne 0 -or $currentExit -ne 0 -or
+            $preparationBlob -cnotmatch '^[0-9a-f]{40}$' -or $currentBlob -cnotmatch '^[0-9a-f]{40}$') {
+            throw "Git could not resolve preparation compatibility blob IDs for $relativePath."
+        }
+        if ($preparationBlob -cne $currentBlob) {
+            throw "VM preparation code changed since the VM copy was created: $relativePath."
+        }
+        $fileProofs.Add([pscustomobject]@{
+            Path = $relativePath
+            PreparationBlob = $preparationBlob
+            CurrentBlob = $currentBlob
+            Identical = $true
+        })
+    }
+    return [pscustomobject]@{
+        Status = 'PREPARATION_CODE_COMPATIBLE'
+        PreparationCommit = $PreparationCommit
+        CurrentCommit = $CurrentCommit
+        PreparationIsAncestor = $true
+        Files = @($fileProofs)
     }
 }
 
@@ -716,9 +772,24 @@ function Get-GpuPayloadArchiveDisposition {
         }
         return [pscustomobject]@{ Allowed = $true; Status = 'ABORTED_ARCHIVED'; VmCleanupResultPin = $null; Reason = 'No VM controller invocation is recorded.' }
     }
-    $controllerRunDirectory = [string]$intent.ControllerRunDirectory
+    $controllerRunDirectory = [string](Get-GpuPayloadObjectProperty -Object $intent -Name 'ControllerRunDirectory')
     if ([string]::IsNullOrWhiteSpace($controllerRunDirectory)) {
-        throw 'Cannot archive a VM validation attempt without a saved controller run directory.'
+        $invocationStarted = Get-GpuPayloadObjectProperty -Object $intent -Name 'ControllerInvocationStarted'
+        $legacyFailure = [string](Get-GpuPayloadObjectProperty -Object $lastFailure -Name 'Failure')
+        $legacyMissingPropertyFailure = $null -eq $invocationStarted -and
+            $legacyFailure -like '*property ''ControllerRunDirectory'' cannot be found*'
+        if (($invocationStarted -is [bool] -and -not [bool]$invocationStarted) -or $legacyMissingPropertyFailure) {
+            $preControllerProof = Get-GpuPayloadPreControllerProof -State $State -Paths $Paths `
+                -RequirePreparationCommitMatch $legacyMissingPropertyFailure
+            return [pscustomobject]@{
+                Allowed = $true
+                Status = 'ABORTED_ARCHIVED'
+                VmCleanupResultPin = $null
+                PreControllerFailureProof = $preControllerProof
+                Reason = 'No VM controller invocation occurred; prepared VMX and retained source pins are unchanged and the fresh NVRAM is absent.'
+            }
+        }
+        throw 'Cannot archive a VM validation attempt without a saved controller result or pre-controller no-start proof.'
     }
     $controllerRunDirectory = [IO.Path]::GetFullPath($controllerRunDirectory)
     $null = Assert-GpuPathWithin -Path $controllerRunDirectory -Root $Paths.ControllerRunsRoot -MustExist
@@ -739,6 +810,70 @@ function Get-GpuPayloadArchiveDisposition {
         VmCleanupResultPin = $afterPin
         ControllerRunDirectory = $controllerRunDirectory
         Reason = 'The recorded controller result confirms VM-off, before/after snapshots, baseline revert, and no cleanup failures.'
+    }
+}
+
+function Get-GpuPayloadPreControllerProof {
+    param(
+        [Parameter(Mandatory = $true)][object]$State,
+        [Parameter(Mandatory = $true)][object]$Paths,
+        [bool]$RequirePreparationCommitMatch = $false
+    )
+
+    $controllerRoot = [IO.Path]::GetFullPath([string]$Paths.ControllerRunsRoot)
+    $matchingControllerRuns = @()
+    if (Test-Path -LiteralPath $controllerRoot -PathType Container) {
+        $matchingControllerRuns = @(Get-ChildItem -LiteralPath $controllerRoot -Force -Directory |
+            Where-Object { $_.Name.StartsWith(([string]$State.RunId + '-'), [StringComparison]::OrdinalIgnoreCase) })
+    }
+    if ($matchingControllerRuns.Count -ne 0) {
+        throw 'A controller run directory exists for this payload workflow; no pre-controller archive proof is possible.'
+    }
+
+    $receiptPath = Join-Path $Paths.StateRoot 'vm-prepared.json'
+    if (-not (Test-Path -LiteralPath $receiptPath -PathType Leaf)) { throw 'VM preparation receipt is missing; cannot prove that the VM was not started.' }
+    $receipt = Read-GpuJson -Path $receiptPath
+    if ($receipt.SchemaVersion -ne 1 -or [string]$receipt.Status -cne 'CLONE_PREPARED_TRUST_UNVERIFIED' -or
+        [bool]$receipt.HostBootChanges -or [bool]$receipt.RetainedVmMoved -or [bool]$receipt.TrustValidated -or
+        [string]$receipt.TrustMechanism -cne 'VM firmware db append, not MOK enrollment' -or
+        [string]$receipt.VmxSha256 -notmatch '^[0-9A-Fa-f]{64}$' -or
+        [string]$receipt.SourceVmxSha256 -notmatch '^[0-9A-Fa-f]{64}$' -or
+        -not (Test-GpuPayloadVmxPath -Path ([string]$receipt.VmxPath)) -or
+        -not (Test-GpuPayloadVmxPath -Path ([string]$receipt.SourceVmx))) {
+        throw 'VM preparation receipt cannot support a pre-controller no-start proof.'
+    }
+    if ($RequirePreparationCommitMatch -and
+        [string]$receipt.SourceCommit -cne [string]$State.SourceCommit) {
+        throw 'Legacy pre-controller recovery requires the prepared VM and workflow to share the same source commit.'
+    }
+
+    $workspaceBuildRoot = Join-Path $Paths.WorkspaceRoot '.codex-build'
+    $vmx = [IO.Path]::GetFullPath([string]$receipt.VmxPath)
+    $sourceVmx = [IO.Path]::GetFullPath([string]$receipt.SourceVmx)
+    $null = Assert-GpuPathWithin -Path $vmx -Root $workspaceBuildRoot -MustExist
+    $null = Assert-GpuPathWithin -Path $sourceVmx -Root $workspaceBuildRoot -MustExist
+    $vmxPin = Get-GpuFilePin -Path $vmx
+    $sourceVmxPin = Get-GpuFilePin -Path $sourceVmx
+    if ([string]$vmxPin.Sha256 -cne [string]$receipt.VmxSha256 -or
+        [string]$sourceVmxPin.Sha256 -cne [string]$receipt.SourceVmxSha256) {
+        throw 'Prepared VMX or retained source VMX changed; pre-controller no-start proof is unavailable.'
+    }
+    $nvramPath = Join-Path (Split-Path -Parent $vmx) 'gpu-payload-test.nvram'
+    if (Test-Path -LiteralPath $nvramPath) {
+        throw 'Diagnostic VM NVRAM exists; the VM may have started, so pre-controller archival is blocked.'
+    }
+    return [pscustomobject]@{
+        Status = 'PRE_CONTROLLER_FAILURE_NO_VM_STARTED'
+        Failure = [string](Get-GpuPayloadObjectProperty -Object $State.LastFailure -Name 'Failure')
+        LegacyRecovery = [bool]$RequirePreparationCommitMatch
+        WorkflowCommit = [string]$State.SourceCommit
+        PreparationCommit = [string]$receipt.SourceCommit
+        ControllerRunDirectoryAbsent = $true
+        ControllerRunDirectoryCount = 0
+        PreparedVmxPin = $vmxPin
+        RetainedVmxPin = $sourceVmxPin
+        FreshNvramPath = $nvramPath
+        FreshNvramAbsent = $true
     }
 }
 
@@ -858,7 +993,6 @@ function Invoke-GpuPayloadValidateVm {
     $vmReceipt = Read-GpuJson -Path $vmReceiptPath
     if ($vmReceipt.SchemaVersion -ne 1 -or
         [string]$vmReceipt.Status -cne 'CLONE_PREPARED_TRUST_UNVERIFIED' -or
-        [string]$vmReceipt.SourceCommit -cne [string]$State.SourceCommit -or
         [bool]$vmReceipt.HostBootChanges -or [bool]$vmReceipt.RetainedVmMoved -or
         [bool]$vmReceipt.TrustValidated -or
         [string]$vmReceipt.TrustMechanism -cne 'VM firmware db append, not MOK enrollment' -or
@@ -870,6 +1004,8 @@ function Invoke-GpuPayloadValidateVm {
         [string]::IsNullOrWhiteSpace([string]$vmReceipt.SourceVmx)) {
         throw 'VM preparation receipt is malformed or does not match this signed workflow.'
     }
+    $preparationCompatibility = Test-GpuPayloadPreparationCompatibility -SourceRoot $State.SourceRoot `
+        -PreparationCommit ([string]$vmReceipt.SourceCommit) -CurrentCommit ([string]$State.SourceCommit)
     $vmx = [IO.Path]::GetFullPath([string]$vmReceipt.VmxPath)
     $sourceVmx = [IO.Path]::GetFullPath([string]$vmReceipt.SourceVmx)
     $null = Assert-GpuPathWithin -Path $vmx -Root $workspaceBuildRoot -MustExist
@@ -900,6 +1036,7 @@ function Invoke-GpuPayloadValidateVm {
     $State.InProgress.ControllerRunDirectory = $controllerRun
     $State.InProgress.VmxPath = $vmx
     $State.InProgress.VmxSha256 = [string]$vmxPin.Sha256
+    $State.InProgress.VmPreparationCompatibility = $preparationCompatibility
     Save-GpuPayloadState -State $State -Paths $Paths
     $controller = Join-Path $State.SourceRoot 'components\hypervisor\setup\Test-GpuHalWindowsVm.ps1'
     $null = Assert-GpuPathWithin -Path $controller -Root $State.SourceRoot -MustExist
@@ -918,6 +1055,8 @@ function Invoke-GpuPayloadValidateVm {
         '-ShimPath', $State.Tools.Shim.Path,
         '-CertificatePath', $State.Tools.Certificate.Path
     )
+    $State.InProgress.ControllerInvocationStarted = $true
+    Save-GpuPayloadState -State $State -Paths $Paths
     $controllerReceipt = Invoke-GpuPayloadNative -Program $powershell -Arguments $arguments `
         -ActionDirectory $ActionDirectory -Label 'signed-native-disposable-vm-controller'
     $resultPath = Join-Path $controllerRun 'result.json'
@@ -936,6 +1075,7 @@ function Invoke-GpuPayloadValidateVm {
         ResultPath = $resultPath
         ResultPin = Get-GpuFilePin -Path $resultPath
         VmPreparationReceiptPin = $vmReceiptPin
+        VmPreparationCompatibility = $preparationCompatibility
         SnapshotBefore = [string]$vmResult.Snapshots.Before
         SnapshotAfter = [string]$vmResult.Snapshots.After
         VmStopped = [bool]$vmResult.Snapshots.VmOffConfirmed
@@ -957,6 +1097,11 @@ function Start-GpuPayloadMutation {
         StartedUtc = [DateTime]::UtcNow.ToString('o')
         ActionDirectory = $actionDirectory
         PhaseBefore = [string]$State.Phase
+        ControllerRunDirectory = $null
+        VmxPath = $null
+        VmxSha256 = $null
+        VmPreparationCompatibility = $null
+        ControllerInvocationStarted = $false
     }
     $State.LastFailure = $null
     Save-GpuPayloadState -State $State -Paths $Paths
@@ -1050,6 +1195,7 @@ function Invoke-GpuPayloadPrepare {
         ArchiveFromPhase = $null
         ArchiveVmCleanupResultPin = $null
         ArchiveReason = $null
+        ArchivePreControllerFailureProof = $null
         ArchivedInterruptedAction = $null
         CreatedUtc = [DateTime]::UtcNow.ToString('o')
         UpdatedUtc = [DateTime]::UtcNow.ToString('o')
@@ -1106,6 +1252,7 @@ function Invoke-GpuPayloadArchive {
         Action = 'Archive'; Status = [string]$State.ArchiveStatus; Succeeded = $true
         Phase = 'Archived'; RunId = $State.RunId; RunDirectory = $Paths.RunDirectory
         ArchivePath = $archivePath; ArchivePin = Get-GpuFilePin -Path $archivePath; EvidencePreserved = $true
+        PreControllerFailureProof = $State.ArchivePreControllerFailureProof
     }
 }
 
@@ -1171,6 +1318,13 @@ function Invoke-GpuPayloadAction {
             $state.ArchiveStatus = [string]$archiveDisposition.Status
             $state.ArchiveVmCleanupResultPin = $archiveDisposition.VmCleanupResultPin
             $state.ArchiveReason = [string]$archiveDisposition.Reason
+            $archiveProofProperty = $state.PSObject.Properties['ArchivePreControllerFailureProof']
+            if ($null -eq $archiveProofProperty) {
+                $state | Add-Member -MemberType NoteProperty -Name 'ArchivePreControllerFailureProof' `
+                    -Value $archiveDisposition.PreControllerFailureProof
+            } else {
+                $state.ArchivePreControllerFailureProof = $archiveDisposition.PreControllerFailureProof
+            }
             if ($null -ne $state.InProgress) { $state.ArchivedInterruptedAction = $state.InProgress }
             elseif ($null -ne $state.LastFailure -and $state.LastFailure.Intent) { $state.ArchivedInterruptedAction = $state.LastFailure.Intent }
             $state.InProgress = [pscustomobject]@{
@@ -1226,6 +1380,7 @@ Export-ModuleMember -Function @(
     'Get-GpuPayloadNextPhase',
     'Get-GpuPayloadSourcePins',
     'Assert-GpuPayloadSourcePins',
+    'Test-GpuPayloadPreparationCompatibility',
     'Test-GpuPayloadVmxPath',
     'Assert-GpuPayloadFreshOutput',
     'Assert-GpuPayloadArtifactPins',
