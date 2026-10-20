@@ -196,6 +196,122 @@ function Assert-AuthenticatedGuestPackage {
     }
 }
 
+function Assert-GuestPathWithoutReparsePoints {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $FullPath = [IO.Path]::GetFullPath($Path)
+    $VolumeRoot = [IO.Path]::GetPathRoot($FullPath)
+    if ([string]::IsNullOrWhiteSpace($VolumeRoot)) {
+        throw 'Guest package path is not an absolute filesystem path.'
+    }
+    $CurrentPath = $VolumeRoot
+    $RelativePath = $FullPath.Substring($VolumeRoot.Length)
+    $Parts = @($RelativePath.Split(
+        [char[]]@('\', '/'), [StringSplitOptions]::RemoveEmptyEntries))
+    if ($Parts.Count -eq 0) { throw 'Guest package path cannot be a filesystem root.' }
+    for ($Index = 0; $Index -lt $Parts.Count; $Index++) {
+        $CurrentPath = Join-Path $CurrentPath $Parts[$Index]
+        $Item = Get-Item -LiteralPath $CurrentPath -Force -ErrorAction Stop
+        if (($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Guest package path contains a reparse point: $CurrentPath"
+        }
+        if ($Index -lt ($Parts.Count - 1) -and -not $Item.PSIsContainer) {
+            throw "Guest package path has a non-directory parent: $CurrentPath"
+        }
+    }
+    return $Item
+}
+
+function Clear-AuthenticatedStageRequestChunks {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$GuestRunId,
+        [Parameter(Mandatory = $true)][string]$GuestRunRoot,
+        [Parameter(Mandatory = $true)][string]$ExpectedGuestRunRoot,
+        [Parameter(Mandatory = $true)][string]$VmtoolsdPath
+    )
+
+    if ($GpuMode -cne 'Stage') { return 0 }
+    if (-not $script:VmGuardPassed -or -not $script:GuestPackageAuthenticated) {
+        throw 'Consumed request chunks can be released only after the VMware/SYSTEM and authenticated-package guards pass.'
+    }
+    if ($GuestRunId -cnotmatch '^uefi-windows-probe-[0-9]{8}-[0-9]{6}-[a-f0-9]{10}$') {
+        throw 'Consumed request chunk RunId is invalid.'
+    }
+
+    $ExpectedRootFull = [IO.Path]::GetFullPath($ExpectedGuestRunRoot).TrimEnd('\') + '\'
+    $RunRootFull = [IO.Path]::GetFullPath($GuestRunRoot)
+    if (-not $RunRootFull.StartsWith($ExpectedRootFull, [StringComparison]::OrdinalIgnoreCase) -or
+        -not [string]::Equals((Split-Path -Leaf $RunRootFull), $GuestRunId,
+            [StringComparison]::Ordinal)) {
+        throw 'Consumed request chunk RunRoot is outside its exact authenticated run directory.'
+    }
+    $CanonicalRunRoot = [IO.Path]::GetFullPath((Join-Path $ExpectedRootFull $GuestRunId))
+    if (-not [string]::Equals($RunRootFull, $CanonicalRunRoot,
+            [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Consumed request chunk RunRoot is not canonical.'
+    }
+
+    $RunRootItem = Assert-GuestPathWithoutReparsePoints -Path $RunRootFull
+    if (-not $RunRootItem.PSIsContainer) {
+        throw 'Consumed request chunk RunRoot is not a directory.'
+    }
+    $PackagePath = Join-Path $RunRootFull 'package.zip'
+    $PackageItem = Assert-GuestPathWithoutReparsePoints -Path $PackagePath
+    if ($PackageItem.PSIsContainer -or $PackageItem.Length -lt 1 -or
+        $PackageItem.Length -gt 4MB) {
+        throw 'Authenticated package.zip is missing, not a regular file, empty, or exceeds 4 MiB.'
+    }
+    $ChunkBytes = 9000
+    $ChunkCount = [int][Math]::Ceiling([double]$PackageItem.Length / $ChunkBytes)
+    if ($ChunkCount -lt 1 -or $ChunkCount -gt 256) {
+        throw 'Authenticated package.zip request chunk count is outside the bounded range.'
+    }
+    $VmtoolsdFullPath = [IO.Path]::GetFullPath($VmtoolsdPath)
+    $AllowedVmtoolsdPaths = @(
+        'C:\Program Files\VMware\VMware Tools\vmtoolsd.exe',
+        'C:\Program Files (x86)\VMware\VMware Tools\vmtoolsd.exe'
+    )
+    if (-not @($AllowedVmtoolsdPaths | Where-Object {
+                [string]::Equals([IO.Path]::GetFullPath($_), $VmtoolsdFullPath,
+                    [StringComparison]::OrdinalIgnoreCase)
+            }).Count) {
+        throw 'VMware Tools executable path is outside the canonical x64/x86 install locations.'
+    }
+    $VmtoolsdItem = Assert-GuestPathWithoutReparsePoints -Path $VmtoolsdFullPath
+    if ($VmtoolsdItem.PSIsContainer -or $VmtoolsdItem.Name -cne 'vmtoolsd.exe') {
+        throw 'VMware Tools vmtoolsd.exe is unavailable or unsafe.'
+    }
+
+    # Validate and materialize the exact bounded set before the first write.
+    $RequestChunkNames = [Collections.Generic.List[string]]::new()
+    for ($Index = 0; $Index -lt $ChunkCount; $Index++) {
+        $Name = 'uefiloader.request.chunk.' + $GuestRunId + '.' + ('{0:D6}' -f $Index)
+        if ($Name -cnotmatch '^uefiloader\.request\.chunk\.uefi-windows-probe-[0-9]{8}-[0-9]{6}-[a-f0-9]{10}\.[0-9]{6}$') {
+            throw 'Derived request chunk name is invalid.'
+        }
+        $RequestChunkNames.Add($Name)
+    }
+
+    $Tombstone = 'MA=='
+    $Deadline = [DateTime]::UtcNow.AddSeconds(120)
+    foreach ($Name in $RequestChunkNames) {
+        $RemainingSeconds = [Math]::Floor(($Deadline - [DateTime]::UtcNow).TotalSeconds)
+        if ($RemainingSeconds -lt 1) {
+            throw 'Consumed request chunk release exceeded its bounded deadline.'
+        }
+        $TimeoutSeconds = [int][Math]::Min(10, $RemainingSeconds)
+        $Command = 'info-set guestinfo.' + $Name + ' ' + $Tombstone
+        $Captured = Invoke-CapturedProcess -FilePath $VmtoolsdPath `
+            -Arguments @('--cmd', $Command) -TimeoutSeconds $TimeoutSeconds `
+            -Label 'release consumed Stage request chunk'
+        if ($null -eq $Captured -or $Captured.ExitCode -ne 0) {
+            throw "VMware Tools failed to release an authenticated Stage request chunk: $Name"
+        }
+    }
+    return $ChunkCount
+}
+
 function Get-SystemVersionInfo {
     $CurrentVersion = Get-ItemProperty `
         -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
@@ -980,6 +1096,8 @@ function Invoke-Stage {
 $OutputBuilder = [Text.StringBuilder]::new()
 $ErrorBuilder = [Text.StringBuilder]::new()
 $script:VmGuardPassed = $false
+$script:GuestPackageAuthenticated = $false
+$script:ConsumedRequestChunksReleased = 0
 try {
     if ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value -cne 'S-1-5-18' -or
         $RunId -cnotmatch `
@@ -1002,6 +1120,13 @@ try {
         throw 'GuestInfo RunRoot does not exist.'
     }
     Assert-AuthenticatedGuestPackage
+    $script:GuestPackageAuthenticated = $true
+    if ($GpuMode -ceq 'Stage') {
+        $script:ConsumedRequestChunksReleased = Clear-AuthenticatedStageRequestChunks -GuestRunId $RunId `
+            -GuestRunRoot $RunRoot -ExpectedGuestRunRoot $ExpectedRunRoot `
+            -VmtoolsdPath 'C:\Program Files\VMware\VMware Tools\vmtoolsd.exe'
+    }
+    $OutputBuilder.AppendLine("ConsumedRequestChunksReleased=$script:ConsumedRequestChunksReleased") | Out-Null
     Publish-SetupDiagnostic -Phase Entry
     if ($GpuMode -ceq 'Diagnose') {
         $EventQueries = [ordered]@{

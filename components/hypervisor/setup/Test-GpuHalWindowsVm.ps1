@@ -1255,6 +1255,11 @@ function Invoke-GpuGuestPhase {
     })
     if ([string]$Response.Result.Status -cne 'PASS' -or
         [string]$Response.Result.RunId -cne $RunId) {
+        # The authenticated response and available evidence are saved locally.
+        # Release this request before diagnostics need the same mailbox.
+        Clear-VmwareGuestInfoVariables -Selected $script:Selected `
+            -VariableNames @($Transport.RequestVariableNames +
+                $Response.ResponseVariableNames)
         if ($Mode -ceq 'Inspect' -and
             [string]$Response.Result.Message -ceq 'The local RunId has already been used.') {
             # Preserve the failure while allowing an already-running read-only

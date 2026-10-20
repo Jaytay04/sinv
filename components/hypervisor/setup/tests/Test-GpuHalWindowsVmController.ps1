@@ -166,6 +166,8 @@ $GuestTextWriter = Find-FunctionDefinitionAst $GuestAst 'Write-Utf8NoBom'
 $StartupByteWriter = Find-FunctionDefinitionAst $StartupAst 'Write-Bytes'
 $GuestSecureBootGetter = Find-FunctionDefinitionAst $GuestAst 'Get-SecureBootValue'
 $StartupSecureBootGetter = Find-FunctionDefinitionAst $StartupAst 'Get-SecureBootValue'
+$GuestReparsePathGuard = Find-FunctionDefinitionAst $GuestAst 'Assert-GuestPathWithoutReparsePoints'
+$GuestStageRequestCleanup = Find-FunctionDefinitionAst $GuestAst 'Clear-AuthenticatedStageRequestChunks'
 $GuestByteSequence = Find-FunctionDefinitionAst $GuestAst 'Test-ByteSequence'
 $GuestCertificateDbEvidence = Find-FunctionDefinitionAst $GuestAst 'Get-ExpectedCertificateDbEvidence'
 $StartupTemplateRenderer = Find-FunctionDefinitionAst $ControllerAst 'Render-GpuStartupTemplate'
@@ -209,6 +211,96 @@ if (-not $GuestInfoConstantsMatch) {
 }
 $script:HostConstantsImported = $GuestInfoConstantsMatch
 
+. ([scriptblock]::Create($GuestReparsePathGuard.Extent.Text))
+. ([scriptblock]::Create($GuestStageRequestCleanup.Extent.Text))
+$GuestLocalSystemCall = @($GuestAst.FindAll({
+            param($Node)
+            $Node -is [Management.Automation.Language.CommandAst] -and
+                $Node.GetCommandName() -ceq 'Assert-VmLocalSystem'
+        }, $true))
+$GuestAuthenticationCall = @($GuestAst.FindAll({
+            param($Node)
+            $Node -is [Management.Automation.Language.CommandAst] -and
+                $Node.GetCommandName() -ceq 'Assert-AuthenticatedGuestPackage'
+        }, $true))
+$GuestReleaseCalls = @($GuestAst.FindAll({
+            param($Node)
+            $Node -is [Management.Automation.Language.CommandAst] -and
+                $Node.GetCommandName() -ceq 'Clear-AuthenticatedStageRequestChunks'
+        }, $true))
+$GuestEntryDiagnosticCalls = @($GuestAst.FindAll({
+            param($Node)
+            $Node -is [Management.Automation.Language.CommandAst] -and
+                $Node.GetCommandName() -ceq 'Publish-SetupDiagnostic' -and
+                $Node.Extent.Text -match '-Phase\s+Entry'
+        }, $true))
+$GuestReleaseGuard = $null
+if ($GuestReleaseCalls.Count -eq 1) {
+    $GuestReleaseGuard = $GuestReleaseCalls[0].Parent
+    while ($null -ne $GuestReleaseGuard -and
+        $GuestReleaseGuard -isnot [Management.Automation.Language.IfStatementAst]) {
+        $GuestReleaseGuard = $GuestReleaseGuard.Parent
+    }
+}
+$GuestAuthFlagSet = @($GuestAst.FindAll({
+            param($Node)
+            $Node -is [Management.Automation.Language.AssignmentStatementAst] -and
+                $Node.Extent.Text.Contains('$script:GuestPackageAuthenticated = $true')
+        }, $true))
+$script:GuestStageReclamationContractPassed = ($GuestLocalSystemCall.Count -eq 1 -and
+    $GuestAuthenticationCall.Count -eq 1 -and $GuestReleaseCalls.Count -eq 1 -and
+    $GuestEntryDiagnosticCalls.Count -eq 1 -and $GuestAuthFlagSet.Count -eq 1 -and
+    $null -ne $GuestReleaseGuard -and $GuestReleaseGuard.Clauses.Count -eq 1 -and
+    $GuestReleaseGuard.Clauses[0].Item1.Extent.Text -match '\$GpuMode\s+-ceq\s+''Stage''' -and
+    $GuestAst.Extent.Text.Contains('ConsumedRequestChunksReleased=$script:ConsumedRequestChunksReleased') -and
+    $GuestLocalSystemCall[0].Extent.StartOffset -lt $GuestAuthenticationCall[0].Extent.StartOffset -and
+    $GuestAuthenticationCall[0].Extent.StartOffset -lt $GuestAuthFlagSet[0].Extent.StartOffset -and
+    $GuestAuthFlagSet[0].Extent.StartOffset -lt $GuestReleaseCalls[0].Extent.StartOffset -and
+    $GuestReleaseCalls[0].Extent.StartOffset -lt $GuestEntryDiagnosticCalls[0].Extent.StartOffset
+    )
+
+$GuestPhaseDefinition = Find-FunctionDefinitionAst $ControllerAst 'Invoke-GpuGuestPhase'
+$GuestPhaseText = [string]$GuestPhaseDefinition.Extent.Text
+$GuestResponseWaitOffset = $GuestPhaseText.IndexOf('Wait-WindowsGuestInfoEvidence', [StringComparison]::Ordinal)
+$GuestResponseSaveOffset = $GuestPhaseText.IndexOf('$script:GuestInfoResponses.Add', [StringComparison]::Ordinal)
+$GuestResponseVerdictOffset = $GuestPhaseText.IndexOf('if ([string]$Response.Result.Status', [StringComparison]::Ordinal)
+$GuestFailureBranches = @($GuestPhaseDefinition.FindAll({
+            param($Node)
+            $Node -is [Management.Automation.Language.IfStatementAst] -and
+                $Node.Clauses.Count -eq 1 -and
+                $Node.Clauses[0].Item1.Extent.Text.Contains('$Response.Result.Status') -and
+                $Node.Clauses[0].Item1.Extent.Text.Contains('$Response.Result.RunId')
+        }, $true))
+$FailureCleanupOrderPassed = $false
+if ($GuestFailureBranches.Count -eq 1) {
+    $FailureBranch = $GuestFailureBranches[0].Clauses[0].Item2
+    $FailureCleanupCalls = @($FailureBranch.FindAll({
+                param($Node)
+                $Node -is [Management.Automation.Language.CommandAst] -and
+                    $Node.GetCommandName() -ceq 'Clear-VmwareGuestInfoVariables'
+            }, $true))
+    $FailureDiagnoseCalls = @($FailureBranch.FindAll({
+                param($Node)
+                $Node -is [Management.Automation.Language.CommandAst] -and
+                    $Node.GetCommandName() -ceq 'Invoke-GpuGuestPhase' -and
+                    $Node.Extent.Text -match "-Mode\s+'Diagnose'"
+            }, $true))
+    $FailureCleanupOrderPassed = ($FailureCleanupCalls.Count -eq 1 -and
+        $FailureDiagnoseCalls.Count -eq 1 -and
+        $FailureCleanupCalls[0].Extent.Text.Contains('$Transport.RequestVariableNames') -and
+        $FailureCleanupCalls[0].Extent.Text.Contains('$Response.ResponseVariableNames') -and
+        $FailureCleanupCalls[0].Extent.StartOffset -lt $FailureDiagnoseCalls[0].Extent.StartOffset)
+}
+$AllGuestPhaseCleanupCalls = @($GuestPhaseDefinition.FindAll({
+            param($Node)
+            $Node -is [Management.Automation.Language.CommandAst] -and
+                $Node.GetCommandName() -ceq 'Clear-VmwareGuestInfoVariables'
+        }, $true))
+$script:GuestControllerFailureCleanupOrderPassed =
+    ($FailureCleanupOrderPassed -and $AllGuestPhaseCleanupCalls.Count -eq 2 -and
+        $GuestResponseWaitOffset -ge 0 -and $GuestResponseSaveOffset -gt $GuestResponseWaitOffset -and
+        $GuestResponseVerdictOffset -gt $GuestResponseSaveOffset)
+
 $script:ReviewKey = [byte[]](1..32)
 $script:Selected = [pscustomobject]@{
     VmxPath = 'synthetic-vmx'
@@ -231,6 +323,10 @@ function Assert-Check {
     $script:Passed++
     Write-Output "PASS: $Name"
 }
+Assert-Check $script:GuestStageReclamationContractPassed `
+    'Stage request reclamation is guarded by LocalSystem and authenticated-package validation and precedes entry diagnostics'
+Assert-Check $script:GuestControllerFailureCleanupOrderPassed `
+    'failed authenticated response releases request/response variables before Diagnose while retaining success-path cleanup'
 
 $SaveRunResultText = [string]$FunctionDefinitions['Save-RunResult'].Extent.Text
 $ControllerText = [string]$ControllerAst.Extent.Text
@@ -274,9 +370,208 @@ $VmxFixtureRoot = Join-Path $FixtureRoot 'vm'
 $OutsideFixtureRoot = Join-Path $FixtureRoot 'outside'
 $JunctionPaths = [Collections.Generic.List[string]]::new()
 $Hmac = $null
+$OriginalGuestCapturedProcess = Get-Item Function:\Invoke-CapturedProcess -ErrorAction SilentlyContinue
+$OriginalGuestPathGuard = Get-Item Function:\Assert-GuestPathWithoutReparsePoints -ErrorAction SilentlyContinue
 
 try {
     New-Item -ItemType Directory -Path $VmxFixtureRoot, $OutsideFixtureRoot | Out-Null
+
+    # Exercise only the extracted guest cleanup helper. VMware Tools is modeled
+    # in memory; this test never launches vmtoolsd or mutates a live VM.
+    $script:OriginalGuestPathGuardScript = (Get-Item Function:\Assert-GuestPathWithoutReparsePoints).ScriptBlock
+    function Assert-GuestPathWithoutReparsePoints {
+        param([Parameter(Mandatory = $true)][string]$Path)
+        $CanonicalVmtoolsd = 'C:\Program Files\VMware\VMware Tools\vmtoolsd.exe'
+        if ([string]::Equals([IO.Path]::GetFullPath($Path), $CanonicalVmtoolsd,
+                [StringComparison]::OrdinalIgnoreCase)) {
+            return [pscustomobject]@{
+                PSIsContainer = $false
+                Name = 'vmtoolsd.exe'
+                Length = 1
+                Attributes = [IO.FileAttributes]::Normal
+            }
+        }
+        return & $script:OriginalGuestPathGuardScript -Path $Path
+    }
+    $script:MockGuestInfoValues = @{}
+    $script:MockGuestInfoWrites = [Collections.Generic.List[object]]::new()
+    $script:MockGuestInfoFailureAt = 0
+    function Invoke-CapturedProcess {
+        param([string]$FilePath, [string[]]$Arguments, [int]$TimeoutSeconds, [string]$Label)
+        if ($Arguments.Count -ne 2 -or $Arguments[0] -cne '--cmd' -or
+            $Arguments[1] -cnotmatch '^info-set guestinfo\.([A-Za-z0-9_.-]+) (MA==)$') {
+            throw 'Synthetic GuestInfo mock received a noncanonical command.'
+        }
+        $VariableName = $Matches[1]
+        $Value = $Matches[2]
+        $script:MockGuestInfoWrites.Add([pscustomobject]@{
+            FilePath = $FilePath
+            TimeoutSeconds = $TimeoutSeconds
+            Label = $Label
+            Name = $VariableName
+            Value = $Value
+        })
+        if ($script:MockGuestInfoFailureAt -gt 0 -and
+            $script:MockGuestInfoWrites.Count -eq $script:MockGuestInfoFailureAt) {
+            return [pscustomobject]@{ ExitCode = 1; Stdout = ''; Stderr = 'synthetic failure' }
+        }
+        $script:MockGuestInfoValues[$VariableName] = $Value
+        return [pscustomobject]@{ ExitCode = 0; Stdout = ''; Stderr = '' }
+    }
+
+    $GuestExpectedRunRoot = Join-Path $FixtureRoot 'ProgramData\UEFILoaderRunner\runs'
+    $GuestRunId = 'uefi-windows-probe-20261020-160000-0123456789'
+    $GuestRunRoot = Join-Path $GuestExpectedRunRoot $GuestRunId
+    New-Item -ItemType Directory -Path $GuestRunRoot -Force | Out-Null
+    $GuestPackagePath = Join-Path $GuestRunRoot 'package.zip'
+    $GuestPackageStream = [IO.File]::Open($GuestPackagePath, [IO.FileMode]::CreateNew)
+    try { $GuestPackageStream.SetLength(762672) } finally { $GuestPackageStream.Dispose() }
+    $GuestPackagePinBefore = (Get-FileHash -LiteralPath $GuestPackagePath -Algorithm SHA256).Hash
+    $GuestPackageBytes = (Get-Item -LiteralPath $GuestPackagePath).Length
+    $GuestChunkCount = [int][Math]::Ceiling([double]$GuestPackageBytes / 9000)
+    $GuestRequestChars = 0
+    $GuestRemainingChars = [int][Math]::Ceiling([double]$GuestPackageBytes / 3) * 4
+    for ($GuestIndex = 0; $GuestIndex -lt $GuestChunkCount; $GuestIndex++) {
+        $ChunkName = 'uefiloader.request.chunk.' + $GuestRunId + '.' + ('{0:D6}' -f $GuestIndex)
+        $ChunkLength = [int][Math]::Min(12000, $GuestRemainingChars)
+        $script:MockGuestInfoValues[$ChunkName] = 'A' * $ChunkLength
+        $GuestRequestChars += $ChunkLength
+        $GuestRemainingChars -= $ChunkLength
+    }
+    Assert-Check ($GuestChunkCount -eq 85 -and $GuestRequestChars -eq 1016896) `
+        '762,672-byte request fixture models the bounded 85-chunk GuestInfo transport'
+
+    $script:GpuMode = 'Stage'
+    $script:VmGuardPassed = $true
+    $script:GuestPackageAuthenticated = $true
+    $ReleasedChunkCount = Clear-AuthenticatedStageRequestChunks -GuestRunId $GuestRunId `
+        -GuestRunRoot $GuestRunRoot -ExpectedGuestRunRoot $GuestExpectedRunRoot `
+        -VmtoolsdPath 'C:\Program Files\VMware\VMware Tools\vmtoolsd.exe'
+    $MockGuestInfoNames = @($script:MockGuestInfoWrites | ForEach-Object Name)
+    $WrongGuestInfoNames = @($MockGuestInfoNames | Where-Object {
+            $_ -notmatch ('^uefiloader\.request\.chunk\.' + [regex]::Escape($GuestRunId) + '\.[0-9]{6}$')
+        })
+    $PostReleaseGuestInfoChars = 0
+    foreach ($StoredValue in $script:MockGuestInfoValues.Values) {
+        $PostReleaseGuestInfoChars += [string]$StoredValue.Length
+    }
+    $SyntheticResponseChars = 100000
+    $SyntheticGuestInfoCapacity = 1100000
+    Assert-Check ($ReleasedChunkCount -eq 85 -and $MockGuestInfoNames.Count -eq 85 -and
+        $WrongGuestInfoNames.Count -eq 0 -and
+        @($MockGuestInfoNames | Select-Object -Unique).Count -eq 85 -and
+        @($script:MockGuestInfoValues.Values | Where-Object { $_ -cne 'MA==' }).Count -eq 0 -and
+        ($GuestRequestChars + $SyntheticResponseChars) -gt $SyntheticGuestInfoCapacity -and
+        ($PostReleaseGuestInfoChars + $SyntheticResponseChars) -lt $SyntheticGuestInfoCapacity -and
+        (Get-FileHash -LiteralPath $GuestPackagePath -Algorithm SHA256).Hash -ceq $GuestPackagePinBefore) `
+        'Stage reclamation tombstones only authenticated current-run request chunks before response capacity is needed and retains package evidence'
+
+    $script:MockGuestInfoWrites.Clear()
+    $script:MockGuestInfoFailureAt = 3
+    Assert-Throws {
+        Clear-AuthenticatedStageRequestChunks -GuestRunId $GuestRunId `
+            -GuestRunRoot $GuestRunRoot -ExpectedGuestRunRoot $GuestExpectedRunRoot `
+            -VmtoolsdPath 'C:\Program Files\VMware\VMware Tools\vmtoolsd.exe'
+    } 'failed GuestInfo tombstone aborts the bounded cleanup' 'failed to release'
+    Assert-Check ($script:MockGuestInfoWrites.Count -eq 3) `
+        'GuestInfo tombstone failure stops before any later request chunk writes'
+    $script:MockGuestInfoFailureAt = 0
+
+    $NoWriteCases = @(
+        [pscustomobject]@{ Name = 'invalid RunId'; RunId = 'uefi-windows-probe-bad'; RunRoot = $GuestRunRoot; ExpectedRoot = $GuestExpectedRunRoot; Vmtoolsd = 'C:\Program Files\VMware\VMware Tools\vmtoolsd.exe'; Guard = $true; Auth = $true; Mode = 'Stage'; Pattern = 'RunId is invalid' },
+        [pscustomobject]@{ Name = 'outside RunRoot'; RunId = $GuestRunId; RunRoot = (Join-Path $OutsideFixtureRoot $GuestRunId); ExpectedRoot = $GuestExpectedRunRoot; Vmtoolsd = 'C:\Program Files\VMware\VMware Tools\vmtoolsd.exe'; Guard = $true; Auth = $true; Mode = 'Stage'; Pattern = 'outside its exact authenticated run directory' },
+        [pscustomobject]@{ Name = 'noncanonical vmtoolsd path'; RunId = $GuestRunId; RunRoot = $GuestRunRoot; ExpectedRoot = $GuestExpectedRunRoot; Vmtoolsd = (Join-Path $FixtureRoot 'vmtoolsd.exe'); Guard = $true; Auth = $true; Mode = 'Stage'; Pattern = 'canonical x64/x86' },
+        [pscustomobject]@{ Name = 'LocalSystem guard not passed'; RunId = $GuestRunId; RunRoot = $GuestRunRoot; ExpectedRoot = $GuestExpectedRunRoot; Vmtoolsd = 'C:\Program Files\VMware\VMware Tools\vmtoolsd.exe'; Guard = $false; Auth = $true; Mode = 'Stage'; Pattern = 'only after the VMware/SYSTEM' },
+        [pscustomobject]@{ Name = 'package authentication not passed'; RunId = $GuestRunId; RunRoot = $GuestRunRoot; ExpectedRoot = $GuestExpectedRunRoot; Vmtoolsd = 'C:\Program Files\VMware\VMware Tools\vmtoolsd.exe'; Guard = $true; Auth = $false; Mode = 'Stage'; Pattern = 'only after the VMware/SYSTEM' }
+    )
+    foreach ($NoWriteCase in $NoWriteCases) {
+        $script:MockGuestInfoWrites.Clear()
+        $script:VmGuardPassed = $NoWriteCase.Guard
+        $script:GuestPackageAuthenticated = $NoWriteCase.Auth
+        $script:GpuMode = $NoWriteCase.Mode
+        Assert-Throws {
+            Clear-AuthenticatedStageRequestChunks -GuestRunId $NoWriteCase.RunId `
+                -GuestRunRoot $NoWriteCase.RunRoot -ExpectedGuestRunRoot $NoWriteCase.ExpectedRoot `
+                -VmtoolsdPath $NoWriteCase.Vmtoolsd
+        } "$($NoWriteCase.Name) rejects before GuestInfo writes" $NoWriteCase.Pattern
+        Assert-Check ($script:MockGuestInfoWrites.Count -eq 0) `
+            "$($NoWriteCase.Name) performs no GuestInfo writes"
+    }
+
+    $script:GpuMode = 'Stage'
+    $script:VmGuardPassed = $true
+    $script:GuestPackageAuthenticated = $true
+    $OriginalGuestPackageLength = (Get-Item -LiteralPath $GuestPackagePath).Length
+    $OversizeStream = [IO.File]::Open($GuestPackagePath, [IO.FileMode]::Open)
+    try { $OversizeStream.SetLength(4194305) } finally { $OversizeStream.Dispose() }
+    $script:MockGuestInfoWrites.Clear()
+    Assert-Throws {
+        Clear-AuthenticatedStageRequestChunks -GuestRunId $GuestRunId `
+            -GuestRunRoot $GuestRunRoot -ExpectedGuestRunRoot $GuestExpectedRunRoot `
+            -VmtoolsdPath 'C:\Program Files\VMware\VMware Tools\vmtoolsd.exe'
+    } 'oversize authenticated package is rejected before writes' 'exceeds 4 MiB'
+    Assert-Check ($script:MockGuestInfoWrites.Count -eq 0) `
+        'oversize authenticated package performs no GuestInfo writes'
+    $ChunkLimitStream = [IO.File]::Open($GuestPackagePath, [IO.FileMode]::Open)
+    try { $ChunkLimitStream.SetLength(2304001) } finally { $ChunkLimitStream.Dispose() }
+    Assert-Throws {
+        Clear-AuthenticatedStageRequestChunks -GuestRunId $GuestRunId `
+            -GuestRunRoot $GuestRunRoot -ExpectedGuestRunRoot $GuestExpectedRunRoot `
+            -VmtoolsdPath 'C:\Program Files\VMware\VMware Tools\vmtoolsd.exe'
+    } 'request beyond the 256-chunk limit is rejected before writes' 'chunk count is outside the bounded range'
+    Assert-Check ($script:MockGuestInfoWrites.Count -eq 0) `
+        'request beyond the 256-chunk limit performs no GuestInfo writes'
+    $RestorePackageLength = [IO.File]::Open($GuestPackagePath, [IO.FileMode]::Open)
+    try { $RestorePackageLength.SetLength($OriginalGuestPackageLength) } finally { $RestorePackageLength.Dispose() }
+
+    Remove-Item -LiteralPath $GuestPackagePath -Force
+    Assert-Throws {
+        Clear-AuthenticatedStageRequestChunks -GuestRunId $GuestRunId `
+            -GuestRunRoot $GuestRunRoot -ExpectedGuestRunRoot $GuestExpectedRunRoot `
+            -VmtoolsdPath 'C:\Program Files\VMware\VMware Tools\vmtoolsd.exe'
+    } 'missing package.zip is rejected before writes' 'Cannot find path|does not exist|cannot find'
+    Assert-Check ($script:MockGuestInfoWrites.Count -eq 0) `
+        'missing package.zip performs no GuestInfo writes'
+    $GuestPackageStream = [IO.File]::Open($GuestPackagePath, [IO.FileMode]::CreateNew)
+    try { $GuestPackageStream.SetLength($OriginalGuestPackageLength) } finally { $GuestPackageStream.Dispose() }
+
+    $GuestJunctionTarget = Join-Path $OutsideFixtureRoot 'guest-run-root-target'
+    New-Item -ItemType Directory -Path $GuestJunctionTarget | Out-Null
+    $GuestRunRootItem = Get-Item -LiteralPath $GuestRunRoot -Force
+    if (($GuestRunRootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw 'Guest run-root fixture unexpectedly became a reparse point before the test.'
+    }
+    Remove-Item -LiteralPath $GuestRunRoot -Recurse -Force
+    $GuestRunRootJunction = Join-Path $GuestExpectedRunRoot $GuestRunId
+    New-Item -ItemType Junction -Path $GuestRunRootJunction -Target $GuestJunctionTarget | Out-Null
+    $JunctionPaths.Add($GuestRunRootJunction)
+    $script:MockGuestInfoWrites.Clear()
+    Assert-Throws {
+        Clear-AuthenticatedStageRequestChunks -GuestRunId $GuestRunId `
+            -GuestRunRoot $GuestRunRootJunction -ExpectedGuestRunRoot $GuestExpectedRunRoot `
+            -VmtoolsdPath 'C:\Program Files\VMware\VMware Tools\vmtoolsd.exe'
+    } 'reparse-point run root is rejected before writes' 'reparse point'
+    Assert-Check ($script:MockGuestInfoWrites.Count -eq 0) `
+        'reparse-point run root performs no GuestInfo writes'
+
+    $script:GpuMode = 'Inspect'
+    $script:VmGuardPassed = $false
+    $script:GuestPackageAuthenticated = $false
+    $script:MockGuestInfoWrites.Clear()
+    $InspectReleaseCount = Clear-AuthenticatedStageRequestChunks -GuestRunId 'invalid' `
+        -GuestRunRoot 'invalid' -ExpectedGuestRunRoot 'invalid' -VmtoolsdPath 'invalid'
+    Assert-Check ($InspectReleaseCount -eq 0 -and $script:MockGuestInfoWrites.Count -eq 0) `
+        'Inspect mode does not validate, alter, or publish GuestInfo request state'
+    if ($null -ne $OriginalGuestCapturedProcess) {
+        Set-Item Function:\Invoke-CapturedProcess -Value $OriginalGuestCapturedProcess.ScriptBlock
+    } else {
+        Remove-Item Function:\Invoke-CapturedProcess -ErrorAction SilentlyContinue
+    }
+    if ($null -ne $OriginalGuestPathGuard) {
+        Set-Item Function:\Assert-GuestPathWithoutReparsePoints -Value $OriginalGuestPathGuard.ScriptBlock
+    } else {
+        Remove-Item Function:\Assert-GuestPathWithoutReparsePoints -ErrorAction SilentlyContinue
+    }
 
     $PinnedVerifierMessage = 'Authenticode integrity and signer pinning test passed'
     $ValidVerifierProcess = [pscustomobject]@{

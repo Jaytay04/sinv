@@ -204,6 +204,42 @@ options in the second physical run. CTest passed 37/37 hypervisor checks and
 30/30 loader checks. The unsigned payload passed the `.hvscan` self-containment
 audit at 54,870 bytes. Separate mutation checks confirmed that the lifetime
 contract test rejects an AP diagnostic write, premature cleanup-return marker,
-and a context dereference after successful guest return. This increment was
-not signed, staged, or booted in a VM or on the primary host; the compiled
-diagnostics still require end-to-end VM validation before another deployment.
+and a context dereference after successful guest return. These initial static
+artifacts were not signed or booted. Subsequent VM validation uses separate
+signed copies with loader debug ports enabled, as recorded below.
+
+## VM validation transport failure
+
+Candidate `d4c8101c406694d2cec7c80343f4586c33ad3f37` built and signed through the
+existing VM-only workflow, passing both component suites and unsigned/signed
+image audits. A fresh independent copy of the reviewed offline Windows VM
+verified all 93 files, totaling 58,094,667,483 bytes. Validation run
+`gpu-payload-20261020T182528Z-7d1ce3dea92145b6840364370c03dbcb` then passed
+guest inspection but failed while returning the Stage result:
+
+```text
+vmtoolsd info-set failed: Total guest info exceeds maximum allocated space
+```
+
+The request ZIP was 762,672 bytes, transported as 1,016,896 Base64 characters
+across 85 chunks. The worker retained those request values while publishing
+response evidence. The saved authenticated failure identifies an `info-set`
+failure during response publication, but does not identify the failed chunk
+or manifest write. The subsequent diagnostic request also failed to allocate
+GuestInfo space. This was a VM transport failure before the controller's signed
+EFI stage, not evidence of another payload startup rejection.
+
+The controller created before/after snapshots, reverted to before, and confirmed
+the VM off with no cleanup failures. The failed run and its used preparation
+receipt were archived; the VM and all evidence remain on disk. Its result is
+`FAIL`, SHA-256
+`B4B47BE2E020E4BA152C8376AFA193ABA98C6025EE397C76175F4D84E2592B5F`.
+
+The follow-up transport change releases only the authenticated Stage request's
+current-RunId chunk values after the VM/SYSTEM and package checks pass, before
+publishing setup diagnostics. The verified local package remains available.
+The controller also clears a saved failed response's owned mailbox values
+before requesting Diagnose. The focused controller suite passes 113 pure
+checks, including exact chunk names, rejection without writes, write failure,
+and cleanup ordering. A fresh VM execution must still verify that tombstoning
+these values releases sufficient GuestInfo capacity.
