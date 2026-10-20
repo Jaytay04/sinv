@@ -764,6 +764,83 @@ try {
             } 'not|did not|missing|failed|cleanup|Secure Boot|certificate|SignedNative' `
                 "admission rejects $($invalid.Name)"
         }
+
+        $archiveWorkspace = Join-Path $FixtureRoot 'archive-retry-workspace'
+        [void](New-Item -ItemType Directory -Path $archiveWorkspace -Force)
+        $archiveRunId = 'gpu-payload-20261020T120001Z-abcdef0123456789abcdef0123456789'
+        $archiveRunDirectory = Join-Path $archiveWorkspace `
+            ('.analysis\gpu-payload-diagnostic\runs\' + $archiveRunId)
+        $archivePaths = Get-GpuPayloadPaths -WorkspaceRoot $archiveWorkspace `
+            -RunDirectory $archiveRunDirectory
+        $archiveControllerRunDirectory = Join-Path $archivePaths.ControllerRunsRoot `
+            ($archiveRunId + '-controller')
+        [void](New-Item -ItemType Directory -Path $archivePaths.ActionsRoot -Force)
+        [void](New-Item -ItemType Directory -Path $archiveControllerRunDirectory -Force)
+        $archiveSerialPath = Join-Path $archiveControllerRunDirectory 'efi-serial.log'
+        $archiveVmwarePath = Join-Path $archiveControllerRunDirectory 'vmware.log'
+        [IO.File]::WriteAllText($archiveSerialPath, @(
+            'uefi hypervisor: DMA isolation admission: PASS'
+            'uefi hypervisor: BSP firmware return: PASS'
+        ) -join "`r`n", [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText($archiveVmwarePath,
+            'Added uefi.secureBoot.dbDefault.file0 to dbDefault', [Text.UTF8Encoding]::new($false))
+        $archiveResult = Copy-TestVmResult $validResult
+        $archiveResult | Add-Member -MemberType NoteProperty -Name 'RunId' -Value ($archiveRunId + '-controller')
+        $archiveResult.Vm.VmxPath = Join-Path $archiveWorkspace 'diagnostic.vmx'
+        $archiveResult.Evidence.EfiSerialPath = $archiveSerialPath
+        $archiveResult.Evidence.EfiSerialSha256 = (Get-TestFilePin $archiveSerialPath).Sha256
+        $archiveResult.Evidence.VmwareLogPath = $archiveVmwarePath
+        $archiveResult.Evidence.VmwareLogSha256 = (Get-TestFilePin $archiveVmwarePath).Sha256
+        $archiveResultPath = Join-Path $archiveControllerRunDirectory 'result.json'
+        [IO.File]::WriteAllText($archiveResultPath,
+            (ConvertTo-Json -InputObject $archiveResult -Depth 20), [Text.UTF8Encoding]::new($false))
+        $archiveResultPin = Get-TestFilePin $archiveResultPath
+        $archiveValidation = [pscustomobject]@{
+            Status = 'PASS'; Profile = 'SignedNative'; VmStopped = $true; RevertedToBefore = $true
+            SnapshotBefore = $archiveResult.Snapshots.Before; SnapshotAfter = $archiveResult.Snapshots.After
+            CleanupFailures = @(); VmxPath = $archiveResult.Vm.VmxPath
+            ControllerRunId = $archiveResult.RunId; ControllerRunDirectory = $archiveControllerRunDirectory
+            ResultPath = $archiveResultPath; ResultPin = $archiveResultPin
+            EfiSerialPin = Get-TestFilePin $archiveSerialPath
+            VmwareLogPin = Get-TestFilePin $archiveVmwarePath
+        }
+        $archiveFailure = [pscustomobject]@{
+            Action = 'Archive'; Failure = 'Previous archive attempt was interrupted.'
+            FailedUtc = [DateTime]::UtcNow.ToString('o')
+            Intent = [pscustomobject]@{ Action = 'Archive'; PhaseBefore = 'Complete' }
+        }
+        $archiveState = [ordered]@{
+            SchemaVersion = 1; Workflow = 'gpu-payload-diagnostic'; RunId = $archiveRunId
+            WorkspaceRoot = $archiveWorkspace; SourceRoot = $WorkspaceRoot
+            SourceCommit = '0' * 40; RunDirectory = $archiveRunDirectory
+            JournalPath = $archivePaths.JournalPath; Phase = 'Complete'; Status = 'PASS'
+            UpdatedUtc = [DateTime]::UtcNow.ToString('o')
+            InProgress = $null; SourcePins = [pscustomobject]@{ Commit = ('0' * 40); Files = [pscustomobject]@{} }
+            Paths = [pscustomobject]@{}; Actions = @(); LastFailure = $archiveFailure; LastAction = $null
+            BuildArtifacts = $null; SignedArtifacts = $null; Validation = $archiveValidation
+            Tools = [pscustomobject]@{ Certificate = [pscustomobject]@{ Sha256 = 'A' * 64 } }
+            ArchiveStatus = $null; ArchiveFromPhase = $null; ArchiveVmCleanupResultPin = $null
+            ArchiveReason = $null; ArchivePreControllerFailureProof = $null
+            ArchivedInterruptedAction = $null
+        }
+        [IO.File]::WriteAllText($archivePaths.JournalPath,
+            (ConvertTo-Json -InputObject $archiveState -Depth 20), [Text.UTF8Encoding]::new($false))
+        $selector = [pscustomobject]@{
+            SchemaVersion = 1; RunId = $archiveRunId; RunDirectory = $archiveRunDirectory
+        }
+        [void](New-Item -ItemType Directory -Path $archivePaths.StateRoot -Force)
+        [IO.File]::WriteAllText($archivePaths.SelectorPath,
+            (ConvertTo-Json -InputObject $selector -Depth 5), [Text.UTF8Encoding]::new($false))
+
+        $archiveResultAction = Invoke-GpuPayloadAction -Action 'Archive' -SourceRoot $WorkspaceRoot `
+            -WorkspaceRoot $archiveWorkspace -RunDirectory $archiveRunDirectory
+        Assert-True ($archiveResultAction.Succeeded -and
+            $archiveResultAction.Status -ceq 'VALIDATED_ARCHIVED' -and
+            $archiveResultAction.Phase -ceq 'Archived' -and
+            $null -eq $archiveResultAction.PreControllerFailureProof -and
+            (Test-Path -LiteralPath $archiveResultAction.ArchivePath -PathType Leaf) -and
+            -not (Test-Path -LiteralPath $archivePaths.SelectorPath)) `
+            'Archive must recover a completed run after an earlier Archive failure when its successful disposition omits the optional pre-controller proof'
     }
 
     Invoke-TestCase 'Status and Report never promote incomplete or forged runs to PASS' {

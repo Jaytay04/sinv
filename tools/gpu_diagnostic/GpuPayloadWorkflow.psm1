@@ -1820,12 +1820,14 @@ function Invoke-GpuPayloadAction {
             $state.ArchiveStatus = [string]$archiveDisposition.Status
             $state.ArchiveVmCleanupResultPin = $archiveDisposition.VmCleanupResultPin
             $state.ArchiveReason = [string]$archiveDisposition.Reason
+            $preControllerFailureProof = Get-GpuPayloadObjectProperty `
+                -Object $archiveDisposition -Name 'PreControllerFailureProof'
             $archiveProofProperty = $state.PSObject.Properties['ArchivePreControllerFailureProof']
             if ($null -eq $archiveProofProperty) {
                 $state | Add-Member -MemberType NoteProperty -Name 'ArchivePreControllerFailureProof' `
-                    -Value $archiveDisposition.PreControllerFailureProof
+                    -Value $preControllerFailureProof
             } else {
-                $state.ArchivePreControllerFailureProof = $archiveDisposition.PreControllerFailureProof
+                $state.ArchivePreControllerFailureProof = $preControllerFailureProof
             }
             if ($null -ne $state.InProgress) { $state.ArchivedInterruptedAction = $state.InProgress }
             elseif ($null -ne $state.LastFailure -and $state.LastFailure.Intent) { $state.ArchivedInterruptedAction = $state.LastFailure.Intent }
