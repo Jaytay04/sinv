@@ -106,6 +106,19 @@ signature rejection, failed payload, missing evidence, or cleanup failure
 must remain a failed result. A model test with Secure Boot off cannot satisfy
 this gate.
 
+If the controller completed successfully but the wrapper rejected its saved
+result because of a reader defect, use the evidence-only review action after
+the reviewed fix is committed:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-payload-test.ps1 ReviewVm
+```
+
+ReviewVm does not boot or reconfigure a VM. It requires the original successful
+controller receipt, matching artifact hashes, complete cleanup proof, and the
+saved serial log. It rejects source changes outside the permitted workflow and
+documentation files. It cannot turn a failed controller run into a pass.
+
 The VM can prove the signed EFI execution path, the existing external-VMM DMA
 admission assumption, VMX startup/return, and Windows per-CPU health. VMware
 SVGA cannot exercise Intel native plane/GGTT/DMA enforcement. It cannot prove

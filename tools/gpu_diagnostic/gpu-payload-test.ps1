@@ -1,7 +1,7 @@
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [Parameter(Position = 0, Mandatory = $true)]
-    [ValidateSet('Prepare', 'Build', 'Sign', 'ValidateVm', 'Status', 'Report', 'Archive')]
+    [ValidateSet('Prepare', 'Build', 'Sign', 'ValidateVm', 'ReviewVm', 'Status', 'Report', 'Archive')]
     [string]$Action,
     [string]$WorkspaceRoot,
     [string]$RunDirectory,

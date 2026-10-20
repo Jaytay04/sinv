@@ -95,6 +95,7 @@ function Test-GpuPayloadTransition {
         'Build' { return $Phase -ceq 'Prepared' }
         'Sign' { return $Phase -ceq 'Built' }
         'ValidateVm' { return $Phase -ceq 'Signed' }
+        'ReviewVm' { return $Phase -ceq 'Signed' }
         'Archive' { return $Phase -in @('Prepared', 'Built', 'Signed', 'Complete', 'Archived') }
         default { return $false }
     }
@@ -109,6 +110,7 @@ function Get-GpuPayloadNextPhase {
         Build = 'Built'
         Sign = 'Signed'
         ValidateVm = 'Complete'
+        ReviewVm = 'Complete'
         Archive = 'Archived'
     }
     if (-not $next.ContainsKey($Action)) { throw "Unknown workflow action: $Action" }
@@ -392,7 +394,8 @@ function Test-GpuPayloadValidationProof {
         @($validation.CleanupFailures).Count -ne 0 -or
         [string]::IsNullOrWhiteSpace([string]$validation.ControllerRunDirectory) -or
         [string]::IsNullOrWhiteSpace([string]$validation.ResultPath) -or
-        $null -eq $validation.ResultPin) { return $false }
+        $null -eq $validation.ResultPin -or $null -eq $validation.EfiSerialPin -or
+        $null -eq $validation.VmwareLogPin) { return $false }
     try {
         $workspaceBuildRoot = Join-Path ([string]$State.WorkspaceRoot) '.codex-build\gpu-payload-vm'
         $controllerRun = [IO.Path]::GetFullPath([string]$validation.ControllerRunDirectory)
@@ -405,11 +408,30 @@ function Test-GpuPayloadValidationProof {
         if ([string]$actualPin.Sha256 -cne [string]$validation.ResultPin.Sha256 -or
             [long]$actualPin.Bytes -ne [long]$validation.ResultPin.Bytes) { return $false }
         $result = Read-GpuJson -Path $resultPath
-        Assert-GpuPayloadVmResult -Result $result -ExpectedVmxPath ([string]$validation.VmxPath) `
+        $serialPin = Assert-GpuPayloadVmResult -Result $result -ControllerRunDirectory $controllerRun `
+            -ExpectedVmxPath ([string]$validation.VmxPath) `
             -ExpectedCertificateSha256 ([string]$State.Tools.Certificate.Sha256)
+        $vmwarePin = Assert-GpuPayloadVmwareLogEvidence -Result $result -ControllerRunDirectory $controllerRun
+        Assert-GpuFilePin -Pin $validation.EfiSerialPin
+        if (-not [string]::Equals([string]$serialPin.Path, [string]$validation.EfiSerialPin.Path, [StringComparison]::OrdinalIgnoreCase) -or
+            -not [string]::Equals([string]$serialPin.Sha256, [string]$validation.EfiSerialPin.Sha256, [StringComparison]::OrdinalIgnoreCase) -or
+            [long]$serialPin.Bytes -ne [long]$validation.EfiSerialPin.Bytes) { return $false }
+        Assert-GpuFilePin -Pin $validation.VmwareLogPin
+        if (-not [string]::Equals([string]$vmwarePin.Path, [string]$validation.VmwareLogPin.Path, [StringComparison]::OrdinalIgnoreCase) -or
+            -not [string]::Equals([string]$vmwarePin.Sha256, [string]$validation.VmwareLogPin.Sha256, [StringComparison]::OrdinalIgnoreCase) -or
+            [long]$vmwarePin.Bytes -ne [long]$validation.VmwareLogPin.Bytes) { return $false }
         if ([string]$result.RunId -cne [string]$validation.ControllerRunId -or
             [string]$result.Snapshots.Before -cne [string]$validation.SnapshotBefore -or
             [string]$result.Snapshots.After -cne [string]$validation.SnapshotAfter) { return $false }
+        $review = Get-GpuPayloadObjectProperty -Object $validation -Name 'EvidenceReview'
+        if ($null -ne $review -and
+            ([string]$review.Status -cne 'SAVED_CONTROLLER_PASS_REVIEWED' -or
+                [string]$review.CandidateSourceCommit -notmatch '^[0-9a-f]{40}$' -or
+                [string]$review.EvidenceReviewSourceCommit -notmatch '^[0-9a-f]{40}$' -or
+                [bool]$review.SignedArtifactPinsMatched -ne $true -or
+                [bool]$review.VmBootRepeated -ne $false -or
+                [bool]$review.BuildRepeated -ne $false -or
+                [bool]$review.SignRepeated -ne $false)) { return $false }
     }
     catch { return $false }
     return $true
@@ -557,6 +579,84 @@ function Assert-GpuPayloadPinsCurrent {
     if ($null -ne $State.SignedArtifacts) {
         $expectedSigned = [pscustomobject]@{ Payload = $Paths.SignedPayload; Loader = $Paths.SignedLoader }
         Assert-GpuPayloadArtifactPins -Pins $State.SignedArtifacts -ExpectedPaths $expectedSigned
+    }
+}
+
+function Test-GpuPayloadReviewChangedPaths {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][string[]]$ChangedPaths)
+
+    $allowed = @(
+        '^tools/gpu_diagnostic/GpuPayloadWorkflow\.psm1$',
+        '^tools/gpu_diagnostic/gpu-payload-test\.ps1$',
+        '^tools/gpu_diagnostic/tests/Test-GpuPayloadWorkflow\.ps1$',
+        '^docs/.+\.md$',
+        '^runbook\.md$'
+    )
+    foreach ($path in $ChangedPaths) {
+        $normalized = ([string]$path).Replace('\', '/').TrimStart('/')
+        if ([string]::IsNullOrWhiteSpace($normalized) -or
+            -not (@($allowed | Where-Object { $normalized -match $_ }).Count -eq 1)) {
+            throw "Evidence review source changes are outside the approved parser, workflow, test, and documentation scope: $normalized"
+        }
+    }
+    return @($ChangedPaths | ForEach-Object { ([string]$_).Replace('\', '/').TrimStart('/') })
+}
+
+function Assert-GpuPayloadReviewSourcePinCompatibility {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][object]$ExpectedPins,
+        [Parameter(Mandatory = $true)][object]$CurrentPins
+    )
+
+    $unchanged = [Collections.Generic.List[object]]::new()
+    foreach ($property in $ExpectedPins.Files.PSObject.Properties) {
+        if ($property.Name -in @('WorkflowModule', 'WorkflowScript')) { continue }
+        $current = $CurrentPins.Files.PSObject.Properties[[string]$property.Name]
+        if ($null -eq $current) { throw "Evidence review source pin is no longer present: $($property.Name)" }
+        if (-not [string]::Equals([string]$property.Value.Path, [string]$current.Value.Path, [StringComparison]::OrdinalIgnoreCase) -or
+            -not [string]::Equals([string]$property.Value.Sha256, [string]$current.Value.Sha256, [StringComparison]::OrdinalIgnoreCase) -or
+            [long]$property.Value.Bytes -ne [long]$current.Value.Bytes) {
+            throw "Evidence review source pin changed outside the approved workflow parser: $($property.Name)"
+        }
+        Assert-GpuFilePin -Pin $property.Value
+        $unchanged.Add([pscustomobject]@{
+            Name = [string]$property.Name
+            Path = [string]$current.Value.Path
+            Sha256 = [string]$current.Value.Sha256
+            Bytes = [long]$current.Value.Bytes
+            Unchanged = $true
+        })
+    }
+    return @($unchanged)
+}
+
+function Get-GpuPayloadReviewSourceProof {
+    param([Parameter(Mandatory = $true)][object]$State, [Parameter(Mandatory = $true)][string]$SourceRoot)
+
+    $candidateCommit = [string]$State.SourceCommit
+    if ($candidateCommit -cnotmatch '^[0-9a-f]{40}$') { throw 'Evidence review journal has no pinned candidate source commit.' }
+    $snapshot = Get-GpuPayloadGitSnapshot -SourceRoot $SourceRoot
+    $null = & git -C $SourceRoot merge-base --is-ancestor $candidateCommit $snapshot.Commit 2>$null
+    $ancestorExit = $LASTEXITCODE
+    if ($ancestorExit -eq 1) { throw 'The evidence review source is not descended from the signed artifact candidate.' }
+    if ($ancestorExit -ne 0) { throw 'Git could not prove evidence review source lineage.' }
+    $changed = @(& git -C $SourceRoot diff --name-only $candidateCommit $snapshot.Commit -- 2>$null)
+    if ($LASTEXITCODE -ne 0) { throw 'Git could not enumerate evidence review source changes.' }
+    $approvedChanged = Test-GpuPayloadReviewChangedPaths -ChangedPaths $changed
+    $currentPins = Get-GpuPayloadSourcePins -SourceRoot $SourceRoot
+    if ([string]$currentPins.Commit -cne [string]$snapshot.Commit) {
+        throw 'Source revision changed while evidence review pins were captured.'
+    }
+    $unchangedPins = Assert-GpuPayloadReviewSourcePinCompatibility -ExpectedPins $State.SourcePins -CurrentPins $currentPins
+    return [pscustomobject]@{
+        Status = 'REVIEW_SOURCE_COMPATIBLE'
+        CandidateSourceCommit = $candidateCommit
+        EvidenceReviewSourceCommit = [string]$snapshot.Commit
+        CandidateIsAncestor = $true
+        ApprovedChangedPaths = @($approvedChanged)
+        UnchangedSourcePins = @($unchangedPins)
     }
 }
 
@@ -1005,10 +1105,76 @@ function Test-GpuPayloadSignedNativeRawEvidence {
         $diagnostic['shim_load_status'] -ceq '0x0000000000000000'
 }
 
+function Assert-GpuPayloadEfiSerialEvidence {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][object]$Result,
+        [Parameter(Mandatory = $true)][string]$ControllerRunDirectory
+    )
+
+    $evidence = Get-GpuPayloadObjectProperty -Object $Result -Name 'Evidence'
+    $serialPath = [string](Get-GpuPayloadObjectProperty -Object $evidence -Name 'EfiSerialPath')
+    $recordedHash = [string](Get-GpuPayloadObjectProperty -Object $evidence -Name 'EfiSerialSha256')
+    if ([string]::IsNullOrWhiteSpace($serialPath) -or $recordedHash -notmatch '^[0-9A-Fa-f]{64}$') {
+        throw 'VM controller did not provide a pinned EFI serial log.'
+    }
+    $controllerRoot = [IO.Path]::GetFullPath($ControllerRunDirectory)
+    $null = Assert-GpuPathWithin -Path $controllerRoot -Root $controllerRoot -AllowRoot -MustExist
+    $safeSerialPath = Assert-GpuPathWithin -Path $serialPath -Root $controllerRoot -MustExist
+    if ([IO.Path]::GetFileName($safeSerialPath) -cne 'efi-serial.log') {
+        throw 'EFI serial evidence must reference the controller-owned efi-serial.log.'
+    }
+    $file = Get-Item -LiteralPath $safeSerialPath -Force -ErrorAction Stop
+    if ($file.PSIsContainer -or $file.Length -le 0 -or $file.Length -gt 1MB) {
+        throw 'EFI serial evidence must be a non-empty regular file bounded to 1 MiB.'
+    }
+    $serialStream = $null
+    try {
+        $serialStream = [IO.File]::Open($safeSerialPath, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+        if ($serialStream.Length -le 0 -or $serialStream.Length -gt 1MB) {
+            throw 'EFI serial evidence exceeded its read bound.'
+        }
+        $bytes = [byte[]]::new([int]$serialStream.Length)
+        $offset = 0
+        while ($offset -lt $bytes.Length) {
+            $read = $serialStream.Read($bytes, $offset, $bytes.Length - $offset)
+            if ($read -le 0) { throw 'EFI serial evidence changed or ended during the bounded read.' }
+            $offset += $read
+        }
+        if ($serialStream.ReadByte() -ne -1) { throw 'EFI serial evidence changed during the bounded read.' }
+    }
+    finally { if ($null -ne $serialStream) { $serialStream.Dispose() } }
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    try { $digest = $sha256.ComputeHash($bytes) }
+    finally { $sha256.Dispose() }
+    $actualHash = ([BitConverter]::ToString($digest)).Replace('-', '')
+    if (-not [string]::Equals($actualHash, $recordedHash, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'EFI serial evidence hash does not match the controller result.'
+    }
+    $serialPin = [pscustomobject]@{
+        Path = $safeSerialPath
+        Sha256 = $actualHash
+        Bytes = [long]$bytes.LongLength
+    }
+    $text = [Text.Encoding]::GetEncoding(28591).GetString($bytes)
+    $markers = @(
+        'uefi hypervisor: DMA isolation admission: PASS',
+        'uefi hypervisor: BSP firmware return: PASS'
+    )
+    foreach ($marker in $markers) {
+        if (-not $text.Contains($marker)) { throw "SignedNative EFI serial marker is missing: $marker" }
+    }
+    if ($text -match '(?i)uefi hypervisor: .*?(?:FAIL|FATAL)|BSP virtualization failure:|GPU_HAL(?:_VM|_MODEL|_ENFORCEMENT_MODEL):.*?(?:FAIL|FATAL)|(?im)^\s*(?:FAIL(?:ED)?|FATAL)\b') {
+        throw 'EFI serial evidence contains a failure marker.'
+    }
+    return $serialPin
+}
+
 function Assert-GpuPayloadVmResult {
     [CmdletBinding()]
     param(
         [object]$Result,
+        [Parameter(Mandatory = $true)][string]$ControllerRunDirectory,
         [AllowNull()][string]$ExpectedVmxPath,
         [AllowNull()][string]$ExpectedCertificateSha256
     )
@@ -1023,6 +1189,7 @@ function Assert-GpuPayloadVmResult {
         [string]$Result.HalResults.VmwareDbAppendMarker -cne 'PASS_LOG_MARKER') {
         throw 'VM controller did not confirm the VMware Secure Boot db append log marker.'
     }
+    $null = Assert-GpuPayloadVmwareLogEvidence -Result $Result -ControllerRunDirectory $ControllerRunDirectory
     foreach ($name in @('Inspect', 'Stage', 'SignedNativeEfi', 'WindowsStartup')) {
         if ([string]$Result.Phases.$name -cne 'PASS') { throw "VM controller phase did not pass: $name" }
     }
@@ -1038,10 +1205,7 @@ function Assert-GpuPayloadVmResult {
         -not (Test-GpuPayloadSignedNativeRawEvidence -Startup $startup)) {
         throw 'Authenticated Windows startup evidence did not confirm SignedNative Secure Boot and certificate admission.'
     }
-    $expectedMarkers = @('uefi hypervisor: DMA isolation admission: PASS', 'uefi hypervisor: BSP firmware return: PASS')
-    foreach ($marker in $expectedMarkers) {
-        if (@($Result.WindowsStartupEvidence.EfiMarkers) -cnotcontains $marker) { throw "SignedNative EFI marker is missing: $marker" }
-    }
+    $efiSerialPin = Assert-GpuPayloadEfiSerialEvidence -Result $Result -ControllerRunDirectory $ControllerRunDirectory
     if ([string]$Result.HalResults.SignedNativeEfiAdmissionMarkers -cne 'PASS' -or
         [string]$Result.HalResults.DmaIsolationAdmission -cne 'EXTERNAL_VMM_ADMISSION' -or
         [string]$Result.HalResults.NativeGpuBackend -cne 'NOT_EXERCISED_EXTERNAL_VMM' -or
@@ -1054,6 +1218,35 @@ function Assert-GpuPayloadVmResult {
         [string]$Result.Vm.Passthrough -cne 'none') {
         throw 'SignedNative test did not preserve Secure Boot or used GPU passthrough.'
     }
+    return $efiSerialPin
+}
+
+function Assert-GpuPayloadVmwareLogEvidence {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][object]$Result, [Parameter(Mandatory = $true)][string]$ControllerRunDirectory)
+
+    $evidence = Get-GpuPayloadObjectProperty -Object $Result -Name 'Evidence'
+    $logPath = [string](Get-GpuPayloadObjectProperty -Object $evidence -Name 'VmwareLogPath')
+    $recordedHash = [string](Get-GpuPayloadObjectProperty -Object $evidence -Name 'VmwareLogSha256')
+    if ([string](Get-GpuPayloadObjectProperty -Object $evidence -Name 'VmwareLogStatus') -cne 'COPIED' -or
+        [string]::IsNullOrWhiteSpace($logPath) -or $recordedHash -notmatch '^[0-9A-Fa-f]{64}$') {
+        throw 'VM controller did not provide a pinned VMware log for its db append marker.'
+    }
+    $safePath = Assert-GpuPathWithin -Path $logPath -Root $ControllerRunDirectory -MustExist
+    if ([IO.Path]::GetFileName($safePath) -cne 'vmware.log') { throw 'VMware db append evidence must reference controller-owned vmware.log.' }
+    $file = Get-Item -LiteralPath $safePath -Force -ErrorAction Stop
+    if ($file.PSIsContainer -or $file.Length -le 0 -or $file.Length -gt 32MB) {
+        throw 'VMware db append log must be a non-empty regular file bounded to 32 MiB.'
+    }
+    $logPin = Get-GpuFilePin -Path $safePath
+    if (-not [string]::Equals([string]$logPin.Sha256, $recordedHash, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'VMware log hash does not match the controller result.'
+    }
+    $logText = [IO.File]::ReadAllText($safePath)
+    if ($logText -notmatch '(?i)Added uefi\.secureBoot\.dbDefault\.file0 to dbDefault') {
+        throw 'VMware log does not contain the Secure Boot db append marker.'
+    }
+    return $logPin
 }
 
 function Invoke-GpuPayloadValidateVm {
@@ -1142,8 +1335,9 @@ function Invoke-GpuPayloadValidateVm {
     $resultPath = Join-Path $controllerRun 'result.json'
     $null = Assert-GpuPathWithin -Path $resultPath -Root $controllerRun -MustExist
     $vmResult = Read-GpuJson -Path $resultPath
-    Assert-GpuPayloadVmResult -Result $vmResult -ExpectedVmxPath $vmx `
+    $efiSerialPin = Assert-GpuPayloadVmResult -Result $vmResult -ControllerRunDirectory $controllerRun -ExpectedVmxPath $vmx `
         -ExpectedCertificateSha256 ([string]$State.Tools.Certificate.Sha256)
+    $vmwareLogPin = Assert-GpuPayloadVmwareLogEvidence -Result $vmResult -ControllerRunDirectory $controllerRun
     $vmReceiptPin = Get-GpuFilePin -Path $vmReceiptPath
     $State.Validation = [pscustomobject]@{
         Status = 'PASS'
@@ -1154,6 +1348,8 @@ function Invoke-GpuPayloadValidateVm {
         ControllerReceipt = $controllerReceipt.ReceiptPath
         ResultPath = $resultPath
         ResultPin = Get-GpuFilePin -Path $resultPath
+        EfiSerialPin = $efiSerialPin
+        VmwareLogPin = $vmwareLogPin
         VmPreparationReceiptPin = $vmReceiptPin
         VmPreparationCompatibility = $preparationCompatibility
         SnapshotBefore = [string]$vmResult.Snapshots.Before
@@ -1165,6 +1361,226 @@ function Invoke-GpuPayloadValidateVm {
         HostDualGpuTopology = 'NOT_TESTED_BY_THIS_VM'
     }
     return [pscustomobject]@{ Status = 'SIGNED_NATIVE_VM_VALIDATION_PASS'; Validation = $State.Validation }
+}
+
+function Assert-GpuPayloadControllerInvocation {
+    param(
+        [Parameter(Mandatory = $true)][object]$Receipt,
+        [Parameter(Mandatory = $true)][object]$State,
+        [Parameter(Mandatory = $true)][string]$VmxPath,
+        [Parameter(Mandatory = $true)][string]$ControllerRunDirectory
+    )
+
+    if ([int]$Receipt.SchemaVersion -ne 1 -or $Receipt.Succeeded -isnot [bool] -or -not [bool]$Receipt.Succeeded -or
+        $Receipt.ExitCode -isnot [ValueType] -or [int]$Receipt.ExitCode -ne 0) {
+        throw 'Saved VM controller invocation receipt does not prove a successful zero-exit controller run.'
+    }
+    $arguments = @($Receipt.Arguments | ForEach-Object { [string]$_ })
+    if ($arguments.Count -lt 2) { throw 'Saved VM controller receipt has no argument vector.' }
+    $expected = [ordered]@{
+        '-VmxPath' = $VmxPath
+        '-RunDirectory' = $ControllerRunDirectory
+        '-ValidationProfile' = 'SignedNative'
+        '-EfiPath' = [string]$State.SignedArtifacts.Payload.Path
+        '-LoaderPath' = [string]$State.SignedArtifacts.Loader.Path
+        '-InstallerPath' = [string]$State.Tools.Installer.Path
+        '-ProbePath' = [string]$State.Tools.Probe.Path
+        '-ShimPath' = [string]$State.Tools.Shim.Path
+        '-CertificatePath' = [string]$State.Tools.Certificate.Path
+        '-VerifierPath' = [string]$State.Tools.Verifier.Path
+        '-VerifierSha256' = [string]$State.Tools.Verifier.Sha256
+    }
+    foreach ($name in $expected.Keys) {
+        $indices = @()
+        for ($index = 0; $index -lt $arguments.Count; $index++) {
+            if ([string]::Equals($arguments[$index], [string]$name, [StringComparison]::OrdinalIgnoreCase)) { $indices += $index }
+        }
+        if ($indices.Count -ne 1 -or $indices[0] + 1 -ge $arguments.Count -or
+            -not [string]::Equals($arguments[$indices[0] + 1], [string]$expected[$name], [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Saved controller receipt does not match the workflow-pinned $name argument."
+        }
+    }
+    return $arguments
+}
+
+function Assert-GpuPayloadResultSignedArtifacts {
+    param([Parameter(Mandatory = $true)][object]$Result, [Parameter(Mandatory = $true)][object]$State)
+
+    $actual = $Result.SignedNativeArtifacts
+    if ($null -eq $actual -or
+        [string]$actual.SignerThumbprint -cne '59DBD6780CFE60C020B3F4511211FEC22C397B85') {
+        throw 'Controller result lacks the pinned signed artifact evidence.'
+    }
+    foreach ($name in @('Payload', 'Loader')) {
+        $expectedPin = $State.SignedArtifacts.$name
+        $actualPin = $actual.$name
+        if ($null -eq $expectedPin -or $null -eq $actualPin -or
+            -not [string]::Equals([IO.Path]::GetFullPath([string]$actualPin.Path), [IO.Path]::GetFullPath([string]$expectedPin.Path), [StringComparison]::OrdinalIgnoreCase) -or
+            -not [string]::Equals([string]$actualPin.Sha256, [string]$expectedPin.Sha256, [StringComparison]::OrdinalIgnoreCase) -or
+            [long]$actualPin.Bytes -ne [long]$expectedPin.Bytes) {
+            throw "Controller result signed $name hash or path does not match the workflow artifact pin."
+        }
+        $verifier = $actualPin.Verifier
+        if ($null -eq $verifier -or [string]$verifier.VerifierStatus -cne 'PINNED_SIGNATURE_PASS' -or
+            $verifier.VerifierExitCode -isnot [ValueType] -or [int]$verifier.VerifierExitCode -ne 0 -or
+            $verifier.VerifierHashMatches -isnot [bool] -or -not [bool]$verifier.VerifierHashMatches -or
+            -not [string]::Equals([IO.Path]::GetFullPath([string]$verifier.VerifierPath), [IO.Path]::GetFullPath([string]$State.Tools.Verifier.Path), [StringComparison]::OrdinalIgnoreCase) -or
+            -not [string]::Equals([string]$verifier.VerifierSha256, [string]$State.Tools.Verifier.Sha256, [StringComparison]::OrdinalIgnoreCase) -or
+            -not [string]::Equals([string]$verifier.CertificateSha256, [string]$State.Tools.Certificate.Sha256, [StringComparison]::OrdinalIgnoreCase) -or
+            -not [string]::Equals([string]$verifier.SignerThumbprint, '59DBD6780CFE60C020B3F4511211FEC22C397B85', [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Controller result did not independently verify the pinned signed $name."
+        }
+    }
+    foreach ($name in @('Shim', 'Certificate', 'Verifier')) {
+        $expectedPin = $State.Tools.$name
+        $actualPin = $actual.$name
+        if ($null -eq $expectedPin -or $null -eq $actualPin -or
+            -not [string]::Equals([IO.Path]::GetFullPath([string]$actualPin.Path), [IO.Path]::GetFullPath([string]$expectedPin.Path), [StringComparison]::OrdinalIgnoreCase) -or
+            -not [string]::Equals([string]$actualPin.Sha256, [string]$expectedPin.Sha256, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Controller result $name pin does not match the workflow-pinned input."
+        }
+    }
+    if (-not [string]::Equals([string]$actual.Verifier.Pin, [string]$State.Tools.Verifier.Sha256, [StringComparison]::OrdinalIgnoreCase) -or
+        -not [bool]$actual.Verifier.PinMatches -or
+        -not [string]::Equals([string]$actual.Certificate.Sha256, [string]$State.Tools.Certificate.Sha256, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Controller verifier or certificate attestation does not match the pinned build inputs.'
+    }
+}
+
+function Invoke-GpuPayloadReviewVm {
+    param([Parameter(Mandatory = $true)][object]$State, [Parameter(Mandatory = $true)][object]$Paths, [Parameter(Mandatory = $true)][string]$SourceRoot)
+
+    if ([string]$State.Phase -cne 'Signed' -or $null -ne $State.InProgress -or
+        $null -eq $State.LastFailure -or [string]$State.LastFailure.Action -cne 'ValidateVm' -or
+        [string]$State.LastFailure.Status -cne 'FAILED') {
+        throw 'ReviewVm is allowed only for a Signed run whose saved ValidateVm attempt failed.'
+    }
+    $sourceProof = Get-GpuPayloadReviewSourceProof -State $State -SourceRoot $SourceRoot
+    $artifactPaths = Get-GpuPayloadBuildArtifactPaths -Paths $Paths
+    $toolPaths = Get-GpuPayloadToolPaths -Paths $Paths -SourceRoot $SourceRoot
+    Assert-GpuPayloadArtifactPins -Pins $State.BuildArtifacts -ExpectedPaths $artifactPaths
+    Assert-GpuPayloadArtifactPins -Pins $State.Tools -ExpectedPaths $toolPaths
+    Assert-GpuPayloadArtifactPins -Pins $State.SignedArtifacts -ExpectedPaths ([pscustomobject]@{
+        Payload = $Paths.SignedPayload; Loader = $Paths.SignedLoader
+    })
+
+    $intent = $State.LastFailure.Intent
+    if ($null -eq $intent -or [string]$intent.Action -cne 'ValidateVm' -or
+        $intent.ControllerInvocationStarted -isnot [bool] -or -not [bool]$intent.ControllerInvocationStarted) {
+        throw 'Saved ValidateVm intent does not prove that the signed VM controller was invoked.'
+    }
+    $controllerRun = [IO.Path]::GetFullPath([string]$intent.ControllerRunDirectory)
+    $null = Assert-GpuPathWithin -Path $controllerRun -Root $Paths.ControllerRunsRoot -MustExist
+    $vmx = [IO.Path]::GetFullPath([string]$intent.VmxPath)
+    $null = Assert-GpuPathWithin -Path $vmx -Root (Join-Path $Paths.WorkspaceRoot '.codex-build') -MustExist
+    if ([IO.Path]::GetExtension($vmx) -ine '.vmx') { throw 'Saved validation intent does not identify a VMware VMX file.' }
+
+    $actionDirectory = [IO.Path]::GetFullPath([string]$State.LastFailure.ActionDirectory)
+    $null = Assert-GpuPathWithin -Path $actionDirectory -Root $Paths.ActionsRoot -MustExist
+    $receiptFiles = @(Get-ChildItem -LiteralPath $actionDirectory -Filter 'signed-native-disposable-vm-controller-*.receipt.json' -File)
+    if ($receiptFiles.Count -ne 1) { throw 'Evidence review requires exactly one saved SignedNative controller invocation receipt.' }
+    $controllerReceiptPath = Assert-GpuPathWithin -Path $receiptFiles[0].FullName -Root $actionDirectory -MustExist
+    $controllerReceiptPin = Get-GpuFilePin -Path $controllerReceiptPath
+    $controllerReceipt = Read-GpuJson -Path $controllerReceiptPath
+    $null = Assert-GpuPayloadControllerInvocation -Receipt $controllerReceipt -State $State `
+        -VmxPath $vmx -ControllerRunDirectory $controllerRun
+    $stdoutPath = Assert-GpuPathWithin -Path ([string]$controllerReceipt.StdoutPath) -Root $actionDirectory -MustExist
+    $stderrPath = Assert-GpuPathWithin -Path ([string]$controllerReceipt.StderrPath) -Root $actionDirectory -MustExist
+    foreach ($outputPath in @($stdoutPath, $stderrPath)) {
+        if ((Get-Item -LiteralPath $outputPath -Force).Length -gt 16MB) {
+            throw 'Saved controller command output exceeds the 16 MiB evidence bound.'
+        }
+    }
+    $stdoutPin = Get-GpuFilePin -Path $stdoutPath
+    $stderrPin = Get-GpuFilePin -Path $stderrPath
+
+    $resultPath = Join-Path $controllerRun 'result.json'
+    $null = Assert-GpuPathWithin -Path $resultPath -Root $controllerRun -MustExist
+    $resultPinBefore = Get-GpuFilePin -Path $resultPath
+    $result = Read-GpuJson -Path $resultPath
+    $serialPin = Assert-GpuPayloadVmResult -Result $result -ControllerRunDirectory $controllerRun `
+        -ExpectedVmxPath $vmx -ExpectedCertificateSha256 ([string]$State.Tools.Certificate.Sha256)
+    $vmwareLogPin = Assert-GpuPayloadVmwareLogEvidence -Result $result -ControllerRunDirectory $controllerRun
+    Assert-GpuPayloadResultSignedArtifacts -Result $result -State $State
+    $resultPinAfter = Get-GpuFilePin -Path $resultPath
+    if ([string]$resultPinBefore.Sha256 -cne [string]$resultPinAfter.Sha256 -or
+        [long]$resultPinBefore.Bytes -ne [long]$resultPinAfter.Bytes) {
+        throw 'Controller result changed while the saved VM evidence was reviewed.'
+    }
+    if (-not [string]::Equals([IO.Path]::GetFullPath([string]$result.Vm.VmxPath), $vmx, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Saved controller result does not identify the VMX in the failed workflow intent.'
+    }
+    $State.Validation = [pscustomobject]@{
+        Status = 'PASS'
+        Profile = 'SignedNative'
+        VmxPath = $vmx
+        ControllerRunId = [string]$result.RunId
+        ControllerRunDirectory = $controllerRun
+        ControllerReceipt = $controllerReceiptPath
+        ControllerReceiptPin = $controllerReceiptPin
+        ControllerStdoutPin = $stdoutPin
+        ControllerStderrPin = $stderrPin
+        ResultPath = $resultPath
+        ResultPin = $resultPinAfter
+        EfiSerialPin = $serialPin
+        VmwareLogPin = $vmwareLogPin
+        VmPreparationCompatibility = $intent.VmPreparationCompatibility
+        SnapshotBefore = [string]$result.Snapshots.Before
+        SnapshotAfter = [string]$result.Snapshots.After
+        VmStopped = [bool]$result.Snapshots.VmOffConfirmed
+        RevertedToBefore = [bool]$result.Snapshots.RevertedBefore
+        CleanupFailures = @($result.CleanupFailures)
+        IntelPhysicalPlaneAndDmaEnforcement = [string]$result.HalResults.IntelPhysicalPlaneAndDmaEnforcement
+        HostDualGpuTopology = [string]$result.HalResults.HostDualGpuTopology
+        EvidenceReview = [pscustomobject]@{
+            Status = 'SAVED_CONTROLLER_PASS_REVIEWED'
+            CandidateSourceCommit = [string]$sourceProof.CandidateSourceCommit
+            EvidenceReviewSourceCommit = [string]$sourceProof.EvidenceReviewSourceCommit
+            ApprovedChangedPaths = @($sourceProof.ApprovedChangedPaths)
+            UnchangedSourcePins = @($sourceProof.UnchangedSourcePins)
+            ControllerInvocationReceiptPin = $controllerReceiptPin
+            ControllerResultPin = $resultPinAfter
+            EfiSerialPin = $serialPin
+            VmwareLogPin = $vmwareLogPin
+            SignedArtifactPinsMatched = $true
+            VmBootRepeated = $false
+            BuildRepeated = $false
+            SignRepeated = $false
+        }
+    }
+    if (-not (Test-GpuPayloadValidationProof -State $State)) {
+        $State.Validation = $null
+        throw 'Reviewed controller evidence did not satisfy the workflow completion proof.'
+    }
+    $reviewProof = $State.Validation.EvidenceReview
+    if ($null -eq $reviewProof -or [string]$reviewProof.Status -cne 'SAVED_CONTROLLER_PASS_REVIEWED' -or
+        [string]$reviewProof.CandidateSourceCommit -cne [string]$State.SourceCommit -or
+        [string]$reviewProof.EvidenceReviewSourceCommit -cne [string]$sourceProof.EvidenceReviewSourceCommit -or
+        $reviewProof.SignedArtifactPinsMatched -isnot [bool] -or -not [bool]$reviewProof.SignedArtifactPinsMatched -or
+        $reviewProof.VmBootRepeated -isnot [bool] -or [bool]$reviewProof.VmBootRepeated -or
+        $reviewProof.BuildRepeated -isnot [bool] -or [bool]$reviewProof.BuildRepeated -or
+        $reviewProof.SignRepeated -isnot [bool] -or [bool]$reviewProof.SignRepeated) {
+        $State.Validation = $null
+        throw 'Evidence review metadata does not bind the original candidate to this read-only review.'
+    }
+    $State.Phase = 'Complete'
+    $State.Status = 'COMPLETE'
+    $State.LastAction = [pscustomobject]@{
+        Action = 'ReviewVm'; Status = 'SIGNED_NATIVE_VM_EVIDENCE_REVIEW_PASS'; Succeeded = $true
+        StartedUtc = [DateTime]::UtcNow.ToString('o'); CompletedUtc = [DateTime]::UtcNow.ToString('o')
+        EvidenceReviewSourceCommit = [string]$sourceProof.EvidenceReviewSourceCommit
+    }
+    $State.Actions = @($State.Actions) + @($State.LastAction)
+    Save-GpuPayloadState -State $State -Paths $Paths
+    return [pscustomobject]@{
+        Action = 'ReviewVm'; Status = 'SIGNED_NATIVE_VM_EVIDENCE_REVIEW_PASS'; Succeeded = $true
+        Phase = 'Complete'; RunId = [string]$State.RunId; RunDirectory = [string]$Paths.RunDirectory
+        CandidateSourceCommit = [string]$sourceProof.CandidateSourceCommit
+        EvidenceReviewSourceCommit = [string]$sourceProof.EvidenceReviewSourceCommit
+        ControllerRunDirectory = $controllerRun; ResultPin = $resultPinAfter; EfiSerialPin = $serialPin
+        VmwareLogPin = $vmwareLogPin
+        Validation = $State.Validation
+    }
 }
 
 function Start-GpuPayloadMutation {
@@ -1339,7 +1755,7 @@ function Invoke-GpuPayloadArchive {
 function Invoke-GpuPayloadAction {
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory = $true)][ValidateSet('Prepare', 'Build', 'Sign', 'ValidateVm', 'Status', 'Report', 'Archive')][string]$Action,
+        [Parameter(Mandatory = $true)][ValidateSet('Prepare', 'Build', 'Sign', 'ValidateVm', 'ReviewVm', 'Status', 'Report', 'Archive')][string]$Action,
         [Parameter(Mandatory = $true)][string]$SourceRoot,
         [Parameter(Mandatory = $true)][string]$WorkspaceRoot,
         [AllowNull()][string]$RunDirectory,
@@ -1374,6 +1790,12 @@ function Invoke-GpuPayloadAction {
     $paths = $selected.Paths
 
     if ($Action -in @('Status', 'Report')) { return New-GpuPayloadSummary -Action $Action -State $state -Paths $paths }
+    if ($Action -ceq 'ReviewVm') {
+        if (-not (Test-GpuPayloadTransition -Action 'ReviewVm' -Phase ([string]$state.Phase) -InProgress $state.InProgress)) {
+            throw 'ReviewVm is blocked unless the selected run is Signed and has no active mutation.'
+        }
+        return Invoke-GpuPayloadReviewVm -State $state -Paths $paths -SourceRoot $source
+    }
     if ($null -ne $state.LastFailure -and [string]$state.LastFailure.Action -ceq 'Archive' -and $Action -cne 'Archive') {
         throw 'Archive was interrupted. Finish archiving this run before any new workflow action.'
     }
@@ -1464,6 +1886,8 @@ Export-ModuleMember -Function @(
     'Test-GpuPayloadVmxPath',
     'Assert-GpuPayloadFreshOutput',
     'Assert-GpuPayloadArtifactPins',
+    'Test-GpuPayloadReviewChangedPaths',
+    'Assert-GpuPayloadReviewSourcePinCompatibility',
     'Test-GpuPayloadCompletionProof',
     'Assert-GpuPayloadVmResult',
     'Get-GpuPayloadArchiveDisposition',

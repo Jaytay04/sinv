@@ -95,6 +95,52 @@ try {
             'not already at the uniquely identified' 'ambiguous reviewed snapshot names must be rejected'
     }
 
+    Invoke-TestCase 'evidence review permits only workflow reader and documentation changes' {
+        $approved = Test-GpuPayloadReviewChangedPaths -ChangedPaths @(
+            'tools/gpu_diagnostic/GpuPayloadWorkflow.psm1',
+            'tools/gpu_diagnostic/gpu-payload-test.ps1',
+            'tools/gpu_diagnostic/tests/Test-GpuPayloadWorkflow.ps1',
+            'docs/GPU_SCANOUT_PROMPT.md', 'runbook.md'
+        )
+        Assert-True ($approved.Count -eq 5) 'approved parser/test/documentation changes were not accepted'
+        Assert-Throws { Test-GpuPayloadReviewChangedPaths -ChangedPaths @('components/hypervisor/setup/Test-GpuHalWindowsVm.ps1') } `
+            'outside the approved' 'controller source changes must block review of the old VM result'
+        Assert-Throws { Test-GpuPayloadReviewChangedPaths -ChangedPaths @('tools/gpu_diagnostic/New-GpuPayloadVm.ps1') } `
+            'outside the approved' 'VM preparation code changes must block review of the old VM result'
+
+        $pinDirectory = Join-Path $FixtureRoot 'review-source-pins'
+        [void](New-Item -ItemType Directory -Path $pinDirectory -Force)
+        $workflowPath = Join-Path $pinDirectory 'workflow.psm1'
+        $scriptPath = Join-Path $pinDirectory 'workflow.ps1'
+        $controllerPath = Join-Path $pinDirectory 'controller.ps1'
+        [IO.File]::WriteAllText($workflowPath, 'old workflow')
+        [IO.File]::WriteAllText($scriptPath, 'old script')
+        [IO.File]::WriteAllText($controllerPath, 'unchanged controller')
+        $expectedPins = [pscustomobject]@{ Files = [pscustomobject]@{
+            WorkflowModule = Get-TestFilePin $workflowPath
+            WorkflowScript = Get-TestFilePin $scriptPath
+            VmController = Get-TestFilePin $controllerPath
+        } }
+        [IO.File]::WriteAllText($workflowPath, 'reviewed workflow parser')
+        $currentPins = [pscustomobject]@{ Files = [pscustomobject]@{
+            WorkflowModule = Get-TestFilePin $workflowPath
+            WorkflowScript = Get-TestFilePin $scriptPath
+            VmController = Get-TestFilePin $controllerPath
+        } }
+        $unchanged = Assert-GpuPayloadReviewSourcePinCompatibility -ExpectedPins $expectedPins -CurrentPins $currentPins
+        Assert-True (@($unchanged).Count -eq 1 -and @($unchanged)[0].Name -ceq 'VmController') `
+            'review did not pin-check non-workflow sources while permitting the approved reader change'
+        [IO.File]::WriteAllText($controllerPath, 'changed controller')
+        $changedPins = [pscustomobject]@{ Files = [pscustomobject]@{
+            WorkflowModule = Get-TestFilePin $workflowPath
+            WorkflowScript = Get-TestFilePin $scriptPath
+            VmController = Get-TestFilePin $controllerPath
+        } }
+        Assert-Throws {
+            Assert-GpuPayloadReviewSourcePinCompatibility -ExpectedPins $expectedPins -CurrentPins $changedPins
+        } 'source pin changed' 'changed pinned VM controller must block evidence review'
+    }
+
     Invoke-TestCase 'generated paths are deterministic and confined to their run identity' {
         $runId = 'gpu-payload-20261019T120000Z-0123456789abcdef0123456789abcdef'
         $runDirectory = Join-Path $FixtureRoot $runId
@@ -130,7 +176,7 @@ try {
             Assert-True (-not (Test-GpuPayloadTransition -Action $entry[0] -Phase $entry[1] -InProgress $null)) `
                 "unexpected transition $($entry[0]) from $($entry[1])"
         }
-        foreach ($action in @('Prepare', 'Build', 'Sign', 'ValidateVm', 'Archive')) {
+        foreach ($action in @('Prepare', 'Build', 'Sign', 'ValidateVm', 'ReviewVm', 'Archive')) {
             Assert-True (-not (Test-GpuPayloadTransition -Action $action -Phase 'Signed' `
                     -InProgress ([pscustomobject]@{ Action = 'Interrupted' }))) `
                 "$action was allowed with an interrupted mutation recorded"
@@ -139,6 +185,11 @@ try {
                 -InProgress 'ValidateVm')) 'ValidateVm was allowed while its prior attempt remained in progress'
         Assert-True ((Get-GpuPayloadNextPhase -Action 'ValidateVm') -ceq 'Complete') `
             'successful SignedNative VM validation must be the only transition to Complete'
+        Assert-True ((Test-GpuPayloadTransition -Action 'ReviewVm' -Phase 'Signed' -InProgress $null) -and
+            (Get-GpuPayloadNextPhase -Action 'ReviewVm') -ceq 'Complete') `
+            'ReviewVm must complete only the Signed evidence-review transition'
+        Assert-True (-not (Test-GpuPayloadTransition -Action 'ReviewVm' -Phase 'Archived' -InProgress $null)) `
+            'ReviewVm must not reopen an archived run'
         Assert-True ((Get-GpuPayloadNextPhase -Action 'Archive') -ceq 'Archived') `
             'Archive must be the terminal transition'
         Assert-True (Test-GpuPayloadVmxPath -Path 'C:\vm\diagnostic.vmx') `
@@ -159,6 +210,12 @@ try {
             $workflowResult.NativeCommandsExecuted -eq $false -and
             $workflowResult.VmStarted -eq $false) `
             'workflow preview did not report zero side effects'
+        $reviewPreview = @(& $WorkflowScriptPath ReviewVm -WorkspaceRoot $missingWorkspace `
+            -RunDirectory $runDirectory -WhatIf) -join "`n"
+        $reviewResult = $reviewPreview | ConvertFrom-Json
+        Assert-True ($reviewResult.Action -ceq 'ReviewVm' -and $reviewResult.Preview -eq $true -and
+            $reviewResult.FilesystemChangesPerformed -eq $false -and $reviewResult.NativeCommandsExecuted -eq $false) `
+            'ReviewVm preview did not remain read-only'
         Assert-True (-not (Test-Path -LiteralPath $missingWorkspace) -and
             -not (Test-Path -LiteralPath $runDirectory)) `
             'workflow preview created a workspace, run, selector, or journal'
@@ -526,6 +583,15 @@ try {
     }
 
     Invoke-TestCase 'VM admission requires authenticated SignedNative evidence and cleanup gates' {
+        $controllerRunDirectory = Join-Path $FixtureRoot 'controller-evidence'
+        [void](New-Item -ItemType Directory -Path $controllerRunDirectory -Force)
+        $efiSerialPath = Join-Path $controllerRunDirectory 'efi-serial.log'
+        $vmwareLogPath = Join-Path $controllerRunDirectory 'vmware.log'
+        [IO.File]::WriteAllText($efiSerialPath, @(
+            'uefi hypervisor: DMA isolation admission: PASS'
+            'uefi hypervisor: BSP firmware return: PASS'
+        ) -join "`r`n", [Text.UTF8Encoding]::new($false))
+        [IO.File]::WriteAllText($vmwareLogPath, 'Added uefi.secureBoot.dbDefault.file0 to dbDefault', [Text.UTF8Encoding]::new($false))
         function New-TestSignedNativeVmResult {
             $handoff = @(
                 'schema=1'
@@ -583,12 +649,15 @@ try {
                     PayloadDiagnosticCapturedBytes = $byteEncoding.GetByteCount($diagnostic)
                     PayloadDiagnosticTooLarge = $false
                     DiagnosticTextEncoding = 'ISO-8859-1 byte-preserving'
-                    EfiMarkers = @(
-                        'uefi hypervisor: DMA isolation admission: PASS'
-                        'uefi hypervisor: BSP firmware return: PASS'
-                    )
                     HandoffStatus = $handoff
                     PayloadDiagnostic = $diagnostic
+                }
+                Evidence = [pscustomobject]@{
+                    EfiSerialPath = $efiSerialPath
+                    EfiSerialSha256 = (Get-TestFilePin $efiSerialPath).Sha256
+                    VmwareLogPath = $vmwareLogPath
+                    VmwareLogSha256 = (Get-TestFilePin $vmwareLogPath).Sha256
+                    VmwareLogStatus = 'COPIED'
                 }
                 VmwareDbAppendMarker = 'PASS_LOG_MARKER'
             }
@@ -598,9 +667,52 @@ try {
         }
 
         $validResult = New-TestSignedNativeVmResult
-        Assert-GpuPayloadVmResult -Result $validResult `
+        $null = Assert-GpuPayloadVmResult -Result $validResult `
+            -ControllerRunDirectory $controllerRunDirectory `
             -ExpectedVmxPath $validResult.Vm.VmxPath -ExpectedCertificateSha256 ('A' * 64)
         Assert-True $true 'strict SignedNative evidence with stopped/reverted VM is admitted'
+
+        $missingSerial = Copy-TestVmResult $validResult
+        $missingSerial.Evidence.EfiSerialPath = $null
+        Assert-Throws {
+            Assert-GpuPayloadVmResult -Result $missingSerial -ControllerRunDirectory $controllerRunDirectory `
+                -ExpectedVmxPath $validResult.Vm.VmxPath -ExpectedCertificateSha256 ('A' * 64)
+        } 'pinned EFI serial log' 'missing controller EFI serial evidence is rejected'
+
+        [IO.File]::WriteAllText($efiSerialPath, 'uefi hypervisor: DMA isolation admission: PASS', [Text.UTF8Encoding]::new($false))
+        $wrongMarker = Copy-TestVmResult $validResult
+        $wrongMarker.Evidence.EfiSerialSha256 = (Get-TestFilePin $efiSerialPath).Sha256
+        Assert-Throws {
+            Assert-GpuPayloadVmResult -Result $wrongMarker -ControllerRunDirectory $controllerRunDirectory `
+                -ExpectedVmxPath $validResult.Vm.VmxPath -ExpectedCertificateSha256 ('A' * 64)
+        } 'serial marker is missing' 'required BSP firmware-return marker must be present in the pinned serial file'
+
+        [IO.File]::WriteAllText($efiSerialPath, @(
+            'uefi hypervisor: DMA isolation admission: PASS'
+            'uefi hypervisor: BSP firmware return: PASS'
+            'uefi hypervisor: processor state: FAIL'
+        ) -join "`r`n", [Text.UTF8Encoding]::new($false))
+        $failureOverride = Copy-TestVmResult $validResult
+        $failureOverride.Evidence.EfiSerialSha256 = (Get-TestFilePin $efiSerialPath).Sha256
+        Assert-Throws {
+            Assert-GpuPayloadVmResult -Result $failureOverride -ControllerRunDirectory $controllerRunDirectory `
+                -ExpectedVmxPath $validResult.Vm.VmxPath -ExpectedCertificateSha256 ('A' * 64)
+        } 'failure marker' 'a failure marker must override the required EFI PASS lines'
+
+        [IO.File]::WriteAllText($efiSerialPath, @(
+            'uefi hypervisor: DMA isolation admission: PASS'
+            'uefi hypervisor: BSP firmware return: PASS'
+        ) -join "`r`n", [Text.UTF8Encoding]::new($false))
+        $tamperedSerial = Copy-TestVmResult $validResult
+        [IO.File]::AppendAllText($efiSerialPath, 'tampered')
+        Assert-Throws {
+            Assert-GpuPayloadVmResult -Result $tamperedSerial -ControllerRunDirectory $controllerRunDirectory `
+                -ExpectedVmxPath $validResult.Vm.VmxPath -ExpectedCertificateSha256 ('A' * 64)
+        } 'hash does not match' 'serial log modification after capture is rejected'
+        [IO.File]::WriteAllText($efiSerialPath, @(
+            'uefi hypervisor: DMA isolation admission: PASS'
+            'uefi hypervisor: BSP firmware return: PASS'
+        ) -join "`r`n", [Text.UTF8Encoding]::new($false))
 
         $invalidCases = @()
         $case = Copy-TestVmResult $validResult
@@ -647,6 +759,7 @@ try {
         foreach ($invalid in $invalidCases) {
             Assert-Throws {
                 Assert-GpuPayloadVmResult -Result $invalid.Result `
+                    -ControllerRunDirectory $controllerRunDirectory `
                     -ExpectedVmxPath $validResult.Vm.VmxPath -ExpectedCertificateSha256 ('A' * 64)
             } 'not|did not|missing|failed|cleanup|Secure Boot|certificate|SignedNative' `
                 "admission rejects $($invalid.Name)"
