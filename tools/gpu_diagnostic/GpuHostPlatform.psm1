@@ -694,6 +694,47 @@ function Assert-GpuThumbprintAndPrivateKey {
     return $expectedThumbprint
 }
 
+function Resolve-GpuEspPartition {
+    param([Parameter(Mandatory = $true)][string]$Volume)
+
+    Assert-GpuEspIdentity -Expected $Volume -Actual $Volume
+    # mountvol /S can expose a DOS mount without setting MSFT_Partition.DriveLetter.
+    # Resolve only the exact volume reported by mountvol /L, never a letter or the
+    # first partition with the ESP type.
+    $partitions = @(Get-Partition -ErrorAction Stop | Where-Object {
+        $hasVolume = $false
+        foreach ($accessPath in @(Get-GpuObjectProperty -Object $_ -Name 'AccessPaths')) {
+            if ([string]::Equals([string]$accessPath, $Volume, [StringComparison]::OrdinalIgnoreCase)) {
+                $hasVolume = $true
+                break
+            }
+        }
+        $hasVolume
+    })
+    if ($partitions.Count -ne 1) {
+        throw "Mounted ESP volume '$Volume' must resolve to exactly one partition; found $($partitions.Count)."
+    }
+    $partition = $partitions[0]
+    $expectedEspType = 'c12a7328-f81f-11d2-ba4b-00a0c93ec93b'
+    if ([string](Get-GpuObjectProperty -Object $partition -Name 'GptType') -notmatch ('(?i)^\{?' + $expectedEspType + '\}?$')) {
+        throw 'The mounted volume is not the GPT EFI System Partition type.'
+    }
+    $partitionGuid = ([string](Get-GpuObjectProperty -Object $partition -Name 'Guid')).Trim('{}')
+    $parsedGuid = [guid]::Empty
+    if ($partitionGuid -notmatch '^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$' -or
+        -not [guid]::TryParse($partitionGuid, [ref]$parsedGuid) -or $parsedGuid -eq [guid]::Empty) {
+        throw 'The mounted ESP partition GUID is missing or malformed.'
+    }
+    $diskNumber = 0
+    $partitionNumber = 0
+    if (-not [int]::TryParse([string](Get-GpuObjectProperty -Object $partition -Name 'DiskNumber'), [ref]$diskNumber) -or
+        -not [int]::TryParse([string](Get-GpuObjectProperty -Object $partition -Name 'PartitionNumber'), [ref]$partitionNumber) -or
+        $diskNumber -lt 0 -or $partitionNumber -le 0) {
+        throw 'The mounted ESP disk or partition number is missing or invalid.'
+    }
+    return $partition
+}
+
 function Get-GpuEspMount {
     param([string]$ActionDirectory)
 
@@ -707,20 +748,8 @@ function Get-GpuEspMount {
         $volumeResult = Invoke-GpuNativeCommand -Program $mountvol -Arguments @('S:', '/L') -ActionDirectory $ActionDirectory -Label 'identify-system-esp'
         Assert-GpuNativeSuccess -Result $volumeResult -Description 'Identifying the system ESP volume GUID'
         $volume = ((Get-Content -LiteralPath $volumeResult.StdoutPath -Raw -ErrorAction Stop).Trim())
-        if ($volume -notmatch '^\\\\\?\\Volume\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}\\$') {
-            throw "mountvol returned an invalid system ESP volume identity: $volume"
-        }
-        $partitions = @(Get-Partition -DriveLetter S -ErrorAction Stop)
-        if ($partitions.Count -ne 1) { throw "Expected one mounted ESP partition at S:; found $($partitions.Count)." }
-        $partition = $partitions[0]
-        $expectedEspType = 'c12a7328-f81f-11d2-ba4b-00a0c93ec93b'
-        if ([string]$partition.GptType -notmatch ('(?i)^\{?' + $expectedEspType + '\}?$')) {
-            throw 'The system S: partition is not the GPT EFI System Partition type.'
-        }
+        $partition = Resolve-GpuEspPartition -Volume $volume
         $partitionGuid = ([string]$partition.Guid).Trim('{}')
-        if ($partitionGuid -notmatch '^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$') {
-            throw 'The mounted ESP partition GUID is missing or malformed.'
-        }
         $disk = Get-Disk -Number ([int]$partition.DiskNumber) -ErrorAction Stop
         return [pscustomobject]@{
             Volume = $volume

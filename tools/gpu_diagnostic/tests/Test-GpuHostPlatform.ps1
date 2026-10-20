@@ -237,6 +237,143 @@ function Get-GpuPlatformTestMountedHashCalls {
     return $isolatedModule
 }
 
+function New-GpuEspFixtureModule {
+    param([string]$ModulePath, [string]$StatePath)
+
+    $platformNames = @(
+        'Get-GpuObjectProperty',
+        'Assert-GpuNativeSuccess',
+        'Resolve-GpuEspPartition',
+        'Get-GpuEspMount',
+        'Dismount-GpuEspMount'
+    )
+    $platformDefinitions = @(Get-PlatformFunctionTexts -Path $ModulePath -Names $platformNames)
+    $stateTokens = $null
+    $stateParseErrors = $null
+    $stateAst = [System.Management.Automation.Language.Parser]::ParseFile($StatePath, [ref]$stateTokens, [ref]$stateParseErrors)
+    if ($null -ne $stateParseErrors -and $stateParseErrors.Count -gt 0) {
+        throw "State helper module does not parse: $($stateParseErrors[0].Message)"
+    }
+    $stateFunctions = @($stateAst.FindAll({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true))
+    $stateDefinitions = @($stateFunctions | ForEach-Object { $_.Extent.Text })
+
+    # Every platform boundary is replaced by a deterministic fixture. The only
+    # real filesystem access is the synthetic mountvol stdout file under runRoot.
+    $fixtureDefinitions = @'
+$script:GpuEspFixtureScenario = $null
+$script:GpuEspFixturePartitionQueries = 0
+$script:GpuEspFixturePartitionUsedDriveLetter = $false
+$script:GpuEspFixtureDiskQueries = 0
+$script:GpuEspFixtureNativeCalls = New-Object 'System.Collections.Generic.List[object]'
+
+function Set-GpuEspFixtureScenario {
+    param([Parameter(Mandatory = $true)][object]$Scenario)
+    $script:GpuEspFixtureScenario = $Scenario
+    $script:GpuEspFixturePartitionQueries = 0
+    $script:GpuEspFixturePartitionUsedDriveLetter = $false
+    $script:GpuEspFixtureDiskQueries = 0
+    $script:GpuEspFixtureNativeCalls.Clear()
+}
+
+function Get-GpuEspFixtureObservations {
+    return [pscustomobject]@{
+        PartitionQueries = $script:GpuEspFixturePartitionQueries
+        PartitionUsedDriveLetter = $script:GpuEspFixturePartitionUsedDriveLetter
+        DiskQueries = $script:GpuEspFixtureDiskQueries
+        NativeCalls = @($script:GpuEspFixtureNativeCalls.ToArray())
+    }
+}
+
+function Get-PSDrive {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][string]$Name)
+    if ($Name -ieq 'S' -and [bool]$script:GpuEspFixtureScenario.SDriveOccupied) {
+        return [pscustomobject]@{ Name = 'S' }
+    }
+    return $null
+}
+
+function Test-Path {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $false)][string[]]$Path,
+        [Parameter(Mandatory = $false)][string[]]$LiteralPath,
+        [Parameter(Mandatory = $false)][ValidateSet('Any', 'Container', 'Leaf')][string]$PathType = 'Any'
+    )
+    $candidate = if ($PSBoundParameters.ContainsKey('LiteralPath')) { [string]$LiteralPath[0] } else { [string]$Path[0] }
+    if ([string]::Equals($candidate, 'S:\', [System.StringComparison]::OrdinalIgnoreCase)) {
+        return [bool]$script:GpuEspFixtureScenario.SPathOccupied
+    }
+    $arguments = @{}
+    if ($PSBoundParameters.ContainsKey('LiteralPath')) { $arguments.LiteralPath = $LiteralPath } else { $arguments.Path = $Path }
+    if ($PSBoundParameters.ContainsKey('PathType')) { $arguments.PathType = $PathType }
+    if ($PSBoundParameters.ContainsKey('ErrorAction')) { $arguments.ErrorAction = $PSBoundParameters['ErrorAction'] }
+    return Microsoft.PowerShell.Management\Test-Path @arguments
+}
+
+function Get-GpuApplicationPath {
+    param([Parameter(Mandatory = $true)][string]$Name)
+    if ($Name -cne 'mountvol.exe') { throw "TEST MOCK DENIED: unexpected executable lookup: $Name" }
+    return 'fixture-mountvol.exe'
+}
+
+function Invoke-GpuNativeCommand {
+    param(
+        [Parameter(Mandatory = $true)][string]$Program,
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [Parameter(Mandatory = $true)][string]$ActionDirectory,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    if ($Program -cne 'fixture-mountvol.exe') { throw "TEST MOCK DENIED: unexpected native program: $Program" }
+    [void]$script:GpuEspFixtureNativeCalls.Add([pscustomobject]@{ Label = $Label; Arguments = @($Arguments) })
+    $succeeded = $true
+    if ($Label -ceq 'mount-system-esp') { $succeeded = [bool]$script:GpuEspFixtureScenario.MountSucceeded }
+    elseif ($Label -ceq 'identify-system-esp') { $succeeded = [bool]$script:GpuEspFixtureScenario.IdentifySucceeded }
+    elseif ($Label -cne 'unmount-owned-system-esp') { throw "TEST MOCK DENIED: unexpected native action: $Label" }
+
+    $stdoutPath = $null
+    if ($Label -ceq 'identify-system-esp' -and $succeeded) {
+        $stdoutPath = Join-Path $script:GpuEspFixtureScenario.OutputRoot 'mountvol-volume.txt'
+        [System.IO.File]::WriteAllText($stdoutPath, [string]$script:GpuEspFixtureScenario.VolumeText, (New-Object System.Text.UTF8Encoding($false)))
+    }
+    return [pscustomobject]@{ Succeeded = $succeeded; ExitCode = if ($succeeded) { 0 } else { 1 }; ReceiptPath = 'fixture-native-receipt.json'; StdoutPath = $stdoutPath }
+}
+
+function Get-Partition {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $false)][string]$DriveLetter)
+    $script:GpuEspFixturePartitionQueries++
+    $script:GpuEspFixturePartitionUsedDriveLetter = $PSBoundParameters.ContainsKey('DriveLetter')
+    if (-not [string]::IsNullOrWhiteSpace([string]$script:GpuEspFixtureScenario.PartitionQueryError)) {
+        throw [string]$script:GpuEspFixtureScenario.PartitionQueryError
+    }
+    return @($script:GpuEspFixtureScenario.Partitions)
+}
+
+function Get-Disk {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][int]$Number)
+    $script:GpuEspFixtureDiskQueries++
+    if (-not [string]::IsNullOrWhiteSpace([string]$script:GpuEspFixtureScenario.DiskQueryError)) {
+        throw [string]$script:GpuEspFixtureScenario.DiskQueryError
+    }
+    if ($Number -ne [int]$script:GpuEspFixtureScenario.Disk.Number) { throw "TEST MOCK DENIED: unexpected disk number $Number" }
+    return $script:GpuEspFixtureScenario.Disk
+}
+'@
+    $source = @(
+        'Set-StrictMode -Version 2.0'
+        $stateDefinitions
+        $platformDefinitions
+        $fixtureDefinitions
+        "Export-ModuleMember -Function 'Set-GpuEspFixtureScenario','Get-GpuEspFixtureObservations'"
+    ) -join "`r`n"
+    $fixtureModule = New-Module -Name ('GpuEspFixture' + [guid]::NewGuid().ToString('N')) `
+        -ScriptBlock ([scriptblock]::Create($source))
+    Import-Module -ModuleInfo $fixtureModule -Force -ErrorAction Stop
+    return $fixtureModule
+}
+
 $workspaceRoot = Split-Path -Parent (Split-Path -Parent $ToolRoot)
 $scratchParent = Join-Path $workspaceRoot '.codex-build\gpu-host-platform-tests'
 $null = Assert-GpuPathWithin -Path $scratchParent -Root $workspaceRoot
@@ -308,6 +445,165 @@ try {
         Assert-PlatformThrows { Assert-GpuThumbprintAndPrivateKey -CertificatePath $wrongCertificatePath } `
             'A different valid public certificate was accepted.' 'does not match the pinned project thumbprint'
         Assert-PlatformEqual 0 (@(Get-GpuPlatformTestStoreQueries).Count) 'Wrong valid certificate reached the certificate store lookup.'
+    }
+
+    Invoke-PlatformTestCase 'Exact ESP volume resolver validates partition identity and rejects ambiguity or malformed metadata' {
+        $espFixtureModule = New-GpuEspFixtureModule -ModulePath $platformPath -StatePath $stateModulePath
+        try {
+            $volume = '\\?\Volume{187BC913-7576-4E6E-8D54-18EEB5C38FCD}\'
+            $otherVolume = '\\?\Volume{287BC913-7576-4E6E-8D54-18EEB5C38FCD}\'
+            $validGuid = 'A12B3456-7890-4ABC-8DEF-0123456789AB'
+            $makePartition = {
+                param([string[]]$AccessPaths, [hashtable]$Overrides)
+                $values = [ordered]@{
+                    DriveLetter = $null
+                    AccessPaths = @($AccessPaths)
+                    GptType = '{C12A7328-F81F-11D2-BA4B-00A0C93EC93B}'
+                    Guid = '{A12B3456-7890-4ABC-8DEF-0123456789AB}'
+                    DiskNumber = 0
+                    PartitionNumber = 2
+                }
+                if ($null -ne $Overrides) { foreach ($key in $Overrides.Keys) { $values[$key] = $Overrides[$key] } }
+                return [pscustomobject]$values
+            }
+            $makeScenario = {
+                param([object[]]$Partitions, [string]$PartitionQueryError)
+                return [pscustomobject]@{
+                    Partitions = @($Partitions)
+                    PartitionQueryError = $PartitionQueryError
+                    DiskQueryError = ''
+                    Disk = [pscustomobject]@{ Number = 0; UniqueId = 'fixture-disk-unique-id' }
+                    VolumeText = $volume
+                    OutputRoot = $runRoot
+                    MountSucceeded = $true
+                    IdentifySucceeded = $true
+                    SDriveOccupied = $false
+                    SPathOccupied = $false
+                }
+            }
+            $invokeResolve = {
+                param([string]$RequestedVolume)
+                return & $espFixtureModule { param($Value) Resolve-GpuEspPartition -Volume $Value } $RequestedVolume
+            }
+            $expectResolveFailure = {
+                param([string]$Name, [string]$RequestedVolume, [object[]]$Partitions, [string]$Pattern, [int]$ExpectedQueries, [string]$QueryError)
+                $scenario = & $makeScenario $Partitions $QueryError
+                Set-GpuEspFixtureScenario -Scenario $scenario
+                Assert-PlatformThrows { & $invokeResolve $RequestedVolume } "$Name was accepted." $Pattern
+                $observations = Get-GpuEspFixtureObservations
+                Assert-PlatformEqual $ExpectedQueries $observations.PartitionQueries "$Name issued the wrong number of Storage queries."
+                Assert-PlatformTrue (-not [bool]$observations.PartitionUsedDriveLetter) "$Name attempted letter-based partition lookup."
+            }
+
+            $validPartition = & $makePartition @($volume.ToLowerInvariant()) @{}
+            $validScenario = & $makeScenario @($validPartition) ''
+            Set-GpuEspFixtureScenario -Scenario $validScenario
+            $resolved = & $invokeResolve $volume
+            Assert-PlatformTrue ([object]::ReferenceEquals($resolved, $validPartition)) 'Resolver did not return the original partition object for a case-insensitive exact volume match.'
+            $observations = Get-GpuEspFixtureObservations
+            Assert-PlatformEqual 1 $observations.PartitionQueries 'Valid resolution did not make one partition query.'
+            Assert-PlatformTrue (-not [bool]$observations.PartitionUsedDriveLetter) 'Valid resolution used a drive-letter partition query.'
+
+            $wrongVolumePartition = & $makePartition @($otherVolume) @{}
+            & $expectResolveFailure 'Wrong volume mapping' $volume @($wrongVolumePartition) 'exactly one partition' 1 ''
+            & $expectResolveFailure 'No volume match' $volume @() 'exactly one partition' 1 ''
+            $ambiguousPartitions = @((& $makePartition @($volume) @{}), (& $makePartition @($volume.ToLowerInvariant()) @{ PartitionNumber = 3 }))
+            & $expectResolveFailure 'Ambiguous volume mapping' $volume $ambiguousPartitions 'exactly one partition' 1 ''
+            & $expectResolveFailure 'Malformed volume identity' 'not-a-volume-guid' @($validPartition) 'ESP identity' 0 ''
+            & $expectResolveFailure 'Wrong GPT partition type' $volume @((& $makePartition @($volume) @{ GptType = 'basic-data' })) 'not the GPT EFI System Partition' 1 ''
+            & $expectResolveFailure 'Missing partition GUID' $volume @((& $makePartition @($volume) @{ Guid = $null })) 'GUID is missing or malformed' 1 ''
+            & $expectResolveFailure 'Malformed partition GUID' $volume @((& $makePartition @($volume) @{ Guid = 'bad-guid' })) 'GUID is missing or malformed' 1 ''
+            & $expectResolveFailure 'Zero partition GUID' $volume @((& $makePartition @($volume) @{ Guid = '00000000-0000-0000-0000-000000000000' })) 'GUID is missing or malformed' 1 ''
+            & $expectResolveFailure 'Invalid disk number' $volume @((& $makePartition @($volume) @{ DiskNumber = -1 })) 'disk or partition number is missing or invalid' 1 ''
+            & $expectResolveFailure 'Invalid partition number' $volume @((& $makePartition @($volume) @{ PartitionNumber = 0 })) 'disk or partition number is missing or invalid' 1 ''
+            & $expectResolveFailure 'Null disk number' $volume @((& $makePartition @($volume) @{ DiskNumber = $null })) 'disk or partition number is missing or invalid' 1 ''
+            & $expectResolveFailure 'Empty disk number' $volume @((& $makePartition @($volume) @{ DiskNumber = '' })) 'disk or partition number is missing or invalid' 1 ''
+            & $expectResolveFailure 'Null partition number' $volume @((& $makePartition @($volume) @{ PartitionNumber = $null })) 'disk or partition number is missing or invalid' 1 ''
+            & $expectResolveFailure 'Empty partition number' $volume @((& $makePartition @($volume) @{ PartitionNumber = '' })) 'disk or partition number is missing or invalid' 1 ''
+            & $expectResolveFailure 'Storage query error' $volume @() 'synthetic partition query failure' 1 'synthetic partition query failure'
+        }
+        finally {
+            if ($null -ne $espFixtureModule) { Remove-Module -ModuleInfo $espFixtureModule -Force -ErrorAction SilentlyContinue }
+        }
+    }
+
+    Invoke-PlatformTestCase 'ESP mount uses exact volume resolution and dismounts only mappings acquired by this action' {
+        $espFixtureModule = New-GpuEspFixtureModule -ModulePath $platformPath -StatePath $stateModulePath
+        try {
+            $volume = '\\?\Volume{187BC913-7576-4E6E-8D54-18EEB5C38FCD}\'
+            $validPartition = [pscustomobject]@{
+                DriveLetter = $null
+                AccessPaths = @($volume)
+                GptType = 'c12a7328-f81f-11d2-ba4b-00a0c93ec93b'
+                Guid = '{A12B3456-7890-4ABC-8DEF-0123456789AB}'
+                DiskNumber = 0
+                PartitionNumber = 2
+            }
+            $disk = [pscustomobject]@{ Number = 0; UniqueId = 'fixture-disk-unique-id' }
+            $stdoutRoot = Join-Path $runRoot 'esp-mount-fixture'
+            [void](New-Item -ItemType Directory -Path $stdoutRoot -Force)
+            $scenario = [pscustomobject]@{
+                Partitions = @($validPartition)
+                PartitionQueryError = ''
+                DiskQueryError = ''
+                Disk = $disk
+                VolumeText = $volume
+                OutputRoot = $stdoutRoot
+                MountSucceeded = $true
+                IdentifySucceeded = $true
+                SDriveOccupied = $false
+                SPathOccupied = $false
+            }
+            $invokeMount = {
+                return & $espFixtureModule { param($Directory) Get-GpuEspMount -ActionDirectory $Directory } $stdoutRoot
+            }
+            $getObservations = { Get-GpuEspFixtureObservations }
+            $setScenario = { param($Value) Set-GpuEspFixtureScenario -Scenario $Value }
+
+            & $setScenario $scenario
+            $mount = & $invokeMount
+            Assert-PlatformEqual $volume $mount.Volume 'ESP mount returned the wrong mountvol volume identity.'
+            Assert-PlatformEqual 0 $mount.DiskNumber 'ESP mount returned the wrong disk number.'
+            Assert-PlatformEqual 'fixture-disk-unique-id' $mount.DiskUniqueId 'ESP mount returned the wrong disk identity.'
+            Assert-PlatformEqual 2 $mount.PartitionNumber 'ESP mount returned the wrong partition number.'
+            Assert-PlatformEqual 'A12B3456-7890-4ABC-8DEF-0123456789AB' $mount.PartitionGuid 'ESP mount did not normalize the partition GUID.'
+            $observations = & $getObservations
+            Assert-PlatformEqual 1 $observations.PartitionQueries 'ESP mount did not resolve one exact partition.'
+            Assert-PlatformTrue (-not [bool]$observations.PartitionUsedDriveLetter) 'ESP mount queried partition by S: instead of AccessPaths.'
+            Assert-PlatformEqual 1 $observations.DiskQueries 'ESP mount did not query exactly the resolved disk.'
+            Assert-PlatformEqual 0 (@($observations.NativeCalls | Where-Object { $_.Label -ceq 'unmount-owned-system-esp' }).Count) 'Successful mount was unexpectedly dismounted before returning.'
+
+            $scenario.Partitions = @()
+            & $setScenario $scenario
+            Assert-PlatformThrows { & $invokeMount } 'Unresolvable mounted ESP did not fail.' 'exactly one partition'
+            $observations = & $getObservations
+            Assert-PlatformEqual 1 (@($observations.NativeCalls | Where-Object { $_.Label -ceq 'unmount-owned-system-esp' }).Count) 'Resolution failure did not dismount exactly once.'
+            Assert-PlatformEqual 0 $observations.DiskQueries 'Unresolvable ESP reached Get-Disk.'
+
+            $scenario.SDriveOccupied = $true
+            & $setScenario $scenario
+            Assert-PlatformThrows { & $invokeMount } 'Occupied S: drive was accepted.' 'S: is already assigned'
+            $observations = & $getObservations
+            Assert-PlatformEqual 0 $observations.NativeCalls.Count 'Occupied S: triggered mountvol or dismount.'
+
+            $scenario.SDriveOccupied = $false
+            $scenario.SPathOccupied = $true
+            & $setScenario $scenario
+            Assert-PlatformThrows { & $invokeMount } 'Occupied S: path was accepted.' 'S: already resolves'
+            $observations = & $getObservations
+            Assert-PlatformEqual 0 $observations.NativeCalls.Count 'Occupied S: path triggered mountvol or dismount.'
+
+            $scenario.SPathOccupied = $false
+            $scenario.MountSucceeded = $false
+            & $setScenario $scenario
+            Assert-PlatformThrows { & $invokeMount } 'Failed mountvol /S was accepted.' 'Mounting the system ESP at S: failed'
+            $observations = & $getObservations
+            Assert-PlatformEqual 1 $observations.NativeCalls.Count 'Failed mount issued unexpected follow-up native commands.'
+            Assert-PlatformEqual 0 (@($observations.NativeCalls | Where-Object { $_.Label -ceq 'unmount-owned-system-esp' }).Count) 'Failed mount attempted to dismount a mapping it never acquired.'
+        }
+        finally {
+            if ($null -ne $espFixtureModule) { Remove-Module -ModuleInfo $espFixtureModule -Force -ErrorAction SilentlyContinue }
+        }
     }
 
     Invoke-PlatformTestCase 'Real module force imports preserve caller State commands and failure receipt writes' {

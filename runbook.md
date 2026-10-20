@@ -82,7 +82,7 @@ Sign also audits the signed hypervisor image and verifies its pinned Authenticod
 
 ### 5. Capture ESP and recovery evidence
 
-The script selects and validates the current GPT system ESP, captures the original EFI tree and boot-manager hash, records a non-empty TPM/replay log readback, and writes the run-specific backup to the configured external recovery disk. Review the receipt and recovery copy before continuing. It refuses existing stage files or ambiguous/recovery residue; preserve and investigate those files rather than deleting them.
+The script selects and validates the current GPT system ESP, captures the original EFI tree and boot-manager hash, records a non-empty TPM/replay log readback, and writes the run-specific backup to the configured external recovery disk. It resolves the exact volume GUID reported by `mountvol S: /L` against partition access paths; a temporary `mountvol /S` mount need not populate the partition's Storage `DriveLetter`. It requires exactly one matching GPT EFI partition and a valid partition identity. Review the receipt and recovery copy before continuing. It refuses existing stage files or ambiguous/recovery residue; preserve and investigate those files rather than deleting them.
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Backup
@@ -169,7 +169,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees
 
 Rollback does not automatically power-cycle the machine. After an Arm intent, it can return `RECOVERY_PENDING_USER_POWER_CYCLE`; follow the recorded recovery result, shut down/power-cycle manually, and run `FinalVerify` only where the action state permits it. Rollback does not remove staged ESP files automatically. Do not delete them recursively; preserve them for exact, reviewed cleanup.
 
-If Prepare, Build, or Sign failed and the saved run has neither an Arm intent nor an ESP backup, rollback reports `DISARMED_NO_ACTIVATION` without invoking the installer or mounting the ESP. When the probe has been built and pinned, FinalVerify requires its per-CPU `ABSENT` result; an unbuilt probe is allowed only for an earlier abort. Close that exact run with the following checks, one successful action at a time:
+If Prepare, Build, Sign, or Backup failed and the saved run has neither an Arm intent nor an ESP backup, rollback reports `DISARMED_NO_ACTIVATION` without invoking the installer or mounting the ESP. After a failed Backup that acquired the temporary ESP mount, first require a successful `unmount-owned-system-esp` receipt and verify the owned `S:` mapping is gone. If cleanup failed, preserve the receipts and stop for reviewed mount recovery; do not remove an unrelated assignment. When the probe has been built and pinned, FinalVerify requires its per-CPU `ABSENT` result; an unbuilt probe is allowed only for an earlier abort. Close that exact run with the following checks, one successful action at a time:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 FinalVerify
