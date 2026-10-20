@@ -117,6 +117,36 @@ The opt-in preview reports no host changes. Fresh native observations and the
 final journal transition still require the operator's elevated invocation;
 these development checks do not themselves complete the run.
 
+### Reviewed verification interrupted by a module reload
+
+The reviewed FinalVerify action at `2026-10-20T21:26:30Z` saved fresh 20-CPU
+ABSENT health, matching reviewed firmware text, two identical raw boot-selection
+captures with zero findings, and successful boot-manager integrity commands.
+Its owned ESP unmount receipt also succeeded. Journal completion and the
+failure receipt then failed because `Write-GpuJson` was no longer visible in
+the dispatcher. The journal retains phase `Disarmed` and the interrupted
+FinalVerify intent; these observations do not establish completion.
+
+Isolated Windows PowerShell reproduction with the actual modules identified
+the cause: force-importing `GpuHostState.psm1` from a nested module removes
+its exports from the caller. The retirement operations factory performs that
+same forced import. The repair reuses loaded dependencies and builds the
+review callbacks around existing private capture functions, leaving the
+pinned retirement module unchanged. A regression test exercises the actual
+wrapper and public helper imports, checks caller command visibility, and
+writes fixture journal and failure JSON through the real state writer.
+All 17 assertions passed, including the replacement capture callback wiring.
+Restoring the forced state import in the isolated module copy reproduced the
+missing-writer failure, confirming that the regression test detects the bug.
+
+The saved review receipt and its cited immutable evidence still pass offline
+validation without journal changes or native queries. Retry
+`FinalVerify -ReviewedFirmwareDifference` through the normal dispatcher; its
+existing recovery rule accepts interrupted FinalVerify in phase `Disarmed`.
+No manual journal repair, baseline replacement, new rollback, or additional
+reset is required for this writer failure. Recovery remains incomplete until
+the operator receives the successful final status and phase `Complete`.
+
 ## Second physical run: entry returned EFI_ABORTED
 
 Run `gpu-20261020T150318Z-59a346ed3cb8422bafe4be60268b7df1` used clean source

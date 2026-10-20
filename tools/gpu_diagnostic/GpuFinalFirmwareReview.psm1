@@ -498,9 +498,11 @@ function Invoke-GpuReviewedFinalFirmware {
         Description='Current GPU final firmware review helper'
     }
 
-    $stateModule = Import-Module -Name $stateModulePath -Force -DisableNameChecking -PassThru -ErrorAction Stop | Select-Object -First 1
-    $platformModule = Import-Module -Name $platformModulePath -Force -DisableNameChecking -PassThru -ErrorAction Stop | Select-Object -First 1
-    $retirementModule = Import-Module -Name $retirementModulePath -Force -DisableNameChecking -PassThru -ErrorAction Stop | Select-Object -First 1
+    # Reuse dependencies already loaded by the dispatcher. Force-reloading them
+    # from this nested module removes their exports from the caller's scope.
+    $stateModule = Import-Module -Name $stateModulePath -DisableNameChecking -PassThru -ErrorAction Stop | Select-Object -First 1
+    $platformModule = Import-Module -Name $platformModulePath -DisableNameChecking -PassThru -ErrorAction Stop | Select-Object -First 1
+    $retirementModule = Import-Module -Name $retirementModulePath -DisableNameChecking -PassThru -ErrorAction Stop | Select-Object -First 1
     $reviewRoot = Join-Path $workspaceRoot '.analysis\gpu-final-firmware-review\8abb7b84ca644a7c84019a1f29b35bb4'
     $receiptPath = Join-Path $reviewRoot 'result.json'
     $null = & $stateModule { param($p,$r) Assert-GpuPathWithin -Path $p -Root $r -MustExist } $receiptPath $workspaceRoot
@@ -508,12 +510,10 @@ function Invoke-GpuReviewedFinalFirmware {
     Assert-GpuFinalReviewPinRecord $receiptPin $receiptPath $script:GpuFinalReviewAuditResultSha256 $script:GpuFinalReviewAuditResultBytes 'Pinned successful firmware review receipt'
     $reviewReceipt = & $stateModule { param($p) Read-GpuJson -Path $p } $receiptPath
     $auditToolPath = Join-Path $workspaceRoot '.codex-build\gpu-stage-retirement-audit\readonly-v1\ibaudit.exe'
-    $nativeOperations = & $retirementModule {
-        param($root,$auditPath)
-        New-GpuStageRetirementPlatformOperations -ToolRoot (Join-Path $root 'tools\gpu_diagnostic') -AuditToolPath $auditPath `
-            -ExpectedAuditToolSha256 'C16517939C887A7991DF4A0CDF05604AEC030141D9DA1FC45FDE8E989EC599A4' -ExpectedAuditToolBytes 246784 `
-            -ExpectedReferenceLogSha256 '8876361480AC4D7A7E1FFD89AD830D3A601EE6323E0695C2A7FB6DE7A9F2EDF0' -ExpectedReferenceLogBytes 40838
-    } $sourceRoot $auditToolPath
+    $auditToolHash = $script:GpuFinalReviewIbauditSha256
+    $auditToolBytes = $script:GpuFinalReviewIbauditBytes
+    $logHash = $script:GpuFinalReviewReferenceLogSha256
+    $logBytes = $script:GpuFinalReviewReferenceLogBytes
     $operations = @{
         Receipt=$reviewReceipt; ReceiptPin=$receiptPin; StateModule=$stateModule; PlatformModule=$platformModule
         HelperPin=$helperPin; PlatformPin=$platformPin
@@ -528,8 +528,27 @@ function Invoke-GpuReviewedFinalFirmware {
             $platformPin
         )
         AssertImmutablePin={ param($pin) $actual=& $stateModule { param($p) Get-GpuFilePin -Path $p } ([string]$pin.Path); if($actual.Sha256 -cne [string]$pin.Sha256 -or $actual.Bytes -ne [long]$pin.Bytes){throw "$($pin.Description) changed during final firmware review."} }.GetNewClosure()
-        CaptureBootSelection=$nativeOperations.CaptureBootSelection
-        CaptureFirmware=$nativeOperations.CaptureFirmware
+        CaptureBootSelection={
+            param($runState,$directory,$checkpoint)
+            & $retirementModule {
+                param($s,$d,$c,$tool,$platform,$toolHash,$toolBytes,$referenceHash,$referenceBytes)
+                Invoke-GpuStageRetirementBootSelectionCapture -State $s -ActionDirectory $d -Checkpoint $c `
+                    -AuditToolPath $tool -PlatformModule $platform -ExpectedToolHash $toolHash `
+                    -ExpectedToolBytes $toolBytes -ExpectedLogHash $referenceHash -ExpectedLogBytes $referenceBytes
+            } $runState $directory $checkpoint $auditToolPath $platformModule $auditToolHash $auditToolBytes $logHash $logBytes
+        }.GetNewClosure()
+        CaptureFirmware={
+            param($directory)
+            $capture = & $platformModule {
+                param($d)
+                $program = Get-GpuApplicationPath 'bcdedit.exe'
+                Invoke-GpuNativeCommand -Program $program -Arguments @('/enum','firmware','/v') `
+                    -ActionDirectory $d -Label 'final-firmware-review'
+            } $directory
+            if (-not $capture.Succeeded) { throw "Firmware enumeration failed with exit $($capture.ExitCode)." }
+            $pin = & $stateModule { param($p) Get-GpuFilePin -Path $p } $capture.StdoutPath
+            [pscustomobject]@{ Text=[IO.File]::ReadAllText($capture.StdoutPath); Pin=$pin; ReceiptPath=$capture.ReceiptPath }
+        }.GetNewClosure()
         AssertBootSelectionStable={ param($before,$after) & $retirementModule { param($b,$a) Assert-GpuStageRetirementBootSelectionStable -Before $b -Current $a -Checkpoint 'during final firmware review' } $before $after }.GetNewClosure()
     }
     return Invoke-GpuFinalFirmwareReviewCore -State $State -CurrentHost $CurrentHost -CurrentFirmwarePin $CurrentFirmwarePin -ActionDirectory $ActionDirectory -Operations $operations

@@ -1795,7 +1795,7 @@ function Invoke-GpuFinalFirmwareReview {
 
     $modulePath = Join-Path $PSScriptRoot 'GpuFinalFirmwareReview.psm1'
     $null = Assert-GpuPathWithin -Path $modulePath -Root ([string]$State.SourceRoot) -MustExist
-    $reviewModule = Import-Module $modulePath -Force -DisableNameChecking -PassThru -ErrorAction Stop | Select-Object -First 1
+    $reviewModule = Import-Module $modulePath -DisableNameChecking -PassThru -ErrorAction Stop | Select-Object -First 1
     return & $reviewModule {
         param($s,$hostSnapshot,$firmwarePin,$directory)
         Invoke-GpuReviewedFinalFirmware -State $s -CurrentHost $hostSnapshot -CurrentFirmwarePin $firmwarePin -ActionDirectory $directory

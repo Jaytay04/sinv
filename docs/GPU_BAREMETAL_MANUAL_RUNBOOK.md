@@ -382,7 +382,18 @@ and the selector/journal were unchanged. The inspector ran with the module
 pins from revision `485d6de`; preserve that receipt rather than rerunning it
 after the recovery code changes.
 
-For this exact reviewed difference, run:
+The first reviewed FinalVerify attempt at `2026-10-20T21:26:30Z` exposed a
+PowerShell module-scope bug: nested forced imports removed `Write-GpuJson`
+from the dispatcher's scope. Its read-only captures and successful ESP unmount
+receipt were saved, but the completion journal and failure receipt could not
+be written. The journal remains `Disarmed` with an interrupted `FinalVerify`
+intent. Preserve that action directory. The repaired helper reuses loaded
+modules and avoids the retirement factory's forced imports; it does not edit
+the journal or relax any review gate.
+
+The state machine permits retrying FinalVerify from this interrupted
+`Disarmed` state. No additional rollback or reset is required for this writer
+failure. For this exact reviewed difference, run:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 FinalVerify -ReviewedFirmwareDifference
