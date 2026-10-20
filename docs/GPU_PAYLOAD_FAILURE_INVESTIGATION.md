@@ -85,6 +85,38 @@ saved inputs; no raw capture or host query ran, and selector/journal hashes
 remained unchanged. Elevated physical-host observation remains an operator
 step. These checks do not mark FinalVerify successful or authorize Archive.
 
+### Read-only firmware inspection passed
+
+The operator's inspection succeeded. The result at
+`.analysis/gpu-final-firmware-review/8abb7b84ca644a7c84019a1f29b35bb4/result.json`
+is 16,924 bytes, SHA-256
+`BEA6DCA1FC904B13830908471D6239A906F71AA6937630B32CBA6DC3C2C023D9`.
+The two 259-byte raw boot-selection captures both hash to
+`B5D4EB51A58A2170EBCA905749E2BDAD177CFD71629A1079A14934F3F5BF63D0`.
+They report BootNext absent, BootOrder `[0,1,2,3,4,5]`, expected boot-manager
+and reference-log hashes, and zero findings. Both accompanying integrity
+commands exited zero. Fresh health passed expected ABSENT on all 20 CPUs;
+Secure Boot remained on, the reviewed firmware text stayed stable, and owned
+ESP cleanup succeeded. The selector and journal hashes stayed unchanged.
+
+This evidence supports a bounded review of the known textual difference.
+`FinalVerify -ReviewedFirmwareDifference` requires this exact pinned receipt,
+run, original/current capture pair, and post-reset session, plus ordinary final
+checks and fresh raw observations. It leaves textual equality false and records
+review acceptance separately. Neither the source baseline nor the failed
+FinalVerify result is rewritten. The default FinalVerify remains strict.
+No new physical boot, TPM operation, firmware write, or GPU activation is part
+of this recovery review. Historical raw equality and unreferenced Boot
+variables remain outside the evidence's scope.
+
+The review helper's fixture checks passed 5 cases with 19 assertions; platform
+verification passed 18 cases with 406 assertions, and dispatcher/state checks
+passed 51 cases with 514 assertions. The actual saved receipt and its cited
+evidence also passed offline validation with no native query or journal change.
+The opt-in preview reports no host changes. Fresh native observations and the
+final journal transition still require the operator's elevated invocation;
+these development checks do not themselves complete the run.
+
 ## Second physical run: entry returned EFI_ABORTED
 
 Run `gpu-20261020T150318Z-59a346ed3cb8422bafe4be60268b7df1` used clean source

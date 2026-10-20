@@ -1789,11 +1789,29 @@ function Invoke-GpuDisarm {
     })
 }
 
+function Invoke-GpuFinalFirmwareReview {
+    param([object]$State, [object]$CurrentHost, [object]$CurrentFirmwarePin,
+          [string]$ActionDirectory)
+
+    $modulePath = Join-Path $PSScriptRoot 'GpuFinalFirmwareReview.psm1'
+    $null = Assert-GpuPathWithin -Path $modulePath -Root ([string]$State.SourceRoot) -MustExist
+    $reviewModule = Import-Module $modulePath -Force -DisableNameChecking -PassThru -ErrorAction Stop | Select-Object -First 1
+    return & $reviewModule {
+        param($s,$hostSnapshot,$firmwarePin,$directory)
+        Invoke-GpuReviewedFinalFirmware -State $s -CurrentHost $hostSnapshot -CurrentFirmwarePin $firmwarePin -ActionDirectory $directory
+    } $State $CurrentHost $CurrentFirmwarePin $ActionDirectory
+}
+
 function Invoke-GpuFinalVerify {
-    param([object]$State, [string]$ActionDirectory)
+    param([object]$State, [string]$ActionDirectory, [switch]$ReviewedFirmwareDifference)
 
     Assert-GpuAdministrator
     $errors = New-Object System.Collections.Generic.List[string]
+    $firmwareReviewAccepted = $false
+    if ($ReviewedFirmwareDifference -and
+        [string](Get-GpuObjectProperty -Object $State -Name 'RunId') -cne 'gpu-20261020T201140Z-6e6e86230a2549b28be3274dfe56cec7') {
+        $errors.Add('The reviewed firmware difference applies only to the fixed 201140 run.')
+    }
     $current = $null
     $preparedHost = Get-GpuObjectProperty -Object $State -Name 'Host'
     $hostIdentityValid = $false
@@ -1886,7 +1904,22 @@ function Invoke-GpuFinalVerify {
                     Meaning = 'Textual bcdedit enumeration comparison with the system ESP mounted at S: for both captures; not a raw firmware-variable attestation.'
                 }
                 if ($null -ne $baselineText -and -not [bool]$firmwareComparison.TextEqual) {
-                    $errors.Add('Firmware enumeration differs from the saved textual baseline.')
+                    if ($ReviewedFirmwareDifference) {
+                        $firmwareComparison | Add-Member -NotePropertyName ReviewedDifferenceAccepted -NotePropertyValue $false
+                        if ($errors.Count -eq 0 -and $everArm -and $resetBoundaryPassed -and
+                            [string](Get-GpuObjectProperty -Object $State -Name 'Phase') -ceq 'Disarmed') {
+                            $review = Invoke-GpuFinalFirmwareReview -State $State -CurrentHost $current -CurrentFirmwarePin $currentPin -ActionDirectory $ActionDirectory
+                            if ($null -eq $review -or $review.Accepted -isnot [bool] -or $review.Accepted -ne $true) {
+                                throw 'The fixed firmware-difference review did not accept the fresh observations.'
+                            }
+                            $firmwareReviewAccepted = $true
+                            $firmwareComparison.ReviewedDifferenceAccepted = $true
+                            $firmwareComparison | Add-Member -NotePropertyName ReviewedDifference -NotePropertyValue $review
+                        }
+                    }
+                    if (-not $firmwareReviewAccepted) {
+                        $errors.Add('Firmware enumeration differs from the saved textual baseline.')
+                    }
                 }
             }
             catch { $errors.Add("Firmware enumeration comparison: $($_.Exception.Message)") }
@@ -1908,6 +1941,9 @@ function Invoke-GpuFinalVerify {
     $status = 'FINAL_VERIFY_FAILED_GPU_UNATTESTED'
     if ($aborted) { $status = 'ABORTED_RECOVERED_NO_GPU_PROOF'; $succeeded = $false }
     elseif ($succeeded -and -not $everArm -and $null -eq $backup) { $status = 'VERIFIED_ABORTED_NO_ACTIVATION' }
+    elseif ($succeeded -and $everArm -and $firmwareReviewAccepted) {
+        $status = 'FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED'
+    }
     elseif ($succeeded -and $everArm) { $status = 'FINAL_RESET_VERIFIED_GPU_UNATTESTED' }
     elseif ($succeeded) { $status = 'FINAL_STATE_VERIFIED_GPU_UNATTESTED' }
     $verification = [pscustomobject]@{
@@ -1939,9 +1975,13 @@ function Invoke-GpuHostPlatformAction {
         [Parameter(Mandatory = $true)][psobject]$State,
         [Parameter(Mandatory = $true)][string]$ActionDirectory,
         [Parameter(Mandatory = $false)][switch]$PhysicalOutputConfirmed,
-        [Parameter(Mandatory = $false)][switch]$RecoveryReady
+        [Parameter(Mandatory = $false)][switch]$RecoveryReady,
+        [Parameter(Mandatory = $false)][switch]$ReviewedFirmwareDifference
     )
 
+    if ($ReviewedFirmwareDifference -and $Action -ne 'FinalVerify') {
+        throw 'ReviewedFirmwareDifference is supported only with FinalVerify.'
+    }
     $validatedActionDirectory = Assert-GpuActionDirectory -ActionDirectory $ActionDirectory -State $State
     $script:CurrentSourceRoot = [string](Get-GpuObjectProperty -Object $State -Name 'SourceRoot')
     if ([string]::IsNullOrWhiteSpace($script:CurrentSourceRoot)) { throw 'State.SourceRoot is empty.' }
@@ -1956,7 +1996,7 @@ function Invoke-GpuHostPlatformAction {
         'Arm' { return Invoke-GpuArm -State $State -ActionDirectory $validatedActionDirectory }
         'Collect' { return Invoke-GpuCollect -State $State -ActionDirectory $validatedActionDirectory }
         'Disarm' { return Invoke-GpuDisarm -State $State -ActionDirectory $validatedActionDirectory }
-        'FinalVerify' { return Invoke-GpuFinalVerify -State $State -ActionDirectory $validatedActionDirectory }
+        'FinalVerify' { return Invoke-GpuFinalVerify -State $State -ActionDirectory $validatedActionDirectory -ReviewedFirmwareDifference:$ReviewedFirmwareDifference }
     }
 }
 

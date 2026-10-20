@@ -7,11 +7,16 @@ param(
     [string]$RunDirectory,
     [string]$RecoveryDirectory = 'E:\CodexBackup\Recovery\hsinv-gpu-test',
     [switch]$PhysicalOutputConfirmed,
-    [switch]$RecoveryReady
+    [switch]$RecoveryReady,
+    [switch]$ReviewedFirmwareDifference
 )
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
+
+if ($ReviewedFirmwareDifference -and $Action -ne 'FinalVerify') {
+    throw 'ReviewedFirmwareDifference is supported only with FinalVerify.'
+}
 
 # Preview never imports platform code, probes the host, creates a selector,
 # mounts an ESP, signs an image, or invokes a native command.
@@ -21,6 +26,7 @@ if ($WhatIfPreference) {
         Preview = $true
         HostChangesPerformed = $false
         AutomaticReboot = $false
+        ReviewedFirmwareDifferenceRequested = [bool]$ReviewedFirmwareDifference
         Note = 'No commands were executed. Prepare creates local/external evidence; Stage writes ESP files; Arm/Disarm change only owned one-shot boot state.'
     } | ConvertTo-Json -Depth 5
     return
@@ -320,7 +326,7 @@ try {
     if ($Action -eq 'Rollback') { $PlatformAction = 'Disarm' }
     $Result = Invoke-GpuHostPlatformAction -Action $PlatformAction -State $State `
         -ActionDirectory $ActionDirectory -PhysicalOutputConfirmed:$PhysicalOutputConfirmed `
-        -RecoveryReady:$RecoveryReady
+        -RecoveryReady:$RecoveryReady -ReviewedFirmwareDifference:$ReviewedFirmwareDifference
     if ($Result.Succeeded -and $Action -in @('Build','Sign','Backup','Stage','Arm')) {
         if ((Get-GpuSourceCommit) -cne $State.SourceCommit) { throw 'Source revision changed during the action.' }
         foreach ($Pin in $State.SourcePins) { Assert-GpuFilePin -Pin $Pin }

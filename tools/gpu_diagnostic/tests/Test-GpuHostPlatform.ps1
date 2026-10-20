@@ -488,6 +488,7 @@ $script:GpuFinalVerifyFixtureMounted = $false
 $script:GpuFinalVerifyFixtureMountCount = 0
 $script:GpuFinalVerifyFixtureDismountCount = 0
 $script:GpuFinalVerifyFixtureFirmwareMountStates = New-Object 'System.Collections.Generic.List[bool]'
+$script:GpuFinalVerifyFixtureReviewCalls = New-Object 'System.Collections.Generic.List[object]'
 
 function Set-GpuFinalVerifyFixtureScenario {
     param([Parameter(Mandatory = $true)][object]$Scenario)
@@ -496,6 +497,7 @@ function Set-GpuFinalVerifyFixtureScenario {
     $script:GpuFinalVerifyFixtureMountCount = 0
     $script:GpuFinalVerifyFixtureDismountCount = 0
     $script:GpuFinalVerifyFixtureFirmwareMountStates.Clear()
+    $script:GpuFinalVerifyFixtureReviewCalls.Clear()
 }
 
 function Get-GpuFinalVerifyFixtureObservations {
@@ -504,6 +506,34 @@ function Get-GpuFinalVerifyFixtureObservations {
         MountCount = $script:GpuFinalVerifyFixtureMountCount
         DismountCount = $script:GpuFinalVerifyFixtureDismountCount
         FirmwareEnumerationMounted = @($script:GpuFinalVerifyFixtureFirmwareMountStates.ToArray())
+        ReviewCalls = @($script:GpuFinalVerifyFixtureReviewCalls.ToArray())
+    }
+}
+
+function Invoke-GpuFinalFirmwareReview {
+    param(
+        [Parameter(Mandatory = $true)][object]$State,
+        [Parameter(Mandatory = $true)][object]$CurrentHost,
+        [Parameter(Mandatory = $true)][object]$CurrentFirmwarePin,
+        [Parameter(Mandatory = $true)][string]$ActionDirectory
+    )
+    [void]$script:GpuFinalVerifyFixtureReviewCalls.Add([pscustomobject]@{
+        RunId = [string](Get-GpuObjectProperty -Object $State -Name 'RunId')
+        Phase = [string](Get-GpuObjectProperty -Object $State -Name 'Phase')
+        BootId = [string](Get-GpuObjectProperty -Object $CurrentHost -Name 'BootId')
+        FirmwarePath = [string](Get-GpuObjectProperty -Object $CurrentFirmwarePin -Name 'Path')
+        FirmwareSha256 = [string](Get-GpuObjectProperty -Object $CurrentFirmwarePin -Name 'Sha256')
+        SecureBoot = [bool](Get-GpuObjectProperty -Object $CurrentHost -Name 'SecureBoot')
+        ActionDirectory = $ActionDirectory
+        EspMounted = [bool]$script:GpuFinalVerifyFixtureMounted
+    })
+    if ([bool](Get-GpuObjectProperty -Object $script:GpuFinalVerifyFixtureScenario -Name 'ReviewThrows' -Default $false)) {
+        throw 'Synthetic raw firmware review was rejected.'
+    }
+    return [pscustomobject]@{
+        Accepted = [bool](Get-GpuObjectProperty -Object $script:GpuFinalVerifyFixtureScenario -Name 'ReviewAccepted' -Default $false)
+        ReviewId = 'fixture-reviewed-firmware-difference'
+        RawBootSelectionVerified = $true
     }
 }
 
@@ -1469,6 +1499,8 @@ catch {
         }
         $state = [pscustomobject]@{
             Host = [pscustomobject]@{ LogicalCpus = 1 }
+            RunId = 'fixture-final-verify-run'
+            Phase = 'Disarmed'
             EverArmIntent = $true
             DisarmedBootId = 'boot-before-reset'
             Tools = [pscustomobject]@{ Probe = $probePin }
@@ -1504,6 +1536,15 @@ catch {
                 ExpectedTextEqual = $null
                 ExpectedStatus = 'FINAL_VERIFY_FAILED_GPU_UNATTESTED'
             }
+            [pscustomobject]@{
+                Name = 'changed-firmware-order-without-review-flag'
+                FirmwareTextWhenMounted = "Windows Boot Manager`r`ndevice partition=S:`r`ndisplayorder {B} {A}`r`n"
+                FirmwareTextWhenUnmounted = $unmountedText
+                FirmwareNativeSucceeded = $true
+                ExpectedSucceeded = $false
+                ExpectedTextEqual = $false
+                ExpectedStatus = 'FINAL_VERIFY_FAILED_GPU_UNATTESTED'
+            }
         )
 
         foreach ($scenarioCase in $scenarios) {
@@ -1512,11 +1553,13 @@ catch {
             $scenario = [pscustomobject]@{
                 Current = $current
                 ProbePin = $probePin
-                PreflightValid = $true
                 MountedEsp = $mountedEsp
                 FirmwareTextWhenMounted = [string]$scenarioCase.FirmwareTextWhenMounted
                 FirmwareTextWhenUnmounted = [string]$scenarioCase.FirmwareTextWhenUnmounted
                 FirmwareNativeSucceeded = [bool]$scenarioCase.FirmwareNativeSucceeded
+                PreflightValid = $true
+                ReviewAccepted = $false
+                ReviewThrows = $false
             }
             Set-GpuFinalVerifyFixtureScenario $scenario
             $result = Invoke-GpuFinalVerify -State $state -ActionDirectory $actionDirectory
@@ -1536,6 +1579,138 @@ catch {
             if ($scenarioCase.Name -ceq 'healthy-mounted-comparison') {
                 Assert-PlatformEqual 'SystemEspMountedAtS' ([string]$result.FinalVerification.FirmwareEnumeration.CaptureContext) `
                     'Firmware comparison omitted its mounted capture context.'
+            }
+            if ($scenarioCase.Name -ceq 'changed-firmware-order-without-review-flag') {
+                Assert-PlatformEqual 0 $observations.ReviewCalls.Count 'Final verification reviewed changed firmware without the explicit review switch.'
+            }
+        }
+
+        $reviewCurrentText = "Windows Boot Manager`r`ndevice partition=S:`r`ndisplayorder {B} {A}`r`n"
+        $reviewRunId = 'gpu-20261020T201140Z-6e6e86230a2549b28be3274dfe56cec7'
+        $reviewCases = @(
+            [pscustomobject]@{
+                Name = 'review-accepted'; ReviewAccepted = $true; ReviewThrows = $false
+                PreflightValid = $true; SecureBoot = $true; ResetPassed = $true
+                Phase = 'Disarmed'; RunId = $reviewRunId; ExpectedCalls = 1; NativeSucceeded = $true
+                ExpectedSucceeded = $true; ExpectedStatus = 'FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED'
+            }
+            [pscustomobject]@{
+                Name = 'review-rejected'; ReviewAccepted = $false; ReviewThrows = $false
+                PreflightValid = $true; SecureBoot = $true; ResetPassed = $true
+                Phase = 'Disarmed'; RunId = $reviewRunId; ExpectedCalls = 1; NativeSucceeded = $true
+                ExpectedSucceeded = $false; ExpectedStatus = 'FINAL_VERIFY_FAILED_GPU_UNATTESTED'
+            }
+            [pscustomobject]@{
+                Name = 'review-throws'; ReviewAccepted = $false; ReviewThrows = $true
+                PreflightValid = $true; SecureBoot = $true; ResetPassed = $true
+                Phase = 'Disarmed'; RunId = $reviewRunId; ExpectedCalls = 1; NativeSucceeded = $true
+                ExpectedSucceeded = $false; ExpectedStatus = 'FINAL_VERIFY_FAILED_GPU_UNATTESTED'
+            }
+            [pscustomobject]@{
+                Name = 'preflight-failure'; ReviewAccepted = $true; ReviewThrows = $false
+                PreflightValid = $false; SecureBoot = $true; ResetPassed = $true
+                Phase = 'Disarmed'; RunId = $reviewRunId; ExpectedCalls = 0; NativeSucceeded = $true
+                ExpectedSucceeded = $false; ExpectedStatus = 'FINAL_VERIFY_FAILED_GPU_UNATTESTED'
+            }
+            [pscustomobject]@{
+                Name = 'secure-boot-failure'; ReviewAccepted = $true; ReviewThrows = $false
+                PreflightValid = $true; SecureBoot = $false; ResetPassed = $true
+                Phase = 'Disarmed'; RunId = $reviewRunId; ExpectedCalls = 0; NativeSucceeded = $true
+                ExpectedSucceeded = $false; ExpectedStatus = 'FINAL_VERIFY_FAILED_GPU_UNATTESTED'
+            }
+            [pscustomobject]@{
+                Name = 'reset-boundary-missing'; ReviewAccepted = $true; ReviewThrows = $false
+                PreflightValid = $true; SecureBoot = $true; ResetPassed = $false
+                Phase = 'Disarmed'; RunId = $reviewRunId; ExpectedCalls = 0; NativeSucceeded = $true
+                ExpectedSucceeded = $false; ExpectedStatus = 'FINAL_VERIFY_FAILED_GPU_UNATTESTED'
+            }
+            [pscustomobject]@{
+                Name = 'wrong-run-id'; ReviewAccepted = $true; ReviewThrows = $false
+                PreflightValid = $true; SecureBoot = $true; ResetPassed = $true
+                Phase = 'Disarmed'; RunId = 'gpu-20261020T201140Z-not-the-reviewed-run'
+                ExpectedCalls = 0; NativeSucceeded = $true; ExpectedSucceeded = $false
+                ExpectedStatus = 'FINAL_VERIFY_FAILED_GPU_UNATTESTED'
+            }
+            [pscustomobject]@{
+                Name = 'wrong-phase'; ReviewAccepted = $true; ReviewThrows = $false
+                PreflightValid = $true; SecureBoot = $true; ResetPassed = $true
+                Phase = 'Collected'; RunId = $reviewRunId; ExpectedCalls = 0; NativeSucceeded = $true
+                ExpectedSucceeded = $false; ExpectedStatus = 'FINAL_VERIFY_FAILED_GPU_UNATTESTED'
+            }
+            [pscustomobject]@{
+                Name = 'native-enumeration-failure-with-review-flag'; ReviewAccepted = $true; ReviewThrows = $false
+                PreflightValid = $true; SecureBoot = $true; ResetPassed = $true
+                Phase = 'Disarmed'; RunId = $reviewRunId; ExpectedCalls = 0; NativeSucceeded = $false
+                ExpectedSucceeded = $false; ExpectedStatus = 'FINAL_VERIFY_FAILED_GPU_UNATTESTED'
+            }
+        )
+        foreach ($reviewCase in $reviewCases) {
+            $actionDirectory = Join-Path $runRoot ('final-verify-review-action-' + $reviewCase.Name)
+            [void](New-Item -ItemType Directory -Path $actionDirectory -Force)
+            $reviewState = [pscustomobject]@{
+                Host = [pscustomobject]@{ LogicalCpus = 1 }
+                RunId = [string]$reviewCase.RunId
+                Phase = [string]$reviewCase.Phase
+                EverArmIntent = $true
+                DisarmedBootId = if ([bool]$reviewCase.ResetPassed) { 'boot-before-reset' } else { 'boot-after-reset' }
+                Tools = [pscustomobject]@{ Probe = $probePin }
+                Backup = $backup
+            }
+            $reviewCurrentHost = [pscustomobject]@{
+                BootId = 'boot-after-reset'
+                SecureBoot = [bool]$reviewCase.SecureBoot
+                LogicalCpus = 1
+            }
+            $scenario = [pscustomobject]@{
+                Current = $reviewCurrentHost
+                ProbePin = $probePin
+                PreflightValid = [bool]$reviewCase.PreflightValid
+                MountedEsp = $mountedEsp
+                FirmwareTextWhenMounted = $reviewCurrentText
+                FirmwareTextWhenUnmounted = $unmountedText
+                FirmwareNativeSucceeded = [bool]$reviewCase.NativeSucceeded
+                ReviewAccepted = [bool]$reviewCase.ReviewAccepted
+                ReviewThrows = [bool]$reviewCase.ReviewThrows
+            }
+            Set-GpuFinalVerifyFixtureScenario $scenario
+            $result = Invoke-GpuFinalVerify -State $reviewState -ActionDirectory $actionDirectory -ReviewedFirmwareDifference
+            $observations = Get-GpuFinalVerifyFixtureObservations
+
+            Assert-PlatformEqual ([bool]$reviewCase.ExpectedSucceeded) ([bool]$result.Succeeded) "Reviewed-difference success differs for $($reviewCase.Name)."
+            Assert-PlatformEqual ([string]$reviewCase.ExpectedStatus) ([string]$result.Status) "Reviewed-difference status differs for $($reviewCase.Name)."
+            Assert-PlatformEqual ([int]$reviewCase.ExpectedCalls) $observations.ReviewCalls.Count "Review helper call count differs for $($reviewCase.Name)."
+            $expectedMountCount = if ($reviewCase.Name -ceq 'secure-boot-failure') { 0 } else { 1 }
+            Assert-PlatformEqual $expectedMountCount $observations.MountCount "Reviewed-difference path mounted the ESP unexpectedly for $($reviewCase.Name)."
+            Assert-PlatformEqual $expectedMountCount $observations.DismountCount "Reviewed-difference path did not release the ESP for $($reviewCase.Name)."
+            Assert-PlatformTrue (-not [bool]$observations.Mounted) "Reviewed-difference path left the ESP mounted for $($reviewCase.Name)."
+            $expectedFirmwareCount = $expectedMountCount
+            Assert-PlatformEqual $expectedFirmwareCount $observations.FirmwareEnumerationMounted.Count "Firmware enumeration count differs for $($reviewCase.Name)."
+            if ($expectedFirmwareCount -eq 1) {
+                Assert-PlatformTrue ([bool]$observations.FirmwareEnumerationMounted[0]) "Firmware enumeration ran after ESP unmount for $($reviewCase.Name)."
+            }
+            if ($expectedFirmwareCount -eq 1 -and [bool]$reviewCase.NativeSucceeded) {
+                $firmwareReviewState = $result.FinalVerification.FirmwareEnumeration
+                Assert-PlatformTrue ($null -ne $firmwareReviewState.PSObject.Properties['ReviewedDifferenceAccepted']) `
+                    "Explicit review request was not recorded for $($reviewCase.Name)."
+                Assert-PlatformEqual ($reviewCase.Name -ceq 'review-accepted') ([bool]$firmwareReviewState.ReviewedDifferenceAccepted) `
+                    "Review acceptance state differs for $($reviewCase.Name)."
+            }
+            if ($reviewCase.ExpectedCalls -eq 1) {
+                $reviewedComparison = $result.FinalVerification.FirmwareEnumeration
+                Assert-PlatformEqual $reviewCase.RunId ([string]$observations.ReviewCalls[0].RunId) "Review helper received the wrong run ID for $($reviewCase.Name)."
+                Assert-PlatformEqual 'Disarmed' ([string]$observations.ReviewCalls[0].Phase) "Review helper ran in the wrong state phase for $($reviewCase.Name)."
+                Assert-PlatformEqual ([string]$reviewedComparison.CurrentSha256) ([string]$observations.ReviewCalls[0].FirmwareSha256) "Review helper received the wrong firmware hash for $($reviewCase.Name)."
+                Assert-PlatformEqual ([bool]$reviewCase.SecureBoot) ([bool]$observations.ReviewCalls[0].SecureBoot) "Review helper received the wrong host snapshot for $($reviewCase.Name)."
+                Assert-PlatformTrue ([bool]$observations.ReviewCalls[0].EspMounted) "Review helper ran without the ESP mounted for $($reviewCase.Name)."
+                Assert-PlatformEqual $actionDirectory ([string]$observations.ReviewCalls[0].ActionDirectory) "Review helper received an unexpected action directory for $($reviewCase.Name)."
+                Assert-PlatformEqual $reviewCurrentText ([System.IO.File]::ReadAllText([string]$observations.ReviewCalls[0].FirmwarePath)) `
+                    "Review helper received an unexpected firmware pin for $($reviewCase.Name)."
+            }
+            if ($reviewCase.Name -ceq 'review-accepted') {
+                Assert-PlatformEqual $false ([bool]$result.FinalVerification.FirmwareEnumeration.TextEqual) 'Reviewed acceptance changed the full-text equality result.'
+                Assert-PlatformEqual $true ([bool]$result.FinalVerification.FirmwareEnumeration.ReviewedDifferenceAccepted) 'Accepted review was not recorded in firmware comparison.'
+                Assert-PlatformEqual 'fixture-reviewed-firmware-difference' ([string]$result.FinalVerification.FirmwareEnumeration.ReviewedDifference.ReviewId) 'Reviewed evidence was not propagated into the firmware comparison.'
+                Assert-PlatformEqual 'SystemEspMountedAtS' ([string]$result.FinalVerification.FirmwareEnumeration.CaptureContext) 'Reviewed comparison omitted mounted capture context.'
             }
         }
     }

@@ -373,6 +373,35 @@ no raw pre-arm snapshot exists. Preserve its complete result for review before
 another FinalVerify or Archive. Do not run the older stage-retirement helper
 against this run.
 
+The inspection has now passed for that run. Its immutable result is
+`.analysis/gpu-final-firmware-review/8abb7b84ca644a7c84019a1f29b35bb4/result.json`,
+SHA-256 `BEA6DCA1FC904B13830908471D6239A906F71AA6937630B32CBA6DC3C2C023D9`.
+Both raw captures have BootNext absent, BootOrder `[0,1,2,3,4,5]`, and zero
+findings; fresh health reported ABSENT on all 20 CPUs. The ESP was unmounted
+and the selector/journal were unchanged. The inspector ran with the module
+pins from revision `485d6de`; preserve that receipt rather than rerunning it
+after the recovery code changes.
+
+For this exact reviewed difference, run:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 FinalVerify -ReviewedFirmwareDifference
+```
+
+Require `FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED`,
+`Succeeded: true`, and phase `Complete`. This opt-in applies only to the pinned
+201140 run, receipt, firmware captures, and reviewed post-reset boot session.
+It repeats the ordinary final checks and requires fresh read-only raw
+boot-selection captures and exact reviewed current firmware text. An unrelated
+change, a set BootNext, an audit finding, a changed BootOrder, or another failed
+verification gate must still fail. `FirmwareEnumeration.TextEqual` remains
+false; `ReviewedDifferenceAccepted` records the limited acceptance separately.
+The original baseline and previous failed action evidence are preserved.
+
+Only after that successful final result, run the ordinary Archive command from
+step 11. This does not attest GPU isolation, historical raw BootOrder equality,
+or the complete namespace of unreferenced Boot variables.
+
 If Windows cannot boot, choose the original Windows Boot Manager through the
 verified firmware menu or use the prepared recovery media and full-system
 backup. These Windows scripts cannot recover an unbootable Windows session.

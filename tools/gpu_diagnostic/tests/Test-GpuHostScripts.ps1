@@ -173,7 +173,8 @@ function Invoke-GpuHostPlatformAction {
         [Parameter(Mandatory=$true)][object]$State,
         [Parameter(Mandatory=$true)][string]$ActionDirectory,
         [switch]$PhysicalOutputConfirmed,
-        [switch]$RecoveryReady
+        [switch]$RecoveryReady,
+        [switch]$ReviewedFirmwareDifference
     )
     $journalPath = Join-Path $State.RunDirectory 'journal.json'
     if (-not (Test-Path -LiteralPath $journalPath -PathType Leaf)) {
@@ -792,6 +793,22 @@ try {
         Assert-True ($rollbackResult.StdOut -match '"Action"\s*:\s*"Rollback"') 'Rollback WhatIf did not forward the Rollback action.'
         Assert-True ($rollbackResult.StdOut -match '"Preview"\s*:\s*true') 'Rollback WhatIf did not reach the dispatcher preview.'
         Assert-True (-not (Test-Path -LiteralPath $whatIfWorkspace)) 'Rollback WhatIf created its nonexistent workspace.'
+    }
+
+    Invoke-TestCase 'Reviewed firmware flag previews FinalVerify and rejects other actions without effects' {
+        $absentRoot = Join-Path $runRoot 'review-preview-root-must-stay-absent'
+        $preview = Invoke-PreviewChild -ScriptPath $dispatcherPath -ScriptArguments @(
+            'FinalVerify', '-ReviewedFirmwareDifference', '-WorkspaceRoot', $absentRoot, '-WhatIf'
+        )
+        Assert-Equal 0 $preview.ExitCode "Reviewed FinalVerify preview failed: $($preview.StdErr)"
+        Assert-True ($preview.StdOut -match '"ReviewedFirmwareDifferenceRequested"\s*:\s*true') 'Preview omitted the explicit review request.'
+        Assert-True (-not (Test-Path -LiteralPath $absentRoot)) 'Reviewed preview created its workspace.'
+        $rejected = Invoke-PreviewChild -ScriptPath $dispatcherPath -ScriptArguments @(
+            'Arm', '-ReviewedFirmwareDifference', '-WorkspaceRoot', $absentRoot, '-WhatIf'
+        )
+        Assert-True ($rejected.ExitCode -ne 0) 'Reviewed firmware flag was accepted for Arm.'
+        Assert-True (($rejected.StdOut + $rejected.StdErr) -match 'supported only with FinalVerify') 'Other-action rejection had an unexpected reason.'
+        Assert-True (-not (Test-Path -LiteralPath $absentRoot)) 'Rejected review request created its workspace.'
     }
 
     Invoke-TestCase 'Fixture dispatcher command allowlist contains only local logic and intercepted git' {
