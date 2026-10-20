@@ -151,20 +151,87 @@ image_launch_status_t image_launch_start(
     return IMAGE_LAUNCH_OK;
 }
 
+static image_launch_status_t image_launch_start_resident_internal(
+    EFI_HANDLE ParentImageHandle, const CHAR16 *Path,
+    EFI_STATUS *ChildStatus, hv_boot_diagnostic_t *Diagnostic,
+    image_launch_diagnostic_state_t *DiagnosticState);
+
 image_launch_status_t image_launch_start_resident(
     EFI_HANDLE ParentImageHandle, const CHAR16 *Path,
     EFI_STATUS *ChildStatus)
+{
+    return image_launch_start_resident_internal(
+        ParentImageHandle, Path, ChildStatus, NULL, NULL);
+}
+
+static int image_launch_record_unchanged(
+    const hv_boot_diagnostic_t *Record,
+    const hv_boot_diagnostic_t *Initial)
+{
+    const UINT8 *record_bytes = (const UINT8 *)Record;
+    const UINT8 *initial_bytes = (const UINT8 *)Initial;
+    UINTN index;
+
+    for (index = 0; index < (UINTN)sizeof(*Record); index++) {
+        if (record_bytes[index] != initial_bytes[index]) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+static int image_launch_record_consistent(
+    const hv_boot_diagnostic_t *Record, EFI_STATUS ChildStatus)
+{
+    if (!hv_boot_diagnostic_valid(Record, (UINT32)sizeof(*Record)) ||
+        Record->Flags != HV_BOOT_DIAGNOSTIC_FLAGS ||
+        Record->Stage == HV_BOOT_STAGE_NONE ||
+        Record->Status != (UINT64)ChildStatus) {
+        return 0;
+    }
+    if (ChildStatus == EFI_SUCCESS) {
+        return Record->Stage == HV_BOOT_STAGE_RETURN &&
+               Record->Reason == HV_BOOT_REASON_NONE;
+    }
+    if (EFI_ERROR(ChildStatus)) {
+        return Record->Stage >= HV_BOOT_STAGE_ENTRY &&
+               Record->Stage <= HV_BOOT_STAGE_VMLAUNCH &&
+               Record->Reason != HV_BOOT_REASON_NONE;
+    }
+    /* The resident hypervisor has no positive-warning return path. */
+    return 0;
+}
+
+static image_launch_status_t image_launch_start_resident_internal(
+    EFI_HANDLE ParentImageHandle, const CHAR16 *Path,
+    EFI_STATUS *ChildStatus, hv_boot_diagnostic_t *Diagnostic,
+    image_launch_diagnostic_state_t *DiagnosticState)
 {
     EFI_GUID loaded_image_guid = EFI_LOADED_IMAGE_PROTOCOL_GUID;
     efi_file_buffer_t source;
     EFI_DEVICE_PATH_PROTOCOL *device_path = NULL;
     EFI_LOADED_IMAGE_PROTOCOL *loaded = NULL;
     image_launch_entry_point_t entry;
+    hv_boot_diagnostic_t diagnostic_record;
+    hv_boot_diagnostic_t diagnostic_initial;
+    VOID *original_load_options = NULL;
+    UINT32 original_load_options_size = 0;
+    int diagnostic_enabled = Diagnostic != NULL && DiagnosticState != NULL;
     EFI_HANDLE child = NULL;
     EFI_STATUS st;
     UINT32 entry_rva = 0;
     UINT32 size_of_image = 0;
 
+    if (Diagnostic != NULL) {
+        hv_boot_diagnostic_init(Diagnostic);
+    }
+    if (DiagnosticState != NULL) {
+        *DiagnosticState = IMAGE_LAUNCH_DIAGNOSTIC_NONE;
+    }
+    if (diagnostic_enabled) {
+        hv_boot_diagnostic_init(&diagnostic_record);
+        diagnostic_initial = diagnostic_record;
+    }
     if (ChildStatus == NULL) {
         return IMAGE_LAUNCH_ERR_ARGUMENT;
     }
@@ -215,7 +282,29 @@ image_launch_status_t image_launch_start_resident(
     }
     entry = (image_launch_entry_point_t)(UINTN)(
         (UINTN)loaded->ImageBase + (UINTN)entry_rva);
+    if (diagnostic_enabled) {
+        original_load_options = loaded->LoadOptions;
+        original_load_options_size = loaded->LoadOptionsSize;
+        loaded->LoadOptions = &diagnostic_record;
+        loaded->LoadOptionsSize = (UINT32)sizeof(diagnostic_record);
+        *DiagnosticState = IMAGE_LAUNCH_DIAGNOSTIC_UNAVAILABLE;
+    }
     st = entry(child, gST);
+    if (diagnostic_enabled) {
+        /* The direct entry is synchronous. Remove the stack-backed pointer
+         * before any subsequent firmware call or image cleanup. */
+        loaded->LoadOptions = original_load_options;
+        loaded->LoadOptionsSize = original_load_options_size;
+        if (!image_launch_record_unchanged(&diagnostic_record,
+                                           &diagnostic_initial)) {
+            if (image_launch_record_consistent(&diagnostic_record, st)) {
+                *Diagnostic = diagnostic_record;
+                *DiagnosticState = IMAGE_LAUNCH_DIAGNOSTIC_VALID;
+            } else {
+                *DiagnosticState = IMAGE_LAUNCH_DIAGNOSTIC_INVALID;
+            }
+        }
+    }
     image_launch_debug_marker('D', 'R');
     *ChildStatus = st;
     if (EFI_ERROR(st)) {
@@ -226,4 +315,25 @@ image_launch_status_t image_launch_start_resident(
      * Its VM-exit block owns separate RuntimeServices allocations, and avoiding
      * firmware child-return cleanup is the purpose of this launch contract. */
     return IMAGE_LAUNCH_OK;
+}
+
+image_launch_status_t image_launch_start_resident_diagnostic(
+    EFI_HANDLE ParentImageHandle, const CHAR16 *Path,
+    EFI_STATUS *ChildStatus, hv_boot_diagnostic_t *Diagnostic,
+    image_launch_diagnostic_state_t *DiagnosticState)
+{
+    if (Diagnostic == NULL || DiagnosticState == NULL) {
+        if (ChildStatus != NULL) {
+            *ChildStatus = EFI_INVALID_PARAMETER;
+        }
+        if (Diagnostic != NULL) {
+            hv_boot_diagnostic_init(Diagnostic);
+        }
+        if (DiagnosticState != NULL) {
+            *DiagnosticState = IMAGE_LAUNCH_DIAGNOSTIC_NONE;
+        }
+        return IMAGE_LAUNCH_ERR_ARGUMENT;
+    }
+    return image_launch_start_resident_internal(
+        ParentImageHandle, Path, ChildStatus, Diagnostic, DiagnosticState);
 }

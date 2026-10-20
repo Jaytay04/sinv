@@ -3,6 +3,7 @@
 #define PAYLOAD_DIAGNOSTIC_H
 
 #include "Uefi.h"
+#include "hv_boot_diagnostic.h"
 
 /* Tokens intentionally mirror image_launch_status_t, with three outcomes for
  * checks performed before image_launch_start_resident is called. */
@@ -29,8 +30,15 @@ typedef struct {
     EFI_STATUS shim_load_status;
 } payload_diagnostic_t;
 
+typedef enum {
+    PAYLOAD_DIAG_STARTUP_NONE = 0,
+    PAYLOAD_DIAG_STARTUP_UNAVAILABLE,
+    PAYLOAD_DIAG_STARTUP_INVALID,
+    PAYLOAD_DIAG_STARTUP_VALID
+} payload_diagnostic_startup_state_t;
+
 /* Maximum output size in bytes, excluding a trailing NUL (none is emitted). */
-#define PAYLOAD_DIAGNOSTIC_MAX_SIZE 192u
+#define PAYLOAD_DIAGNOSTIC_MAX_SIZE 1024u
 
 /* Format schema 1 as deterministic ASCII with LF line endings. On success,
  * returns nonzero and sets Written to the byte count. On failure, returns
@@ -38,5 +46,13 @@ typedef struct {
 int payload_diagnostic_format(const payload_diagnostic_t *Diagnostic,
                               UINT8 *Buffer, UINTN Capacity,
                               UINTN *Written);
+
+/* Append the optional synchronous child startup record to schema 1. NONE
+ * preserves the original five-line output byte for byte. */
+int payload_diagnostic_format_with_startup(
+    const payload_diagnostic_t *Diagnostic,
+    payload_diagnostic_startup_state_t StartupState,
+    const hv_boot_diagnostic_t *StartupRecord,
+    UINT8 *Buffer, UINTN Capacity, UINTN *Written);
 
 #endif /* PAYLOAD_DIAGNOSTIC_H */

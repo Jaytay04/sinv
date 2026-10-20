@@ -259,6 +259,26 @@ else()
 endif()
 add_test(NAME uefi_hypervisor_static_contracts
     COMMAND uefi_hypervisor_static_contracts)
+
+if(EXISTS "${HYPERSINV_UEFI_SUPPORT_DIR}/hv_boot_diagnostic.h")
+    add_executable(uefi_hypervisor_boot_diagnostic_tests
+        tests/test_efi_boot_diagnostic.c)
+    target_include_directories(uefi_hypervisor_boot_diagnostic_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}"
+        "${HYPERSINV_UEFI_SUPPORT_DIR}")
+    target_compile_features(uefi_hypervisor_boot_diagnostic_tests PRIVATE
+        c_std_11)
+    if(MSVC)
+        target_compile_options(uefi_hypervisor_boot_diagnostic_tests PRIVATE
+            /W4 /WX /GS-)
+    else()
+        target_compile_options(uefi_hypervisor_boot_diagnostic_tests PRIVATE
+            -Wall -Wextra -Werror)
+    endif()
+    add_test(NAME uefi_hypervisor_boot_diagnostic_tests
+        COMMAND uefi_hypervisor_boot_diagnostic_tests)
+endif()
+
 # Reuse the existing host executable; no new CMake targets or EFI images.
 add_test(NAME uefi_hypervisor_gpu_hal_tests
     COMMAND uefi_hypervisor_static_contracts --gpu-hal)
@@ -535,6 +555,10 @@ add_test(NAME uefi_hypervisor_runtime_transport_tests
     COMMAND uefi_hypervisor_runtime_transport_tests)
 
 if(WIN32)
+    add_test(NAME uefi_hypervisor_boot_diagnostic_contracts
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/Test-EfiBootDiagnosticContracts.ps1"
+            -EfiSourceRoot "${CMAKE_CURRENT_SOURCE_DIR}")
     add_test(NAME uefi_hypervisor_resident_rva_table_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
             -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/Test-EfiResidentRvaTables.ps1")

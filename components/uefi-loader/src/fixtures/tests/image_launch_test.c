@@ -29,6 +29,13 @@ static UINTN g_entry_calls;
 static UINTN g_release_calls;
 static UINTN g_path_release_calls;
 static int g_direct_source;
+static int g_diagnostic_mode;
+static int g_diagnostic_options_seen;
+static int g_copied_before_unload;
+static hv_boot_diagnostic_t *g_unload_record;
+static image_launch_diagnostic_state_t *g_unload_state;
+static VOID *g_original_load_options;
+static UINT32 g_original_load_options_size;
 static UINT8 g_direct_bytes[256];
 static EFI_HANDLE g_child = (EFI_HANDLE)(UINTN)0x1234u;
 static EFI_DEVICE_PATH_PROTOCOL *g_path =
@@ -105,6 +112,11 @@ static EFI_STATUS EFIAPI mock_unload(EFI_HANDLE ImageHandle)
 {
     (void)ImageHandle;
     ++g_unload_calls;
+    if (g_unload_record != NULL && g_unload_state != NULL &&
+        *g_unload_state == IMAGE_LAUNCH_DIAGNOSTIC_VALID &&
+        g_unload_record->Stage == HV_BOOT_STAGE_GPU_PREPARE) {
+        g_copied_before_unload = 1;
+    }
     return EFI_SUCCESS;
 }
 
@@ -126,9 +138,47 @@ static EFI_STATUS EFIAPI mock_handle_protocol(
 static EFI_STATUS EFIAPI mock_resident_entry(
     EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)
 {
+    hv_boot_diagnostic_t *diagnostic;
     (void)ImageHandle;
     ++g_entry_calls;
     if (SystemTable != &g_system_table) return EFI_DEVICE_ERROR;
+    if (g_diagnostic_mode != 0 &&
+        g_loaded_image.LoadOptions != NULL &&
+        g_loaded_image.LoadOptionsSize == sizeof(*diagnostic)) {
+        diagnostic = (hv_boot_diagnostic_t *)g_loaded_image.LoadOptions;
+        if (diagnostic->Magic == HV_BOOT_DIAGNOSTIC_MAGIC &&
+            diagnostic->Version == HV_BOOT_DIAGNOSTIC_VERSION &&
+            diagnostic->Stage == HV_BOOT_STAGE_NONE &&
+            diagnostic->Flags == 0u) {
+            g_diagnostic_options_seen = 1;
+        }
+        if (g_diagnostic_mode != 1) {
+            diagnostic->Flags = HV_BOOT_DIAGNOSTIC_FLAGS;
+            diagnostic->Stage = EFI_ERROR(g_entry_status) ?
+                                 HV_BOOT_STAGE_GPU_PREPARE :
+                                 HV_BOOT_STAGE_RETURN;
+            diagnostic->Reason = EFI_ERROR(g_entry_status) ?
+                                 HV_BOOT_REASON_OPERATION_FAILED :
+                                 HV_BOOT_REASON_NONE;
+            diagnostic->Processor = EFI_ERROR(g_entry_status) ? 0u :
+                                   HV_BOOT_DIAGNOSTIC_NO_PROCESSOR;
+            diagnostic->Status = (UINT64)g_entry_status;
+            diagnostic->Detail = 0x12345678u;
+            diagnostic->ExpectedCpus = 4u;
+            diagnostic->PreparedCpus = 3u;
+            diagnostic->VmxReadyCpus = 2u;
+            diagnostic->ResourceStatus = 0x80000001u;
+            diagnostic->PreparationStatus = 0x80000002u;
+            diagnostic->PreparationFailure = 10u;
+            diagnostic->ActivationStatus = 0x80000003u;
+            diagnostic->ActivationFailure = 7u;
+            if (g_diagnostic_mode == 3) {
+                diagnostic->Flags = HV_BOOT_DIAGNOSTIC_ENTRY_REACHED;
+            } else if (g_diagnostic_mode == 4) {
+                diagnostic->Status ^= 1u;
+            }
+        }
+    }
     return g_entry_status;
 }
 
@@ -162,6 +212,13 @@ static void reset_fixture(void)
     g_release_calls = 0;
     g_path_release_calls = 0;
     g_direct_source = 0;
+    g_diagnostic_mode = 0;
+    g_diagnostic_options_seen = 0;
+    g_copied_before_unload = 0;
+    g_unload_record = NULL;
+    g_unload_state = NULL;
+    g_original_load_options = (VOID *)(UINTN)0x9876u;
+    g_original_load_options_size = 19u;
 }
 
 static void make_valid_resident_image(void)
@@ -179,6 +236,8 @@ static void make_valid_resident_image(void)
     g_direct_bytes[0x91] = 0x01;
     g_loaded_image.ImageBase = (VOID *)((UINTN)mock_resident_entry - 0x80u);
     g_loaded_image.ImageSize = sizeof(g_direct_bytes);
+    g_loaded_image.LoadOptions = g_original_load_options;
+    g_loaded_image.LoadOptionsSize = g_original_load_options_size;
 }
 
 static int expect(int condition, const char *message)
@@ -315,9 +374,151 @@ int main(void)
                 "successful resident child remains loaded") ||
         !expect(child_status == EFI_SUCCESS,
                 "successful resident entry reports its exact status") ||
+        !expect(g_loaded_image.LoadOptions == g_original_load_options &&
+                    g_loaded_image.LoadOptionsSize ==
+                        g_original_load_options_size,
+                "legacy resident launch leaves child LoadOptions unchanged") ||
         !expect(g_release_calls == 1 && g_path_release_calls == 1,
                 "successful resident launch releases temporary resources")) {
         return 1;
+    }
+
+    reset_fixture();
+    make_valid_resident_image();
+    {
+        hv_boot_diagnostic_t diagnostic;
+        image_launch_diagnostic_state_t diagnostic_state =
+            IMAGE_LAUNCH_DIAGNOSTIC_VALID;
+        if (!expect(image_launch_start_resident_diagnostic(
+                        (EFI_HANDLE)1, path, NULL,
+                        &diagnostic, &diagnostic_state) ==
+                        IMAGE_LAUNCH_ERR_ARGUMENT,
+                    "diagnostic launch rejects missing status output") ||
+            !expect(diagnostic_state == IMAGE_LAUNCH_DIAGNOSTIC_NONE &&
+                        diagnostic.Magic == HV_BOOT_DIAGNOSTIC_MAGIC &&
+                        diagnostic.Stage == HV_BOOT_STAGE_NONE &&
+                        g_file_read_calls == 0,
+                    "invalid diagnostic call still initializes outputs before effects")) {
+            return 1;
+        }
+    }
+
+    reset_fixture();
+    make_valid_resident_image();
+    {
+        hv_boot_diagnostic_t diagnostic;
+        image_launch_diagnostic_state_t diagnostic_state;
+        g_diagnostic_mode = 2;
+        if (!expect(image_launch_start_resident_diagnostic(
+                        (EFI_HANDLE)1, path, &child_status,
+                        &diagnostic, &diagnostic_state) == IMAGE_LAUNCH_OK,
+                    "instrumented resident payload returns successfully") ||
+            !expect(g_diagnostic_options_seen,
+                    "child receives an initialized diagnostic through LoadOptions") ||
+            !expect(diagnostic_state == IMAGE_LAUNCH_DIAGNOSTIC_VALID &&
+                        diagnostic.Stage == HV_BOOT_STAGE_RETURN &&
+                        diagnostic.Status == (UINT64)EFI_SUCCESS,
+                    "successful child record is copied and validated") ||
+            !expect(g_loaded_image.LoadOptions == g_original_load_options &&
+                        g_loaded_image.LoadOptionsSize ==
+                            g_original_load_options_size,
+                    "LoadOptions are restored immediately after direct entry") ||
+            !expect(g_start_calls == 0 && g_unload_calls == 0,
+                    "diagnostic transport uses direct entry and retains success")) {
+            return 1;
+        }
+    }
+
+    reset_fixture();
+    make_valid_resident_image();
+    {
+        hv_boot_diagnostic_t diagnostic;
+        image_launch_diagnostic_state_t diagnostic_state;
+        g_diagnostic_mode = 2;
+        g_entry_status = EFI_ENCODE_ERROR(0x4567u);
+        g_unload_record = &diagnostic;
+        g_unload_state = &diagnostic_state;
+        if (!expect(image_launch_start_resident_diagnostic(
+                        (EFI_HANDLE)1, path, &child_status,
+                        &diagnostic, &diagnostic_state) ==
+                        IMAGE_LAUNCH_ERR_START,
+                    "instrumented failed resident entry reports failure") ||
+            !expect(child_status == g_entry_status &&
+                        diagnostic_state == IMAGE_LAUNCH_DIAGNOSTIC_VALID &&
+                        diagnostic.Stage == HV_BOOT_STAGE_GPU_PREPARE &&
+                        diagnostic.Reason ==
+                            HV_BOOT_REASON_OPERATION_FAILED &&
+                        diagnostic.Status == (UINT64)g_entry_status,
+                    "failure record preserves stage, reason, and raw status") ||
+            !expect(g_copied_before_unload && g_unload_calls == 1,
+                    "valid failure record is copied before child unload") ||
+            !expect(g_loaded_image.LoadOptions == g_original_load_options &&
+                        g_loaded_image.LoadOptionsSize ==
+                            g_original_load_options_size,
+                    "failed direct entry also restores original LoadOptions")) {
+            return 1;
+        }
+    }
+
+    reset_fixture();
+    make_valid_resident_image();
+    {
+        hv_boot_diagnostic_t diagnostic;
+        image_launch_diagnostic_state_t diagnostic_state;
+        g_diagnostic_mode = 1;
+        if (!expect(image_launch_start_resident_diagnostic(
+                        (EFI_HANDLE)1, path, &child_status,
+                        &diagnostic, &diagnostic_state) == IMAGE_LAUNCH_OK,
+                    "legacy child without startup telemetry still returns") ||
+            !expect(diagnostic_state == IMAGE_LAUNCH_DIAGNOSTIC_UNAVAILABLE &&
+                        diagnostic.Flags == 0u &&
+                        diagnostic.Stage == HV_BOOT_STAGE_NONE,
+                    "unchanged record is unavailable without invented stage") ||
+            !expect(g_loaded_image.LoadOptions == g_original_load_options &&
+                        g_loaded_image.LoadOptionsSize ==
+                            g_original_load_options_size,
+                    "unavailable child telemetry leaves LoadOptions restored")) {
+            return 1;
+        }
+    }
+
+    reset_fixture();
+    make_valid_resident_image();
+    {
+        hv_boot_diagnostic_t diagnostic;
+        image_launch_diagnostic_state_t diagnostic_state;
+        g_diagnostic_mode = 3;
+        g_entry_status = EFI_ENCODE_ERROR(0x89abu);
+        if (!expect(image_launch_start_resident_diagnostic(
+                        (EFI_HANDLE)1, path, &child_status,
+                        &diagnostic, &diagnostic_state) ==
+                        IMAGE_LAUNCH_ERR_START,
+                    "malformed child diagnostic does not change launch result") ||
+            !expect(diagnostic_state == IMAGE_LAUNCH_DIAGNOSTIC_INVALID &&
+                        diagnostic.Stage == HV_BOOT_STAGE_NONE &&
+                        diagnostic.Flags == 0u,
+                    "missing returned flag rejects malformed telemetry")) {
+            return 1;
+        }
+    }
+
+    reset_fixture();
+    make_valid_resident_image();
+    {
+        hv_boot_diagnostic_t diagnostic;
+        image_launch_diagnostic_state_t diagnostic_state;
+        g_diagnostic_mode = 4;
+        g_entry_status = EFI_ENCODE_ERROR(0x89abu);
+        if (!expect(image_launch_start_resident_diagnostic(
+                        (EFI_HANDLE)1, path, &child_status,
+                        &diagnostic, &diagnostic_state) ==
+                        IMAGE_LAUNCH_ERR_START,
+                    "status-mismatched telemetry does not change launch result") ||
+            !expect(diagnostic_state == IMAGE_LAUNCH_DIAGNOSTIC_INVALID &&
+                        diagnostic.Stage == HV_BOOT_STAGE_NONE,
+                    "record status must match the direct-entry return")) {
+            return 1;
+        }
     }
 
     reset_fixture();

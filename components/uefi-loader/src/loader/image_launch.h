@@ -3,6 +3,7 @@
 #define IMAGE_LAUNCH_H
 
 #include "Uefi.h"
+#include "hv_boot_diagnostic.h"
 
 typedef enum {
     IMAGE_LAUNCH_OK = 0,
@@ -35,5 +36,20 @@ image_launch_status_t image_launch_start(
 image_launch_status_t image_launch_start_resident(
     EFI_HANDLE ParentImageHandle, const CHAR16 *Path,
     EFI_STATUS *ChildStatus);
+
+typedef enum {
+    IMAGE_LAUNCH_DIAGNOSTIC_NONE = 0,
+    IMAGE_LAUNCH_DIAGNOSTIC_UNAVAILABLE,
+    IMAGE_LAUNCH_DIAGNOSTIC_INVALID,
+    IMAGE_LAUNCH_DIAGNOSTIC_VALID
+} image_launch_diagnostic_state_t;
+
+/* As above, with a bounded synchronous record passed through the child
+ * LoadedImage LoadOptions. Original LoadOptions are restored as soon as the
+ * direct PE entry returns. No record pointer is retained by this helper. */
+image_launch_status_t image_launch_start_resident_diagnostic(
+    EFI_HANDLE ParentImageHandle, const CHAR16 *Path,
+    EFI_STATUS *ChildStatus, hv_boot_diagnostic_t *Diagnostic,
+    image_launch_diagnostic_state_t *DiagnosticState);
 
 #endif /* IMAGE_LAUNCH_H */

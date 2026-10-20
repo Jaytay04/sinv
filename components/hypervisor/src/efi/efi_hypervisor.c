@@ -11,6 +11,7 @@
 #include "shadow_ept.h"
 #include "gpu_native.h"
 #include "gpu_boot.h"
+#include "efi_boot_diagnostic.h"
 #include <intrin.h>
 #pragma intrinsic(__wbinvd)
 #if defined(HYPERSINV_GPU_VM_SELFTEST)
@@ -44,6 +45,122 @@
 /* Uefi.h declares these globals for the shared freestanding support layer. */
 EFI_SYSTEM_TABLE *gST = NULL;
 EFI_BOOT_SERVICES *gBS = NULL;
+
+/* The loader owns this record and exposes it only for the synchronous child
+ * entry call. Only the BSP preboot path accesses it. */
+static hv_boot_diagnostic_t *gHvEfiBootDiagnostic = NULL;
+static uint32_t gHvEfiBootDiagnosticStage = HV_BOOT_STAGE_ENTRY;
+static uint32_t gHvEfiBootDiagnosticReason = HV_BOOT_REASON_NONE;
+static uint32_t gHvEfiBootDiagnosticDetail =
+    HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE;
+
+static void HvEfiBootDiagnosticReset(void)
+{
+    gHvEfiBootDiagnostic = NULL;
+    gHvEfiBootDiagnosticStage = HV_BOOT_STAGE_ENTRY;
+    gHvEfiBootDiagnosticReason = HV_BOOT_REASON_NONE;
+    gHvEfiBootDiagnosticDetail = HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE;
+}
+
+static void HvEfiBootDiagnosticAttach(EFI_HANDLE imageHandle)
+{
+    EFI_GUID loadedImageGuid = EFI_LOADED_IMAGE_PROTOCOL_GUID;
+    EFI_LOADED_IMAGE_PROTOCOL *loadedImage = NULL;
+    hv_boot_diagnostic_t *record;
+
+    if (imageHandle == NULL || gBS == NULL || gBS->HandleProtocol == NULL ||
+        EFI_ERROR(gBS->HandleProtocol(imageHandle, &loadedImageGuid,
+                                      (VOID **)&loadedImage)) ||
+        loadedImage == NULL || loadedImage->LoadOptions == NULL ||
+        loadedImage->LoadOptionsSize != sizeof(hv_boot_diagnostic_t)) {
+        return;
+    }
+
+    record = (hv_boot_diagnostic_t *)loadedImage->LoadOptions;
+    if (hv_efi_boot_diagnostic_mark_entry(
+            record, (uint32_t)loadedImage->LoadOptionsSize)) {
+        gHvEfiBootDiagnostic = record;
+    }
+}
+
+static void HvEfiBootDiagnosticSet(uint32_t stage, uint32_t reason,
+                                   uint32_t detail)
+{
+    gHvEfiBootDiagnosticStage = stage;
+    gHvEfiBootDiagnosticReason = reason;
+    gHvEfiBootDiagnosticDetail = detail;
+    if (gHvEfiBootDiagnostic != NULL &&
+        !hv_efi_boot_diagnostic_set_stage(
+            gHvEfiBootDiagnostic,
+            (uint32_t)sizeof(*gHvEfiBootDiagnostic), stage, reason, detail)) {
+        gHvEfiBootDiagnostic = NULL;
+    }
+}
+
+static void HvEfiBootDiagnosticCapture(
+    hv_efi_boot_diagnostic_snapshot_t *snapshot,
+    const HV_EFI_CONTEXT *context)
+{
+    snapshot->Processor = HV_BOOT_DIAGNOSTIC_NO_PROCESSOR;
+    snapshot->Detail = gHvEfiBootDiagnosticDetail;
+    snapshot->ExpectedCpus = 0;
+    snapshot->PreparedCpus = 0;
+    snapshot->VmxReadyCpus = 0;
+    snapshot->ResourceStatus = 0;
+    snapshot->PreparationStatus = 0;
+    snapshot->PreparationFailure = 0;
+    snapshot->ActivationStatus = 0;
+    snapshot->ActivationFailure = 0;
+    if (context == NULL) return;
+
+    if (context->CurrentProcessorNumber < context->ProcessorCount) {
+        snapshot->Processor = context->CurrentProcessorNumber;
+    }
+    snapshot->ExpectedCpus = context->EnabledProcessorCount;
+    snapshot->PreparedCpus = context->PreparedProcessorCount;
+    snapshot->VmxReadyCpus = context->VmxReadyProcessorCount;
+    snapshot->ResourceStatus = context->ProcessorResourceStatus;
+    snapshot->PreparationStatus = context->ProcessorPreparationStatus;
+    snapshot->PreparationFailure = context->ProcessorPreparationFailure;
+    snapshot->ActivationStatus = context->ApActivationStatus;
+    snapshot->ActivationFailure = context->ApActivationFailure;
+}
+
+static EFI_STATUS HvEfiBootDiagnosticReturnWithSnapshot(
+    EFI_STATUS status, const hv_efi_boot_diagnostic_snapshot_t *snapshot)
+{
+    uint32_t stage = gHvEfiBootDiagnosticStage;
+    uint32_t reason = gHvEfiBootDiagnosticReason;
+    if (status == EFI_SUCCESS) {
+        stage = HV_BOOT_STAGE_RETURN;
+        reason = HV_BOOT_REASON_NONE;
+    } else if (reason == HV_BOOT_REASON_NONE) {
+        reason = HV_BOOT_REASON_OPERATION_FAILED;
+    }
+
+    if (gHvEfiBootDiagnostic != NULL) {
+        (void)hv_efi_boot_diagnostic_record_return(
+            gHvEfiBootDiagnostic,
+            (uint32_t)sizeof(*gHvEfiBootDiagnostic), stage, reason,
+            (uint64_t)status, snapshot);
+    }
+    gHvEfiBootDiagnostic = NULL;
+    return status;
+}
+
+static EFI_STATUS HvEfiBootDiagnosticReturn(
+    EFI_STATUS status, const HV_EFI_CONTEXT *context)
+{
+    hv_efi_boot_diagnostic_snapshot_t snapshot;
+    HvEfiBootDiagnosticCapture(&snapshot, context);
+    return HvEfiBootDiagnosticReturnWithSnapshot(status, &snapshot);
+}
+
+static void HvEfiBootDiagnosticSetDetail(uint32_t detail)
+{
+    HvEfiBootDiagnosticSet(gHvEfiBootDiagnosticStage,
+                           gHvEfiBootDiagnosticReason, detail);
+}
 
 typedef struct HV_EFI_PHYSICAL_IOMMU_STATE {
     uint64_t Signature;
@@ -3228,15 +3345,21 @@ static EFI_STATUS HvEfiPrepareApProcessorStates(HV_EFI_CONTEXT *context)
     EFI_STATUS memoryMapFreeStatus = EFI_SUCCESS;
     EFI_STATUS eptPlanFreeStatus = EFI_SUCCESS;
     EFI_STATUS denyPlanFreeStatus = EFI_SUCCESS;
+    uint32_t preparationDetailBeforePoolRelease;
+    int preparationFailedBeforePoolRelease;
     uint32_t processorNumber;
 
     if (context == NULL) {
         return EFI_INVALID_PARAMETER;
     }
+    HvEfiBootDiagnosticSetDetail(
+        HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_NATIVE_CPU);
     if (context->GpuStatePhysical != 0 &&
         !HvGpuNativePrepareCpu((HV_GPU_NATIVE_STATE *)(uintptr_t)
             context->GpuStatePhysical, context)) return EFI_UNSUPPORTED;
 #if defined(HYPERSINV_GPU_VM_SELFTEST)
+    HvEfiBootDiagnosticSetDetail(
+        HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_VM_WC_CPU);
     if (context->GpuVmWcStatePhysical != 0 && !HvGpuVmWcPrepareCpu(context))
         return EFI_UNSUPPORTED;
 #endif
@@ -3245,6 +3368,8 @@ static EFI_STATUS HvEfiPrepareApProcessorStates(HV_EFI_CONTEXT *context)
     context->ProcessorPreparationFailure =
         HV_EFI_PROCESSOR_PREPARATION_FAILURE_NONE;
     context->PreparedProcessorCount = 1;
+    HvEfiBootDiagnosticSetDetail(
+        HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_RESOURCE_VALIDATION);
     if (context->ProcessorRecordsPhysical == 0 ||
         context->ProcessorRecordCount == 0 ||
         context->CurrentProcessorNumber >= context->ProcessorRecordCount) {
@@ -3267,6 +3392,8 @@ static EFI_STATUS HvEfiPrepareApProcessorStates(HV_EFI_CONTEXT *context)
             HV_EFI_PROCESSOR_PREPARATION_FAILED;
         return EFI_ABORTED;
     }
+    HvEfiBootDiagnosticSetDetail(
+        HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_CALLBACK);
     if (gBS == NULL ||
         (context->EnabledProcessorCount > 1 &&
          (context->ProcessorResourceStatus !=
@@ -3281,6 +3408,7 @@ static EFI_STATUS HvEfiPrepareApProcessorStates(HV_EFI_CONTEXT *context)
         return EFI_ABORTED;
     }
 
+    HvEfiBootDiagnosticSetDetail(HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_MEMORY_MAP);
     status = gBS->AllocatePool(
         EfiLoaderData, HV_EFI_EPT_IDENTITY_PAGE_COUNT,
         (void **)&eptMemoryTypes);
@@ -3325,6 +3453,8 @@ static EFI_STATUS HvEfiPrepareApProcessorStates(HV_EFI_CONTEXT *context)
         return EFI_ABORTED;
     }
 
+    HvEfiBootDiagnosticSetDetail(
+        HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_EPT_HIERARCHY);
     eptVpidCapabilities = HvEfiReadMsr(HV_EFI_IA32_VMX_EPT_VPID_CAP);
     context->EptVpidCapabilities = eptVpidCapabilities;
     if ((eptVpidCapabilities &
@@ -3398,12 +3528,16 @@ static EFI_STATUS HvEfiPrepareApProcessorStates(HV_EFI_CONTEXT *context)
     preparation.EptDenyRangeCount = eptDenyRangeCount;
     preparation.PreparedCount = 1;
     if (!EFI_ERROR(status) && context->EnabledProcessorCount > 1) {
+        HvEfiBootDiagnosticSetDetail(
+            HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_CALLBACK);
         status = mpServices->StartupAllAPs(
             mpServices, HvEfiApPrepareProcessorState, TRUE, NULL,
             HV_EFI_AP_OPERATION_TIMEOUT_US, &preparation, NULL);
     }
     if (!EFI_ERROR(status) && preparation.FailureCount == 0 &&
         preparation.PreparedCount == context->EnabledProcessorCount) {
+        HvEfiBootDiagnosticSetDetail(
+            HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_PHYSICAL_IOMMU);
         status = HvEfiPreparePhysicalIommu(
             context, memoryMap, memoryMapSize, descriptorSize,
             eptDenyRanges, eptDenyRangeCount);
@@ -3411,6 +3545,18 @@ static EFI_STATUS HvEfiPrepareApProcessorStates(HV_EFI_CONTEXT *context)
             context->ProcessorPreparationFailure =
                 HV_EFI_PROCESSOR_PREPARATION_FAILURE_MEMORY_POLICY;
         }
+    }
+    preparationDetailBeforePoolRelease = gHvEfiBootDiagnosticDetail;
+    preparationFailedBeforePoolRelease = EFI_ERROR(status) ||
+        preparation.FailureCount != 0 ||
+        preparation.FailureStage !=
+            HV_EFI_PROCESSOR_PREPARATION_FAILURE_NONE ||
+        preparation.PreparedCount != context->EnabledProcessorCount ||
+        context->ProcessorPreparationFailure !=
+            HV_EFI_PROCESSOR_PREPARATION_FAILURE_NONE;
+    if (!preparationFailedBeforePoolRelease) {
+        HvEfiBootDiagnosticSetDetail(
+            HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_POOL_RELEASE);
     }
     memoryMapFreeStatus = gBS->FreePool(memoryMap);
     eptPlanFreeStatus = gBS->FreePool(eptMemoryTypes);
@@ -3422,6 +3568,9 @@ static EFI_STATUS HvEfiPrepareApProcessorStates(HV_EFI_CONTEXT *context)
         context->ProcessorPreparationStatus =
             HV_EFI_PROCESSOR_PREPARATION_FAILED;
         return EFI_ABORTED;
+    }
+    if (!preparationFailedBeforePoolRelease) {
+        HvEfiBootDiagnosticSetDetail(preparationDetailBeforePoolRelease);
     }
     context->PreparedProcessorCount = preparation.PreparedCount;
     if (preparation.FailureStage !=
@@ -3831,6 +3980,9 @@ static EFI_STATUS HvEfiFailAndFree(HV_EFI_CONTEXT *context,
                                    int vmxonActive,
                                    EFI_STATUS status)
 {
+    hv_efi_boot_diagnostic_snapshot_t diagnosticSnapshot;
+    /* Capture before cleanup destroys context-owned scalar results. */
+    HvEfiBootDiagnosticCapture(&diagnosticSnapshot, context);
     if (context != NULL && context->GpuStatePhysical != 0 &&
         context->PhysicalIommuStatePhysical != 0 &&
         ((const HV_EFI_PHYSICAL_IOMMU_STATE *)(uintptr_t)
@@ -3901,6 +4053,7 @@ static EFI_STATUS HvEfiFailAndFree(HV_EFI_CONTEXT *context,
         context->ProcessorRecordCount = 0;
     }
     HvEfiFreeRuntime(contextPa, HV_EFI_CONTEXT_PAGES);
+    (void)HvEfiBootDiagnosticReturnWithSnapshot(status, &diagnosticSnapshot);
     return status;
 }
 
@@ -3949,39 +4102,59 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
     UINTN runtimeScannerSize;
     UINTN guestTransitionSize;
     int launchResult;
-    uint32_t dmaIsolationState;
+    uint32_t dmaIsolationState = 0;
+    hv_efi_boot_diagnostic_snapshot_t diagnosticSnapshot;
 
-    (void)imageHandle;
+    HvEfiBootDiagnosticReset();
     if (systemTable == NULL || systemTable->BootServices == NULL) {
         return EFI_INVALID_PARAMETER;
     }
     gST = systemTable;
     gBS = systemTable->BootServices;
+    HvEfiBootDiagnosticAttach(imageHandle);
     HvEfiDebugInitializeSerial();
 
 #if defined(HYPERSINV_GPU_VM_SELFTEST)
     /* Test-only image: refuse before VMX on anything except the explicitly
      * selected VMware lab environment. This does not enable physical GPU use.
      * The synthetic callbacks exist only before launch in the EFI image. */
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_SELFTEST,
+                           HV_BOOT_REASON_UNSUPPORTED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     HvEfiCpuid(1, 0, cpuid);
-    if ((cpuid[2] & (UINT32_C(1) << 31)) == 0) return EFI_UNSUPPORTED;
+    if ((cpuid[2] & (UINT32_C(1) << 31)) == 0) {
+        return HvEfiBootDiagnosticReturn(EFI_UNSUPPORTED, NULL);
+    }
     HvEfiCpuid(UINT32_C(0x40000000), 0, cpuid);
     if (cpuid[1] != UINT32_C(0x61774d56) ||
         cpuid[2] != UINT32_C(0x4d566572) ||
-        cpuid[3] != UINT32_C(0x65726177)) return EFI_UNSUPPORTED;
+        cpuid[3] != UINT32_C(0x65726177)) {
+        return HvEfiBootDiagnosticReturn(EFI_UNSUPPORTED, NULL);
+    }
     HvEfiGpuVmEmit("GPU_HAL_MODEL:ENVIRONMENT VMWARE_TEST_ONLY");
-    if (HvGpuVmSelfTest(HvEfiGpuVmEmit) != 1) return EFI_ABORTED;
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_SELFTEST,
+                           HV_BOOT_REASON_OPERATION_FAILED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
+    if (HvGpuVmSelfTest(HvEfiGpuVmEmit) != 1) {
+        return HvEfiBootDiagnosticReturn(EFI_ABORTED, NULL);
+    }
 #endif
 
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_CONTEXT_ALLOC,
+                           HV_BOOT_REASON_OPERATION_FAILED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     status = HvEfiAllocateRuntime(EfiRuntimeServicesData, 1, &contextPa);
     if (EFI_ERROR(status)) {
-        return status;
+        return HvEfiBootDiagnosticReturn(status, NULL);
     }
     context = (HV_EFI_CONTEXT *)(uintptr_t)contextPa;
     HvEfiZero(context, sizeof(*context));
     context->Signature = HV_EFI_CONTEXT_MAGIC;
     context->Version = HV_EFI_CONTEXT_VERSION;
     context->Size = (uint32_t)sizeof(*context);
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_TOPOLOGY,
+                           HV_BOOT_REASON_UNSUPPORTED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     HvEfiCaptureProcessorTopology(context);
     if (context->CurrentProcessorNumber >= UINT16_MAX) {
         return HvEfiFailAndFree(context, contextPa, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -3990,9 +4163,15 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
     context->Vpid = (uint16_t)(context->CurrentProcessorNumber + 1u);
     HvEfiReportProcessorTopology(context);
 
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_DMA_ADMISSION,
+                           HV_BOOT_REASON_OPERATION_FAILED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     status = HvEfiAdmitDmaIsolation(
         context, systemTable, &dmaIsolationState);
     if (EFI_ERROR(status)) {
+        HvEfiBootDiagnosticSet(HV_BOOT_STAGE_DMA_ADMISSION,
+                               HV_BOOT_REASON_OPERATION_FAILED,
+                               dmaIsolationState);
         HvEfiDebugPrintAscii(
             "uefi hypervisor: DMA isolation admission: FAIL 0x");
         HvEfiDebugPrintHex32(dmaIsolationState);
@@ -4000,9 +4179,14 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
         return HvEfiFailAndFree(context, contextPa, 0, 0, 0, 0, 0, 0, 0, 0,
                                 status);
     }
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_DMA_ADMISSION,
+                           HV_BOOT_REASON_NONE, dmaIsolationState);
     HvEfiDebugPrintAscii(
         "uefi hypervisor: DMA isolation admission: PASS\n");
 
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_RESIDENT_ALLOC,
+                           HV_BOOT_REASON_OPERATION_FAILED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     status = HvEfiAllocateRuntime(EfiRuntimeServicesCode,
                                   HV_EFI_RESIDENT_CODE_PAGES, &codePa);
     if (EFI_ERROR(status)) {
@@ -4010,6 +4194,9 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
                                 status);
     }
     HvEfiDebugPrintAscii("uefi hypervisor: resident code allocation: PASS\n");
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_RESIDENT_BOUNDS,
+                           HV_BOOT_REASON_BOUNDS,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     residentSize = (UINTN)((uintptr_t)HvEfiResidentCodeEnd -
                             (uintptr_t)HvEfiResidentVmExitStart);
     if (residentSize == 0 ||
@@ -4024,6 +4211,9 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
     HvEfiCopy((void *)(uintptr_t)codePa, HvEfiResidentVmExitStart,
               residentSize);
 
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_SCANNER_ALLOC,
+                           HV_BOOT_REASON_OPERATION_FAILED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     status = HvEfiAllocateRuntime(
         EfiRuntimeServicesCode, HV_EFI_RUNTIME_SCANNER_CODE_PAGES,
         &context->RuntimeScannerCodeBase);
@@ -4055,6 +4245,9 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
         return HvEfiFailAndFree(context, contextPa, codePa, 0, 0, 0, 0, 0, 0,
                                 0, status);
     }
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_SCANNER_BOUNDS,
+                           HV_BOOT_REASON_BOUNDS,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     runtimeScannerSize = (UINTN)(
         (uintptr_t)HvEfiRuntimeScannerResidentEnd -
         (uintptr_t)HvEfiRuntimeScannerResidentStart);
@@ -4121,6 +4314,9 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
     HvEfiDebugPrintAscii(
         "uefi hypervisor: runtime scanner allocation: PASS\n");
 
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_TRANSITION_ALLOC,
+                           HV_BOOT_REASON_OPERATION_FAILED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     status = HvEfiAllocateRuntime(EfiRuntimeServicesCode,
                                   HV_EFI_GUEST_TRANSITION_CODE_PAGES,
                                   &guestTransitionPa);
@@ -4129,6 +4325,9 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
                                 0, status);
     }
     context->GuestTransitionCodeBase = guestTransitionPa;
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_TRANSITION_BOUNDS,
+                           HV_BOOT_REASON_BOUNDS,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     guestTransitionSize = (UINTN)(
         (uintptr_t)HvEfiGuestTransitionEnd -
         (uintptr_t)HvEfiGuestTransitionStart);
@@ -4164,6 +4363,9 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
     HvEfiDebugPrintAscii(
         "uefi hypervisor: guest transition allocation: PASS\n");
 
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_VMXON_ALLOC,
+                           HV_BOOT_REASON_OPERATION_FAILED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     status = HvEfiAllocateRuntime(EfiRuntimeServicesData,
                                   HV_EFI_VMXON_PAGES, &vmxonPa);
     if (EFI_ERROR(status)) {
@@ -4171,30 +4373,45 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
                                 0,
                                 status);
     }
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_VMCS_ALLOC,
+                           HV_BOOT_REASON_OPERATION_FAILED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     status = HvEfiAllocateRuntime(EfiRuntimeServicesData,
                                   HV_EFI_VMCS_PAGES, &vmcsPa);
     if (EFI_ERROR(status)) {
         return HvEfiFailAndFree(context, contextPa, codePa, vmxonPa, 0, 0, 0,
                                 0, 0, 0, status);
     }
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_HOST_STACK_ALLOC,
+                           HV_BOOT_REASON_OPERATION_FAILED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     status = HvEfiAllocateRuntime(EfiRuntimeServicesData,
                                   HV_EFI_HOST_STACK_PAGES, &hostStackPa);
     if (EFI_ERROR(status)) {
         return HvEfiFailAndFree(context, contextPa, codePa, vmxonPa, vmcsPa, 0,
                                 0, 0, 0, 0, status);
     }
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_GUEST_STACK_ALLOC,
+                           HV_BOOT_REASON_OPERATION_FAILED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     status = HvEfiAllocateRuntime(EfiRuntimeServicesData,
                                   HV_EFI_GUEST_STACK_PAGES, &guestStackPa);
     if (EFI_ERROR(status)) {
         return HvEfiFailAndFree(context, contextPa, codePa, vmxonPa, vmcsPa,
                                 hostStackPa, 0, 0, 0, 0, status);
     }
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_PAGE_TABLE_ALLOC,
+                           HV_BOOT_REASON_OPERATION_FAILED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     status = HvEfiAllocateRuntime(EfiRuntimeServicesData,
                                   HV_EFI_PAGE_TABLE_PAGES, &pageTablePa);
     if (EFI_ERROR(status)) {
         return HvEfiFailAndFree(context, contextPa, codePa, vmxonPa, vmcsPa,
                                 hostStackPa, guestStackPa, 0, 0, 0, status);
     }
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_DESCRIPTOR_ALLOC,
+                           HV_BOOT_REASON_OPERATION_FAILED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     status = HvEfiAllocateRuntime(EfiRuntimeServicesData,
                                   HV_EFI_DESCRIPTOR_STORAGE_PAGES,
                                   &descriptorPa);
@@ -4226,6 +4443,9 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
     context->PageTablePhysical = pageTablePa;
     context->MsrBitmapPhysical = pageTablePa +
         (uint64_t)HV_EFI_MSR_BITMAP_PAGE * HV_EFI_PAGE_SIZE;
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_BSP_BIND,
+                           HV_BOOT_REASON_INVARIANT,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     if (!HvEfiBindBspProcessorResources(
             context, contextPa, vmxonPa, vmcsPa, hostStackPa, guestStackPa,
             pageTablePa, descriptorPa)) {
@@ -4241,6 +4461,9 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
     HvEfiZero((void *)(uintptr_t)guestStackPa, HV_EFI_PAGE_SIZE);
     HvEfiZero((void *)(uintptr_t)context->EptPhysical,
               HV_EFI_EPT_TABLE_PAGES * HV_EFI_PAGE_SIZE);
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_PRIVATE_PAGING,
+                           HV_BOOT_REASON_INVARIANT,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     if (!HvEfiInitializePrivatePageTables(pageTablePa)) {
         return HvEfiFailAndFree(context, contextPa, codePa, vmxonPa, vmcsPa,
                                 hostStackPa, guestStackPa, pageTablePa,
@@ -4250,6 +4473,9 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
     *(uint64_t *)(uintptr_t)context->HostStackTop =
         (uint64_t)(uintptr_t)context;
 
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_CPU_CAPTURE,
+                           HV_BOOT_REASON_INVARIANT,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     HvEfiCaptureCpu(context);
     context->OriginalCr0 = context->GuestCr0;
     context->OriginalCr4 = context->GuestCr4;
@@ -4281,12 +4507,18 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
     HvEfiDebugPrintHex32(context->GuestTrLimit);
     HvEfiDebugPrintAscii("\n");
 
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_DESCRIPTORS,
+                           HV_BOOT_REASON_UNSUPPORTED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     if (!HvEfiPrepareDescriptorState(context, descriptorPa, codePa)) {
         return HvEfiFailAndFree(context, contextPa, codePa, vmxonPa, vmcsPa,
                                 hostStackPa, guestStackPa, pageTablePa,
                                 descriptorPa, 0, EFI_UNSUPPORTED);
     }
     HvEfiDebugPrintAscii("uefi hypervisor: BSP descriptor state: PASS\n");
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_DESCRIPTORS,
+                           HV_BOOT_REASON_INVARIANT,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     if (!HvEfiMarkCurrentProcessorState(
             context, HV_EFI_PROCESSOR_STATE_DESCRIPTORS_READY)) {
         return HvEfiFailAndFree(context, contextPa, codePa, vmxonPa, vmcsPa,
@@ -4294,6 +4526,9 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
                                 descriptorPa, 0, EFI_ABORTED);
     }
 
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_CPU_FEATURES,
+                           HV_BOOT_REASON_UNSUPPORTED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     HvEfiCpuid(1, 0, cpuid);
     if ((cpuid[2] & (UINT32_C(1) << 5)) == 0 ||
         (cpuid[2] & (UINT32_C(1) << 30)) == 0 ||
@@ -4303,6 +4538,9 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
                                 descriptorPa, 0,
                                 EFI_UNSUPPORTED);
     }
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_FEATURE_CONTROL,
+                           HV_BOOT_REASON_UNSUPPORTED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     featureControl = HvEfiReadMsr(HV_EFI_IA32_FEATURE_CONTROL);
     if ((featureControl & (HV_EFI_FEATURE_CONTROL_LOCK |
                            HV_EFI_FEATURE_CONTROL_VMXON_OUTSIDE_SMX)) !=
@@ -4313,6 +4551,9 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
                                 descriptorPa, 0,
                                 EFI_ACCESS_DENIED);
     }
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_VMX_BASIC,
+                           HV_BOOT_REASON_UNSUPPORTED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     vmxBasic = HvEfiReadMsr(HV_EFI_IA32_VMX_BASIC);
     if (!HvEfiValidateVmxBasic(vmxBasic) ||
         !HvEfiIsCanonical(context->ResidentHostRip) ||
@@ -4336,6 +4577,9 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
         for (segment = 0; segment < iommu->McfgCount; ++segment) {
             if (iommu->Mcfg[segment].Segment != 0 ||
                 iommu->Mcfg[segment].StartBus != 0) continue;
+            HvEfiBootDiagnosticSet(HV_BOOT_STAGE_GPU_PREPARE,
+                                   HV_BOOT_REASON_OPERATION_FAILED,
+                                   HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
             status = HvGpuBootPrepare(context, systemTable,
                 iommu->Mcfg[segment].EcamBase,
                 (uint64_t)(iommu->Mcfg[segment].EndBus + 1) << 20);
@@ -4343,6 +4587,9 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
                 return HvEfiFailAndFree(context, contextPa, codePa,
                     vmxonPa, vmcsPa, hostStackPa, guestStackPa, pageTablePa,
                     descriptorPa, 0, status);
+            HvEfiBootDiagnosticSet(HV_BOOT_STAGE_GPU_PREPARE,
+                                   HV_BOOT_REASON_NONE,
+                                   HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
             break;
         }
         if (context->GpuStatePhysical != 0) {
@@ -4354,6 +4601,9 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
         }
     }
 #if defined(HYPERSINV_GPU_VM_SELFTEST)
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_GPU_PREPARE,
+                           HV_BOOT_REASON_OPERATION_FAILED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     status = HvGpuVmWcAllocate(context, gBS);
     if (EFI_ERROR(status)) return HvEfiFailAndFree(context, contextPa,
         codePa, vmxonPa, vmcsPa, hostStackPa, guestStackPa, pageTablePa,
@@ -4362,6 +4612,9 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
         ((uintptr_t)HvGpuVmWcResident - (uintptr_t)HvEfiRuntimeScannerResidentStart);
 #endif
 
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_AP_RESOURCES,
+                           HV_BOOT_REASON_OPERATION_FAILED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     status = HvEfiAllocateApProcessorResources(context, revision);
     HvEfiReportProcessorResources(context);
     if (EFI_ERROR(status)) {
@@ -4370,12 +4623,18 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
                                 descriptorPa, 0, status);
     }
 
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_CONTROLS,
+                           HV_BOOT_REASON_UNSUPPORTED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     if (!HvEfiPrepareControlRegisters(context, vmxBasic, 0)) {
         return HvEfiFailAndFree(context, contextPa, codePa, vmxonPa, vmcsPa,
                                 hostStackPa, guestStackPa, pageTablePa,
                                 descriptorPa, 0,
                                 EFI_UNSUPPORTED);
     }
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_CONTROLS,
+                           HV_BOOT_REASON_INVARIANT,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     if (!HvEfiMarkCurrentProcessorState(
             context, HV_EFI_PROCESSOR_STATE_CONTROLS_READY)) {
         return HvEfiFailAndFree(context, contextPa, codePa, vmxonPa, vmcsPa,
@@ -4383,6 +4642,9 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
                                 descriptorPa, 0, EFI_ABORTED);
     }
 
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_AP_PREPARE,
+                           HV_BOOT_REASON_OPERATION_FAILED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     status = HvEfiPrepareApProcessorStates(context);
     HvEfiReportProcessorPreparation(context);
     if (EFI_ERROR(status)) {
@@ -4391,6 +4653,11 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
                                 descriptorPa, 0, status);
     }
 
+    if (context->GpuStatePhysical != 0) {
+        HvEfiBootDiagnosticSet(HV_BOOT_STAGE_GPU_ARM,
+                               HV_BOOT_REASON_OPERATION_FAILED,
+                               HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
+    }
     if (context->GpuStatePhysical != 0 && EFI_ERROR(HvGpuBootArm(context))) {
         /* Device DMA may reference the reservation once arming begins.
          * No generic cleanup, native detach or firmware hand-back is safe. */
@@ -4398,6 +4665,9 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
         HvEfiFailStop();
     }
 
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_AP_ACTIVATE,
+                           HV_BOOT_REASON_OPERATION_FAILED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     status = HvEfiActivateApProcessors(context);
     HvEfiReportApActivation(context);
     if (EFI_ERROR(status)) {
@@ -4407,6 +4677,9 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
     }
 
     /* Enable VMX only after all software preflight checks pass. */
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_VMXON,
+                           HV_BOOT_REASON_OPERATION_FAILED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     HvEfiWriteCr0(context->HostCr0);
     HvEfiWriteCr4(context->HostCr4);
     if (context->GpuStatePhysical != 0 || context->GpuVmWcStatePhysical != 0)
@@ -4419,44 +4692,59 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
         HvEfiDebugPrintAscii(
             "uefi hypervisor: BSP virtualization failure: VMXON\n");
         HvEfiFailStop();
-        return EFI_ABORTED;
+        return HvEfiBootDiagnosticReturn(EFI_ABORTED, context);
     }
     HvEfiDebugPrintAscii("uefi hypervisor: BSP VMXON: PASS\n");
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_VMCLEAR,
+                           HV_BOOT_REASON_OPERATION_FAILED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     if (HvEfiVmClear(&context->VmcsPhysical) != 0) {
         HvEfiDebugPrintAscii(
             "uefi hypervisor: BSP virtualization failure: VMCLEAR\n");
         HvEfiFailStop();
-        return EFI_ABORTED;
+        return HvEfiBootDiagnosticReturn(EFI_ABORTED, context);
     }
     HvEfiDebugPrintAscii("uefi hypervisor: BSP VMCLEAR: PASS\n");
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_VMPTRLD,
+                           HV_BOOT_REASON_OPERATION_FAILED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     if (HvEfiVmPtrld(&context->VmcsPhysical) != 0) {
         HvEfiDebugPrintAscii(
             "uefi hypervisor: BSP virtualization failure: VMPTRLD\n");
         HvEfiFailStop();
-        return EFI_ABORTED;
+        return HvEfiBootDiagnosticReturn(EFI_ABORTED, context);
     }
     HvEfiDebugPrintAscii("uefi hypervisor: BSP VMPTRLD: PASS\n");
     /* From this point VMWRITE is architecturally valid. */
     context->VmcsActive = 1;
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_VMCS_CONTROLS,
+                           HV_BOOT_REASON_OPERATION_FAILED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     if (!HvEfiWriteControls(context)) {
         HvEfiDebugPrintAscii(
             "uefi hypervisor: BSP virtualization failure: VMCS CONTROLS\n");
         HvEfiFailStop();
-        return EFI_ABORTED;
+        return HvEfiBootDiagnosticReturn(EFI_ABORTED, context);
     }
     HvEfiDebugPrintAscii("uefi hypervisor: BSP VMCS controls: PASS\n");
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_VMCS_GUEST,
+                           HV_BOOT_REASON_OPERATION_FAILED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     if (!HvEfiPrepareGuestState(context)) {
         HvEfiDebugPrintAscii(
             "uefi hypervisor: BSP virtualization failure: VMCS GUEST\n");
         HvEfiFailStop();
-        return EFI_ABORTED;
+        return HvEfiBootDiagnosticReturn(EFI_ABORTED, context);
     }
     HvEfiDebugPrintAscii("uefi hypervisor: BSP VMCS guest: PASS\n");
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_VMCS_HOST,
+                           HV_BOOT_REASON_OPERATION_FAILED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
     if (!HvEfiPrepareHostState(context)) {
         HvEfiDebugPrintAscii(
             "uefi hypervisor: BSP virtualization failure: VMCS HOST\n");
         HvEfiFailStop();
-        return EFI_ABORTED;
+        return HvEfiBootDiagnosticReturn(EFI_ABORTED, context);
     }
     HvEfiDebugPrintAscii("uefi hypervisor: BSP VMCS host: PASS\n");
 
@@ -4464,6 +4752,10 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
     /* Use the same ordinary call/return continuation that is already proven
      * for AP callbacks.  Bypassing the active C frames and returning directly
      * to the EFI caller is not portable across firmware implementations. */
+    HvEfiBootDiagnosticSet(HV_BOOT_STAGE_VMLAUNCH,
+                           HV_BOOT_REASON_OPERATION_FAILED,
+                           HV_EFI_BOOT_DIAGNOSTIC_DETAIL_NONE);
+    HvEfiBootDiagnosticCapture(&diagnosticSnapshot, context);
     launchResult = HvEfiVmxLaunchAp(context);
     /* A zero return is reachable only through ResidentBootstrapVmcall and
      * the guest-transition return stub.  Root mode validates health, records
@@ -4475,7 +4767,8 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
 #endif
         HvEfiDebugPrintAscii(
             "uefi hypervisor: BSP firmware return: PASS\n");
-        return EFI_SUCCESS;
+        return HvEfiBootDiagnosticReturnWithSnapshot(
+            EFI_SUCCESS, &diagnosticSnapshot);
     }
     HvEfiDebugPrintAscii(
         "uefi hypervisor: BSP virtualization failure: VMLAUNCH 0x");
@@ -4486,5 +4779,6 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
     }
     HvEfiDebugPrintAscii("\n");
     HvEfiFailStop();
-    return EFI_ABORTED;
+    return HvEfiBootDiagnosticReturnWithSnapshot(
+        EFI_ABORTED, &diagnosticSnapshot);
 }

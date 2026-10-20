@@ -1,5 +1,53 @@
 # GPU diagnostic payload failure investigation
 
+## Second physical run: entry returned EFI_ABORTED
+
+Run `gpu-20261020T150318Z-59a346ed3cb8422bafe4be60268b7df1` used clean source
+`d79806d51187963cd81578b7287076e17558c2e2`. Unlike the first run below, its
+collected launch diagnostic selects the failing phase:
+
+```text
+schema=1
+payload_launch=start
+payload_status=0x8000000000000015
+shim_load_phase=firmware_load
+shim_load_status=0x0000000000000000
+```
+
+Firmware image loading succeeded. The resident launcher then called the
+relocated PE entry directly, and that entry returned `EFI_ABORTED`. This path
+does not call firmware `StartImage`; its `ExitData` cannot explain this failure.
+The diagnostic file was 130 bytes, SHA-256
+`7E7C99AF5816BA4539E070A3AF80AB89F67870AA4020384BF720157DAA97651A`.
+The collected payload matched the staged signed image, SHA-256
+`242DF01C0B66C4DB48EB04DD1ED954F35DE657462D63637DDEE50AE991CF2FED`.
+
+The operator's boot photo shows SHA-256 PCRs 0 through 7 as nonzero. Each `1`
+in `11111111` means that at least one digest byte is nonzero. It does not mean
+the digests contain all `FF` bytes. The loader's PCR guard therefore refused
+replay. `IB_PAYLOAD_REPLAY_INDEPENDENT=ON` allowed the separate payload attempt,
+so replay refusal alone does not explain its returned error. No TPM clear or
+weaker PCR check is justified by this evidence.
+
+The exact internal startup check remains unknown. BSP binding, private paging,
+state invariants, and AP resource/preparation failures can return the same
+`EFI_ABORTED`. The existing hypervisor startup messages use COM1 and port
+`0xE9`; this run has no captured serial trace. Failure cleanup frees the context
+containing the preparation result. Later fail-stop paths halt instead of
+returning, so a clean return to Windows does not select one of those paths.
+
+After rollback and the operator's reset, FinalVerify passed expected ABSENT
+health on all 20 CPUs, Secure Boot, the boot-manager hash, and the textual
+firmware baseline captured with the ESP mounted at `S:`. The selector was
+archived and the journal remains `Complete`. GPU isolation remains unattested.
+The retained seven-file ESP stage and all run evidence must be preserved. The
+older retirement helper is pinned to the first run and must not be used on
+this run.
+
+The sections below retain the first investigation and its earlier diagnostic
+coverage. The second run narrows the failure to the payload's internal startup;
+it does not establish a specific DMA, EPT, GPU, or CPU failure.
+
 ## Observed run and recovery
 
 Run `gpu-20261020T031023Z-9a2a92a17bf54b4faf4b60c6b7231ec7` was prepared from
@@ -67,7 +115,7 @@ used native/output confirmation on, Secure Boot on, 20 CPUs, and build
 configuration. Real UHD 770 scanout, physical Intel DMA isolation, and the
 dual-adapter topology remain unverified.
 
-## Added diagnostic coverage
+## Initial launch diagnostic coverage
 
 The loader now prints and attempts to write the optional
 `EFI\insecure-boot\payload-diagnostic.txt` before inventory and Windows handoff.
@@ -110,3 +158,52 @@ loader. CTest passed 29/29 loader and 32/32 hypervisor checks. The existing
 signed hypervisor payload passed its static `.hvscan` audit at 54,870 bytes;
 its binary, renderer, and scanner sources were unchanged. The new loader was
 not signed, staged, or executed.
+
+## Startup diagnostic extension
+
+The loader now supplies an optional versioned 80-byte record through the
+child's `EFI_LOADED_IMAGE_PROTOCOL.LoadOptions` during the synchronous direct
+entry call. It restores both original LoadOptions fields immediately after
+return, validates the record against the actual returned EFI status, and copies
+valid data before unloading a failed child. The existing resident launch API
+and the original five schema-1 lines remain compatible.
+
+New launched children append `startup_record=valid`, `unavailable`, or `invalid`
+to `payload-diagnostic.txt`. Only a valid record appends startup version, stage,
+reason, status, observer processor index, detail, CPU counts, and resource,
+preparation, and activation result fields. Output is bounded to 1,024 bytes.
+An old payload that leaves the initialized record untouched is unavailable;
+missing or malformed data cannot be presented as a known startup stage.
+
+The BSP records setup phases from context allocation through AP preparation and
+VMX launch. Safe failure paths snapshot scalar results before cleanup frees
+the context, then mark a returned result only after cleanup completes. The
+success path takes its context snapshot before VMLAUNCH because that context
+is EPT-denied after successful guest return. AP callbacks and resident VMX-root
+code do not access the loader-owned record. No context ABI, resident scanner,
+renderer, admission checks, or fail-stop behavior is changed.
+
+`startup_processor` identifies the observed BSP/current processor, not
+necessarily a failing AP; `4294967295` means unavailable. Counts and status
+fields are the existing context snapshot, not new per-CPU attestations.
+`startup_detail` is stage-dependent: at `dma_admission` it is the raw DMA
+admission-state value; at `ap_prepare` it identifies a bounded BSP substep
+defined in `efi_boot_diagnostic.h`. Preparation-failure numbers retain their
+existing meanings in `efi_hypervisor.h`. These values narrow a returned error
+without authorizing a weaker check.
+
+This transport cannot persist a fail-stop or a boot that never returns to the
+loader. File-write failure can still leave a stale diagnostic file. It cannot
+retroactively recover the second run's missing startup reason or prove GPU
+ownership, scanout, or DMA isolation. Another physical boot is not part of this
+investigation increment.
+
+The native-enabled Release payload and loader built with MSVC 19.51.36248.
+The loader used replay independence on and debug ports off, matching those
+options in the second physical run. CTest passed 37/37 hypervisor checks and
+30/30 loader checks. The unsigned payload passed the `.hvscan` self-containment
+audit at 54,870 bytes. Separate mutation checks confirmed that the lifetime
+contract test rejects an AP diagnostic write, premature cleanup-return marker,
+and a context dereference after successful guest return. This increment was
+not signed, staged, or booted in a VM or on the primary host; the compiled
+diagnostics still require end-to-end VM validation before another deployment.

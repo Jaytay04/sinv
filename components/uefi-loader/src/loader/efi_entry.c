@@ -267,27 +267,48 @@ static payload_diagnostic_launch_t payload_diagnostic_launch_from_result(
 }
 
 static void report_payload_diagnostic(EFI_HANDLE image_handle,
-                                      const payload_diagnostic_t *Diagnostic)
+                                      const payload_diagnostic_t *Diagnostic,
+                                      payload_diagnostic_startup_state_t
+                                          StartupState,
+                                      const hv_boot_diagnostic_t *Startup)
 {
     UINT8 bytes[PAYLOAD_DIAGNOSTIC_MAX_SIZE];
-    CHAR16 console_text[(PAYLOAD_DIAGNOSTIC_MAX_SIZE * 2u) + 1u];
+    CHAR16 console_text[128];
     UINTN size = 0;
     UINTN input;
     UINTN output = 0;
     EFI_STATUS status;
 
-    if (!payload_diagnostic_format(Diagnostic, bytes, sizeof(bytes), &size)) {
+    if (!payload_diagnostic_format_with_startup(
+            Diagnostic, StartupState, Startup, bytes, sizeof(bytes), &size)) {
         con_print(L"payload diagnostic format: FAIL\r\n");
         return;
     }
     for (input = 0; input < size; input++) {
         if (bytes[input] == (UINT8)'\n') {
+            if (output + 2u >= sizeof(console_text) / sizeof(console_text[0])) {
+                console_text[output] = 0;
+                con_print(console_text);
+                output = 0;
+            }
             console_text[output++] = (CHAR16)'\r';
+            console_text[output++] = (CHAR16)'\n';
+            console_text[output] = 0;
+            con_print(console_text);
+            output = 0;
+        } else {
+            console_text[output++] = (CHAR16)bytes[input];
+            if (output + 1u >= sizeof(console_text) / sizeof(console_text[0])) {
+                console_text[output] = 0;
+                con_print(console_text);
+                output = 0;
+            }
         }
-        console_text[output++] = (CHAR16)bytes[input];
     }
-    console_text[output] = 0;
-    con_print(console_text);
+    if (output != 0u) {
+        console_text[output] = 0;
+        con_print(console_text);
+    }
 
     status = efi_file_write(image_handle, g_payload_diagnostic_path,
                             bytes, size);
@@ -297,6 +318,23 @@ static void report_payload_diagnostic(EFI_HANDLE image_handle,
         con_print(L")\r\n");
     } else {
         con_print(L"payload diagnostic write: PASS\r\n");
+    }
+}
+
+static payload_diagnostic_startup_state_t
+payload_diagnostic_startup_state_from_launch(
+    image_launch_diagnostic_state_t State)
+{
+    switch (State) {
+    case IMAGE_LAUNCH_DIAGNOSTIC_UNAVAILABLE:
+        return PAYLOAD_DIAG_STARTUP_UNAVAILABLE;
+    case IMAGE_LAUNCH_DIAGNOSTIC_INVALID:
+        return PAYLOAD_DIAG_STARTUP_INVALID;
+    case IMAGE_LAUNCH_DIAGNOSTIC_VALID:
+        return PAYLOAD_DIAG_STARTUP_VALID;
+    case IMAGE_LAUNCH_DIAGNOSTIC_NONE:
+    default:
+        return PAYLOAD_DIAG_STARTUP_NONE;
     }
 }
 
@@ -331,6 +369,11 @@ static EFI_STATUS restore_and_handoff(EFI_HANDLE image_handle,
     EFI_STATUS status;
     EFI_STATUS child_status;
     image_launch_status_t launch;
+    image_launch_diagnostic_state_t launch_diagnostic_state =
+        IMAGE_LAUNCH_DIAGNOSTIC_NONE;
+    payload_diagnostic_startup_state_t startup_state =
+        PAYLOAD_DIAG_STARTUP_NONE;
+    hv_boot_diagnostic_t startup_record;
     payload_diagnostic_t payload_diagnostic;
     const char *shim_load_phase = "not_applicable";
     EFI_STATUS shim_load_status = EFI_NOT_STARTED;
@@ -341,6 +384,7 @@ static EFI_STATUS restore_and_handoff(EFI_HANDLE image_handle,
     payload_diagnostic.payload_status = EFI_NOT_STARTED;
     payload_diagnostic.shim_load_phase = shim_load_phase;
     payload_diagnostic.shim_load_status = shim_load_status;
+    hv_boot_diagnostic_init(&startup_record);
 
     status = efi_file_exists(image_handle, g_backup_path);
     if (status == EFI_SUCCESS) {
@@ -370,8 +414,11 @@ static EFI_STATUS restore_and_handoff(EFI_HANDLE image_handle,
         status = efi_file_exists(image_handle, g_payload_path);
         if (status == EFI_SUCCESS) {
             payload_present = 1;
-            launch = image_launch_start_resident(
-                image_handle, g_payload_path, &child_status);
+            launch = image_launch_start_resident_diagnostic(
+                image_handle, g_payload_path, &child_status,
+                &startup_record, &launch_diagnostic_state);
+            startup_state = payload_diagnostic_startup_state_from_launch(
+                launch_diagnostic_state);
             shim_chain_get_last_load_trace(&shim_load_phase,
                                            &shim_load_status);
             payload_diagnostic.payload_launch =
@@ -399,7 +446,8 @@ static EFI_STATUS restore_and_handoff(EFI_HANDLE image_handle,
         con_print(L"payload launch: SKIPPED\r\n");
     }
 
-    report_payload_diagnostic(image_handle, &payload_diagnostic);
+    report_payload_diagnostic(image_handle, &payload_diagnostic,
+                              startup_state, &startup_record);
 
     if (!replay_succeeded && !IB_PAYLOAD_REPLAY_INDEPENDENT) {
         write_status(image_handle, status_ready_abort,

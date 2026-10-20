@@ -77,6 +77,30 @@ static int format_and_compare(const payload_diagnostic_t *diagnostic,
     return 1;
 }
 
+static int format_startup_and_compare(
+    const payload_diagnostic_t *diagnostic,
+    payload_diagnostic_startup_state_t state,
+    const hv_boot_diagnostic_t *record, const char *expected)
+{
+    UINT8 actual[PAYLOAD_DIAGNOSTIC_MAX_SIZE];
+    UINTN written = (UINTN)-1;
+    UINTN expected_length = (UINTN)strlen(expected);
+
+    memset(actual, 0xcc, sizeof(actual));
+    if (!payload_diagnostic_format_with_startup(
+            diagnostic, state, record, actual, sizeof(actual), &written)) {
+        fprintf(stderr, "FAIL: startup formatter rejected a valid diagnostic\n");
+        return 0;
+    }
+    if (written != expected_length ||
+        memcmp(actual, expected, expected_length) != 0 ||
+        actual[written] != 0xcc) {
+        fprintf(stderr, "FAIL: startup formatter bytes differ from expected record\n");
+        return 0;
+    }
+    return 1;
+}
+
 static int check_category(const launch_case_t *test_case)
 {
     payload_diagnostic_t diagnostic;
@@ -145,7 +169,9 @@ int main(void)
         "shim_load_phase=not_applicable\n"
         "shim_load_status=0x8000000000000013\n";
     payload_diagnostic_t diagnostic;
+    hv_boot_diagnostic_t startup;
     UINT8 guarded[258];
+    UINT8 startup_guarded[PAYLOAD_DIAGNOSTIC_MAX_SIZE + 2u];
     UINTN written;
     UINTN i;
 
@@ -155,6 +181,169 @@ int main(void)
     diagnostic.shim_load_status = (EFI_STATUS)EFI_ENCODE_ERROR(0x89abu);
     if (!expect(format_and_compare(&diagnostic, expected_golden),
                 "full record preserves exact high-bit EFI_STATUS values")) {
+        return 1;
+    }
+
+    hv_boot_diagnostic_init(&startup);
+    startup.Flags = HV_BOOT_DIAGNOSTIC_FLAGS;
+    startup.Stage = HV_BOOT_STAGE_GPU_PREPARE;
+    startup.Reason = HV_BOOT_REASON_OPERATION_FAILED;
+    startup.Processor = 2u;
+    startup.Status = (UINT64)EFI_ENCODE_ERROR(0x2345u);
+    startup.Detail = 0x12345678u;
+    startup.ExpectedCpus = 20u;
+    startup.PreparedCpus = 18u;
+    startup.VmxReadyCpus = 17u;
+    startup.ResourceStatus = 0x80000001u;
+    startup.PreparationStatus = 0x80000002u;
+    startup.PreparationFailure = 10u;
+    startup.ActivationStatus = 0x80000003u;
+    startup.ActivationFailure = 7u;
+    {
+        char expected_startup[PAYLOAD_DIAGNOSTIC_MAX_SIZE];
+        int count;
+        diagnostic.payload_launch = PAYLOAD_DIAG_START;
+        diagnostic.payload_status = (EFI_STATUS)startup.Status;
+        diagnostic.shim_load_phase = "firmware_load";
+        diagnostic.shim_load_status = EFI_ENCODE_ERROR(0x5678u);
+        count = snprintf(expected_startup, sizeof(expected_startup),
+            "schema=1\npayload_launch=start\npayload_status=0x%016llX\n"
+            "shim_load_phase=firmware_load\nshim_load_status=0x%016llX\n"
+            "startup_record=valid\nstartup_version=1\n"
+            "startup_flags=0x00000003\nstartup_stage=gpu_prepare\n"
+            "startup_reason=operation_failed\nstartup_status=0x%016llX\n"
+            "startup_processor=2\nstartup_detail=305419896\n"
+            "startup_expected_cpus=20\nstartup_prepared_cpus=18\n"
+            "startup_vmx_ready_cpus=17\n"
+            "startup_resource_status=0x80000001\n"
+            "startup_preparation_status=0x80000002\n"
+            "startup_preparation_failure=10\n"
+            "startup_activation_status=0x80000003\n"
+            "startup_activation_failure=7\n",
+            (unsigned long long)(UINT64)diagnostic.payload_status,
+            (unsigned long long)(UINT64)diagnostic.shim_load_status,
+            (unsigned long long)startup.Status);
+        if (!expect(count > 0 && (size_t)count < sizeof(expected_startup),
+                    "expected startup record fits bounded output") ||
+            !expect(format_startup_and_compare(
+                        &diagnostic, PAYLOAD_DIAG_STARTUP_VALID,
+                        &startup, expected_startup),
+                    "startup formatter preserves stage, status, and counters")) {
+            return 1;
+        }
+
+        memset(startup_guarded, 0xa5, sizeof(startup_guarded));
+        written = 77u;
+        if (!expect(!payload_diagnostic_format_with_startup(
+                        &diagnostic, PAYLOAD_DIAG_STARTUP_VALID, &startup,
+                        startup_guarded + 1u, (UINTN)count - 1u, &written),
+                    "one-byte-short startup capacity is rejected") ||
+            !expect(written == 0u &&
+                        bytes_equal(startup_guarded,
+                                    sizeof(startup_guarded), 0xa5u),
+                    "startup capacity failure leaves buffer and guards untouched")) {
+            return 1;
+        }
+
+        memset(startup_guarded, 0xa5, sizeof(startup_guarded));
+        written = 77u;
+        diagnostic.payload_status = EFI_SUCCESS;
+        if (!expect(!payload_diagnostic_format_with_startup(
+                        &diagnostic, PAYLOAD_DIAG_STARTUP_VALID, &startup,
+                        startup_guarded + 1u, sizeof(startup_guarded) - 2u,
+                        &written),
+                    "record status must match payload launch status") ||
+            !expect(written == 0u &&
+                        bytes_equal(startup_guarded,
+                                    sizeof(startup_guarded), 0xa5u),
+                    "status mismatch is rejected atomically")) {
+            return 1;
+        }
+
+        diagnostic.payload_status = (EFI_STATUS)startup.Status;
+        diagnostic.payload_launch = PAYLOAD_DIAG_OK;
+        written = 77u;
+        if (!expect(!payload_diagnostic_format_with_startup(
+                        &diagnostic, PAYLOAD_DIAG_STARTUP_VALID, &startup,
+                        startup_guarded + 1u, sizeof(startup_guarded) - 2u,
+                        &written),
+                    "EFI error record must pair with failed direct launch") ||
+            !expect(written == 0u &&
+                        bytes_equal(startup_guarded,
+                                    sizeof(startup_guarded), 0xa5u),
+                    "launch-status mismatch is rejected atomically")) {
+            return 1;
+        }
+    }
+
+    diagnostic.payload_launch = PAYLOAD_DIAG_OK;
+    diagnostic.payload_status = EFI_SUCCESS;
+    diagnostic.shim_load_phase = "not_applicable";
+    diagnostic.shim_load_status = EFI_NOT_STARTED;
+    hv_boot_diagnostic_init(&startup);
+    startup.Flags = HV_BOOT_DIAGNOSTIC_FLAGS;
+    startup.Stage = HV_BOOT_STAGE_RETURN;
+    startup.Reason = HV_BOOT_REASON_NONE;
+    startup.Status = EFI_SUCCESS;
+    {
+        static const char expected_startup_success[] =
+            "schema=1\npayload_launch=ok\npayload_status=0x0000000000000000\n"
+            "shim_load_phase=not_applicable\n"
+            "shim_load_status=0x8000000000000013\n"
+            "startup_record=valid\nstartup_version=1\n"
+            "startup_flags=0x00000003\nstartup_stage=return\n"
+            "startup_reason=none\nstartup_status=0x0000000000000000\n"
+            "startup_processor=4294967295\nstartup_detail=0\n"
+            "startup_expected_cpus=0\nstartup_prepared_cpus=0\n"
+            "startup_vmx_ready_cpus=0\n"
+            "startup_resource_status=0x00000000\n"
+            "startup_preparation_status=0x00000000\n"
+            "startup_preparation_failure=0\n"
+            "startup_activation_status=0x00000000\n"
+            "startup_activation_failure=0\n";
+        if (!expect(format_startup_and_compare(
+                        &diagnostic, PAYLOAD_DIAG_STARTUP_VALID, &startup,
+                        expected_startup_success),
+                    "successful returned record has a distinct stage and reason")) {
+            return 1;
+        }
+    }
+
+    {
+        static const char expected_unavailable[] =
+            "schema=1\npayload_launch=ok\npayload_status=0x0000000000000000\n"
+            "shim_load_phase=not_applicable\n"
+            "shim_load_status=0x8000000000000013\n"
+            "startup_record=unavailable\n";
+        static const char expected_invalid[] =
+            "schema=1\npayload_launch=ok\npayload_status=0x0000000000000000\n"
+            "shim_load_phase=not_applicable\n"
+            "shim_load_status=0x8000000000000013\n"
+            "startup_record=invalid\n";
+        if (!expect(format_startup_and_compare(
+                        &diagnostic, PAYLOAD_DIAG_STARTUP_UNAVAILABLE,
+                        NULL, expected_unavailable),
+                    "unavailable record is explicit without fabricated details") ||
+            !expect(format_startup_and_compare(
+                        &diagnostic, PAYLOAD_DIAG_STARTUP_INVALID,
+                        NULL, expected_invalid),
+                    "invalid record is explicit without exposing corrupt fields")) {
+            return 1;
+        }
+    }
+
+    startup.Flags = HV_BOOT_DIAGNOSTIC_ENTRY_REACHED;
+    written = 77u;
+    memset(startup_guarded, 0xa5, sizeof(startup_guarded));
+    if (!expect(!payload_diagnostic_format_with_startup(
+                    &diagnostic, PAYLOAD_DIAG_STARTUP_VALID, &startup,
+                    startup_guarded + 1u, sizeof(startup_guarded) - 2u,
+                    &written),
+                "record missing Returned flag is rejected") ||
+        !expect(written == 0u &&
+                    bytes_equal(startup_guarded,
+                                sizeof(startup_guarded), 0xa5u),
+                "invalid record leaves output and guards untouched")) {
         return 1;
     }
 
