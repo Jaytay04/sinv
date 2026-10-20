@@ -8,6 +8,9 @@ param(
     [Parameter(Mandatory = $true)][string]$InstallerPath,
     [Parameter(Mandatory = $true)][string]$ProbePath,
     [Parameter(Mandatory = $true)][string]$CredentialStateRoot,
+    [ValidateSet('Model', 'SignedNative')][string]$ValidationProfile = 'Model',
+    [string]$ShimPath,
+    [string]$CertificatePath,
     [ValidateRange(1, 65535)][int]$ExpectedBuild = 26200,
     [ValidateRange(0, 65535)][int]$ExpectedUbr = 9457,
     [ValidateRange(1, 256)][int]$ExpectedCpus = 4,
@@ -73,6 +76,10 @@ $script:EfiStatus = 'NOT_RUN'
 $script:StartupStatus = 'NOT_RUN'
 $script:VmStartedAtLeastOnce = $false
 $script:SecureBootChanged = $false
+$script:ValidationProfile = $ValidationProfile
+$script:ModelPassed = $null
+$script:SignedNativePassed = $null
+$script:SignedNativeArtifactEvidence = $null
 $script:InspectEvidence = $null
 $script:StageEvidence = $null
 $script:HalResults = $null
@@ -92,6 +99,7 @@ $script:ScreenCaptureStatus = 'NOT_ATTEMPTED'
 $script:ScreenCapturePath = $null
 $script:VmwareLogPath = $null
 $script:VmwareLogStatus = 'NOT_ATTEMPTED'
+$script:VmwareDbAppendMarker = 'NOT_APPLICABLE'
 $script:ResultObject = $null
 $script:Selected = $null
 $script:Config = $null
@@ -723,6 +731,9 @@ function Configure-DisposableClone {
     elseif ($Original -ieq 'TRUE') { $script:OriginalSecureBoot = $true }
     elseif ($Original -ieq 'FALSE') { $script:OriginalSecureBoot = $false }
     else { throw 'The clone Secure Boot setting must be TRUE or FALSE.' }
+    if ($script:ValidationProfile -ceq 'SignedNative' -and $Original -ine 'TRUE') {
+        throw 'SignedNative requires the provisioned clone VMX Secure Boot setting to remain TRUE.'
+    }
 
     $script:Serial0Path = Join-Path $script:RunRoot 'efi-serial.log'
     $script:Serial1Path = Join-Path $script:RunRoot 'windows-session.log'
@@ -822,6 +833,75 @@ function Get-Sha256([string]$Path) {
     }
 }
 
+function Get-SignedNativeArtifactEvidence {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][string]$ExpectedSignerThumbprint
+    )
+    $Signature = Get-AuthenticodeSignature -FilePath $Path
+    if ($null -eq $Signature.SignerCertificate) {
+        throw "$Label does not contain an Authenticode signer certificate."
+    }
+    $ActualThumbprint = ([string]$Signature.SignerCertificate.Thumbprint).ToUpperInvariant()
+    if ($ActualThumbprint -cne $ExpectedSignerThumbprint) {
+        throw "$Label signer thumbprint does not match the supplied diagnostic certificate."
+    }
+    # NotTrusted can mean that the build host does not trust the test certificate
+    # chain. The embedded signer must still match the pinned certificate exactly;
+    # Secure Boot acceptance is proven later by the SignedNative guest boot.
+    if ([string]$Signature.Status -cnotin @('Valid', 'NotTrusted')) {
+        throw "$Label Authenticode signature is invalid: $($Signature.Status): $($Signature.StatusMessage)"
+    }
+    return [pscustomobject]@{
+        Path = $Path
+        Sha256 = Get-Sha256 $Path
+        Bytes = (Get-Item -LiteralPath $Path -Force).Length
+        SignatureStatus = [string]$Signature.Status
+        SignatureStatusMessage = [string]$Signature.StatusMessage
+        SignerThumbprint = $ActualThumbprint
+    }
+}
+
+function Test-SignedNativeEfiMarkers([string]$Text) {
+    if ([string]::IsNullOrEmpty($Text)) { return $false }
+    return $Text.Contains('uefi hypervisor: DMA isolation admission: PASS') -and
+        $Text.Contains('uefi hypervisor: BSP firmware return: PASS') -and
+        $Text -notmatch '(?i)uefi hypervisor: .*?(?:FAIL|FATAL)|BSP virtualization failure:'
+}
+
+function Test-SignedNativePayloadEvidence {
+    param(
+        [Parameter(Mandatory = $true)][string]$HandoffStatus,
+        [Parameter(Mandatory = $true)][string]$PayloadDiagnostic
+    )
+    $Handoff = @{}
+    foreach ($Line in ($HandoffStatus -split "`r?`n")) {
+        if ($Line -match '^([a-z_]+)=([A-Za-z0-9_]+)$') {
+            if ($Handoff.ContainsKey($Matches[1])) { return $false }
+            $Handoff[$Matches[1]] = $Matches[2]
+        }
+        elseif (-not [string]::IsNullOrWhiteSpace($Line)) { return $false }
+    }
+    $Diagnostic = @{}
+    foreach ($Line in ($PayloadDiagnostic -split "`r?`n")) {
+        if ($Line -match '^([a-z_]+)=([A-Za-z0-9_]+|0x[0-9A-F]{16})$') {
+            if ($Diagnostic.ContainsKey($Matches[1])) { return $false }
+            $Diagnostic[$Matches[1]] = $Matches[2]
+        }
+        elseif (-not [string]::IsNullOrWhiteSpace($Line)) { return $false }
+    }
+    return $Handoff['schema'] -ceq '1' -and
+        $Handoff['state'] -ceq 'READY_BOOT_MANAGER' -and
+        $Handoff['restore'] -ceq 'PASS' -and
+        $Handoff['payload'] -ceq 'PASS' -and
+        $Diagnostic['schema'] -ceq '1' -and
+        $Diagnostic['payload_launch'] -ceq 'ok' -and
+        $Diagnostic['payload_status'] -ceq '0x0000000000000000' -and
+        $Diagnostic['shim_load_phase'] -ceq 'firmware_load' -and
+        $Diagnostic['shim_load_status'] -ceq '0x0000000000000000'
+}
+
 function Compress-FileBase64 {
     param([string]$Path, [int]$MaximumBytes, [string]$Label)
     $Item = Get-Item -LiteralPath $Path -Force
@@ -847,28 +927,81 @@ function Compress-FileBase64 {
     finally { [Array]::Clear($Bytes, 0, $Bytes.Length) }
 }
 
+function Render-GpuStartupTemplate {
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Template,
+        [Parameter(Mandatory = $true)][ValidateSet('Model', 'SignedNative')][string]$Profile
+    )
+    $Replacements = [ordered]@{
+        '__GPU_VALIDATION_PROFILE__' = $Profile
+        '__GPU_EXPECTED_SECURE_BOOT__' = [string]($Profile -ceq 'SignedNative')
+    }
+    foreach ($Token in $Replacements.Keys) {
+        $First = $Template.IndexOf([string]$Token, [StringComparison]::Ordinal)
+        if ($First -lt 0 -or $Template.IndexOf([string]$Token,
+                $First + ([string]$Token).Length, [StringComparison]::Ordinal) -ge 0) {
+            throw "GPU startup template token must appear exactly once: $Token"
+        }
+        $Template = $Template.Replace([string]$Token, [string]$Replacements[$Token])
+    }
+    if ($Template -match '__GPU_[A-Z0-9_]+__') {
+        throw 'The rendered GPU startup template contains an unresolved token.'
+    }
+    return $Template
+}
+
 function Render-GpuGuestScript([string]$Mode, [string]$EfiHash) {
     $Template = [IO.File]::ReadAllText(
         (Join-Path $PSScriptRoot 'guest\Invoke-GpuHalWindowsGuest.ps1'),
         [Text.Encoding]::UTF8)
-    $Startup = [IO.File]::ReadAllBytes(
+    $StartupBytes = [IO.File]::ReadAllBytes(
         (Join-Path $PSScriptRoot 'guest\Invoke-GpuHalWindowsStartup.ps1'))
-    if ($Startup.Length -lt 1 -or $Startup.Length -gt 2097152) {
-        [Array]::Clear($Startup, 0, $Startup.Length)
+    if ($StartupBytes.Length -lt 1 -or $StartupBytes.Length -gt 2097152) {
+        [Array]::Clear($StartupBytes, 0, $StartupBytes.Length)
         throw 'The GPU startup template is outside its bounded size.'
     }
-    try { $StartupBase64 = [Convert]::ToBase64String($Startup) }
-    finally { [Array]::Clear($Startup, 0, $Startup.Length) }
+    try {
+        $StartupText = Render-GpuStartupTemplate `
+            -Template ([Text.UTF8Encoding]::new($false, $true).GetString($StartupBytes)) `
+            -Profile $script:ValidationProfile
+        $StartupRenderedBytes = [Text.UTF8Encoding]::new($false).GetBytes($StartupText)
+        $StartupBase64 = [Convert]::ToBase64String($StartupRenderedBytes)
+        [Array]::Clear($StartupRenderedBytes, 0, $StartupRenderedBytes.Length)
+    }
+    finally { [Array]::Clear($StartupBytes, 0, $StartupBytes.Length) }
+    $ShimBase64 = ''
+    $CertificateBase64 = ''
+    $NativeEvidence = $script:SignedNativeArtifactEvidence
+    if ($script:ValidationProfile -ceq 'SignedNative' -and $Mode -ceq 'Stage') {
+        $ShimBase64 = Compress-FileBase64 $ShimPath 16777216 'Pinned vendor shim'
+        $CertificateBytes = [IO.File]::ReadAllBytes($CertificatePath)
+        try {
+            if ($CertificateBytes.Length -eq 0 -or $CertificateBytes.Length -gt 65536) {
+                throw 'The diagnostic signing certificate exceeds its 64 KiB bound.'
+            }
+            $CertificateBase64 = [Convert]::ToBase64String($CertificateBytes)
+        }
+        finally { [Array]::Clear($CertificateBytes, 0, $CertificateBytes.Length) }
+    }
     $Replacements = [ordered]@{
         '__GPU_MODE__' = $Mode
+        '__GPU_VALIDATION_PROFILE__' = $script:ValidationProfile
         '__GPU_LOADER_DEFLATE_BASE64__' = $(if ($Mode -ceq 'Stage') { Compress-FileBase64 $LoaderPath 16777216 'Loader' } else { '' })
         '__GPU_EFI_DEFLATE_BASE64__' = $(if ($Mode -ceq 'Stage') { Compress-FileBase64 $EfiPath 33554432 'EFI payload' } else { '' })
         '__GPU_INSTALLER_DEFLATE_BASE64__' = $(if ($Mode -ceq 'Stage') { Compress-FileBase64 $InstallerPath 16777216 'Installer' } else { '' })
+        '__GPU_SHIM_DEFLATE_BASE64__' = $ShimBase64
+        '__GPU_CERTIFICATE_BASE64__' = $CertificateBase64
         '__GPU_STARTUP_BASE64__' = $(if ($Mode -ceq 'Stage') { $StartupBase64 } else { '' })
         '__GPU_EXPECTED_BUILD__' = [string]$ExpectedBuild
         '__GPU_EXPECTED_UBR__' = [string]$ExpectedUbr
         '__GPU_EXPECTED_CPUS__' = [string]$ExpectedCpus
         '__GPU_EFI_SHA256__' = $EfiHash
+        '__GPU_LOADER_SHA256__' = if ($null -ne $NativeEvidence) { [string]$NativeEvidence.Loader.Sha256 } else { '' }
+        '__GPU_PAYLOAD_SHA256__' = if ($null -ne $NativeEvidence) { [string]$NativeEvidence.Payload.Sha256 } else { '' }
+        '__GPU_SHIM_SHA256__' = if ($null -ne $NativeEvidence) { [string]$NativeEvidence.Shim.Sha256 } else { '' }
+        '__GPU_CERTIFICATE_SHA256__' = if ($null -ne $NativeEvidence) { [string]$NativeEvidence.Certificate.Sha256 } else { '' }
+        '__GPU_SIGNER_THUMBPRINT__' = if ($null -ne $NativeEvidence) { [string]$NativeEvidence.SignerThumbprint } else { '' }
+        '__GPU_EXPECTED_SECURE_BOOT__' = [string]($script:ValidationProfile -ceq 'SignedNative')
     }
     foreach ($Token in $Replacements.Keys) {
         $First = $Template.IndexOf([string]$Token, [StringComparison]::Ordinal)
@@ -1019,6 +1152,10 @@ function Assert-GuestInspection($Paths, [string]$Phase) {
     $SecureBootValue = if ([string]::IsNullOrEmpty($SecureBootText)) {
         $null
     } else { [bool]::Parse($SecureBootText) }
+    if ($script:ValidationProfile -ceq 'SignedNative' -and
+        $SecureBootValue -ne $true) {
+        throw "$Phase guest inspection did not prove that Secure Boot is enabled."
+    }
     # HostRunner synthesizes result.json from its authenticated response. The
     # guest's extended metadata is carried in the authenticated stdout archive.
     return [pscustomobject]@{
@@ -1097,6 +1234,24 @@ function Copy-CloneVmwareLog {
     $script:VmwareLogStatus = 'COPIED'
 }
 
+function Confirm-SignedNativeVmwareDbAppend {
+    if ($script:ValidationProfile -cne 'SignedNative') { return }
+    $LogText = $null
+    if ($script:VmwareLogStatus -ceq 'COPIED' -and $script:VmwareLogPath -and
+        (Test-Path -LiteralPath $script:VmwareLogPath -PathType Leaf)) {
+        $LogText = [IO.File]::ReadAllText($script:VmwareLogPath)
+    }
+    if ($null -ne $LogText -and
+        $LogText -match '(?i)Added uefi\.secureBoot\.dbDefault\.file0 to dbDefault') {
+        $script:VmwareDbAppendMarker = 'PASS_LOG_MARKER'
+        return
+    }
+    $script:VmwareDbAppendMarker = 'NOT_CONFIRMED'
+    if ([string]::IsNullOrWhiteSpace($script:Failure)) {
+        $script:Failure = 'VMware log did not confirm uefi.secureBoot.dbDefault.file0 was appended to dbDefault.'
+    }
+}
+
 function Test-ConstantHex([string]$Left, [string]$Right) {
     if ($Left -cnotmatch '^[0-9A-F]{64}$' -or $Right -cnotmatch '^[0-9A-F]{64}$') {
         return $false
@@ -1129,41 +1284,119 @@ function Get-AuthenticatedWindowsResult {
                 if (-not (Test-ConstantHex $ActualHex $Frame.Groups[2].Value)) { continue }
                 $Json = [Text.UTF8Encoding]::new($false, $true).GetString($PayloadBytes)
                 $Value = $Json | ConvertFrom-Json
-                if ([int]$Value.SchemaVersion -eq 1 -and
-                    [string]$Value.RunId -ceq $ExpectedRunId -and
-                    [string]$Value.Status -ceq 'FAIL') {
-                    throw ('The authenticated Windows startup result failed: ' +
-                        [string]$Value.Message)
-                }
-                if ([int]$Value.SchemaVersion -ne 1 -or
-                    [string]$Value.RunId -cne $ExpectedRunId -or
-                    [string]$Value.Status -cne 'PASS' -or
-                    [int]$Value.CurrentBuild -ne $ExpectedBuild -or
-                    [int]$Value.Ubr -ne $ExpectedUbr -or
-                    [int]$Value.ExpectedCpus -ne $ExpectedCpus -or
-                    [int]$Value.CpuPassCount -ne $ExpectedCpus -or
-                    $Value.HealthPassed -isnot [bool] -or -not [bool]$Value.HealthPassed -or
-                    $Value.BootManagerUnchanged -isnot [bool] -or
-                    -not [bool]$Value.BootManagerUnchanged -or
-                    [string]$Value.BootManagerSha256Before -cnotmatch '^[0-9A-F]{64}$' -or
-                    [string]$Value.BootManagerSha256After -cne
-                        [string]$Value.BootManagerSha256Before) {
-                    throw 'The authenticated Windows startup result failed its exact identity, build, CPU, health, or boot-manager checks.'
-                }
                 $Sha = [Security.Cryptography.SHA256]::Create()
                 try { $PayloadHash = $Sha.ComputeHash($PayloadBytes) }
                 finally { $Sha.Dispose() }
                 try { $PayloadHashText = ([BitConverter]::ToString($PayloadHash)).Replace('-', '') }
                 finally { [Array]::Clear($PayloadHash, 0, $PayloadHash.Length) }
-                return [pscustomobject]@{
+                $Evidence = [pscustomobject]@{
                     Result = $Value
                     PayloadSha256 = $PayloadHashText
                     PayloadBytes = $PayloadBytes.Length
                     HmacSha256 = $ActualHex
                 }
+                if ([int]$Value.SchemaVersion -ne 1 -or
+                    [string]$Value.RunId -cne $ExpectedRunId) { continue }
+                $script:StartupEvidence = [ordered]@{
+                    RunId = [string]$Value.RunId
+                    ValidationProfile = [string]$Value.ValidationProfile
+                    Status = [string]$Value.Status
+                    SecureBoot = $Value.SecureBoot
+                    ExpectedSecureBoot = $Value.ExpectedSecureBoot
+                    ExpectedCertificateDerPresent = $Value.ExpectedCertificateDerPresent
+                    ExpectedCertificateSha256 = [string]$Value.ExpectedCertificateSha256
+                    CertificateDbInspection = [string]$Value.CertificateDbInspection
+                    HandoffStatus = [string]$Value.HandoffStatus
+                    HandoffStatusBytes = $Value.HandoffStatusBytes
+                    HandoffStatusCapturedBytes = $Value.HandoffStatusCapturedBytes
+                    HandoffStatusTooLarge = $Value.HandoffStatusTooLarge
+                    PayloadDiagnostic = [string]$Value.PayloadDiagnostic
+                    PayloadDiagnosticBytes = $Value.PayloadDiagnosticBytes
+                    PayloadDiagnosticCapturedBytes = $Value.PayloadDiagnosticCapturedBytes
+                    PayloadDiagnosticTooLarge = $Value.PayloadDiagnosticTooLarge
+                    DiagnosticTextEncoding = [string]$Value.DiagnosticTextEncoding
+                    PayloadSha256 = $PayloadHashText
+                    PayloadBytes = $PayloadBytes.Length
+                    HmacSha256 = $ActualHex
+                }
+                if ([string]$Value.Status -ceq 'FAIL') {
+                    $script:StartupStatus = 'FAIL_AUTHENTICATED_GUEST'
+                    $Message = [string]$Value.Message
+                    if ($script:ValidationProfile -ceq 'SignedNative') {
+                        $Message += "`nHandoffStatus:`n$([string]$Value.HandoffStatus)`nPayloadDiagnostic:`n$([string]$Value.PayloadDiagnostic)"
+                    }
+                    throw ('The authenticated Windows startup result failed: ' + $Message)
+                }
+                $CommonValid = [string]$Value.Status -ceq 'PASS' -and
+                    [int]$Value.CurrentBuild -eq $ExpectedBuild -and
+                    [int]$Value.Ubr -eq $ExpectedUbr -and
+                    [int]$Value.ExpectedCpus -eq $ExpectedCpus -and
+                    [int]$Value.CpuPassCount -eq $ExpectedCpus -and
+                    $Value.HealthPassed -is [bool] -and [bool]$Value.HealthPassed -and
+                    $Value.BootManagerUnchanged -is [bool] -and
+                    [bool]$Value.BootManagerUnchanged -and
+                    [string]$Value.BootManagerSha256Before -cmatch '^[0-9A-F]{64}$' -and
+                    [string]$Value.BootManagerSha256After -ceq
+                        [string]$Value.BootManagerSha256Before
+                if (-not $CommonValid) {
+                    $script:StartupStatus = 'FAIL_AUTHENTICATED_RESULT_VALIDATION'
+                    throw 'The authenticated Windows startup result failed its exact identity, build, CPU, health, or boot-manager checks.'
+                }
+                if ([string]$Value.ValidationProfile -cne $script:ValidationProfile) {
+                    $script:StartupStatus = 'FAIL_PROFILE_MISMATCH'
+                    throw 'The authenticated Windows startup result used a different validation profile.'
+                }
+                if ($script:ValidationProfile -ceq 'SignedNative') {
+                    $NativeValid = $Value.ExpectedSecureBoot -is [bool] -and
+                        [bool]$Value.ExpectedSecureBoot -and
+                        $Value.SecureBoot -is [bool] -and [bool]$Value.SecureBoot -and
+                        $Value.ExpectedCertificateDerPresent -is [bool] -and
+                        [bool]$Value.ExpectedCertificateDerPresent -and
+                        [string]$Value.CertificateDbInspection -ceq
+                            'BOUNDED_RAW_DER_SUBSEQUENCE_ONLY' -and
+                        [string]$Value.ExpectedCertificateSha256 -ceq
+                            [string]$script:SignedNativeArtifactEvidence.Certificate.Sha256 -and
+                        $Value.HandoffStatusBytes -is [ValueType] -and
+                        [long]$Value.HandoffStatusBytes -ge 0 -and
+                        [long]$Value.HandoffStatusBytes -le 4096 -and
+                        $Value.HandoffStatusCapturedBytes -is [ValueType] -and
+                        [int]$Value.HandoffStatusCapturedBytes -eq [long]$Value.HandoffStatusBytes -and
+                        $Value.HandoffStatusTooLarge -is [bool] -and
+                        -not [bool]$Value.HandoffStatusTooLarge -and
+                        $Value.PayloadDiagnosticBytes -is [ValueType] -and
+                        [long]$Value.PayloadDiagnosticBytes -ge 0 -and
+                        [long]$Value.PayloadDiagnosticBytes -le 4096 -and
+                        $Value.PayloadDiagnosticCapturedBytes -is [ValueType] -and
+                        [int]$Value.PayloadDiagnosticCapturedBytes -eq [long]$Value.PayloadDiagnosticBytes -and
+                        $Value.PayloadDiagnosticTooLarge -is [bool] -and
+                        -not [bool]$Value.PayloadDiagnosticTooLarge -and
+                        [string]$Value.DiagnosticTextEncoding -ceq 'ISO-8859-1 byte-preserving' -and
+                        (Test-SignedNativePayloadEvidence `
+                            -HandoffStatus ([string]$Value.HandoffStatus) `
+                            -PayloadDiagnostic ([string]$Value.PayloadDiagnostic))
+                    if (-not $NativeValid) {
+                        $script:StartupStatus = 'FAIL_SIGNED_NATIVE_EVIDENCE'
+                        throw ('The authenticated SignedNative startup result failed Secure Boot, db certificate, ' +
+                            'handoff, or payload-launch evidence checks. HandoffStatus=' +
+                            [string]$Value.HandoffStatus + '; PayloadDiagnostic=' +
+                            [string]$Value.PayloadDiagnostic)
+                    }
+                } else {
+                    $ModelValid = $Value.ExpectedSecureBoot -is [bool] -and
+                        -not [bool]$Value.ExpectedSecureBoot -and
+                        $Value.SecureBoot -is [bool] -and -not [bool]$Value.SecureBoot
+                    if (-not $ModelValid) {
+                        $script:StartupStatus = 'FAIL_MODEL_SECURE_BOOT'
+                        throw 'The authenticated Model startup result did not confirm its expected Secure Boot state.'
+                    }
+                }
+                return $Evidence
             }
             catch {
                 if ($_.Exception.Message -like 'The authenticated Windows startup result*') { throw }
+                if ($_.Exception.Message -like 'The authenticated SignedNative startup result*' -or
+                    $_.Exception.Message -like 'The authenticated Model startup result*' -or
+                    $_.Exception.Message -like 'The authenticated Windows startup result used*') { throw }
             }
             finally {
                 if ($null -ne $Digest) { [Array]::Clear($Digest, 0, $Digest.Length) }
@@ -1205,11 +1438,14 @@ function Wait-WindowsVmEvidence([string]$StartupRunId) {
         if ($LastEfi -match 'GPU_HAL_MODEL:FAIL|GPU_ENFORCEMENT_MODEL:FAIL|(?i)uefi hypervisor: .*?(?:FAIL|FATAL)|BSP virtualization failure:|GPU_HAL_VM:.*? FAIL') {
             throw 'EFI serial output reported a fatal GPU HAL or VM failure.'
         }
+        $EfiPass = if ($script:ValidationProfile -ceq 'SignedNative') {
+            Test-SignedNativeEfiMarkers $LastEfi
+        } else { Test-EfiMarkers $LastEfi }
+        if ($EfiPass) { $script:EfiStatus = 'PASS' }
         # Surface a signed guest failure even when the EFI chain never ran.
         $Startup = Get-AuthenticatedWindowsResult -SerialText $LastWindows `
             -ExpectedRunId $StartupRunId
-        if (Test-EfiMarkers $LastEfi) {
-            $script:EfiStatus = 'PASS'
+        if ($EfiPass) {
             if ($null -ne $Startup) {
                 $script:StartupStatus = 'PASS'
                 break
@@ -1218,20 +1454,29 @@ function Wait-WindowsVmEvidence([string]$StartupRunId) {
         Start-Sleep -Milliseconds 500
     } while ([DateTime]::UtcNow -lt $Deadline)
     if ($script:EfiStatus -cne 'PASS') {
-        throw "Timed out waiting for EFI model, ownership, and root-WC markers; see $script:Serial0Path."
+        $ExpectedMarkers = if ($script:ValidationProfile -ceq 'SignedNative') {
+            'DMA isolation admission and BSP firmware return'
+        } else { 'EFI model, ownership, and root-WC' }
+        throw "Timed out waiting for $ExpectedMarkers markers; see $script:Serial0Path."
     }
     if ($null -eq $Startup) {
         throw "Timed out waiting for authenticated Windows COM2 startup evidence; see $script:Serial1Path."
     }
-    return [pscustomobject]@{
-        EfiMarkers = @(
-            'GPU_HAL_MODEL:ALL_PASS',
+    $ObservedMarkers = if ($script:ValidationProfile -ceq 'SignedNative') {
+        @('uefi hypervisor: DMA isolation admission: PASS',
+            'uefi hypervisor: BSP firmware return: PASS')
+    } else {
+        @('GPU_HAL_MODEL:ALL_PASS',
             'GPU_ENFORCEMENT_MODEL:ALL_PASS SYNTHETIC_ONLY',
             'GPU_HAL_VM:ROOT_WC_NO_BACKEND PASS',
             'GPU_HAL_VM:ROOT_WC_BOUNDS PASS',
             'GPU_HAL_VM:ROOT_WC_RENDER PASS',
             'GPU_HAL_VM:ROOT_WC_UNMAPPED PASS',
             'GPU_HAL_VM:VMX_FIRMWARE_RETURN PASS')
+    }
+    return [pscustomobject]@{
+        ValidationProfile = $script:ValidationProfile
+        EfiMarkers = $ObservedMarkers
         Startup = $Startup
         EfiSerialSha256 = if (Test-Path -LiteralPath $script:Serial0Path -PathType Leaf) {
             Get-Sha256 $script:Serial0Path
@@ -1284,44 +1529,40 @@ function Save-RunResult {
     if ($null -eq $script:RunRoot -or -not (Test-Path -LiteralPath $script:RunRoot -PathType Container)) {
         return
     }
+    if ($script:ValidationProfile -ceq 'SignedNative' -and
+        $script:VmwareDbAppendMarker -cne 'PASS_LOG_MARKER' -and
+        [string]::IsNullOrWhiteSpace($script:Failure)) {
+        $script:Failure = 'VMware log did not confirm uefi.secureBoot.dbDefault.file0 was appended to dbDefault.'
+    }
+    if ($script:ValidationProfile -ceq 'SignedNative' -and
+        $null -ne $script:HalResults -and $script:HalResults -is [Collections.IDictionary]) {
+        $script:HalResults['VmwareDbAppendMarker'] = $script:VmwareDbAppendMarker
+        if ($script:VmwareDbAppendMarker -cne 'PASS_LOG_MARKER') {
+            $script:HalResults['DmaIsolationAdmission'] = 'EXTERNAL_VMM_ADMISSION_NOT_CONFIRMED'
+        }
+    }
     $Passed = -not $script:Failure -and $script:CleanupFailures.Count -eq 0 -and
         $script:InspectStatus -eq 'PASS' -and $script:StageStatus -eq 'PASS' -and
         $script:EfiStatus -eq 'PASS' -and $script:StartupStatus -eq 'PASS' -and
         $script:BeforeSnapshotCreated -and $script:AfterSnapshotCreated -and
         $script:RevertedBefore
-    $Result = [ordered]@{
-        SchemaVersion = 1
-        RunId = $script:RunId
-        Result = if ($Passed) { 'PASS' } else { 'FAIL' }
-        Failure = $script:Failure
-        FailureScriptStackTrace = $script:FailureScriptStackTrace
-        CleanupFailures = @($script:CleanupFailures)
-        StopEvents = @($script:StopEvents)
-        Vm = [ordered]@{
-            VmxPath = if ($null -ne $script:Selected) {
-                [string]$script:Selected.VmxPath
-            } else { $null }
-            Build = $ExpectedBuild
-            Ubr = $ExpectedUbr
-            LogicalCpus = $ExpectedCpus
-            NestedVirtualization = $true
-            Network = 'disabled'
-            Passthrough = 'none'
-            OriginalSecureBoot = $script:OriginalSecureBoot
-            SecureBootChangedOnlyAfterStage = $script:SecureBootChanged
-        }
-        Phases = [ordered]@{
-            Inspect = $script:InspectStatus
-            Stage = $script:StageStatus
-            EfiAndRootWc = $script:EfiStatus
-            WindowsStartup = $script:StartupStatus
-        }
-        GuestInspection = [ordered]@{
-            Inspect = if ($null -ne $script:InspectEvidence) { $script:InspectEvidence } else { $null }
-            Stage = if ($null -ne $script:StageEvidence) { $script:StageEvidence } else { $null }
-        }
-        GuestInfoWorkerReadiness = @($script:GuestWorkerReadiness)
-        HalResults = if ($null -ne $script:HalResults) { $script:HalResults } else {
+    $script:ModelPassed = if ($script:ValidationProfile -ceq 'Model') { [bool]$Passed } else { $null }
+    $script:SignedNativePassed = if ($script:ValidationProfile -ceq 'SignedNative') { [bool]$Passed } else { $null }
+    $HalResults = if ($null -ne $script:HalResults) { $script:HalResults }
+        elseif ($script:ValidationProfile -ceq 'SignedNative') {
+            [ordered]@{
+                SignedNativeEfiAdmissionMarkers = if ($script:EfiStatus -ceq 'PASS') { 'PASS' } else { 'NOT_CONFIRMED' }
+                DmaIsolationAdmission = if ($script:EfiStatus -ceq 'PASS') {
+                    'EXTERNAL_VMM_ADMISSION'
+                } else { 'EXTERNAL_VMM_ADMISSION_NOT_CONFIRMED' }
+                NativeGpuBackend = 'NOT_EXERCISED_EXTERNAL_VMM'
+                SyntheticEnforcementModel = 'NOT_EXERCISED'
+                ActualVmxRootWcRenderDrainAndUnmap = 'NOT_EXERCISED_EXTERNAL_VMM'
+                WindowsStartupHealth = 'NOT_CONFIRMED'
+                IntelPhysicalPlaneAndDmaEnforcement = 'NOT_TESTED_BY_THIS_VM'
+                HostDualGpuTopology = 'NOT_TESTED_BY_THIS_VM'
+            }
+        } else {
             [ordered]@{
                 SyntheticEnforcementModel = 'NOT_CONFIRMED'
                 ActualVmxRootWcRenderDrainAndUnmap = 'NOT_CONFIRMED'
@@ -1330,6 +1571,52 @@ function Save-RunResult {
                 HostDualGpuTopology = 'NOT_TESTED_BY_THIS_VM'
             }
         }
+    $Result = [ordered]@{
+        SchemaVersion = 1
+        RunId = $script:RunId
+        ValidationProfile = $script:ValidationProfile
+        SecureBootTrust = if ($script:ValidationProfile -ceq 'SignedNative') {
+            'VMWARE_FIRMWARE_DB_CERTIFICATE; DISTINCT_FROM_HOST_MOK'
+        } else { 'MODEL_PROFILE' }
+        VmwareDbAppendMarker = $script:VmwareDbAppendMarker
+        Result = if ($Passed) { 'PASS' } else { 'FAIL' }
+        ModelPassed = $script:ModelPassed
+        SignedNativePassed = $script:SignedNativePassed
+        SignedNativeArtifacts = if ($script:ValidationProfile -ceq 'SignedNative') {
+            $script:SignedNativeArtifactEvidence
+        } else { $null }
+        Failure = $script:Failure
+        FailureScriptStackTrace = $script:FailureScriptStackTrace
+        CleanupFailures = @($script:CleanupFailures)
+        StopEvents = @($script:StopEvents)
+        Vm = [ordered]@{
+            VmxPath = if ($null -ne $script:Selected) {
+                [string]$script:Selected.VmxPath
+            } else { $null }
+            ValidationProfile = $script:ValidationProfile
+            Build = $ExpectedBuild
+            Ubr = $ExpectedUbr
+            LogicalCpus = $ExpectedCpus
+            NestedVirtualization = $true
+            Network = 'disabled'
+            Passthrough = 'none'
+            OriginalSecureBoot = $script:OriginalSecureBoot
+            ExpectedSecureBoot = ($script:ValidationProfile -ceq 'SignedNative')
+            SecureBootChangedOnlyAfterStage = $script:SecureBootChanged
+        }
+        Phases = [ordered]@{
+            Inspect = $script:InspectStatus
+            Stage = $script:StageStatus
+            EfiAndRootWc = if ($script:ValidationProfile -ceq 'Model') { $script:EfiStatus } else { 'NOT_APPLICABLE' }
+            SignedNativeEfi = if ($script:ValidationProfile -ceq 'SignedNative') { $script:EfiStatus } else { 'NOT_APPLICABLE' }
+            WindowsStartup = $script:StartupStatus
+        }
+        GuestInspection = [ordered]@{
+            Inspect = if ($null -ne $script:InspectEvidence) { $script:InspectEvidence } else { $null }
+            Stage = if ($null -ne $script:StageEvidence) { $script:StageEvidence } else { $null }
+        }
+        GuestInfoWorkerReadiness = @($script:GuestWorkerReadiness)
+        HalResults = $HalResults
         WindowsStartupEvidence = if ($null -ne $script:StartupEvidence) { $script:StartupEvidence } else { $null }
         RunIds = [ordered]@{ Inspect = $script:InspectRunId; Stage = $script:StageRunId }
         Snapshots = [ordered]@{
@@ -1353,6 +1640,7 @@ function Save-RunResult {
                 (Test-Path -LiteralPath $script:ScreenCapturePath -PathType Leaf)) { Get-Sha256 $script:ScreenCapturePath } else { $null }
             VmwareLogPath = $script:VmwareLogPath
             VmwareLogStatus = $script:VmwareLogStatus
+            VmwareDbAppendMarker = $script:VmwareDbAppendMarker
             VmwareLogSha256 = if ($script:VmwareLogPath -and
                 (Test-Path -LiteralPath $script:VmwareLogPath -PathType Leaf)) { Get-Sha256 $script:VmwareLogPath } else { $null }
             Commands = $script:CommandLog
@@ -1368,6 +1656,7 @@ function Save-RunResult {
 }
 
 try {
+    $script:ValidationProfile = $ValidationProfile
     $WorkspaceRoot = Get-FullPath $WorkspaceRoot
     $BuildRoot = Join-Path $WorkspaceRoot '.codex-build'
     $VmxPath = Get-FullPath $VmxPath
@@ -1378,6 +1667,14 @@ try {
     $InstallerPath = Get-FullPath $InstallerPath
     $ProbePath = Get-FullPath $ProbePath
     $VmrunPath = Get-FullPath $VmrunPath
+    if ($script:ValidationProfile -ceq 'SignedNative') {
+        if ([string]::IsNullOrWhiteSpace($ShimPath) -or
+            [string]::IsNullOrWhiteSpace($CertificatePath)) {
+            throw 'SignedNative requires both ShimPath and CertificatePath.'
+        }
+        $ShimPath = Get-FullPath $ShimPath
+        $CertificatePath = Get-FullPath $CertificatePath
+    }
 
     if (-not (Test-Path -LiteralPath $WorkspaceRoot -PathType Container) -or
         -not (Test-Path -LiteralPath $BuildRoot -PathType Container)) {
@@ -1393,14 +1690,68 @@ try {
     if (Test-Path -LiteralPath $RunDirectory) {
         throw 'RunDirectory must be a fresh, nonexistent directory.'
     }
+    $InputPaths = [Collections.Generic.List[string]]::new()
     foreach ($InputPath in @($EfiPath, $LoaderPath, $InstallerPath, $ProbePath,
             (Join-Path $PSScriptRoot 'guest\Invoke-GpuHalWindowsGuest.ps1'),
             (Join-Path $PSScriptRoot 'guest\Invoke-GpuHalWindowsStartup.ps1'))) {
+        $InputPaths.Add([string]$InputPath)
+    }
+    if ($script:ValidationProfile -ceq 'SignedNative') {
+        $InputPaths.Add($ShimPath)
+        $InputPaths.Add($CertificatePath)
+    }
+    foreach ($InputPath in $InputPaths) {
         if (-not (Test-Path -LiteralPath $InputPath -PathType Leaf) -or
             -not (Test-PathWithin $WorkspaceRoot $InputPath)) {
             throw "Required artifact is missing or outside WorkspaceRoot: $InputPath"
         }
         Assert-NoReparsePoint $InputPath 'Input artifact'
+    }
+    if ($script:ValidationProfile -ceq 'SignedNative') {
+        $CertificateItem = Get-Item -LiteralPath $CertificatePath -Force
+        if ($CertificateItem.Length -eq 0 -or $CertificateItem.Length -gt 65536) {
+            throw 'The diagnostic signing certificate must be between 1 byte and 64 KiB.'
+        }
+        $CertificateBytes = [IO.File]::ReadAllBytes($CertificatePath)
+        $SignerCertificate = $null
+        try {
+            $SignerCertificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new($CertificateBytes)
+            if ($SignerCertificate.HasPrivateKey) {
+                throw 'CertificatePath must contain only the public signing certificate.'
+            }
+            $SignerThumbprint = ([string]$SignerCertificate.Thumbprint).ToUpperInvariant()
+        }
+        finally {
+            [Array]::Clear($CertificateBytes, 0, $CertificateBytes.Length)
+            if ($null -ne $SignerCertificate) { $SignerCertificate.Dispose() }
+        }
+        if ($SignerThumbprint -cnotmatch '^[0-9A-F]{40}$') {
+            throw 'The supplied diagnostic signing certificate has an invalid SHA-1 thumbprint.'
+        }
+        $ShimEvidence = [pscustomobject]@{
+            Path = $ShimPath
+            Sha256 = Get-Sha256 $ShimPath
+            Bytes = (Get-Item -LiteralPath $ShimPath -Force).Length
+            PinnedSha256 = '6FE6E1BCBE6CF6BAEC8E056D40361CA1AA715CC04DDCC2855351DE060B84350B'
+        }
+        if ($ShimEvidence.Sha256 -cne $ShimEvidence.PinnedSha256) {
+            throw 'ShimPath does not match the repository-pinned vendor shim image.'
+        }
+        $LoaderEvidence = Get-SignedNativeArtifactEvidence -Path $LoaderPath `
+            -Label 'Signed loader' -ExpectedSignerThumbprint $SignerThumbprint
+        $PayloadEvidence = Get-SignedNativeArtifactEvidence -Path $EfiPath `
+            -Label 'Signed EFI payload' -ExpectedSignerThumbprint $SignerThumbprint
+        $script:SignedNativeArtifactEvidence = [pscustomobject]@{
+            Shim = $ShimEvidence
+            Loader = $LoaderEvidence
+            Payload = $PayloadEvidence
+            Certificate = [pscustomobject]@{
+                Path = $CertificatePath
+                Sha256 = Get-Sha256 $CertificatePath
+                Bytes = $CertificateItem.Length
+            }
+            SignerThumbprint = $SignerThumbprint
+        }
     }
     if (-not (Test-Path -LiteralPath $CredentialStateRoot -PathType Container) -or
         -not (Test-PathWithin $WorkspaceRoot $RunDirectory)) {
@@ -1536,16 +1887,28 @@ try {
         Installer = [ordered]@{ Path = $InstallerPath; Sha256 = (Get-Sha256 $InstallerPath); Bytes = (Get-Item $InstallerPath).Length }
         Probe = [ordered]@{ Path = $ProbePath; Sha256 = (Get-Sha256 $ProbePath); Bytes = (Get-Item $ProbePath).Length }
     }
+    if ($script:ValidationProfile -ceq 'SignedNative') {
+        $Artifacts['Shim'] = $script:SignedNativeArtifactEvidence.Shim
+        $Artifacts['Certificate'] = $script:SignedNativeArtifactEvidence.Certificate
+        $Artifacts['SignerThumbprint'] = $script:SignedNativeArtifactEvidence.SignerThumbprint
+        $Artifacts['LoaderSignature'] = $script:SignedNativeArtifactEvidence.Loader
+        $Artifacts['PayloadSignature'] = $script:SignedNativeArtifactEvidence.Payload
+    }
     [IO.File]::WriteAllText((Join-Path $script:RunRoot 'provenance.json'),
         ([ordered]@{
             SchemaVersion = 1
             RunId = $script:RunId
+            ValidationProfile = $script:ValidationProfile
+            ExpectedSecureBoot = ($script:ValidationProfile -ceq 'SignedNative')
             OriginalVmxSha256 = $VmBefore.Hash.ToUpperInvariant()
             PreparedVmSettings = $SafeVmxSummary
             Artifacts = $Artifacts
             ExpectedWindowsBuild = $ExpectedBuild
             ExpectedWindowsUbr = $ExpectedUbr
             ExpectedLogicalCpus = $ExpectedCpus
+        SecureBootTrust = if ($script:ValidationProfile -ceq 'SignedNative') {
+            'VMWARE_FIRMWARE_DB_CERTIFICATE_PROVISIONING; NOT_HOST_MOK'
+        } else { 'MODEL_PROFILE' }
             TimeoutSeconds = $TimeoutSeconds
             CredentialValuesRecorded = $false
             HmacKeyRecorded = $false
@@ -1574,9 +1937,20 @@ try {
 
     Stop-OnlyTargetVm
     if (-not $script:VmOffConfirmed) { throw 'Windows did not stop after the staged BootNext setup.' }
-    $script:SecureBootRestoreNeeded = $true
-    Set-CloneSecureBoot $false
-    $script:SecureBootChanged = $true
+    if ($script:ValidationProfile -ceq 'Model') {
+        $script:SecureBootRestoreNeeded = $true
+        Set-CloneSecureBoot $false
+        $script:SecureBootChanged = $true
+    } else {
+        if ($script:OriginalSecureBoot -ne $true -or
+            $script:StageEvidence.SecureBoot -ne $true) {
+            throw 'SignedNative requires Secure Boot to remain enabled through staging.'
+        }
+        $CurrentCloneLines = [IO.File]::ReadAllLines([string]$script:Selected.VmxPath)
+        if ((Get-VmxSetting $CurrentCloneLines 'uefi.secureBoot.enabled') -ine 'TRUE') {
+            throw 'SignedNative refuses to start if the clone Secure Boot VMX setting changed from TRUE.'
+        }
+    }
 
     $script:VmStartAttempted = $true
     [void](Invoke-TargetVmrun -Operation @('start', $VmxPath, 'nogui') -Timeout 60)
@@ -1584,21 +1958,50 @@ try {
     $script:VmOffConfirmed = $false
     $VmEvidence = Wait-WindowsVmEvidence -StartupRunId $script:StageRunId
 
-    $script:HalResults = [ordered]@{
-        SyntheticEnforcementModel = 'PASS'
-        ActualVmxRootWcRenderDrainAndUnmap = 'PASS'
-        WindowsStartupHealth = 'PASS'
-        IntelPhysicalPlaneAndDmaEnforcement = 'NOT_TESTED_BY_THIS_VM'
-        HostDualGpuTopology = 'NOT_TESTED_BY_THIS_VM'
+    $script:HalResults = if ($script:ValidationProfile -ceq 'SignedNative') {
+        [ordered]@{
+            SignedNativeEfiAdmissionMarkers = 'PASS'
+            DmaIsolationAdmission = 'EXTERNAL_VMM_ADMISSION'
+            NativeGpuBackend = 'NOT_EXERCISED_EXTERNAL_VMM'
+            SyntheticEnforcementModel = 'NOT_EXERCISED'
+            ActualVmxRootWcRenderDrainAndUnmap = 'NOT_EXERCISED_EXTERNAL_VMM'
+            WindowsStartupHealth = 'PASS'
+            IntelPhysicalPlaneAndDmaEnforcement = 'NOT_TESTED_BY_THIS_VM'
+            HostDualGpuTopology = 'NOT_TESTED_BY_THIS_VM'
+        }
+    } else {
+        [ordered]@{
+            SyntheticEnforcementModel = 'PASS'
+            ActualVmxRootWcRenderDrainAndUnmap = 'PASS'
+            WindowsStartupHealth = 'PASS'
+            IntelPhysicalPlaneAndDmaEnforcement = 'NOT_TESTED_BY_THIS_VM'
+            HostDualGpuTopology = 'NOT_TESTED_BY_THIS_VM'
+        }
     }
     $script:StartupEvidence = [ordered]@{
         RunId = [string]$VmEvidence.Startup.Result.RunId
+        ValidationProfile = [string]$VmEvidence.Startup.Result.ValidationProfile
+        Status = [string]$VmEvidence.Startup.Result.Status
         CurrentBuild = [int]$VmEvidence.Startup.Result.CurrentBuild
         Ubr = [int]$VmEvidence.Startup.Result.Ubr
         ExpectedCpus = [int]$VmEvidence.Startup.Result.ExpectedCpus
         CpuPassCount = [int]$VmEvidence.Startup.Result.CpuPassCount
         HealthPassed = [bool]$VmEvidence.Startup.Result.HealthPassed
         BootManagerUnchanged = [bool]$VmEvidence.Startup.Result.BootManagerUnchanged
+        SecureBoot = $VmEvidence.Startup.Result.SecureBoot
+        ExpectedSecureBoot = $VmEvidence.Startup.Result.ExpectedSecureBoot
+        ExpectedCertificateDerPresent = $VmEvidence.Startup.Result.ExpectedCertificateDerPresent
+        ExpectedCertificateSha256 = [string]$VmEvidence.Startup.Result.ExpectedCertificateSha256
+        CertificateDbInspection = [string]$VmEvidence.Startup.Result.CertificateDbInspection
+        HandoffStatus = [string]$VmEvidence.Startup.Result.HandoffStatus
+        HandoffStatusBytes = [long]$VmEvidence.Startup.Result.HandoffStatusBytes
+        HandoffStatusCapturedBytes = [int]$VmEvidence.Startup.Result.HandoffStatusCapturedBytes
+        HandoffStatusTooLarge = [bool]$VmEvidence.Startup.Result.HandoffStatusTooLarge
+        PayloadDiagnostic = [string]$VmEvidence.Startup.Result.PayloadDiagnostic
+        PayloadDiagnosticBytes = [long]$VmEvidence.Startup.Result.PayloadDiagnosticBytes
+        PayloadDiagnosticCapturedBytes = [int]$VmEvidence.Startup.Result.PayloadDiagnosticCapturedBytes
+        PayloadDiagnosticTooLarge = [bool]$VmEvidence.Startup.Result.PayloadDiagnosticTooLarge
+        DiagnosticTextEncoding = [string]$VmEvidence.Startup.Result.DiagnosticTextEncoding
         PayloadSha256 = [string]$VmEvidence.Startup.PayloadSha256
         HmacSha256 = [string]$VmEvidence.Startup.HmacSha256
     }
@@ -1627,6 +2030,13 @@ finally {
                 try { Copy-CloneVmwareLog }
                 catch { $script:VmwareLogStatus = 'COPY_FAILED: ' + $_.Exception.Message }
             }
+            try { Confirm-SignedNativeVmwareDbAppend }
+            catch {
+                $script:VmwareDbAppendMarker = 'NOT_CONFIRMED'
+                if ([string]::IsNullOrWhiteSpace($script:Failure)) {
+                    $script:Failure = 'Could not verify the VMware Secure Boot db append log marker: ' + $_.Exception.Message
+                }
+            }
             if ($script:BeforeSnapshotCreated) {
                 try {
                     [void](Invoke-TargetVmrun -Operation @('snapshot',
@@ -1652,19 +2062,46 @@ finally {
             }
         }
         else {
+            if ($script:ValidationProfile -ceq 'SignedNative') {
+                $script:VmwareDbAppendMarker = 'NOT_CONFIRMED'
+                if ([string]::IsNullOrWhiteSpace($script:Failure)) {
+                    $script:Failure = 'VMware Secure Boot db append evidence is unavailable while the VM remains running.'
+                }
+            }
             $script:CleanupFailures.Add('VM remained running; snapshots and Secure Boot restoration were skipped.')
         }
         try {
-            $ScriptStatus = [ordered]@{
-                Inspect = $script:InspectStatus
-                Stage = $script:StageStatus
-                Efi = $script:EfiStatus
-                Startup = $script:StartupStatus
-                SyntheticEnforcementModel = if ($script:EfiStatus -eq 'PASS') { 'PASS' } else { 'NOT_CONFIRMED' }
-                ActualVmxRootWc = if ($script:EfiStatus -eq 'PASS') { 'PASS' } else { 'NOT_CONFIRMED' }
-                Windows = if ($script:StartupStatus -eq 'PASS') { 'PASS' } else { 'NOT_CONFIRMED' }
-                IntelPhysicalPlaneAndDmaEnforcement = 'NOT_TESTED_BY_THIS_VM'
-                HostDualGpuTopology = 'NOT_TESTED_BY_THIS_VM'
+            $ScriptStatus = if ($script:ValidationProfile -ceq 'SignedNative') {
+                [ordered]@{
+                    ValidationProfile = $script:ValidationProfile
+                    Inspect = $script:InspectStatus
+                    Stage = $script:StageStatus
+                    SignedNativeEfi = $script:EfiStatus
+                    Startup = $script:StartupStatus
+                    DmaIsolationAdmission = if ($script:VmwareDbAppendMarker -ceq 'PASS_LOG_MARKER') {
+                        'EXTERNAL_VMM_ADMISSION'
+                    } else { 'EXTERNAL_VMM_ADMISSION_NOT_CONFIRMED' }
+                    VmwareDbAppendMarker = $script:VmwareDbAppendMarker
+                    NativeGpuBackend = 'NOT_EXERCISED_EXTERNAL_VMM'
+                    SyntheticEnforcementModel = 'NOT_EXERCISED'
+                    ActualVmxRootWc = 'NOT_EXERCISED_EXTERNAL_VMM'
+                    Windows = if ($script:StartupStatus -eq 'PASS') { 'PASS' } else { 'NOT_CONFIRMED' }
+                    IntelPhysicalPlaneAndDmaEnforcement = 'NOT_TESTED_BY_THIS_VM'
+                    HostDualGpuTopology = 'NOT_TESTED_BY_THIS_VM'
+                }
+            } else {
+                [ordered]@{
+                    ValidationProfile = $script:ValidationProfile
+                    Inspect = $script:InspectStatus
+                    Stage = $script:StageStatus
+                    Efi = $script:EfiStatus
+                    Startup = $script:StartupStatus
+                    SyntheticEnforcementModel = if ($script:EfiStatus -eq 'PASS') { 'PASS' } else { 'NOT_CONFIRMED' }
+                    ActualVmxRootWc = if ($script:EfiStatus -eq 'PASS') { 'PASS' } else { 'NOT_CONFIRMED' }
+                    Windows = if ($script:StartupStatus -eq 'PASS') { 'PASS' } else { 'NOT_CONFIRMED' }
+                    IntelPhysicalPlaneAndDmaEnforcement = 'NOT_TESTED_BY_THIS_VM'
+                    HostDualGpuTopology = 'NOT_TESTED_BY_THIS_VM'
+                }
             }
             [IO.File]::WriteAllText((Join-Path $script:RunRoot 'validation.json'),
                 ($ScriptStatus | ConvertTo-Json -Depth 5), [Text.UTF8Encoding]::new($false))

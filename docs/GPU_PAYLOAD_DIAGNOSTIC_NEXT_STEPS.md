@@ -1,5 +1,10 @@
 # Payload diagnostic build: next steps
 
+This document records the earlier preparation checkpoint. For the current
+script-per-action workflow, use [Scripted signed payload validation](GPU_PAYLOAD_SCRIPT_RUNBOOK.md).
+The controller now has a separate SignedNative profile; the Model profile
+described below remains distinct from signed validation.
+
 The previous physical run is recovered and `Complete`. The new diagnostic
 loader is committed at `33eac97fa9bb7eb921e0e3f8d3b452e06029eaea`; its build
 and 61 component tests passed. It has not been signed, staged, or boot-tested.

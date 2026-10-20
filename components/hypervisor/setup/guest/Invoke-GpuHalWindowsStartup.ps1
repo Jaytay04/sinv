@@ -180,6 +180,22 @@ $Result = [ordered]@{
     Stderr = ''
     DisplayVersion = $null
     SecureBoot = $null
+    ValidationProfile = '__GPU_VALIDATION_PROFILE__'
+    ExpectedSecureBoot = [bool]::Parse('__GPU_EXPECTED_SECURE_BOOT__')
+    ExpectedCertificateDerPresent = $null
+    ExpectedCertificateSha256 = $null
+    CertificateDbInspection = $null
+    HandoffStatus = ''
+    HandoffStatusSha256 = $null
+    HandoffStatusBytes = 0
+    HandoffStatusCapturedBytes = 0
+    HandoffStatusTooLarge = $false
+    PayloadDiagnostic = ''
+    PayloadDiagnosticSha256 = $null
+    PayloadDiagnosticBytes = 0
+    PayloadDiagnosticCapturedBytes = 0
+    PayloadDiagnosticTooLarge = $false
+    DiagnosticTextEncoding = 'ISO-8859-1 byte-preserving'
     BcdCurrent = $null
     BitLockerStatus = $null
     GraphicsInventory = @()
@@ -263,6 +279,71 @@ function Get-BootManagerHash {
             throw 'Windows boot manager is absent from the mounted ESP.'
         }
         (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
+    }
+}
+
+function Get-SignedNativeLaunchDiagnostics {
+    return Invoke-WithEsp {
+        param($EspDrive)
+        $StageRoot = $EspDrive + '\EFI\insecure-boot'
+        $Evidence = [ordered]@{}
+        foreach ($Name in @('handoff-status.txt', 'payload-diagnostic.txt')) {
+            $Path = Join-Path $StageRoot $Name
+            $Bytes = [byte[]]@()
+            $Present = Test-Path -LiteralPath $Path -PathType Leaf
+            $OriginalLength = 0
+            if ($Present) {
+                $Stream = [IO.File]::Open($Path, [IO.FileMode]::Open,
+                    [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+                try {
+                    $OriginalLength = [long]$Stream.Length
+                    $ReadCount = [int][Math]::Min(4097, $Stream.Length)
+                    if ($ReadCount -gt 0) {
+                        $Bytes = [byte[]]::new($ReadCount)
+                        $Offset = 0
+                        while ($Offset -lt $ReadCount) {
+                            $Count = $Stream.Read($Bytes, $Offset, $ReadCount - $Offset)
+                            if ($Count -le 0) { break }
+                            $Offset += $Count
+                        }
+                        $ReadBytes = [byte[]]::new($Offset)
+                        if ($Offset -gt 0) { [Array]::Copy($Bytes, $ReadBytes, $Offset) }
+                        [Array]::Clear($Bytes, 0, $Bytes.Length)
+                        $Bytes = $ReadBytes
+                    }
+                }
+                finally { $Stream.Dispose() }
+            }
+            $TooLarge = $OriginalLength -gt 4096
+            if ($Bytes.Length -gt 4096) {
+                $Captured = [byte[]]::new(4096)
+                [Array]::Copy($Bytes, $Captured, 4096)
+                [Array]::Clear($Bytes, 0, $Bytes.Length)
+                $Bytes = $Captured
+            }
+            $RawText = ''
+            if ($Bytes.Length -gt 0) {
+                $RawText = [Text.Encoding]::GetEncoding(28591).GetString($Bytes)
+            }
+            $Sha256 = $null
+            if ($Bytes.Length -gt 0) {
+                $Sha = [Security.Cryptography.SHA256]::Create()
+                try { $Sha256 = ([BitConverter]::ToString($Sha.ComputeHash($Bytes))).Replace('-', '') }
+                finally { $Sha.Dispose() }
+            }
+            $Evidence[$Name] = [pscustomobject]@{
+                Present = $Present
+                TooLarge = $TooLarge
+                Bytes = $OriginalLength
+                CapturedBytes = $Bytes.Length
+                Sha256 = $Sha256
+                Text = $RawText
+            }
+        }
+        [pscustomobject]@{
+            Handoff = $Evidence['handoff-status.txt']
+            Payload = $Evidence['payload-diagnostic.txt']
+        }
     }
 }
 
@@ -397,6 +478,36 @@ try {
     $Result.ExpectedUbr = [int]$Metadata.ExpectedUbr
     $Result.BootManagerSha256Before = [string]$Metadata.BootManagerSha256Before
     $Result.DisplayVersion = [string]$Metadata.DisplayVersion
+    if ([string]$Metadata.ValidationProfile -cne [string]$Result.ValidationProfile -or
+        [bool]$Metadata.ExpectedSecureBoot -ne [bool]$Result.ExpectedSecureBoot) {
+        throw 'The startup metadata profile does not match the embedded validation profile.'
+    }
+    if ($Result.ValidationProfile -ceq 'SignedNative') {
+        $Result.ExpectedCertificateDerPresent = [bool]$Metadata.ExpectedCertificateDerPresent
+        $Result.ExpectedCertificateSha256 = [string]$Metadata.ExpectedCertificateSha256
+        $Result.CertificateDbInspection = [string]$Metadata.CertificateDbInspection
+        if ($Result.ExpectedCertificateSha256 -cnotmatch '^[0-9A-F]{64}$' -or
+            $Result.CertificateDbInspection -cne 'BOUNDED_RAW_DER_SUBSEQUENCE_ONLY') {
+            throw 'The signed-native startup metadata lacks valid bounded db certificate evidence.'
+        }
+        $LaunchDiagnostics = Get-SignedNativeLaunchDiagnostics
+        $Result.HandoffStatus = [string]$LaunchDiagnostics.Handoff.Text
+        $Result.HandoffStatusSha256 = [string]$LaunchDiagnostics.Handoff.Sha256
+        $Result.HandoffStatusBytes = [long]$LaunchDiagnostics.Handoff.Bytes
+        $Result.HandoffStatusCapturedBytes = [int]$LaunchDiagnostics.Handoff.CapturedBytes
+        $Result.HandoffStatusTooLarge = [bool]$LaunchDiagnostics.Handoff.TooLarge
+        $Result.PayloadDiagnostic = [string]$LaunchDiagnostics.Payload.Text
+        $Result.PayloadDiagnosticSha256 = [string]$LaunchDiagnostics.Payload.Sha256
+        $Result.PayloadDiagnosticBytes = [long]$LaunchDiagnostics.Payload.Bytes
+        $Result.PayloadDiagnosticCapturedBytes = [int]$LaunchDiagnostics.Payload.CapturedBytes
+        $Result.PayloadDiagnosticTooLarge = [bool]$LaunchDiagnostics.Payload.TooLarge
+        if (-not $LaunchDiagnostics.Handoff.Present -or
+            -not $LaunchDiagnostics.Payload.Present -or
+            $LaunchDiagnostics.Handoff.TooLarge -or
+            $LaunchDiagnostics.Payload.TooLarge) {
+            throw 'Signed-native ESP launch diagnostics are missing or exceed the 4 KiB evidence bound.'
+        }
+    }
 
     $Version = Get-SystemVersionInfo
     $Result.CurrentBuild = $Version.Build
@@ -410,8 +521,12 @@ try {
 
     $SecureBoot = Get-SecureBootValue
     $Result.SecureBoot = $SecureBoot
-    if ($SecureBoot -ne $false) {
-        throw 'The test VM did not boot with Secure Boot disabled as required by the direct test-loader fixture.'
+    if ($null -eq $SecureBoot -or $SecureBoot -ne [bool]$Result.ExpectedSecureBoot) {
+        throw "The test VM Secure Boot state did not match the $($Result.ValidationProfile) profile expectation."
+    }
+    if ($Result.ValidationProfile -ceq 'SignedNative' -and
+        -not $Result.ExpectedCertificateDerPresent) {
+        throw 'The expected signed-native certificate DER was not observed in Secure Boot db.'
     }
 
     $Bcd = Get-BcdCurrent

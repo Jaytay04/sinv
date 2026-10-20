@@ -63,6 +63,8 @@ $FunctionNames = @(
     'Stop-OnlyTargetVm', 'Get-VerifiedLiteralAssignmentValue',
     'Import-VmwareGuestInfoConstants', 'Assert-GuestInspection',
     'Read-BoundedText', 'Get-Sha256', 'Test-EfiMarkers',
+    'Test-SignedNativeEfiMarkers', 'Test-SignedNativePayloadEvidence',
+    'Render-GpuStartupTemplate',
     'Wait-WindowsVmEvidence'
 )
 $FunctionDefinitions = @{}
@@ -163,6 +165,9 @@ $GuestTextWriter = Find-FunctionDefinitionAst $GuestAst 'Write-Utf8NoBom'
 $StartupByteWriter = Find-FunctionDefinitionAst $StartupAst 'Write-Bytes'
 $GuestSecureBootGetter = Find-FunctionDefinitionAst $GuestAst 'Get-SecureBootValue'
 $StartupSecureBootGetter = Find-FunctionDefinitionAst $StartupAst 'Get-SecureBootValue'
+$GuestByteSequence = Find-FunctionDefinitionAst $GuestAst 'Test-ByteSequence'
+$GuestCertificateDbEvidence = Find-FunctionDefinitionAst $GuestAst 'Get-ExpectedCertificateDbEvidence'
+$StartupTemplateRenderer = Find-FunctionDefinitionAst $ControllerAst 'Render-GpuStartupTemplate'
 . ([scriptblock]::Create((Find-FunctionDefinitionAst $CoreAst 'Test-UhrRunId').Extent.Text))
 . ([scriptblock]::Create((Find-FunctionDefinitionAst $HostRunnerAst 'Test-UhrGuestInfoRunId').Extent.Text))
 . ([scriptblock]::Create((Find-FunctionDefinitionAst $HostRunnerAst 'Get-VmwareGuestInfoBase').Extent.Text))
@@ -208,6 +213,8 @@ $script:Selected = [pscustomobject]@{
     VmxPath = 'synthetic-vmx'
     MailboxCredentialFile = 'synthetic-mailbox'
 }
+$script:ValidationProfile = 'Model'
+$script:StartupStatus = 'NOT_RUN'
 $ExpectedBuild = 26200
 $ExpectedUbr = 9457
 $ExpectedCpus = 4
@@ -283,6 +290,197 @@ try {
             }
             Assert-Check $CaseMatches "$($Getter.Name) SecureBoot getter: $($Case.Name)"
         }
+    }
+
+    $ByteSequenceCases = & {
+        param($Definition)
+        . ([scriptblock]::Create($Definition))
+        [pscustomobject]@{
+            Present = Test-ByteSequence -Haystack ([byte[]]@(0x10, 0x30, 0x82, 0x01, 0x02, 0x20)) `
+                -Needle ([byte[]]@(0x30, 0x82, 0x01, 0x02))
+            Absent = Test-ByteSequence -Haystack ([byte[]]@(0x10, 0x30, 0x82, 0x01, 0x02, 0x20)) `
+                -Needle ([byte[]]@(0x30, 0x82, 0x01, 0x03))
+            LongerNeedle = Test-ByteSequence -Haystack ([byte[]]@(0x30, 0x82)) `
+                -Needle ([byte[]]@(0x30, 0x82, 0x01))
+            EmptyNeedle = Test-ByteSequence -Haystack ([byte[]]@(0x30, 0x82)) `
+                -Needle ([byte[]]::new(0))
+        }
+    } $GuestByteSequence.Extent.Text
+    Assert-Check ($ByteSequenceCases.Present -and -not $ByteSequenceCases.Absent -and
+        -not $ByteSequenceCases.LongerNeedle -and -not $ByteSequenceCases.EmptyNeedle) `
+        'Secure Boot certificate byte search matches exact embedded DER and rejects absent, longer, and empty needles'
+
+    $ExpectedCertificatePath = Join-Path $FixtureRoot 'expected-public-certificate.der'
+    $ExpectedCertificateBytes = [byte[]]@(0x30, 0x04, 0x02, 0x01, 0x7f)
+    [IO.File]::WriteAllBytes($ExpectedCertificatePath, $ExpectedCertificateBytes)
+    $CertificateTrust = & {
+        param($ByteSequenceDefinition, $EvidenceDefinition, $CertificatePath, $ExpectedBytes)
+        . ([scriptblock]::Create($ByteSequenceDefinition))
+        . ([scriptblock]::Create($EvidenceDefinition))
+        $script:MockDatabaseName = $null
+        $script:MockDatabaseRecords = @(
+            [pscustomobject]@{ Bytes = [byte[]]@(0x01, 0x02, 0x30, 0x04, 0x02, 0x01, 0x7f, 0x03) }
+        )
+        function Get-SecureBootUEFI {
+            param([string]$Name, [string]$ErrorAction)
+            $script:MockDatabaseName = $Name
+            if ($Name -cne 'db' -or $ErrorAction -cne 'Stop') {
+                throw 'Unexpected Secure Boot variable request.'
+            }
+            return $script:MockDatabaseRecords
+        }
+        $present = Get-ExpectedCertificateDbEvidence -CertificatePath $CertificatePath
+        $presentName = $script:MockDatabaseName
+        $script:MockDatabaseRecords = @(
+            [pscustomobject]@{ Bytes = [byte[]]@(0x01, 0x02, 0x30, 0x04, 0x02, 0x01, 0x70, 0x03) }
+        )
+        $absent = Get-ExpectedCertificateDbEvidence -CertificatePath $CertificatePath
+        $script:MockDatabaseRecords = @([pscustomobject]@{ Bytes = [byte[]]::new(0) })
+        $malformedMessage = $null
+        try { $null = Get-ExpectedCertificateDbEvidence -CertificatePath $CertificatePath }
+        catch { $malformedMessage = [string]$_.Exception.Message }
+        [pscustomobject]@{
+            Present = $present
+            Absent = $absent
+            RequestedVariable = $presentName
+            MalformedMessage = $malformedMessage
+        }
+    } $GuestByteSequence.Extent.Text $GuestCertificateDbEvidence.Extent.Text `
+        $ExpectedCertificatePath $ExpectedCertificateBytes
+    Assert-Check ($CertificateTrust.RequestedVariable -ceq 'db' -and
+        $CertificateTrust.Present.ExpectedCertificateDerPresent -and
+        $CertificateTrust.Present.ExpectedCertificateSha256 -ceq
+            (Get-FileHash -LiteralPath $ExpectedCertificatePath -Algorithm SHA256).Hash -and
+        $CertificateTrust.Present.Inspection -ceq 'BOUNDED_RAW_DER_SUBSEQUENCE_ONLY') `
+        'guest trust proof requests db and reports only bounded raw DER presence with the expected certificate hash'
+    Assert-Check (-not $CertificateTrust.Absent.ExpectedCertificateDerPresent) `
+        'guest trust proof fails closed when expected certificate DER is absent from db'
+    Assert-Check ($CertificateTrust.MalformedMessage -match 'unreadable record') `
+        'guest trust proof rejects malformed db records'
+
+    $SignedNativeSuccessOutput = @(
+        'uefi hypervisor: DMA isolation admission: PASS'
+        'uefi hypervisor: BSP firmware return: PASS'
+    ) -join "`r`n"
+    Assert-Check (Test-SignedNativeEfiMarkers $SignedNativeSuccessOutput) `
+        'SignedNative EFI evidence requires DMA admission and BSP firmware return markers'
+    Assert-Check (-not (Test-SignedNativeEfiMarkers (@(
+                'GPU_HAL_MODEL:ALL_PASS'
+                'GPU_HAL_VM:ROOT_WC_RENDER PASS'
+                'GPU_HAL_VM:VMX_FIRMWARE_RETURN PASS'
+            ) -join "`r`n"))) `
+        'synthetic model and root-WC self-test markers cannot satisfy SignedNative EFI evidence'
+    Assert-Check (-not (Test-SignedNativeEfiMarkers ($SignedNativeSuccessOutput +
+            "`r`nuefi hypervisor: GPU admission: FAIL"))) `
+        'SignedNative EFI failure markers override otherwise-present PASS markers'
+
+    $StartupTemplate = @'
+profile=__GPU_VALIDATION_PROFILE__
+secure_boot_expected=__GPU_EXPECTED_SECURE_BOOT__
+'@
+    $RenderedStartupProfiles = foreach ($Profile in @('Model', 'SignedNative')) {
+        $Rendered = Render-GpuStartupTemplate -Template $StartupTemplate -Profile $Profile
+        $Encoded = [Convert]::ToBase64String([Text.UTF8Encoding]::new($false).GetBytes($Rendered))
+        [Text.UTF8Encoding]::new($false).GetString([Convert]::FromBase64String($Encoded))
+    }
+    Assert-Check ($RenderedStartupProfiles[0] -match '(?m)^profile=Model$' -and
+        $RenderedStartupProfiles[0] -match '(?m)^secure_boot_expected=False$' -and
+        $RenderedStartupProfiles[1] -match '(?m)^profile=SignedNative$' -and
+        $RenderedStartupProfiles[1] -match '(?m)^secure_boot_expected=True$' -and
+        ($RenderedStartupProfiles -join "`n") -notmatch '__GPU_[A-Z0-9_]+__') `
+        'startup template renders profile and Secure Boot values before nested Base64 encoding'
+    Assert-Throws {
+        Render-GpuStartupTemplate -Template ($StartupTemplate + "`nprofile=__GPU_VALIDATION_PROFILE__") `
+            -Profile SignedNative
+    } 'startup template rejects duplicated security profile tokens' 'exactly once'
+    Assert-Throws {
+        Render-GpuStartupTemplate -Template 'profile=Model' -Profile Model
+    } 'startup template rejects a missing Secure Boot expectation token' 'exactly once'
+    $GuestRendererDefinition = Find-FunctionDefinitionAst $ControllerAst 'Render-GpuGuestScript'
+    $GuestRendererText = $GuestRendererDefinition.Extent.Text
+    Assert-Check ($GuestRendererText.IndexOf('Render-GpuStartupTemplate', [StringComparison]::Ordinal) -ge 0 -and
+        $GuestRendererText.IndexOf('Render-GpuStartupTemplate', [StringComparison]::Ordinal) -lt
+        $GuestRendererText.IndexOf('ToBase64String($StartupRenderedBytes)', [StringComparison]::Ordinal)) `
+        'production guest renderer resolves startup tokens before embedding startup bytes'
+
+    $SecureBootDisableCalls = @($ControllerAst.FindAll({
+            param($Node)
+            $Node -is [Management.Automation.Language.CommandAst] -and
+                $Node.GetCommandName() -ceq 'Set-CloneSecureBoot' -and
+                $Node.Extent.Text -match '(?i)\$false\s*$'
+        }, $true))
+    $DisableCallGuard = $null
+    if ($SecureBootDisableCalls.Count -eq 1) {
+        $DisableCallGuard = $SecureBootDisableCalls[0].Parent
+        while ($null -ne $DisableCallGuard -and
+            $DisableCallGuard -isnot [Management.Automation.Language.IfStatementAst]) {
+            $DisableCallGuard = $DisableCallGuard.Parent
+        }
+    }
+    Assert-Check ($SecureBootDisableCalls.Count -eq 1 -and $null -ne $DisableCallGuard -and
+        $DisableCallGuard.Clauses.Count -eq 1 -and
+        $DisableCallGuard.Clauses[0].Item1.Extent.Text -match "ValidationProfile\s+-ceq\s+'Model'" -and
+        $null -ne $DisableCallGuard.ElseClause -and
+        $DisableCallGuard.ElseClause.Extent.Text -notmatch 'Set-CloneSecureBoot') `
+        'only Model profile disables clone Secure Boot; SignedNative branch retains it'
+
+    $SignedShimBranches = @($GuestAst.FindAll({
+            param($Node)
+            $Node -is [Management.Automation.Language.IfStatementAst] -and
+                $Node.Extent.Text.Contains('Copy-Item -LiteralPath $VerifiedShimPath')
+        }, $true))
+    $ShimBranch = if ($SignedShimBranches.Count -eq 1) { $SignedShimBranches[0] } else { $null }
+    Assert-Check ($null -ne $ShimBranch -and $ShimBranch.Clauses.Count -eq 1 -and
+        $ShimBranch.Clauses[0].Item1.Extent.Text -match "ValidationProfile\s+-ceq\s+'SignedNative'" -and
+        $GuestAst.Extent.Text.Contains("Join-Path `$StageDirectory 'shimx64.efi'") -and
+        $ShimBranch.Clauses[0].Item2.Extent.Text.Contains('$VerifiedShimPath') -and
+        $null -ne $ShimBranch.ElseClause -and $ShimBranch.ElseClause.Extent.Text.Contains('$LoaderPath')) `
+        'SignedNative stages the verified vendor shim as shimx64; Model keeps its direct-loader fixture'
+
+    $InstallerProfileBranches = @($GuestAst.FindAll({
+            param($Node)
+            $Node -is [Management.Automation.Language.IfStatementAst] -and
+                $Node.Extent.Text.Contains("'legacy'") -and
+                $Node.Extent.Text.Contains("'vm-direct'")
+        }, $true))
+    $InstallerProfileBranch = if ($InstallerProfileBranches.Count -eq 1) {
+        $InstallerProfileBranches[0]
+    } else { $null }
+    Assert-Check ($null -ne $InstallerProfileBranch -and $InstallerProfileBranch.Clauses.Count -eq 1 -and
+        $InstallerProfileBranch.Clauses[0].Item1.Extent.Text -match "ValidationProfile\s+-ceq\s+'SignedNative'" -and
+        $InstallerProfileBranch.Clauses[0].Item2.Extent.Text.Contains("'legacy'") -and
+        $null -ne $InstallerProfileBranch.ElseClause -and
+        $InstallerProfileBranch.ElseClause.Extent.Text.Contains("'vm-direct'")) `
+        'SignedNative uses the legacy shim chain while Model retains vm-direct boot'
+
+    $ValidSignedNativeHandoff = @(
+        'schema=1'
+        'state=READY_BOOT_MANAGER'
+        'restore=PASS'
+        'payload=PASS'
+    ) -join "`r`n"
+    $ValidSignedNativeDiagnostic = @(
+        'schema=1'
+        'payload_launch=ok'
+        'payload_status=0x0000000000000000'
+        'shim_load_phase=firmware_load'
+        'shim_load_status=0x0000000000000000'
+    ) -join "`r`n"
+    Assert-Check (Test-SignedNativePayloadEvidence -HandoffStatus $ValidSignedNativeHandoff `
+            -PayloadDiagnostic $ValidSignedNativeDiagnostic) `
+        'SignedNative payload proof accepts exact successful handoff, firmware launch, and EFI status evidence'
+    foreach ($InvalidSignedNativeCase in @(
+            [pscustomobject]@{ Name = 'payload handoff failed'; Handoff = $ValidSignedNativeHandoff.Replace('payload=PASS', 'payload=FAILED'); Diagnostic = $ValidSignedNativeDiagnostic }
+            [pscustomobject]@{ Name = 'nonzero payload status'; Handoff = $ValidSignedNativeHandoff; Diagnostic = $ValidSignedNativeDiagnostic.Replace('payload_status=0x0000000000000000', 'payload_status=0x8000000000000001') }
+            [pscustomobject]@{ Name = 'launch stage failed'; Handoff = $ValidSignedNativeHandoff; Diagnostic = $ValidSignedNativeDiagnostic.Replace('payload_launch=ok', 'payload_launch=failed') }
+            [pscustomobject]@{ Name = 'shim stage failed'; Handoff = $ValidSignedNativeHandoff; Diagnostic = $ValidSignedNativeDiagnostic.Replace('shim_load_status=0x0000000000000000', 'shim_load_status=0x8000000000000001') }
+            [pscustomobject]@{ Name = 'duplicate diagnostic key'; Handoff = $ValidSignedNativeHandoff; Diagnostic = $ValidSignedNativeDiagnostic + "`r`npayload_launch=ok" }
+            [pscustomobject]@{ Name = 'malformed diagnostic line'; Handoff = $ValidSignedNativeHandoff; Diagnostic = $ValidSignedNativeDiagnostic + "`r`nnot-a-status" }
+        )) {
+        Assert-Check (-not (Test-SignedNativePayloadEvidence `
+                -HandoffStatus $InvalidSignedNativeCase.Handoff `
+                -PayloadDiagnostic $InvalidSignedNativeCase.Diagnostic)) `
+            "SignedNative payload proof rejects $($InvalidSignedNativeCase.Name)"
     }
 
     $OpenSerialPath = Join-Path $FixtureRoot 'open-vmware-serial.txt'
@@ -514,6 +712,21 @@ RW 8 SPARSE "cid-mismatch-child-flat.vmdk"
         SchemaVersion = 1
         RunId = 'gpu-hal-windows-test-001'
         Status = 'PASS'
+        ValidationProfile = 'Model'
+        ExpectedSecureBoot = $false
+        SecureBoot = $false
+        ExpectedCertificateDerPresent = $null
+        ExpectedCertificateSha256 = $null
+        CertificateDbInspection = $null
+        HandoffStatus = $null
+        HandoffStatusBytes = $null
+        HandoffStatusCapturedBytes = $null
+        HandoffStatusTooLarge = $null
+        PayloadDiagnostic = $null
+        PayloadDiagnosticBytes = $null
+        PayloadDiagnosticCapturedBytes = $null
+        PayloadDiagnosticTooLarge = $null
+        DiagnosticTextEncoding = $null
         CurrentBuild = $ExpectedBuild
         Ubr = $ExpectedUbr
         ExpectedCpus = $ExpectedCpus
@@ -538,10 +751,9 @@ RW 8 SPARSE "cid-mismatch-child-flat.vmdk"
         -ExpectedRunId 'gpu-hal-windows-test-001'
     Assert-Check ($null -eq $WrongHmacResult) 'wrong HMAC is rejected'
 
-    Assert-Throws {
-        Get-AuthenticatedWindowsResult -SerialText $ValidFrame `
-            -ExpectedRunId 'gpu-hal-windows-other'
-    } 'wrong run identity is rejected' 'failed its exact identity'
+    $WrongRunResult = Get-AuthenticatedWindowsResult -SerialText $ValidFrame `
+        -ExpectedRunId 'gpu-hal-windows-other'
+    Assert-Check ($null -eq $WrongRunResult) 'wrong run identity is rejected'
 
     $MissingHealthPayload = [ordered]@{
         SchemaVersion = 1
@@ -568,6 +780,21 @@ RW 8 SPARSE "cid-mismatch-child-flat.vmdk"
         SchemaVersion = 1
         RunId = $StartupRunId
         Status = 'FAIL'
+        ValidationProfile = 'Model'
+        SecureBoot = $false
+        ExpectedSecureBoot = $false
+        ExpectedCertificateDerPresent = $null
+        ExpectedCertificateSha256 = $null
+        CertificateDbInspection = $null
+        HandoffStatus = $null
+        HandoffStatusBytes = $null
+        HandoffStatusCapturedBytes = $null
+        HandoffStatusTooLarge = $null
+        PayloadDiagnostic = $null
+        PayloadDiagnosticBytes = $null
+        PayloadDiagnosticCapturedBytes = $null
+        PayloadDiagnosticTooLarge = $null
+        DiagnosticTextEncoding = $null
         Message = 'Synthetic authenticated startup failure.'
     } | ConvertTo-Json -Compress
     $SignedFailureBytes = [Text.UTF8Encoding]::new($false).GetBytes($SignedFailurePayload)

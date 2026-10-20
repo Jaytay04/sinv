@@ -15,14 +15,23 @@ $ErrorActionPreference = 'Stop'
 # The controller replaces every token exactly once before placing this script
 # in the authenticated UEFILoader GuestInfo package as Invoke-WindowsGuestTest.ps1.
 $GpuMode = '__GPU_MODE__'
+$ValidationProfile = '__GPU_VALIDATION_PROFILE__'
 $LoaderDeflateBase64 = '__GPU_LOADER_DEFLATE_BASE64__'
 $EfiDeflateBase64 = '__GPU_EFI_DEFLATE_BASE64__'
 $InstallerDeflateBase64 = '__GPU_INSTALLER_DEFLATE_BASE64__'
+$ShimDeflateBase64 = '__GPU_SHIM_DEFLATE_BASE64__'
+$CertificateBase64 = '__GPU_CERTIFICATE_BASE64__'
 $StartupBase64 = '__GPU_STARTUP_BASE64__'
 $ExpectedBuild = [int]'__GPU_EXPECTED_BUILD__'
 $ExpectedUbr = [int]'__GPU_EXPECTED_UBR__'
 $ExpectedCpus = [int]'__GPU_EXPECTED_CPUS__'
 $ExpectedEfiSha256 = '__GPU_EFI_SHA256__'
+$ExpectedLoaderSha256 = '__GPU_LOADER_SHA256__'
+$ExpectedPayloadSha256 = '__GPU_PAYLOAD_SHA256__'
+$ExpectedShimSha256 = '__GPU_SHIM_SHA256__'
+$ExpectedCertificateSha256 = '__GPU_CERTIFICATE_SHA256__'
+$ExpectedSignerThumbprint = '__GPU_SIGNER_THUMBPRINT__'
+$ExpectedSecureBoot = [bool]::Parse('__GPU_EXPECTED_SECURE_BOOT__')
 
 $RunRoot = [IO.Path]::GetFullPath($RunRoot)
 $RunId = Split-Path -Leaf $RunRoot
@@ -38,6 +47,7 @@ $Result = [ordered]@{
     Message = 'GPU HAL Windows guest workflow failed.'
     CompletedUtc = $null
     Mode = $GpuMode
+    ValidationProfile = $ValidationProfile
     Action = $Action
     ExpectedProbeVerdict = $ExpectedProbeVerdict
     CurrentBuild = $null
@@ -48,6 +58,11 @@ $Result = [ordered]@{
     ExpectedCpus = $ExpectedCpus
     BootManagerSha256 = $null
     SecureBoot = $null
+    ExpectedSecureBoot = $ExpectedSecureBoot
+    ExpectedCertificateDerPresent = $null
+    ExpectedCertificateSha256 = $ExpectedCertificateSha256
+    CertificateDbInspection = $null
+    SignerThumbprint = $ExpectedSignerThumbprint
     BitLockerStatus = $null
     BcdBefore = $null
     BcdAfter = $null
@@ -282,6 +297,80 @@ function Get-SecureBootValue {
     }
 }
 
+function Test-ByteSequence {
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][byte[]]$Haystack,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][byte[]]$Needle
+    )
+    if ($Needle.Length -eq 0 -or $Haystack.Length -lt $Needle.Length) { return $false }
+    $LastStart = $Haystack.Length - $Needle.Length
+    for ($Start = 0; $Start -le $LastStart; $Start++) {
+        $Matches = $true
+        for ($Index = 0; $Index -lt $Needle.Length; $Index++) {
+            if ($Haystack[$Start + $Index] -ne $Needle[$Index]) {
+                $Matches = $false
+                break
+            }
+        }
+        if ($Matches) { return $true }
+    }
+    return $false
+}
+
+function Get-ByteArraySha256([byte[]]$Bytes) {
+    $Sha = [Security.Cryptography.SHA256]::Create()
+    try { return ([BitConverter]::ToString($Sha.ComputeHash($Bytes))).Replace('-', '') }
+    finally { $Sha.Dispose() }
+}
+
+function Get-ExpectedCertificateDbEvidence([string]$CertificatePath) {
+    if (-not (Test-Path -LiteralPath $CertificatePath -PathType Leaf)) {
+        throw 'The expected Secure Boot certificate is missing from the private staging directory.'
+    }
+    $Certificate = [IO.File]::ReadAllBytes($CertificatePath)
+    try {
+        if ($Certificate.Length -eq 0 -or $Certificate.Length -gt 65536) {
+            throw 'The expected public certificate exceeds its 64 KiB bound.'
+        }
+        $DatabaseEntries = @(Get-SecureBootUEFI -Name db -ErrorAction Stop)
+        if ($DatabaseEntries.Count -eq 0) { throw 'Secure Boot db returned no records.' }
+        $TotalBytes = 0
+        $Present = $false
+        foreach ($Entry in $DatabaseEntries) {
+            $DatabaseBytes = $null
+            if ($Entry -is [byte[]]) { $DatabaseBytes = [byte[]]$Entry }
+            elseif ($null -ne $Entry.PSObject.Properties['Bytes']) {
+                $DatabaseBytes = [byte[]]$Entry.Bytes
+            }
+            if ($null -eq $DatabaseBytes -or $DatabaseBytes.Length -eq 0) {
+                throw 'Secure Boot db returned an unreadable record.'
+            }
+            $TotalBytes += $DatabaseBytes.Length
+            if ($TotalBytes -gt 16777216) {
+                throw 'Secure Boot db exceeds the bounded 16 MiB inspection limit.'
+            }
+            if (Test-ByteSequence -Haystack $DatabaseBytes -Needle $Certificate) {
+                $Present = $true
+            }
+        }
+        return [pscustomobject]@{
+            ExpectedCertificateDerPresent = $Present
+            ExpectedCertificateSha256 = (Get-FileHash -LiteralPath $CertificatePath -Algorithm SHA256).Hash
+            DatabaseRecordCount = $DatabaseEntries.Count
+            DatabaseBytesInspected = $TotalBytes
+            Inspection = 'BOUNDED_RAW_DER_SUBSEQUENCE_ONLY'
+        }
+    }
+    finally { [Array]::Clear($Certificate, 0, $Certificate.Length) }
+}
+
+function Assert-EmbeddedArtifactHash([byte[]]$Bytes, [string]$ExpectedHash, [string]$Label) {
+    if ($ExpectedHash -cnotmatch '^[0-9A-F]{64}$' -or
+        (Get-ByteArraySha256 $Bytes) -cne $ExpectedHash) {
+        throw "$Label bytes do not match the authenticated package hash."
+    }
+}
+
 function Get-BitLockerStatusText {
     $ManageBde = Join-Path $env:SystemRoot 'System32\manage-bde.exe'
     $Captured = Invoke-CapturedProcess -FilePath $ManageBde `
@@ -498,8 +587,18 @@ function Invoke-Stage {
     if ($ExpectedBuild -lt 22000 -or $ExpectedBuild -gt 99999 -or
         $ExpectedUbr -lt 0 -or $ExpectedUbr -gt 999999 -or
         $ExpectedCpus -lt 1 -or $ExpectedCpus -gt 256 -or
-        $ExpectedEfiSha256 -cnotmatch '^[0-9A-F]{64}$') {
+        $ExpectedEfiSha256 -cnotmatch '^[0-9A-F]{64}$' -or
+        $ValidationProfile -cnotin @('Model', 'SignedNative')) {
         throw 'The rendered GPU VM test expectations are invalid.'
+    }
+    if ($ValidationProfile -ceq 'SignedNative' -and
+        (-not $ExpectedSecureBoot -or
+         $ExpectedLoaderSha256 -cnotmatch '^[0-9A-F]{64}$' -or
+         $ExpectedPayloadSha256 -cnotmatch '^[0-9A-F]{64}$' -or
+         $ExpectedShimSha256 -cnotmatch '^[0-9A-F]{64}$' -or
+         $ExpectedCertificateSha256 -cnotmatch '^[0-9A-F]{64}$' -or
+         $ExpectedSignerThumbprint -cnotmatch '^[0-9A-F]{40}$')) {
+        throw 'SignedNative requires Secure Boot and pinned signed-artifact evidence.'
     }
 
     $Version = Get-SystemVersionInfo
@@ -520,6 +619,57 @@ function Invoke-Stage {
         -Encoded $EfiDeflateBase64 -MaximumBytes 32MB -Label 'EFI test image'
     $InstallerBytes = ConvertFrom-BoundedDeflateBase64 `
         -Encoded $InstallerDeflateBase64 -MaximumBytes 16MB -Label 'installer'
+    $ShimBytes = [byte[]]@()
+    $CertificateBytes = [byte[]]@()
+    if ($ValidationProfile -ceq 'SignedNative') {
+        $ShimBytes = ConvertFrom-BoundedDeflateBase64 `
+            -Encoded $ShimDeflateBase64 -MaximumBytes 16MB -Label 'vendor shim'
+        if ([string]::IsNullOrWhiteSpace($CertificateBase64) -or
+            $CertificateBase64.Length -gt 100000) {
+            throw 'The authenticated public certificate is absent or exceeds its encoded bound.'
+        }
+        $CertificateBytes = [Convert]::FromBase64String($CertificateBase64)
+        if ($CertificateBytes.Length -eq 0 -or $CertificateBytes.Length -gt 65536) {
+            throw 'The public signing certificate is empty or exceeds its 64 KiB bound.'
+        }
+        Assert-EmbeddedArtifactHash -Bytes $LoaderBytes `
+            -ExpectedHash $ExpectedLoaderSha256 -Label 'Signed loader'
+        Assert-EmbeddedArtifactHash -Bytes $EfiBytes `
+            -ExpectedHash $ExpectedPayloadSha256 -Label 'Signed EFI payload'
+        Assert-EmbeddedArtifactHash -Bytes $ShimBytes `
+            -ExpectedHash $ExpectedShimSha256 -Label 'Pinned vendor shim'
+        Assert-EmbeddedArtifactHash -Bytes $CertificateBytes `
+            -ExpectedHash $ExpectedCertificateSha256 -Label 'Public signing certificate'
+        if ($ShimBytes.Length -lt 1024 -or $ShimBytes[0] -ne 0x4d -or
+            $ShimBytes[1] -ne 0x5a) {
+            throw 'The embedded vendor shim is not a PE image.'
+        }
+        $SignerCertificate = $null
+        try {
+            $SignerCertificate = [Security.Cryptography.X509Certificates.X509Certificate2]::new(
+                $CertificateBytes)
+            if ($SignerCertificate.HasPrivateKey -or
+                ([string]$SignerCertificate.Thumbprint).ToUpperInvariant() -cne
+                    $ExpectedSignerThumbprint) {
+                throw 'The embedded public certificate does not match the pinned signer thumbprint.'
+            }
+            $CertificateDer = $SignerCertificate.RawData
+            try {
+                if ($CertificateDer.Length -ne $CertificateBytes.Length) {
+                    throw 'CertificatePath must contain a single DER-encoded public certificate.'
+                }
+                for ($Index = 0; $Index -lt $CertificateDer.Length; $Index++) {
+                    if ($CertificateDer[$Index] -ne $CertificateBytes[$Index]) {
+                        throw 'CertificatePath must contain a single DER-encoded public certificate.'
+                    }
+                }
+            }
+            finally { [Array]::Clear($CertificateDer, 0, $CertificateDer.Length) }
+        }
+        finally {
+            if ($null -ne $SignerCertificate) { $SignerCertificate.Dispose() }
+        }
+    }
     $StartupBytes = [Convert]::FromBase64String($StartupBase64)
     if ($StartupBytes.Length -eq 0 -or $StartupBytes.Length -gt 2MB) {
         throw 'The embedded startup script is empty or exceeds its size bound.'
@@ -551,10 +701,15 @@ function Invoke-Stage {
     }
 
     $SecureBootBefore = Get-SecureBootValue
+    $CertificateDbEvidence = $null
+    $Result.SecureBoot = $SecureBootBefore
+    if ($ValidationProfile -ceq 'SignedNative' -and
+        ($SecureBootBefore -ne $true -or -not $ExpectedSecureBoot)) {
+        throw 'SignedNative staging requires Secure Boot to be enabled in the current guest boot.'
+    }
     $BitLockerBefore = Get-BitLockerStatusText
     $BcdBefore = Get-BcdText
     $BootManagerBefore = Get-BootManagerHash
-    $Result.SecureBoot = $SecureBootBefore
     $Result.BitLockerStatus = $BitLockerBefore
     $Result.BcdBefore = $BcdBefore
     $Result.BootManagerSha256 = $BootManagerBefore
@@ -570,16 +725,29 @@ function Invoke-Stage {
         throw 'ib-tcg-dump.exe is absent from the authenticated GuestInfo run root.'
     }
     $DumpPath = Join-Path $NativeRoot 'ib-tcg-dump.exe'
+    $CertificatePath = Join-Path $NativeRoot 'expected-signer.cer'
+    $VerifiedShimPath = Join-Path $NativeRoot 'vendor-shim.efi'
     [IO.File]::WriteAllBytes($LoaderPath, $LoaderBytes)
     [IO.File]::WriteAllBytes($EfiPath, $EfiBytes)
     [IO.File]::WriteAllBytes($InstallerPath, $InstallerBytes)
-    [IO.File]::WriteAllBytes($StartupPath, $StartupBytes)
-    Copy-Item -LiteralPath $DumpSource -Destination $DumpPath
-
-    $StartupText = [IO.File]::ReadAllText($StartupPath, [Text.Encoding]::UTF8)
+    $StartupText = [Text.UTF8Encoding]::new($false, $true).GetString($StartupBytes)
     if ($StartupText -match '__GPU_[A-Z0-9_]+__') {
         throw 'The embedded startup script still contains an unresolved template token.'
     }
+    Write-Utf8NoBom -Path $StartupPath -Text $StartupText
+    if ($ValidationProfile -ceq 'SignedNative') {
+        [IO.File]::WriteAllBytes($CertificatePath, $CertificateBytes)
+        [IO.File]::WriteAllBytes($VerifiedShimPath, $ShimBytes)
+        $CertificateDbEvidence = Get-ExpectedCertificateDbEvidence -CertificatePath $CertificatePath
+        $Result.ExpectedCertificateDerPresent = [bool]$CertificateDbEvidence.ExpectedCertificateDerPresent
+        $Result.ExpectedCertificateSha256 = [string]$CertificateDbEvidence.ExpectedCertificateSha256
+        $Result.CertificateDbInspection = [string]$CertificateDbEvidence.Inspection
+        if (-not $Result.ExpectedCertificateDerPresent -or
+            $Result.ExpectedCertificateSha256 -cne $ExpectedCertificateSha256) {
+            throw 'The expected public certificate DER was not found in Secure Boot db.'
+        }
+    }
+    Copy-Item -LiteralPath $DumpSource -Destination $DumpPath
 
     $BitLockerProtectionOn = $BitLockerBefore -match `
         '(?im)Protection Status:\s*Protection On'
@@ -653,10 +821,13 @@ function Invoke-Stage {
         New-Item -ItemType Directory -Path $StageDirectory | Out-Null
         $ShimPath = Join-Path $StageDirectory 'shimx64.efi'
         $GrubPath = Join-Path $StageDirectory 'grubx64.efi'
-        # The vm-direct profile launches grubx64.efi at its existing allowlisted
-        # path. The identical shim-named copy only satisfies this VM fixture's
-        # shared manifest preflight; it is not an executable shim chain.
-        Copy-Item -LiteralPath $LoaderPath -Destination $ShimPath
+        if ($ValidationProfile -ceq 'SignedNative') {
+            Copy-Item -LiteralPath $VerifiedShimPath -Destination $ShimPath
+        } else {
+            # The Model profile launches grubx64.efi directly. Its duplicate
+            # shim name satisfies the shared manifest preflight only.
+            Copy-Item -LiteralPath $LoaderPath -Destination $ShimPath
+        }
         Copy-Item -LiteralPath $LoaderPath -Destination $GrubPath
         Copy-Item -LiteralPath $EfiPath `
             -Destination (Join-Path $StageDirectory 'payload.efi')
@@ -672,7 +843,10 @@ function Invoke-Stage {
             [Array]::Clear($Sentinel, 0, $Sentinel.Length)
         }
         $ManifestLines = @('schema=1')
-        foreach ($Name in @('shimx64.efi', 'grubx64.efi')) {
+        $ManifestNames = if ($ValidationProfile -ceq 'SignedNative') {
+            @('shimx64.efi', 'grubx64.efi', 'tcglog.ib', 'payload.efi')
+        } else { @('shimx64.efi', 'grubx64.efi') }
+        foreach ($Name in $ManifestNames) {
             $Path = Join-Path $StageDirectory $Name
             $Item = Get-Item -LiteralPath $Path
             $Digest = (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash
@@ -687,12 +861,13 @@ function Invoke-Stage {
             throw 'bootmgfw.efi changed after initial inspection.'
         }
         $Install = Invoke-CapturedProcess -FilePath $InstallerPath `
-            -Arguments @('oneshot', '--mode', 'bootnext', '--profile', 'vm-direct',
+            -Arguments @('oneshot', '--mode', 'bootnext', '--profile',
+                $(if ($ValidationProfile -ceq 'SignedNative') { 'legacy' } else { 'vm-direct' }),
                 '--esp-volume', 'auto') `
             -TimeoutSeconds 90 -Label 'ib-install BootNext'
         Save-ProbeOrCaptureOutput -Label 'ib-install BootNext' -Captured $Install
         if ($Install.ExitCode -ne 0) {
-            throw "ib-install oneshot --mode bootnext --profile vm-direct exited with code $($Install.ExitCode)."
+            throw "ib-install oneshot --mode bootnext --profile $ValidationProfile exited with code $($Install.ExitCode)."
         }
         if ($Install.Stdout -notmatch `
             '(?m)^BootNext set to owned Boot[0-9A-F]{4}; BootOrder was not changed\.\r?$') {
@@ -724,6 +899,19 @@ function Invoke-Stage {
     $Metadata = [ordered]@{
         SchemaVersion = 1
         RunId = $RunId
+        ValidationProfile = $ValidationProfile
+        ExpectedSecureBoot = $ExpectedSecureBoot
+        ExpectedCertificateDerPresent = $Result.ExpectedCertificateDerPresent
+        ExpectedCertificateSha256 = $Result.ExpectedCertificateSha256
+        CertificateDbInspection = if ($null -ne $CertificateDbEvidence) {
+            [string]$CertificateDbEvidence.Inspection
+        } else { $null }
+        CertificateDbRecordCount = if ($null -ne $CertificateDbEvidence) {
+            [int]$CertificateDbEvidence.DatabaseRecordCount
+        } else { $null }
+        CertificateDbBytesInspected = if ($null -ne $CertificateDbEvidence) {
+            [int]$CertificateDbEvidence.DatabaseBytesInspected
+        } else { $null }
         CreatedUtc = [DateTime]::UtcNow.ToString('o')
         CurrentBuild = $Version.Build
         Ubr = $Version.Ubr
@@ -734,7 +922,14 @@ function Invoke-Stage {
         LogicalProcessorCount = $ActualCpus
         EfiSha256 = $ActualEfiHash
         LoaderSha256 = (Get-FileHash -LiteralPath $LoaderPath -Algorithm SHA256).Hash
+        PayloadSha256 = (Get-FileHash -LiteralPath $EfiPath -Algorithm SHA256).Hash
         InstallerSha256 = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash
+        ShimSha256 = if ($ValidationProfile -ceq 'SignedNative') {
+            (Get-FileHash -LiteralPath $VerifiedShimPath -Algorithm SHA256).Hash
+        } else { $null }
+        SignerThumbprint = if ($ValidationProfile -ceq 'SignedNative') {
+            $ExpectedSignerThumbprint
+        } else { $null }
         BootManagerSha256Before = $BootManagerBefore
         BcdBefore = $BcdBefore
         BcdAfter = $BcdAfter
