@@ -109,6 +109,7 @@ function New-PlatformHelperModule {
         'Get-GpuDiskPhysicalClassification',
         'Assert-GpuNoReparseAncestors',
         'Copy-GpuEspTreeWithManifest',
+        'Assert-GpuSystemBcdBackup',
         'Get-GpuRunPath',
         'Get-GpuBuildDirectories',
         'Get-GpuExpectedToolPaths',
@@ -374,6 +375,92 @@ function Get-Disk {
     return $fixtureModule
 }
 
+function New-GpuSystemBcdExportFixtureModule {
+    param([string]$ModulePath, [string]$StatePath)
+
+    $platformNames = @(
+        'Export-GpuSystemBcdBackup',
+        'Assert-GpuNativeSuccess',
+        'Assert-GpuFreshPath',
+        'Assert-GpuNoReparseAncestors'
+    )
+    $platformDefinitions = @(Get-PlatformFunctionTexts -Path $ModulePath -Names $platformNames)
+    $stateTokens = $null
+    $stateParseErrors = $null
+    $stateAst = [System.Management.Automation.Language.Parser]::ParseFile($StatePath, [ref]$stateTokens, [ref]$stateParseErrors)
+    if ($null -ne $stateParseErrors -and $stateParseErrors.Count -gt 0) {
+        throw "State helper module does not parse: $($stateParseErrors[0].Message)"
+    }
+    $stateFunctions = @($stateAst.FindAll({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true))
+    $stateDefinitions = @($stateFunctions | ForEach-Object { $_.Extent.Text })
+    $mockDefinitions = @'
+$script:GpuBcdExportFixtureScenario = $null
+$script:GpuBcdExportFixtureNativeCalls = New-Object 'System.Collections.Generic.List[object]'
+
+function Set-GpuBcdExportFixtureScenario {
+    param([Parameter(Mandatory = $true)][object]$Scenario)
+    $script:GpuBcdExportFixtureScenario = $Scenario
+    $script:GpuBcdExportFixtureNativeCalls.Clear()
+}
+
+function Get-GpuBcdExportFixtureNativeCalls {
+    return @($script:GpuBcdExportFixtureNativeCalls.ToArray())
+}
+
+function Get-GpuApplicationPath {
+    param([Parameter(Mandatory = $true)][string]$Name)
+    if ($Name -cne 'bcdedit.exe') { throw "TEST MOCK DENIED: unexpected executable lookup: $Name" }
+    return 'fixture-bcdedit.exe'
+}
+
+function Invoke-GpuNativeCommand {
+    param(
+        [Parameter(Mandatory = $true)][string]$Program,
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [Parameter(Mandatory = $true)][string]$ActionDirectory,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    if ($Program -cne 'fixture-bcdedit.exe') { throw "TEST MOCK DENIED: unexpected native program: $Program" }
+    if ($Label -cne 'export-system-bcd') { throw "TEST MOCK DENIED: unexpected native action: $Label" }
+    [void]$script:GpuBcdExportFixtureNativeCalls.Add([pscustomobject]@{
+        Program = $Program
+        Arguments = @($Arguments)
+        ActionDirectory = $ActionDirectory
+        Label = $Label
+    })
+
+    $mode = [string]$script:GpuBcdExportFixtureScenario.OutputMode
+    if ($mode -ceq 'Bytes') {
+        [System.IO.File]::WriteAllBytes($Arguments[1], [byte[]]$script:GpuBcdExportFixtureScenario.Bytes)
+    }
+    elseif ($mode -ceq 'Empty') {
+        [System.IO.File]::WriteAllBytes($Arguments[1], [byte[]]@())
+    }
+    elseif ($mode -cne 'Missing') {
+        throw "TEST MOCK DENIED: unknown BCD export output mode: $mode"
+    }
+
+    $exitCode = [int]$script:GpuBcdExportFixtureScenario.ExitCode
+    return [pscustomobject]@{
+        Succeeded = [bool]$script:GpuBcdExportFixtureScenario.Succeeded
+        ExitCode = $exitCode
+        ReceiptPath = Join-Path $ActionDirectory 'fixture-export-system-bcd.receipt.json'
+    }
+}
+'@
+    $source = @(
+        'Set-StrictMode -Version 2.0'
+        $stateDefinitions
+        $platformDefinitions
+        $mockDefinitions
+        "Export-ModuleMember -Function 'Export-GpuSystemBcdBackup','Set-GpuBcdExportFixtureScenario','Get-GpuBcdExportFixtureNativeCalls'"
+    ) -join "`r`n"
+    $fixtureModule = New-Module -Name ('GpuBcdExportFixture' + [guid]::NewGuid().ToString('N')) `
+        -ScriptBlock ([scriptblock]::Create($source))
+    Import-Module -ModuleInfo $fixtureModule -Force -ErrorAction Stop
+    return $fixtureModule
+}
+
 $workspaceRoot = Split-Path -Parent (Split-Path -Parent $ToolRoot)
 $scratchParent = Join-Path $workspaceRoot '.codex-build\gpu-host-platform-tests'
 $null = Assert-GpuPathWithin -Path $scratchParent -Root $workspaceRoot
@@ -386,9 +473,11 @@ $null = Assert-GpuPathWithin -Path $runRoot -Root $scratchParent
 [void](New-Item -ItemType Directory -Path $runRoot -ErrorAction Stop)
 $junctionPath = $null
 $isolatedModule = $null
+$bcdExportFixtureModule = $null
 
 try {
     $isolatedModule = New-PlatformHelperModule -ModulePath $platformPath -StatePath $stateModulePath
+    $bcdExportFixtureModule = New-GpuSystemBcdExportFixtureModule -ModulePath $platformPath -StatePath $stateModulePath
 
     Invoke-PlatformTestCase 'Pinned certificate DER and CurrentUser private-key check use the intended store path' {
         $fixtureSourceRoot = Join-Path $runRoot 'certificate-source'
@@ -806,6 +895,339 @@ catch {
         Assert-PlatformTrue (-not (Test-Path -LiteralPath $reparseDestination)) 'Rejected reparse source left a partial destination tree.'
     }
 
+    Invoke-PlatformTestCase 'Logical BCD export permits locked live BCD logs while preserving unrelated ESP files' {
+        $sourceRoot = Join-Path $runRoot 'esp-source-bcd-export'
+        $bootRoot = Join-Path $sourceRoot 'Microsoft\Boot'
+        $otherRoot = Join-Path $sourceRoot 'Other'
+        $actionDirectory = Join-Path $runRoot 'bcd-copy-action'
+        [void](New-Item -ItemType Directory -Path $bootRoot -Force)
+        [void](New-Item -ItemType Directory -Path $otherRoot -Force)
+        [void](New-Item -ItemType Directory -Path $actionDirectory -Force)
+
+        $sourceBytes = @{
+            'Microsoft\Boot\bootmgfw.efi' = [byte[]]@(1, 2, 3, 4)
+            'Microsoft\Boot\BCD' = [byte[]]@(11, 12, 13, 14, 15)
+            'Microsoft\Boot\BCD.LOG' = [byte[]]@(21, 22)
+            'Microsoft\Boot\BCD.LOG1' = [byte[]]@(31, 32)
+            'Microsoft\Boot\BCD.LOG2' = [byte[]]@(41, 42)
+            'Microsoft\Boot\BCD.LOG3' = [byte[]]@(51, 52)
+            'Microsoft\Boot\BCD.LOG.old' = [byte[]]@(61, 62)
+            'Other\diagnostic.bin' = [byte[]]@(71, 72, 73)
+        }
+        foreach ($relativePath in $sourceBytes.Keys) {
+            $sourcePath = Join-Path $sourceRoot $relativePath
+            [System.IO.File]::WriteAllBytes($sourcePath, [byte[]]$sourceBytes[$relativePath])
+        }
+
+        $systemBcdPath = Join-Path $actionDirectory 'system-bcd-export.bcd'
+        [System.IO.File]::WriteAllBytes($systemBcdPath, [byte[]]@(81, 82, 83, 84, 85, 86))
+        $systemBcdPin = Get-GpuFilePin -Path $systemBcdPath
+        $lockedPaths = @(
+            (Join-Path $bootRoot 'BCD'),
+            (Join-Path $bootRoot 'BCD.LOG'),
+            (Join-Path $bootRoot 'BCD.LOG1'),
+            (Join-Path $bootRoot 'BCD.LOG2')
+        )
+        $lockStreams = New-Object 'System.Collections.Generic.List[System.IO.FileStream]'
+        try {
+            foreach ($lockedPath in $lockedPaths) {
+                $lockStreams.Add([System.IO.File]::Open(
+                    $lockedPath,
+                    [System.IO.FileMode]::Open,
+                    [System.IO.FileAccess]::ReadWrite,
+                    [System.IO.FileShare]::None
+                ))
+            }
+
+            $destinationRoot = Join-Path $runRoot 'esp-copy-bcd-export'
+            $manifest = Copy-GpuEspTreeWithManifest `
+                -SourceRoot $sourceRoot `
+                -DestinationRoot $destinationRoot `
+                -ActionDirectory $actionDirectory `
+                -SystemBcdExport $systemBcdPin
+
+            Assert-PlatformEqual 4 $manifest.OmittedFiles.Count 'Logical BCD export omitted an unexpected number of live BCD files.'
+            Assert-PlatformEqual 4 $manifest.FileCount 'Logical BCD export manifest file count differs.'
+            $expectedOmissions = @{
+                'Microsoft\Boot\BCD' = 'SystemBcdLogicalExport'
+                'Microsoft\Boot\BCD.LOG' = 'VolatileSystemBcdLog'
+                'Microsoft\Boot\BCD.LOG1' = 'VolatileSystemBcdLog'
+                'Microsoft\Boot\BCD.LOG2' = 'VolatileSystemBcdLog'
+            }
+            foreach ($omission in $manifest.OmittedFiles) {
+                $normalizedPath = ([string]$omission.RelativePath).Replace('/', '\')
+                Assert-PlatformTrue $expectedOmissions.ContainsKey($normalizedPath) "Unexpected omitted ESP file: $normalizedPath"
+                Assert-PlatformEqual $expectedOmissions[$normalizedPath] $omission.Reason "Wrong omission reason for $normalizedPath."
+            }
+
+            foreach ($relativePath in @(
+                'Microsoft\Boot\bootmgfw.efi',
+                'Microsoft\Boot\BCD.LOG3',
+                'Microsoft\Boot\BCD.LOG.old',
+                'Other\diagnostic.bin'
+            )) {
+                $sourcePath = Join-Path $sourceRoot $relativePath
+                $destinationPath = Join-Path $destinationRoot $relativePath
+                Assert-PlatformTrue ([System.IO.File]::Exists($destinationPath)) "Unrelated ESP file was not copied: $relativePath"
+                Assert-PlatformEqual (Get-GpuFilePin -Path $sourcePath).Sha256 `
+                    (Get-GpuFilePin -Path $destinationPath).Sha256 "Copied ESP file hash differs: $relativePath"
+            }
+            Assert-PlatformTrue (-not [System.IO.File]::Exists((Join-Path $destinationRoot 'Microsoft\Boot\BCD'))) 'Live BCD unexpectedly appeared in the raw ESP copy.'
+        }
+        finally {
+            foreach ($lockStream in $lockStreams) { $lockStream.Dispose() }
+        }
+
+        $lockedUnrelatedRoot = Join-Path $runRoot 'esp-source-locked-unrelated'
+        $lockedUnrelatedBoot = Join-Path $lockedUnrelatedRoot 'Microsoft\Boot'
+        $lockedUnrelatedOther = Join-Path $lockedUnrelatedRoot 'Other'
+        [void](New-Item -ItemType Directory -Path $lockedUnrelatedBoot -Force)
+        [void](New-Item -ItemType Directory -Path $lockedUnrelatedOther -Force)
+        [System.IO.File]::WriteAllBytes((Join-Path $lockedUnrelatedBoot 'BCD'), [byte[]]@(1, 2, 3))
+        $lockedUnrelatedPath = Join-Path $lockedUnrelatedOther 'unrelated.locked'
+        [System.IO.File]::WriteAllBytes($lockedUnrelatedPath, [byte[]]@(4, 5, 6))
+        $unrelatedLock = [System.IO.File]::Open(
+            $lockedUnrelatedPath,
+            [System.IO.FileMode]::Open,
+            [System.IO.FileAccess]::ReadWrite,
+            [System.IO.FileShare]::None
+        )
+        try {
+            Assert-PlatformThrows {
+                Copy-GpuEspTreeWithManifest `
+                    -SourceRoot $lockedUnrelatedRoot `
+                    -DestinationRoot (Join-Path $runRoot 'esp-copy-locked-unrelated') `
+                    -ActionDirectory $actionDirectory `
+                    -SystemBcdExport $systemBcdPin
+            } 'Copy helper ignored a locked unrelated ESP file.' 'unrelated\.locked.*being used by another process|being used by another process.*unrelated\.locked|sharing violation'
+        }
+        finally {
+            $unrelatedLock.Dispose()
+        }
+
+        $noExportLock = [System.IO.File]::Open(
+            (Join-Path $bootRoot 'BCD'),
+            [System.IO.FileMode]::Open,
+            [System.IO.FileAccess]::ReadWrite,
+            [System.IO.FileShare]::None
+        )
+        try {
+            Assert-PlatformThrows {
+                Copy-GpuEspTreeWithManifest `
+                    -SourceRoot $sourceRoot `
+                    -DestinationRoot (Join-Path $runRoot 'esp-copy-locked-bcd-no-export') `
+                    -ActionDirectory $actionDirectory
+            } 'Raw ESP copy silently omitted a locked BCD without a system export.' 'BCD.*being used by another process|being used by another process.*BCD|sharing violation'
+        }
+        finally {
+            $noExportLock.Dispose()
+        }
+    }
+
+    Invoke-PlatformTestCase 'Logical BCD export rejects missing source BCD and invalid export pins before destination creation' {
+        $actionDirectory = Join-Path $runRoot 'bcd-pin-action'
+        $sourceRoot = Join-Path $runRoot 'esp-source-bcd-pin-validation'
+        [void](New-Item -ItemType Directory -Path $actionDirectory -Force)
+        [void](New-Item -ItemType Directory -Path (Join-Path $sourceRoot 'Microsoft\Boot') -Force)
+        [System.IO.File]::WriteAllBytes((Join-Path $sourceRoot 'Microsoft\Boot\BCD'), [byte[]]@(1, 2, 3))
+        [System.IO.File]::WriteAllBytes((Join-Path $sourceRoot 'Microsoft\Boot\bootmgfw.efi'), [byte[]]@(4, 5, 6))
+
+        $validExportPath = Join-Path $actionDirectory 'system-bcd-export.bcd'
+        [System.IO.File]::WriteAllBytes($validExportPath, [byte[]]@(7, 8, 9, 10))
+        $validExportPin = Get-GpuFilePin -Path $validExportPath
+        $invalidHashPin = [pscustomobject]@{
+            Path = $validExportPin.Path
+            Sha256 = ('0' * 64)
+            Bytes = $validExportPin.Bytes
+        }
+        $missingExportPath = Join-Path $actionDirectory 'missing-system-bcd-export.bcd'
+        $missingExportPin = [pscustomobject]@{
+            Path = $missingExportPath
+            Sha256 = $validExportPin.Sha256
+            Bytes = $validExportPin.Bytes
+        }
+        $zeroExportPath = Join-Path $actionDirectory 'zero-system-bcd-export.bcd'
+        [System.IO.File]::WriteAllBytes($zeroExportPath, [byte[]]@())
+        $zeroExportPin = Get-GpuFilePin -Path $zeroExportPath
+
+        foreach ($case in @(
+            [pscustomobject]@{ Name = 'wrong hash'; Pin = $invalidHashPin }
+            [pscustomobject]@{ Name = 'missing path'; Pin = $missingExportPin }
+            [pscustomobject]@{ Name = 'zero-byte export'; Pin = $zeroExportPin }
+        )) {
+            $destinationRoot = Join-Path $runRoot ('esp-copy-invalid-pin-' + ($case.Name -replace '[^a-z]', '-'))
+            Assert-PlatformThrows {
+                Copy-GpuEspTreeWithManifest `
+                    -SourceRoot $sourceRoot `
+                    -DestinationRoot $destinationRoot `
+                    -ActionDirectory $actionDirectory `
+                    -SystemBcdExport $case.Pin
+            } "Copy helper accepted a $($case.Name) system BCD export pin." ''
+            Assert-PlatformTrue (-not [System.IO.Directory]::Exists($destinationRoot)) "Rejected $($case.Name) export pin created the destination tree."
+        }
+
+        $sourceWithoutBcd = Join-Path $runRoot 'esp-source-missing-bcd'
+        [void](New-Item -ItemType Directory -Path (Join-Path $sourceWithoutBcd 'Microsoft\Boot') -Force)
+        [System.IO.File]::WriteAllBytes((Join-Path $sourceWithoutBcd 'Microsoft\Boot\bootmgfw.efi'), [byte[]]@(11, 12, 13))
+        $missingBcdDestination = Join-Path $runRoot 'esp-copy-missing-bcd'
+        Assert-PlatformThrows {
+            Copy-GpuEspTreeWithManifest `
+                -SourceRoot $sourceWithoutBcd `
+                -DestinationRoot $missingBcdDestination `
+                -ActionDirectory $actionDirectory `
+                -SystemBcdExport $validExportPin
+        } 'Logical BCD backup accepted a source ESP without Microsoft\Boot\BCD.' 'BCD'
+        Assert-PlatformTrue (-not [System.IO.Directory]::Exists($missingBcdDestination)) 'Missing source BCD created a partial destination tree.'
+    }
+
+    Invoke-PlatformTestCase 'System BCD backup uses exact bcdedit export arguments and verifies a non-overwriting recovery copy' {
+        $actionDirectory = Join-Path $runRoot 'system-bcd-native-action'
+        $recoveryDirectory = Join-Path $runRoot 'system-bcd-native-recovery'
+        [void](New-Item -ItemType Directory -Path $actionDirectory -Force)
+        [void](New-Item -ItemType Directory -Path $recoveryDirectory -Force)
+        $expectedBytes = [byte[]]@(101, 102, 103, 104, 105, 106, 107)
+        Set-GpuBcdExportFixtureScenario ([pscustomobject]@{
+            Succeeded = $true
+            ExitCode = 0
+            OutputMode = 'Bytes'
+            Bytes = $expectedBytes
+        })
+
+        $result = Export-GpuSystemBcdBackup -ActionDirectory $actionDirectory -RecoveryRunDirectory $recoveryDirectory
+        $localPath = Join-Path $actionDirectory 'system-bcd-export.bcd'
+        $externalPath = Join-Path $recoveryDirectory 'system-bcd-export.bcd'
+        $calls = @(Get-GpuBcdExportFixtureNativeCalls)
+        Assert-PlatformEqual 1 $calls.Count 'System BCD export invoked the native tool an unexpected number of times.'
+        Assert-PlatformEqual 'fixture-bcdedit.exe' $calls[0].Program 'Unexpected native executable was used for BCD export.'
+        Assert-PlatformEqual 'export-system-bcd' $calls[0].Label 'Native BCD export label differs.'
+        Assert-PlatformEqual $actionDirectory $calls[0].ActionDirectory 'Native BCD export action directory differs.'
+        Assert-PlatformEqual 2 $calls[0].Arguments.Count 'Native BCD export argument count differs.'
+        Assert-PlatformEqual '/export' $calls[0].Arguments[0] 'Native BCD export did not use the logical /export operation.'
+        Assert-PlatformEqual $localPath $calls[0].Arguments[1] 'Native BCD export target path differs.'
+        Assert-PlatformEqual (Get-GpuFilePin -Path $localPath).Sha256 $result.LocalExport.Sha256 'Returned local BCD export hash differs.'
+        Assert-PlatformEqual (Get-GpuFilePin -Path $externalPath).Sha256 $result.ExternalExport.Sha256 'Returned external BCD export hash differs.'
+        Assert-PlatformEqual $result.LocalExport.Sha256 $result.ExternalExport.Sha256 'Local and external BCD export hashes differ.'
+        Assert-PlatformEqual $result.LocalExport.Bytes $result.ExternalExport.Bytes 'Local and external BCD export lengths differ.'
+        Assert-PlatformEqual 7 $result.ExternalExport.Bytes 'External BCD export length differs from the synthetic output.'
+        Assert-PlatformEqual ([System.IO.Path]::GetFullPath((Join-Path $actionDirectory 'fixture-export-system-bcd.receipt.json'))) `
+            ([System.IO.Path]::GetFullPath($result.ReceiptPath)) 'Native BCD export receipt path was not returned.'
+
+        $secondActionDirectory = Join-Path $runRoot 'system-bcd-native-action-overwrite'
+        [void](New-Item -ItemType Directory -Path $secondActionDirectory -Force)
+        Set-GpuBcdExportFixtureScenario ([pscustomobject]@{
+            Succeeded = $true
+            ExitCode = 0
+            OutputMode = 'Bytes'
+            Bytes = [byte[]]@(201, 202, 203)
+        })
+        Assert-PlatformThrows {
+            Export-GpuSystemBcdBackup -ActionDirectory $secondActionDirectory -RecoveryRunDirectory $recoveryDirectory
+        } 'System BCD exporter overwrote an existing recovery export.' 'Refusing to overwrite'
+        Assert-PlatformEqual 0 @(Get-GpuBcdExportFixtureNativeCalls).Count 'Exporter invoked bcdedit before rejecting an existing external destination.'
+        Assert-PlatformEqual $result.ExternalExport.Sha256 (Get-GpuFilePin -Path $externalPath).Sha256 'Existing external BCD export changed after overwrite rejection.'
+    }
+
+    Invoke-PlatformTestCase 'System BCD backup rejects native failure, missing output, and empty output' {
+        foreach ($case in @(
+            [pscustomobject]@{ Name = 'native-failure'; Succeeded = $false; ExitCode = 5; OutputMode = 'Missing'; Pattern = 'failed with exit 5' }
+            [pscustomobject]@{ Name = 'missing-output'; Succeeded = $true; ExitCode = 0; OutputMode = 'Missing'; Pattern = 'does not exist|not found|missing' }
+            [pscustomobject]@{ Name = 'empty-output'; Succeeded = $true; ExitCode = 0; OutputMode = 'Empty'; Pattern = 'empty' }
+        )) {
+            $actionDirectory = Join-Path $runRoot ('system-bcd-reject-action-' + $case.Name)
+            $recoveryDirectory = Join-Path $runRoot ('system-bcd-reject-recovery-' + $case.Name)
+            [void](New-Item -ItemType Directory -Path $actionDirectory -Force)
+            [void](New-Item -ItemType Directory -Path $recoveryDirectory -Force)
+            Set-GpuBcdExportFixtureScenario ([pscustomobject]@{
+                Succeeded = [bool]$case.Succeeded
+                ExitCode = [int]$case.ExitCode
+                OutputMode = [string]$case.OutputMode
+                Bytes = [byte[]]@(111, 112, 113)
+            })
+            Assert-PlatformThrows {
+                Export-GpuSystemBcdBackup -ActionDirectory $actionDirectory -RecoveryRunDirectory $recoveryDirectory
+            } "System BCD export accepted $($case.Name)." $case.Pattern
+            Assert-PlatformTrue (-not [System.IO.File]::Exists((Join-Path $recoveryDirectory 'system-bcd-export.bcd'))) "Rejected $($case.Name) created an external BCD export."
+        }
+    }
+
+    Invoke-PlatformTestCase 'System BCD backup validator checks pinned external export, omission evidence, and manifest schema' {
+        $recoveryDirectory = Join-Path $runRoot 'system-bcd-validation-recovery'
+        [void](New-Item -ItemType Directory -Path $recoveryDirectory -Force)
+        $externalPath = Join-Path $recoveryDirectory 'system-bcd-export.bcd'
+        [System.IO.File]::WriteAllBytes($externalPath, [byte[]]@(121, 122, 123, 124))
+        $externalPin = Get-GpuFilePin -Path $externalPath
+        $expectedOmissions = @(
+            [pscustomobject]@{ RelativePath = 'Microsoft\Boot\BCD'; Reason = 'SystemBcdLogicalExport' }
+            [pscustomobject]@{ RelativePath = 'Microsoft\Boot\BCD.LOG'; Reason = 'VolatileSystemBcdLog' }
+            [pscustomobject]@{ RelativePath = 'Microsoft\Boot\BCD.LOG1'; Reason = 'VolatileSystemBcdLog' }
+            [pscustomobject]@{ RelativePath = 'Microsoft\Boot\BCD.LOG2'; Reason = 'VolatileSystemBcdLog' }
+        )
+        $description = [pscustomobject]@{
+            Kind = 'BcdeditSystemStoreExport'
+            RelativePath = 'system-bcd-export.bcd'
+            Sha256 = $externalPin.Sha256
+            Bytes = $externalPin.Bytes
+        }
+        $backup = [pscustomobject]@{ SystemBcdExport = $externalPin }
+        $manifest = [pscustomobject]@{
+            SchemaVersion = 2
+            SystemBcdExport = $description
+            OmittedFiles = $expectedOmissions
+            Files = @([pscustomobject]@{ RelativePath = 'Microsoft\Boot\bootmgfw.efi'; Sha256 = ('A' * 64); Bytes = 1 })
+        }
+        Assert-GpuSystemBcdBackup -Backup $backup -Manifest $manifest -RecoveryRunDirectory $recoveryDirectory
+
+        $badOmissionCases = @(
+            [pscustomobject]@{ Name = 'unapproved path'; Entries = @($expectedOmissions[0], [pscustomobject]@{ RelativePath = 'Microsoft\Boot\BCD.LOG3'; Reason = 'VolatileSystemBcdLog' }) }
+            [pscustomobject]@{ Name = 'wrong reason'; Entries = @($expectedOmissions[0], [pscustomobject]@{ RelativePath = 'Microsoft\Boot\BCD.LOG'; Reason = 'SystemBcdLogicalExport' }) }
+            [pscustomobject]@{ Name = 'duplicate path'; Entries = @($expectedOmissions[0], $expectedOmissions[0]) }
+            [pscustomobject]@{ Name = 'missing system BCD substitution'; Entries = @($expectedOmissions[1], $expectedOmissions[2], $expectedOmissions[3]) }
+        )
+        foreach ($badOmissions in $badOmissionCases) {
+            $candidateManifest = [pscustomobject]@{
+                SchemaVersion = 2
+                SystemBcdExport = $description
+                OmittedFiles = $badOmissions.Entries
+                Files = @()
+            }
+            Assert-PlatformThrows {
+                Assert-GpuSystemBcdBackup -Backup $backup -Manifest $candidateManifest -RecoveryRunDirectory $recoveryDirectory
+            } "Validator accepted $($badOmissions.Name) omission evidence." 'omission|substitution'
+        }
+
+        $manifestWithRawBcd = [pscustomobject]@{
+            SchemaVersion = 2
+            SystemBcdExport = $description
+            OmittedFiles = @($expectedOmissions[0])
+            Files = @([pscustomobject]@{ RelativePath = 'Microsoft\Boot\BCD'; Sha256 = ('B' * 64); Bytes = 1 })
+        }
+        Assert-PlatformThrows {
+            Assert-GpuSystemBcdBackup -Backup $backup -Manifest $manifestWithRawBcd -RecoveryRunDirectory $recoveryDirectory
+        } 'Validator accepted a raw live BCD entry alongside the logical export.' 'incorrectly claims a raw copy'
+
+        $unknownSchema = [pscustomobject]@{
+            SchemaVersion = 3
+            SystemBcdExport = $description
+            OmittedFiles = $expectedOmissions
+            Files = @()
+        }
+        Assert-PlatformThrows {
+            Assert-GpuSystemBcdBackup -Backup $backup -Manifest $unknownSchema -RecoveryRunDirectory $recoveryDirectory
+        } 'Validator accepted an unknown manifest schema.' 'Unsupported.*schema'
+
+        $legacyManifest = [pscustomobject]@{ SchemaVersion = 1 }
+        Assert-GpuSystemBcdBackup -Backup ([pscustomobject]@{}) -Manifest $legacyManifest -RecoveryRunDirectory $recoveryDirectory
+
+        [System.IO.File]::WriteAllBytes($externalPath, [byte[]]@(125, 126, 127, 128))
+        Assert-PlatformThrows {
+            Assert-GpuSystemBcdBackup -Backup $backup -Manifest $manifest -RecoveryRunDirectory $recoveryDirectory
+        } 'Validator accepted a tampered external system BCD export.' 'Pinned file has drifted'
+        [System.IO.File]::Delete($externalPath)
+        Assert-PlatformThrows {
+            Assert-GpuSystemBcdBackup -Backup $backup -Manifest $manifest -RecoveryRunDirectory $recoveryDirectory
+        } 'Validator accepted a missing external system BCD export.' 'does not exist|not found|missing'
+    }
+
     Invoke-PlatformTestCase 'Stage readback validates all five owned files and detects payload drift' {
         $espRoot = Join-Path $runRoot 'stage-esp'
         $null = New-Item -ItemType Directory -Path $espRoot
@@ -948,6 +1370,9 @@ exit $Code
     Write-Output ("GPU_HOST_PLATFORM_TESTS:PASS cases={0} assertions={1} skipped=0" -f $script:PassedCases, $script:Assertions)
 }
 finally {
+    if ($null -ne $bcdExportFixtureModule) {
+        Remove-Module -ModuleInfo $bcdExportFixtureModule -Force -ErrorAction SilentlyContinue
+    }
     if ($null -ne $isolatedModule) {
         Remove-Module -ModuleInfo $isolatedModule -Force -ErrorAction SilentlyContinue
     }

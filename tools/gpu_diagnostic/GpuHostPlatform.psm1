@@ -789,16 +789,54 @@ function Assert-GpuNoPreviousStage {
     return $bootManager
 }
 
+function Export-GpuSystemBcdBackup {
+    param([string]$ActionDirectory, [string]$RecoveryRunDirectory)
+
+    $localPath = Join-Path $ActionDirectory 'system-bcd-export.bcd'
+    $externalPath = Join-Path $RecoveryRunDirectory 'system-bcd-export.bcd'
+    Assert-GpuFreshPath -Path $localPath
+    Assert-GpuFreshPath -Path $externalPath
+    Assert-GpuNoReparseAncestors -Path $ActionDirectory
+    Assert-GpuNoReparseAncestors -Path $RecoveryRunDirectory
+    # /export reads the active system store through Windows' BCD API. It does
+    # not modify the store. Never open the live registry hive as a raw file.
+    $export = Invoke-GpuNativeCommand -Program (Get-GpuApplicationPath 'bcdedit.exe') `
+        -Arguments @('/export', $localPath) -ActionDirectory $ActionDirectory -Label 'export-system-bcd'
+    Assert-GpuNativeSuccess -Result $export -Description 'System BCD logical backup export'
+    $localPin = Get-GpuFilePin -Path $localPath
+    if ($localPin.Bytes -le 0) { throw 'System BCD export is empty; no EFI backup may be admitted.' }
+    [System.IO.File]::Copy($localPath, $externalPath, $false)
+    $stream = [System.IO.File]::Open($externalPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::Read)
+    try { $stream.Flush($true) } finally { $stream.Dispose() }
+    $externalPin = Get-GpuFilePin -Path $externalPath
+    Assert-GpuFilePin -Pin $localPin
+    if ($externalPin.Bytes -ne $localPin.Bytes -or $externalPin.Sha256 -cne $localPin.Sha256) {
+        throw 'External system BCD export failed hash readback.'
+    }
+    return [pscustomobject]@{ LocalExport=$localPin; ExternalExport=$externalPin; ReceiptPath=$export.ReceiptPath }
+}
+
 function Copy-GpuEspTreeWithManifest {
     param(
         [string]$SourceRoot,
         [string]$DestinationRoot,
-        [string]$ActionDirectory
+        [string]$ActionDirectory,
+        [AllowNull()][object]$SystemBcdExport = $null
     )
 
     Assert-GpuFreshPath -Path $DestinationRoot
     Assert-GpuNoReparseAncestors -Path $SourceRoot
     $sourceFull = [System.IO.Path]::GetFullPath($SourceRoot).TrimEnd('\')
+    $omitted = New-Object System.Collections.Generic.List[object]
+    $systemBcdCount = 0
+    if ($null -ne $SystemBcdExport) {
+        Assert-GpuFilePin -Pin $SystemBcdExport
+        if ([long]$SystemBcdExport.Bytes -le 0) { throw 'System BCD export must be nonempty.' }
+        $exportFull = [System.IO.Path]::GetFullPath([string]$SystemBcdExport.Path)
+        if ($exportFull.StartsWith(($sourceFull + '\'), [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'System BCD export must be outside the live EFI source tree.'
+        }
+    }
     $directories = New-Object System.Collections.Generic.List[string]
     $files = New-Object System.Collections.Generic.List[object]
     $pending = New-Object System.Collections.Generic.Stack[string]
@@ -817,9 +855,25 @@ function Copy-GpuEspTreeWithManifest {
                 $pending.Push($child.FullName)
             }
             else {
+                # Only the system hive and its exact volatile transaction logs
+                # are replaced by the verified logical export. Other files,
+                # including other stores/log-like names, retain strict copying.
+                if ($null -ne $SystemBcdExport -and $relative -iin @('Microsoft\Boot\BCD', 'Microsoft\Boot\BCD.LOG', 'Microsoft\Boot\BCD.LOG1', 'Microsoft\Boot\BCD.LOG2')) {
+                    $isSystemBcd = ($relative -ieq 'Microsoft\Boot\BCD')
+                    if ($isSystemBcd) { $systemBcdCount++ }
+                    $omitted.Add([pscustomobject]@{
+                        RelativePath=$relative
+                        Reason=if ($isSystemBcd) { 'SystemBcdLogicalExport' } else { 'VolatileSystemBcdLog' }
+                    })
+                    continue
+                }
                 $files.Add([pscustomobject]@{ Source = $child.FullName; RelativePath = $relative; Bytes = [long]$child.Length })
             }
         }
+    }
+
+    if ($null -ne $SystemBcdExport -and $systemBcdCount -ne 1) {
+        throw 'The selected system ESP must contain exactly one Microsoft\Boot\BCD before using a system-store export.'
     }
 
     [void](New-Item -ItemType Directory -Path $DestinationRoot -ErrorAction Stop)
@@ -852,11 +906,44 @@ function Copy-GpuEspTreeWithManifest {
         })
     }
 
+    if ($null -ne $SystemBcdExport) { Assert-GpuFilePin -Pin $SystemBcdExport }
+
     return [pscustomobject]@{
         Root = $DestinationRoot
         FileCount = $manifestFiles.Count
         DirectoryCount = $directories.Count
         Files = @($manifestFiles.ToArray())
+        OmittedFiles = @($omitted.ToArray())
+    }
+}
+
+function Assert-GpuSystemBcdBackup {
+    param([object]$Backup, [object]$Manifest, [string]$RecoveryRunDirectory)
+
+    if ([int]$Manifest.SchemaVersion -eq 1) { return }
+    if ([int]$Manifest.SchemaVersion -ne 2) { throw 'Unsupported ESP backup manifest schema.' }
+    $exportPin = Get-GpuObjectProperty -Object $Backup -Name 'SystemBcdExport'
+    $description = Get-GpuObjectProperty -Object $Manifest -Name 'SystemBcdExport'
+    if ($null -eq $exportPin -or $null -eq $description) { throw 'System BCD export evidence is missing.' }
+    $expectedPath = Join-Path $RecoveryRunDirectory 'system-bcd-export.bcd'
+    if (-not [string]::Equals([string]$exportPin.Path, [System.IO.Path]::GetFullPath($expectedPath), [StringComparison]::OrdinalIgnoreCase) -or
+        [string]$description.Kind -cne 'BcdeditSystemStoreExport' -or [string]$description.RelativePath -cne 'system-bcd-export.bcd' -or
+        [long]$exportPin.Bytes -le 0 -or [long]$description.Bytes -ne [long]$exportPin.Bytes -or
+        [string]$description.Sha256 -cne [string]$exportPin.Sha256) { throw 'System BCD export identity differs from the backup manifest.' }
+    Assert-GpuFilePin -Pin $exportPin
+    $allowed = @('Microsoft\Boot\BCD', 'Microsoft\Boot\BCD.LOG', 'Microsoft\Boot\BCD.LOG1', 'Microsoft\Boot\BCD.LOG2')
+    $seen = @{}
+    foreach ($entry in @($Manifest.OmittedFiles)) {
+        $relative = [string]$entry.RelativePath
+        $reason = if ($relative -ieq 'Microsoft\Boot\BCD') { 'SystemBcdLogicalExport' } else { 'VolatileSystemBcdLog' }
+        if ($relative -inotin $allowed -or $seen.ContainsKey($relative) -or [string]$entry.Reason -cne $reason) {
+            throw 'ESP manifest contains an invalid or duplicate BCD omission.'
+        }
+        $seen[$relative] = $true
+    }
+    if (-not $seen.ContainsKey('Microsoft\Boot\BCD')) { throw 'ESP manifest does not record the system BCD logical export substitution.' }
+    foreach ($entry in @($Manifest.Files)) {
+        if ([string]$entry.RelativePath -iin $allowed) { throw 'ESP manifest incorrectly claims a raw copy of an exported system BCD file.' }
     }
 }
 
@@ -897,6 +984,7 @@ function Assert-GpuRecoveryManifest {
     if ([int]$location.Disk.Number -eq [int]$State.Host.SystemDiskNumber) {
         throw 'Recovery files are no longer on a separate physical disk.'
     }
+    Assert-GpuSystemBcdBackup -Backup $backup -Manifest $manifest -RecoveryRunDirectory $location.RunDirectory
     $tree = Join-Path $location.RunDirectory 'esp-efi-before'
     if (-not (Test-Path -LiteralPath $tree -PathType Container)) { throw 'External ESP backup tree is missing.' }
     foreach ($entry in @($manifest.Files)) {
@@ -931,7 +1019,7 @@ function Assert-GpuRecordedBackupIdentity {
     if (-not [guid]::TryParse([string]$backup.EspPartitionGuid, [ref]$partitionGuid)) {
         throw 'ESP backup partition GUID is malformed.'
     }
-    foreach ($localPinName in @('LocalManifest', 'ReferenceLog', 'FirmwareEnumeration')) {
+    foreach ($localPinName in @('LocalManifest', 'ReferenceLog', 'FirmwareEnumeration', 'LocalBcdExport', 'BcdExportReceipt')) {
         $localPin = Get-GpuObjectProperty -Object $backup -Name $localPinName
         if ($null -ne $localPin) { Assert-GpuFilePin -Pin $localPin }
     }
@@ -1289,13 +1377,14 @@ function Invoke-GpuBackup {
         $bootManagerPath = Assert-GpuNoPreviousStage -EspRoot 'S:'
         $bootManagerPin = Get-GpuFilePin -Path $bootManagerPath
         $recoveryLocation = Assert-GpuRecoveryLocation -State $State -RequireRunDirectory
+        $bcdBackup = Export-GpuSystemBcdBackup -ActionDirectory $ActionDirectory -RecoveryRunDirectory $recoveryLocation.RunDirectory
         $externalTree = Join-Path $recoveryLocation.RunDirectory 'esp-efi-before'
-        $treeCopy = Copy-GpuEspTreeWithManifest -SourceRoot 'S:\EFI' -DestinationRoot $externalTree -ActionDirectory $ActionDirectory
+        $treeCopy = Copy-GpuEspTreeWithManifest -SourceRoot 'S:\EFI' -DestinationRoot $externalTree -ActionDirectory $ActionDirectory -SystemBcdExport $bcdBackup.ExternalExport
         $firmware = Invoke-GpuNativeCommand -Program (Get-GpuApplicationPath 'bcdedit.exe') -Arguments @('/enum', 'firmware', '/v') -ActionDirectory $ActionDirectory -Label 'firmware-enumeration-backup'
         Assert-GpuNativeSuccess -Result $firmware -Description 'Firmware boot-entry baseline capture'
         $firmwarePin = Get-GpuFilePin -Path $firmware.StdoutPath
         $manifest = [pscustomobject]@{
-            SchemaVersion = 1
+            SchemaVersion = 2
             RunId = [string]$State.RunId
             CreatedUtc = [DateTime]::UtcNow.ToString('o')
             EspVolume = [string]$esp.Volume
@@ -1310,6 +1399,11 @@ function Invoke-GpuBackup {
             FileCount = [int]$treeCopy.FileCount
             DirectoryCount = [int]$treeCopy.DirectoryCount
             Files = @($treeCopy.Files)
+            OmittedFiles = @($treeCopy.OmittedFiles)
+            SystemBcdExport = [pscustomobject]@{
+                Kind='BcdeditSystemStoreExport'; RelativePath='system-bcd-export.bcd'
+                Sha256=$bcdBackup.ExternalExport.Sha256; Bytes=[long]$bcdBackup.ExternalExport.Bytes
+            }
         }
         $localManifestPath = Join-Path $ActionDirectory 'esp-manifest.json'
         $externalManifestPath = Join-Path $recoveryLocation.RunDirectory 'esp-manifest.json'
@@ -1331,6 +1425,9 @@ function Invoke-GpuBackup {
             ExternalManifest = $externalManifestPin
             LocalManifest = $localManifestPin
             FirmwareEnumeration = $firmwarePin
+            SystemBcdExport = $bcdBackup.ExternalExport
+            LocalBcdExport = $bcdBackup.LocalExport
+            BcdExportReceipt = Get-GpuFilePin -Path $bcdBackup.ReceiptPath
             RecoveryDiskNumber = [int]$recoveryLocation.Disk.Number
             RecoveryDiskUniqueId = [string]$recoveryLocation.Disk.UniqueId
             RecoveryDiskSerialNumber = [string]$recoveryLocation.Disk.SerialNumber
