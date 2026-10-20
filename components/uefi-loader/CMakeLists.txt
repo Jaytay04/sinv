@@ -191,6 +191,16 @@ target_include_directories(image_launch_test PRIVATE
 )
 add_test(NAME image_launch_test COMMAND image_launch_test)
 
+add_executable(payload_diagnostic_test
+    src/fixtures/tests/payload_diagnostic_test.c
+    src/loader/payload_diagnostic.c
+)
+target_include_directories(payload_diagnostic_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/vendor
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/loader
+)
+add_test(NAME payload_diagnostic_test COMMAND payload_diagnostic_test)
+
 add_executable(inventory_entry_test
     src/fixtures/tests/inventory_entry_test.c
     src/loader/inventory_entry.c
@@ -678,6 +688,7 @@ add_executable(loader
     src/loader/efi_entry.c
     src/loader/efi_file.c
     src/loader/image_launch.c
+    src/loader/payload_diagnostic.c
     src/loader/pe_rehash.c
     src/loader/reference_log.c
     src/loader/tcg2.c
@@ -804,7 +815,7 @@ if(IB_STATIC_RUNTIME AND MSVC)
                                reference_log tcglog_test
                                tcglog_ib_test pcr_gate_test replay_test
                                divergence_test sha256_test reference_log_test
-                               boot_restore_test efi_file_test image_launch_test tcg2_test
+                               boot_restore_test efi_file_test image_launch_test payload_diagnostic_test tcg2_test
                                inventory_entry_test shim_inventory_test shim_chain_test uefi_runtime_abi_test
                                replay_uefi_path_test
                                install_sign_test install_authenticode_test

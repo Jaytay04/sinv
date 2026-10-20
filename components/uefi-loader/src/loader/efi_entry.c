@@ -7,11 +7,13 @@
 #include "efi_file.h"
 #include "image_launch.h"
 #include "pcr_gate.h"
+#include "payload_diagnostic.h"
 #include "reference_log.h"
 #include "replay.h"
 #include "replay_uefi.h"
 #include "sha256.h"
 #include "shim_inventory.h"
+#include "shim_chain.h"
 #include "tcg2.h"
 
 #ifndef IB_PAYLOAD_REPLAY_INDEPENDENT
@@ -41,6 +43,8 @@ static const CHAR16 g_reference_path[] = L"\\EFI\\insecure-boot\\tcglog.ib";
 static const CHAR16 g_divergence_path[] = L"\\EFI\\insecure-boot\\divergence.ib";
 static const CHAR16 g_status_path[] = L"\\EFI\\insecure-boot\\handoff-status.txt";
 static const CHAR16 g_payload_path[] = L"\\EFI\\insecure-boot\\payload.efi";
+static const CHAR16 g_payload_diagnostic_path[] =
+    L"\\EFI\\insecure-boot\\payload-diagnostic.txt";
 static const CHAR16 g_inventory_path[] = L"\\EFI\\insecure-boot\\inventory.efi";
 static const CHAR16 g_boot_manager_path[] = L"\\EFI\\Microsoft\\Boot\\bootmgfw.efi";
 static const CHAR16 g_backup_path[] = L"\\EFI\\Microsoft\\Boot\\bootmgfw.efi.bak";
@@ -245,6 +249,57 @@ static void write_status(EFI_HANDLE image_handle, const UINT8 *text,
     (void)efi_file_write(image_handle, g_status_path, text, size);
 }
 
+static payload_diagnostic_launch_t payload_diagnostic_launch_from_result(
+    image_launch_status_t Launch)
+{
+    switch (Launch) {
+    case IMAGE_LAUNCH_OK:                 return PAYLOAD_DIAG_OK;
+    case IMAGE_LAUNCH_ERR_ARGUMENT:       return PAYLOAD_DIAG_ARGUMENT;
+    case IMAGE_LAUNCH_ERR_NOT_FOUND:      return PAYLOAD_DIAG_NOT_FOUND;
+    case IMAGE_LAUNCH_ERR_READ:           return PAYLOAD_DIAG_READ;
+    case IMAGE_LAUNCH_ERR_DEVICE_PATH:    return PAYLOAD_DIAG_DEVICE_PATH;
+    case IMAGE_LAUNCH_ERR_LOAD:           return PAYLOAD_DIAG_LOAD;
+    case IMAGE_LAUNCH_ERR_IMAGE_FORMAT:   return PAYLOAD_DIAG_IMAGE_FORMAT;
+    case IMAGE_LAUNCH_ERR_PROTOCOL:       return PAYLOAD_DIAG_PROTOCOL;
+    case IMAGE_LAUNCH_ERR_START:          return PAYLOAD_DIAG_START;
+    default:                              return PAYLOAD_DIAG_ARGUMENT;
+    }
+}
+
+static void report_payload_diagnostic(EFI_HANDLE image_handle,
+                                      const payload_diagnostic_t *Diagnostic)
+{
+    UINT8 bytes[PAYLOAD_DIAGNOSTIC_MAX_SIZE];
+    CHAR16 console_text[(PAYLOAD_DIAGNOSTIC_MAX_SIZE * 2u) + 1u];
+    UINTN size = 0;
+    UINTN input;
+    UINTN output = 0;
+    EFI_STATUS status;
+
+    if (!payload_diagnostic_format(Diagnostic, bytes, sizeof(bytes), &size)) {
+        con_print(L"payload diagnostic format: FAIL\r\n");
+        return;
+    }
+    for (input = 0; input < size; input++) {
+        if (bytes[input] == (UINT8)'\n') {
+            console_text[output++] = (CHAR16)'\r';
+        }
+        console_text[output++] = (CHAR16)bytes[input];
+    }
+    console_text[output] = 0;
+    con_print(console_text);
+
+    status = efi_file_write(image_handle, g_payload_diagnostic_path,
+                            bytes, size);
+    if (EFI_ERROR(status)) {
+        con_print(L"payload diagnostic write: FAIL (EFI_STATUS=0x");
+        con_print_hex((UINT64)status, 16u);
+        con_print(L")\r\n");
+    } else {
+        con_print(L"payload diagnostic write: PASS\r\n");
+    }
+}
+
 static EFI_STATUS restore_and_handoff(EFI_HANDLE image_handle,
                                       int replay_succeeded)
 {
@@ -276,8 +331,16 @@ static EFI_STATUS restore_and_handoff(EFI_HANDLE image_handle,
     EFI_STATUS status;
     EFI_STATUS child_status;
     image_launch_status_t launch;
+    payload_diagnostic_t payload_diagnostic;
+    const char *shim_load_phase = "not_applicable";
+    EFI_STATUS shim_load_status = EFI_NOT_STARTED;
     int payload_present = 0;
     int payload_succeeded = 0;
+
+    payload_diagnostic.payload_launch = PAYLOAD_DIAG_SKIPPED;
+    payload_diagnostic.payload_status = EFI_NOT_STARTED;
+    payload_diagnostic.shim_load_phase = shim_load_phase;
+    payload_diagnostic.shim_load_status = shim_load_status;
 
     status = efi_file_exists(image_handle, g_backup_path);
     if (status == EFI_SUCCESS) {
@@ -309,6 +372,13 @@ static EFI_STATUS restore_and_handoff(EFI_HANDLE image_handle,
             payload_present = 1;
             launch = image_launch_start_resident(
                 image_handle, g_payload_path, &child_status);
+            shim_chain_get_last_load_trace(&shim_load_phase,
+                                           &shim_load_status);
+            payload_diagnostic.payload_launch =
+                payload_diagnostic_launch_from_result(launch);
+            payload_diagnostic.payload_status = child_status;
+            payload_diagnostic.shim_load_phase = shim_load_phase;
+            payload_diagnostic.shim_load_status = shim_load_status;
             if (launch == IMAGE_LAUNCH_OK) {
                 payload_succeeded = 1;
                 con_print(L"payload launch: PASS\r\n");
@@ -316,14 +386,20 @@ static EFI_STATUS restore_and_handoff(EFI_HANDLE image_handle,
                 con_print(L"payload launch: FAIL; continuing Windows handoff\r\n");
             }
         } else if (status == EFI_NOT_FOUND) {
+            payload_diagnostic.payload_launch = PAYLOAD_DIAG_ABSENT;
+            payload_diagnostic.payload_status = status;
             con_print(L"payload launch: ABSENT\r\n");
         } else {
             payload_present = 1;
+            payload_diagnostic.payload_launch = PAYLOAD_DIAG_PRESENCE_ERROR;
+            payload_diagnostic.payload_status = status;
             con_print(L"payload launch: FAIL (filesystem); continuing Windows handoff\r\n");
         }
     } else {
         con_print(L"payload launch: SKIPPED\r\n");
     }
+
+    report_payload_diagnostic(image_handle, &payload_diagnostic);
 
     if (!replay_succeeded && !IB_PAYLOAD_REPLAY_INDEPENDENT) {
         write_status(image_handle, status_ready_abort,

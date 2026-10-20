@@ -119,6 +119,7 @@ function New-PlatformHelperModule {
         'Assert-GpuThumbprintAndPrivateKey',
         'Get-GpuStageExpectedFiles',
         'Get-GpuStageReadback',
+        'Copy-GpuStageEvidence',
         'Assert-GpuStageInputPins',
         'Assert-GpuMountedEspMatchesBackup',
         'Assert-GpuStageState'
@@ -651,6 +652,36 @@ try {
     $isolatedModule = New-PlatformHelperModule -ModulePath $platformPath -StatePath $stateModulePath
     $bcdExportFixtureModule = New-GpuSystemBcdExportFixtureModule -ModulePath $platformPath -StatePath $stateModulePath
     $finalVerifyFixtureModule = New-GpuFinalVerifyFixtureModule -ModulePath $platformPath -StatePath $stateModulePath
+
+    Invoke-PlatformTestCase 'Stage evidence captures optional payload diagnostics without changing legacy output' {
+        $fixtureEsp = Join-Path $runRoot 'evidence-esp'
+        $fixtureStage = Join-Path $fixtureEsp 'EFI\insecure-boot'
+        $legacyAction = Join-Path $runRoot 'evidence-legacy'
+        $diagnosticAction = Join-Path $runRoot 'evidence-diagnostic'
+        foreach ($directory in @($fixtureStage, $legacyAction, $diagnosticAction)) {
+            [void](New-Item -ItemType Directory -Path $directory -Force)
+        }
+        $legacyText = "schema=1`nstate=READY_BOOT_MANAGER`nreplay=ABORTED`nrestore=PASS`npayload=FAILED`nexit_boot_services_calls=0`n"
+        [IO.File]::WriteAllText((Join-Path $fixtureStage 'handoff-status.txt'), $legacyText)
+        $legacyEvidence = @(Copy-GpuStageEvidence -EspRoot $fixtureEsp -ActionDirectory $legacyAction)
+        $absent = @($legacyEvidence | Where-Object { $_.Name -ceq 'payload-diagnostic.txt' })
+        Assert-PlatformEqual 1 $absent.Count 'Legacy stage omitted the optional diagnostic observation.'
+        Assert-PlatformTrue (-not $absent[0].Present) 'Legacy stage invented a payload diagnostic.'
+        Assert-PlatformTrue ($null -eq $absent[0].Pin) 'Absent diagnostic was assigned a file pin.'
+
+        $diagnosticText = "schema=1`npayload_launch=load`npayload_status=0x800000000000001A`nshim_load_phase=shim_verify`nshim_load_status=0x800000000000001A`n"
+        $sourcePath = Join-Path $fixtureStage 'payload-diagnostic.txt'
+        [IO.File]::WriteAllText($sourcePath, $diagnosticText)
+        $evidence = @(Copy-GpuStageEvidence -EspRoot $fixtureEsp -ActionDirectory $diagnosticAction)
+        $captured = @($evidence | Where-Object { $_.Name -ceq 'payload-diagnostic.txt' })
+        Assert-PlatformEqual 1 $captured.Count 'Payload diagnostic was not captured exactly once.'
+        Assert-PlatformTrue $captured[0].Present 'Existing payload diagnostic was reported absent.'
+        Assert-PlatformEqual $diagnosticText ([IO.File]::ReadAllText($captured[0].Path)) 'Payload diagnostic bytes changed during collection.'
+        Assert-PlatformEqual (Get-GpuFilePin -Path $sourcePath).Sha256 $captured[0].Pin.Sha256 'Captured payload diagnostic hash differs from its source.'
+        Assert-PlatformEqual $diagnosticText ([IO.File]::ReadAllText($sourcePath)) 'Collection changed its diagnostic source.'
+        Assert-PlatformEqual $legacyText ([IO.File]::ReadAllText((Join-Path $diagnosticAction 'esp-handoff-status.txt'))) 'Diagnostic collection changed the legacy handoff status.'
+        Assert-PlatformThrows { Copy-GpuStageEvidence -EspRoot $fixtureEsp -ActionDirectory $diagnosticAction } 'Collection overwrote existing evidence.' 'existing path'
+    }
 
     Invoke-PlatformTestCase 'Repeated disarm preserves the original reset boundary only for an already disarmed run' {
         Assert-PlatformEqual 'boot-current' `

@@ -1563,7 +1563,7 @@ function Copy-GpuStageEvidence {
 
     $stageRoot = Join-Path $EspRoot 'EFI\insecure-boot'
     $results = New-Object System.Collections.Generic.List[object]
-    foreach ($name in @('shimx64.efi', 'grubx64.efi', 'tcglog.ib', 'payload.efi', 'manifest.sha256', 'handoff-status.txt')) {
+    foreach ($name in @('shimx64.efi', 'grubx64.efi', 'tcglog.ib', 'payload.efi', 'manifest.sha256', 'handoff-status.txt', 'payload-diagnostic.txt')) {
         $source = Join-Path $stageRoot $name
         if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
             $results.Add([pscustomobject]@{ Name = $name; Present = $false; Path = $null; Pin = $null })

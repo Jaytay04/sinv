@@ -11,10 +11,14 @@ EFI_BOOT_SERVICES *gBS;
 EFI_SYSTEM_TABLE *gST;
 
 static EFI_STATUS g_start_status;
+static EFI_STATUS g_entry_status;
 static EFI_STATUS g_load_status;
 static EFI_STATUS g_file_read_status;
 static EFI_STATUS g_device_path_status;
+static EFI_STATUS g_handle_protocol_status;
 static int g_load_error_with_child;
+static int g_load_success_without_child;
+static int g_handle_protocol_without_interface;
 static UINTN g_load_calls;
 static UINTN g_start_calls;
 static UINTN g_file_read_calls;
@@ -83,7 +87,7 @@ static EFI_STATUS EFIAPI mock_load(
         if (g_load_error_with_child) *ImageHandle = g_child;
         return g_load_status;
     }
-    *ImageHandle = g_child;
+    *ImageHandle = g_load_success_without_child ? NULL : g_child;
     return EFI_SUCCESS;
 }
 
@@ -110,7 +114,12 @@ static EFI_STATUS EFIAPI mock_handle_protocol(
     (void)Handle;
     (void)Protocol;
     ++g_handle_calls;
-    *Interface = &g_loaded_image;
+    if (EFI_ERROR(g_handle_protocol_status)) {
+        *Interface = NULL;
+        return g_handle_protocol_status;
+    }
+    *Interface = g_handle_protocol_without_interface ?
+                  NULL : &g_loaded_image;
     return EFI_SUCCESS;
 }
 
@@ -119,7 +128,8 @@ static EFI_STATUS EFIAPI mock_resident_entry(
 {
     (void)ImageHandle;
     ++g_entry_calls;
-    return SystemTable == &g_system_table ? EFI_SUCCESS : EFI_DEVICE_ERROR;
+    if (SystemTable != &g_system_table) return EFI_DEVICE_ERROR;
+    return g_entry_status;
 }
 
 static void reset_fixture(void)
@@ -134,10 +144,14 @@ static void reset_fixture(void)
     memset(&g_loaded_image, 0, sizeof(g_loaded_image));
     memset(g_direct_bytes, 0, sizeof(g_direct_bytes));
     g_start_status = EFI_SUCCESS;
+    g_entry_status = EFI_SUCCESS;
     g_load_status = EFI_SUCCESS;
     g_file_read_status = EFI_SUCCESS;
     g_device_path_status = EFI_SUCCESS;
+    g_handle_protocol_status = EFI_SUCCESS;
     g_load_error_with_child = 0;
+    g_load_success_without_child = 0;
+    g_handle_protocol_without_interface = 0;
     g_load_calls = 0;
     g_start_calls = 0;
     g_file_read_calls = 0;
@@ -148,6 +162,23 @@ static void reset_fixture(void)
     g_release_calls = 0;
     g_path_release_calls = 0;
     g_direct_source = 0;
+}
+
+static void make_valid_resident_image(void)
+{
+    g_direct_source = 1;
+    g_direct_bytes[0] = 'M';
+    g_direct_bytes[1] = 'Z';
+    g_direct_bytes[0x3c] = 0x40;
+    g_direct_bytes[0x40] = 'P';
+    g_direct_bytes[0x41] = 'E';
+    g_direct_bytes[0x58] = 0x0b;
+    g_direct_bytes[0x59] = 0x02;
+    g_direct_bytes[0x68] = 0x80;
+    g_direct_bytes[0x90] = 0x00;
+    g_direct_bytes[0x91] = 0x01;
+    g_loaded_image.ImageBase = (VOID *)((UINTN)mock_resident_entry - 0x80u);
+    g_loaded_image.ImageSize = sizeof(g_direct_bytes);
 }
 
 static int expect(int condition, const char *message)
@@ -273,19 +304,7 @@ int main(void)
     }
 
     reset_fixture();
-    g_direct_source = 1;
-    g_direct_bytes[0] = 'M';
-    g_direct_bytes[1] = 'Z';
-    g_direct_bytes[0x3c] = 0x40;
-    g_direct_bytes[0x40] = 'P';
-    g_direct_bytes[0x41] = 'E';
-    g_direct_bytes[0x58] = 0x0b;
-    g_direct_bytes[0x59] = 0x02;
-    g_direct_bytes[0x68] = 0x80;
-    g_direct_bytes[0x90] = 0x00;
-    g_direct_bytes[0x91] = 0x01;
-    g_loaded_image.ImageBase = (VOID *)((UINTN)mock_resident_entry - 0x80u);
-    g_loaded_image.ImageSize = sizeof(g_direct_bytes);
+    make_valid_resident_image();
     if (!expect(image_launch_start_resident(
                     (EFI_HANDLE)1, path, &child_status) == IMAGE_LAUNCH_OK,
                 "resident child entry returns") ||
@@ -293,7 +312,11 @@ int main(void)
                     g_entry_calls == 1 && g_start_calls == 0,
                 "resident child bypasses StartImage exactly once") ||
         !expect(g_unload_calls == 0,
-                "successful resident child remains loaded")) {
+                "successful resident child remains loaded") ||
+        !expect(child_status == EFI_SUCCESS,
+                "successful resident entry reports its exact status") ||
+        !expect(g_release_calls == 1 && g_path_release_calls == 1,
+                "successful resident launch releases temporary resources")) {
         return 1;
     }
 
@@ -307,6 +330,199 @@ int main(void)
                 "resident image-format failure preserves EFI_LOAD_ERROR") ||
         !expect(g_load_calls == 0 && g_release_calls == 1,
                 "invalid resident image is not loaded")) {
+        return 1;
+    }
+
+    reset_fixture();
+    g_direct_source = 1;
+    g_file_read_status = EFI_NOT_FOUND;
+    if (!expect(image_launch_start_resident(
+                    (EFI_HANDLE)1, path, &child_status) ==
+                    IMAGE_LAUNCH_ERR_NOT_FOUND,
+                "resident missing payload reports not found") ||
+        !expect(child_status == EFI_NOT_FOUND,
+                "resident missing payload preserves raw EFI_STATUS") ||
+        !expect(g_device_path_calls == 0 && g_load_calls == 0 &&
+                    g_release_calls == 0,
+                "resident missing payload stops before path and load")) {
+        return 1;
+    }
+
+    reset_fixture();
+    g_direct_source = 1;
+    g_file_read_status = EFI_DEVICE_ERROR;
+    if (!expect(image_launch_start_resident(
+                    (EFI_HANDLE)1, path, &child_status) ==
+                    IMAGE_LAUNCH_ERR_READ,
+                "resident source read failure reports read error") ||
+        !expect(child_status == EFI_DEVICE_ERROR,
+                "resident read failure preserves raw EFI_STATUS") ||
+        !expect(g_device_path_calls == 0 && g_load_calls == 0 &&
+                    g_release_calls == 0,
+                "resident read failure stops before path and load")) {
+        return 1;
+    }
+
+    reset_fixture();
+    make_valid_resident_image();
+    g_device_path_status = EFI_ACCESS_DENIED;
+    if (!expect(image_launch_start_resident(
+                    (EFI_HANDLE)1, path, &child_status) ==
+                    IMAGE_LAUNCH_ERR_DEVICE_PATH,
+                "resident device-path failure reports its phase") ||
+        !expect(child_status == EFI_ACCESS_DENIED,
+                "resident device-path failure preserves raw EFI_STATUS") ||
+        !expect(g_load_calls == 0 && g_release_calls == 1 &&
+                    g_path_release_calls == 0,
+                "resident path failure releases source without loading")) {
+        return 1;
+    }
+
+    reset_fixture();
+    make_valid_resident_image();
+    g_load_status = EFI_ENCODE_ERROR(0x1234u);
+    if (!expect(image_launch_start_resident(
+                    (EFI_HANDLE)1, path, &child_status) ==
+                    IMAGE_LAUNCH_ERR_LOAD,
+                "resident LoadImage failure reports load failure") ||
+        !expect(child_status == g_load_status,
+                "resident LoadImage failure preserves exact raw EFI_STATUS") ||
+        !expect(g_unload_calls == 0 && g_handle_calls == 0 &&
+                    g_entry_calls == 0,
+                "failed LoadImage without a handle performs no child cleanup") ||
+        !expect(g_release_calls == 1 && g_path_release_calls == 1,
+                "failed LoadImage releases temporary resources")) {
+        return 1;
+    }
+
+    reset_fixture();
+    make_valid_resident_image();
+    g_load_status = EFI_ENCODE_ERROR(0x4321u);
+    g_load_error_with_child = 1;
+    if (!expect(image_launch_start_resident(
+                    (EFI_HANDLE)1, path, &child_status) ==
+                    IMAGE_LAUNCH_ERR_LOAD,
+                "resident LoadImage failure with handle reports load failure") ||
+        !expect(child_status == g_load_status,
+                "resident failed LoadImage preserves exact raw EFI_STATUS") ||
+        !expect(g_unload_calls == 1 && g_handle_calls == 0 &&
+                    g_entry_calls == 0,
+                "handle returned with failed LoadImage is unloaded once") ||
+        !expect(g_release_calls == 1 && g_path_release_calls == 1,
+                "failed LoadImage with child releases temporary resources")) {
+        return 1;
+    }
+
+    reset_fixture();
+    make_valid_resident_image();
+    g_load_success_without_child = 1;
+    if (!expect(image_launch_start_resident(
+                    (EFI_HANDLE)1, path, &child_status) ==
+                    IMAGE_LAUNCH_ERR_LOAD,
+                "successful LoadImage without a handle is rejected") ||
+        !expect(child_status == EFI_DEVICE_ERROR,
+                "missing loaded handle maps to EFI_DEVICE_ERROR") ||
+        !expect(g_unload_calls == 0 && g_handle_calls == 0 &&
+                    g_entry_calls == 0,
+                "missing loaded handle has no protocol or entry call") ||
+        !expect(g_release_calls == 1 && g_path_release_calls == 1,
+                "missing loaded handle releases temporary resources")) {
+        return 1;
+    }
+
+    reset_fixture();
+    make_valid_resident_image();
+    g_handle_protocol_status = EFI_ENCODE_ERROR(0x2468u);
+    if (!expect(image_launch_start_resident(
+                    (EFI_HANDLE)1, path, &child_status) ==
+                    IMAGE_LAUNCH_ERR_PROTOCOL,
+                "resident loaded-image protocol failure is rejected") ||
+        !expect(child_status == g_handle_protocol_status,
+                "protocol failure preserves exact raw EFI_STATUS") ||
+        !expect(g_unload_calls == 1 && g_entry_calls == 0,
+                "protocol failure unloads child without invoking entry") ||
+        !expect(g_release_calls == 1 && g_path_release_calls == 1,
+                "protocol failure releases temporary resources")) {
+        return 1;
+    }
+
+    reset_fixture();
+    make_valid_resident_image();
+    g_handle_protocol_without_interface = 1;
+    if (!expect(image_launch_start_resident(
+                    (EFI_HANDLE)1, path, &child_status) ==
+                    IMAGE_LAUNCH_ERR_PROTOCOL,
+                "missing loaded-image protocol interface is rejected") ||
+        !expect(child_status == EFI_LOAD_ERROR,
+                "missing protocol interface reports EFI_LOAD_ERROR") ||
+        !expect(g_unload_calls == 1 && g_entry_calls == 0,
+                "missing protocol interface unloads child") ||
+        !expect(g_release_calls == 1 && g_path_release_calls == 1,
+                "missing protocol interface releases temporary resources")) {
+        return 1;
+    }
+
+    reset_fixture();
+    make_valid_resident_image();
+    g_loaded_image.ImageBase = NULL;
+    if (!expect(image_launch_start_resident(
+                    (EFI_HANDLE)1, path, &child_status) ==
+                    IMAGE_LAUNCH_ERR_PROTOCOL,
+                "null loaded image base is rejected") ||
+        !expect(child_status == EFI_LOAD_ERROR,
+                "null loaded image base reports EFI_LOAD_ERROR") ||
+        !expect(g_unload_calls == 1 && g_entry_calls == 0,
+                "null loaded image base unloads child") ||
+        !expect(g_release_calls == 1 && g_path_release_calls == 1,
+                "null loaded image base releases temporary resources")) {
+        return 1;
+    }
+
+    reset_fixture();
+    make_valid_resident_image();
+    g_loaded_image.ImageSize = 0xffu;
+    if (!expect(image_launch_start_resident(
+                    (EFI_HANDLE)1, path, &child_status) ==
+                    IMAGE_LAUNCH_ERR_PROTOCOL,
+                "loaded image smaller than PE SizeOfImage is rejected") ||
+        !expect(child_status == EFI_LOAD_ERROR,
+                "undersized loaded image reports EFI_LOAD_ERROR") ||
+        !expect(g_unload_calls == 1 && g_entry_calls == 0,
+                "undersized loaded image unloads child") ||
+        !expect(g_release_calls == 1 && g_path_release_calls == 1,
+                "undersized loaded image releases temporary resources")) {
+        return 1;
+    }
+
+    reset_fixture();
+    make_valid_resident_image();
+    g_loaded_image.ImageSize = 0x80u;
+    if (!expect(image_launch_start_resident(
+                    (EFI_HANDLE)1, path, &child_status) ==
+                    IMAGE_LAUNCH_ERR_PROTOCOL,
+                "loaded image ending at entry RVA is rejected") ||
+        !expect(child_status == EFI_LOAD_ERROR,
+                "entry RVA outside loaded extent reports EFI_LOAD_ERROR") ||
+        !expect(g_unload_calls == 1 && g_entry_calls == 0,
+                "out-of-range entry unloads child") ||
+        !expect(g_release_calls == 1 && g_path_release_calls == 1,
+                "out-of-range entry releases temporary resources")) {
+        return 1;
+    }
+
+    reset_fixture();
+    make_valid_resident_image();
+    g_entry_status = EFI_ENCODE_ERROR(0x4567u);
+    if (!expect(image_launch_start_resident(
+                    (EFI_HANDLE)1, path, &child_status) ==
+                    IMAGE_LAUNCH_ERR_START,
+                "resident entry failure reports start failure") ||
+        !expect(child_status == g_entry_status,
+                "resident entry preserves exact raw EFI_STATUS") ||
+        !expect(g_entry_calls == 1 && g_unload_calls == 1,
+                "failed resident entry unloads child exactly once") ||
+        !expect(g_release_calls == 1 && g_path_release_calls == 1,
+                "failed resident entry releases temporary resources")) {
         return 1;
     }
 
