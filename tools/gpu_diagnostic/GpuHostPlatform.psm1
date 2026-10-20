@@ -680,7 +680,7 @@ function Assert-GpuThumbprintAndPrivateKey {
 
     $expectedThumbprint = '59DBD6780CFE60C020B3F4511211FEC22C397B85'
     $certificatePath = Assert-GpuPathWithin -Path $CertificatePath -Root ([string]$script:CurrentSourceRoot) -MustExist
-    $publicCertificate = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2([System.IO.File]::ReadAllBytes($certificatePath))
+    $publicCertificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new([System.IO.File]::ReadAllBytes($certificatePath))
     try {
         if (-not [string]::Equals([string]$publicCertificate.Thumbprint, $expectedThumbprint, [StringComparison]::OrdinalIgnoreCase)) {
             throw 'The public signer certificate does not match the pinned project thumbprint.'

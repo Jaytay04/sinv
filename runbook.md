@@ -169,14 +169,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees
 
 Rollback does not automatically power-cycle the machine. After an Arm intent, it can return `RECOVERY_PENDING_USER_POWER_CYCLE`; follow the recorded recovery result, shut down/power-cycle manually, and run `FinalVerify` only where the action state permits it. Rollback does not remove staged ESP files automatically. Do not delete them recursively; preserve them for exact, reviewed cleanup.
 
-If Prepare failed before activation and the saved run has no Arm intent, tool pins, or ESP backup, rollback reports `DISARMED_NO_ACTIVATION` without invoking the installer or mounting the ESP. Close that exact run with the following checks, one successful action at a time:
+If Prepare, Build, or Sign failed and the saved run has neither an Arm intent nor an ESP backup, rollback reports `DISARMED_NO_ACTIVATION` without invoking the installer or mounting the ESP. When the probe has been built and pinned, FinalVerify requires its per-CPU `ABSENT` result; an unbuilt probe is allowed only for an earlier abort. Close that exact run with the following checks, one successful action at a time:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 FinalVerify
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Archive
 ```
 
-Require `VERIFIED_ABORTED_NO_ACTIVATION` from FinalVerify before Archive. This no-activation abort needs no reboot; an Arm intent still requires the reset boundary described above. Archive preserves the failed run and its receipts. Correct the missing prerequisite, then start a fresh Prepare so it pins the current reviewed source. Never remove the selector or edit its journal to bypass a failure.
+Require `VERIFIED_ABORTED_NO_ACTIVATION` from FinalVerify before Archive. This no-activation abort needs no reboot; an Arm intent still requires the reset boundary described above. Archive preserves the failed run, build outputs, and receipts. Files copied into a failed Sign directory are not verified signed candidates and must not be staged or reused. Correct the missing prerequisite or script defect, then start a fresh Prepare so it pins the current reviewed source. Never remove the selector or edit its journal to bypass a failure.
 
 If Windows cannot boot, these Windows scripts cannot run. Use the verified firmware boot menu to choose the original Windows Boot Manager or boot the prepared recovery media and restore the full-system backup. Use the offline BitLocker recovery key if requested. Do not format an ESP, clear Secure Boot keys, or run `bcdboot` against an unidentified partition. Keep the external recovery copy and all run evidence.
 

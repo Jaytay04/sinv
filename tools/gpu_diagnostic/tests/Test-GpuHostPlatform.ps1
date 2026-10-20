@@ -114,6 +114,7 @@ function New-PlatformHelperModule {
         'Get-GpuExpectedToolPaths',
         'Get-GpuExpectedSignedArtifactPaths',
         'Assert-GpuNamedPin',
+        'Assert-GpuThumbprintAndPrivateKey',
         'Get-GpuStageExpectedFiles',
         'Get-GpuStageReadback',
         'Assert-GpuStageInputPins',
@@ -141,6 +142,45 @@ function New-PlatformHelperModule {
 $script:GpuPlatformTestBackup = $null
 $script:GpuPlatformTestBackupEnabled = $false
 $script:GpuPlatformTestMountedHashCalls = 0
+$script:GpuPlatformTestStoreHasPrivateKey = $true
+$script:GpuPlatformTestStorePaths = New-Object 'System.Collections.Generic.List[string]'
+
+function Set-GpuPlatformTestCertificateContext {
+    param([Parameter(Mandatory = $true)][string]$SourceRoot)
+    $script:CurrentSourceRoot = $SourceRoot
+    $script:GpuPlatformTestStoreHasPrivateKey = $true
+    $script:GpuPlatformTestStorePaths.Clear()
+}
+
+function Set-GpuPlatformTestPrivateKeyState {
+    param([Parameter(Mandatory = $true)][bool]$HasPrivateKey)
+    $script:GpuPlatformTestStoreHasPrivateKey = $HasPrivateKey
+}
+
+function Reset-GpuPlatformTestStoreQueries {
+    $script:GpuPlatformTestStorePaths.Clear()
+}
+
+function Get-GpuPlatformTestStoreQueries {
+    return $script:GpuPlatformTestStorePaths.ToArray()
+}
+
+function Get-Item {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][string]$LiteralPath, [switch]$Force)
+
+    if ($LiteralPath -match '^Cert:') {
+        if ($LiteralPath -notlike 'Cert:\CurrentUser\My\*') {
+            throw "TEST MOCK DENIED: unexpected certificate-store path: $LiteralPath"
+        }
+        [void]$script:GpuPlatformTestStorePaths.Add($LiteralPath)
+        return [pscustomobject]@{ HasPrivateKey = $script:GpuPlatformTestStoreHasPrivateKey }
+    }
+
+    $arguments = @{ LiteralPath = $LiteralPath; Force = [bool]$Force }
+    if ($PSBoundParameters.ContainsKey('ErrorAction')) { $arguments.ErrorAction = $PSBoundParameters['ErrorAction'] }
+    return Microsoft.PowerShell.Management\Get-Item @arguments
+}
 
 function Set-GpuPlatformTestBackup {
     param([Parameter(Mandatory = $true)][object]$Backup)
@@ -174,6 +214,10 @@ function Get-GpuPlatformTestMountedHashCalls {
 '@
 
     $exports = @($functionNames + @(
+        'Set-GpuPlatformTestCertificateContext',
+        'Set-GpuPlatformTestPrivateKeyState',
+        'Reset-GpuPlatformTestStoreQueries',
+        'Get-GpuPlatformTestStoreQueries',
         'Set-GpuPlatformTestBackup',
         'Reset-GpuPlatformTestMocks',
         'Get-GpuPlatformTestMountedHashCalls'
@@ -208,6 +252,63 @@ $isolatedModule = $null
 
 try {
     $isolatedModule = New-PlatformHelperModule -ModulePath $platformPath -StatePath $stateModulePath
+
+    Invoke-PlatformTestCase 'Pinned certificate DER and CurrentUser private-key check use the intended store path' {
+        $fixtureSourceRoot = Join-Path $runRoot 'certificate-source'
+        [void](New-Item -ItemType Directory -Path $fixtureSourceRoot)
+        $fixtureCertificatePath = Join-Path $fixtureSourceRoot 'hypersinv.cer'
+        $repositoryCertificatePath = Join-Path $workspaceRoot 'components\hypervisor\hypersinv.cer'
+        if (-not [System.IO.File]::Exists($repositoryCertificatePath)) { throw "Pinned public certificate fixture is missing: $repositoryCertificatePath" }
+        [System.IO.File]::Copy($repositoryCertificatePath, $fixtureCertificatePath)
+        Set-GpuPlatformTestCertificateContext -SourceRoot $fixtureSourceRoot
+
+        $expectedThumbprint = '59DBD6780CFE60C020B3F4511211FEC22C397B85'
+        $actualThumbprint = Assert-GpuThumbprintAndPrivateKey -CertificatePath $fixtureCertificatePath
+        Assert-PlatformEqual $expectedThumbprint $actualThumbprint 'Pinned public certificate was not accepted.'
+        $storeQueries = @(Get-GpuPlatformTestStoreQueries)
+        Assert-PlatformEqual 1 $storeQueries.Count 'Valid pinned certificate did not query exactly one store path.'
+        Assert-PlatformEqual ('Cert:\CurrentUser\My\' + $expectedThumbprint) $storeQueries[0] 'Certificate helper queried an unexpected store path.'
+
+        Reset-GpuPlatformTestStoreQueries
+        Set-GpuPlatformTestPrivateKeyState -HasPrivateKey $false
+        Assert-PlatformThrows { Assert-GpuThumbprintAndPrivateKey -CertificatePath $fixtureCertificatePath } `
+            'Certificate without an accessible private key was accepted.' 'no accessible private key'
+        $storeQueries = @(Get-GpuPlatformTestStoreQueries)
+        Assert-PlatformEqual 1 $storeQueries.Count 'Private-key check did not query exactly one store path.'
+        Assert-PlatformEqual ('Cert:\CurrentUser\My\' + $expectedThumbprint) $storeQueries[0] 'Private-key check queried an unexpected store path.'
+
+        $malformedCertificatePath = Join-Path $fixtureSourceRoot 'malformed.cer'
+        [System.IO.File]::WriteAllBytes($malformedCertificatePath, [byte[]]@(0, 1, 2, 3, 4))
+        Reset-GpuPlatformTestStoreQueries
+        Assert-PlatformThrows { Assert-GpuThumbprintAndPrivateKey -CertificatePath $malformedCertificatePath } `
+            'Malformed public certificate data was accepted.' ''
+        Assert-PlatformEqual 0 (@(Get-GpuPlatformTestStoreQueries).Count) 'Malformed certificate reached the certificate store lookup.'
+
+        $wrongCertificatePath = Join-Path $fixtureSourceRoot 'wrong-valid.cer'
+        $wrongRsa = $null
+        $wrongCertificate = $null
+        try {
+            $wrongRsa = [System.Security.Cryptography.RSA]::Create()
+            $wrongSubject = [System.Security.Cryptography.X509Certificates.X500DistinguishedName]::new('CN=GPU host test ephemeral certificate')
+            $wrongRequest = [System.Security.Cryptography.X509Certificates.CertificateRequest]::new(
+                $wrongSubject,
+                $wrongRsa,
+                [System.Security.Cryptography.HashAlgorithmName]::SHA256,
+                [System.Security.Cryptography.RSASignaturePadding]::Pkcs1
+            )
+            $wrongCertificate = $wrongRequest.CreateSelfSigned([DateTimeOffset]::UtcNow.AddMinutes(-5), [DateTimeOffset]::UtcNow.AddDays(1))
+            [System.IO.File]::WriteAllBytes($wrongCertificatePath, $wrongCertificate.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
+        }
+        finally {
+            if ($null -ne $wrongCertificate) { $wrongCertificate.Dispose() }
+            if ($null -ne $wrongRsa) { $wrongRsa.Dispose() }
+        }
+
+        Reset-GpuPlatformTestStoreQueries
+        Assert-PlatformThrows { Assert-GpuThumbprintAndPrivateKey -CertificatePath $wrongCertificatePath } `
+            'A different valid public certificate was accepted.' 'does not match the pinned project thumbprint'
+        Assert-PlatformEqual 0 (@(Get-GpuPlatformTestStoreQueries).Count) 'Wrong valid certificate reached the certificate store lookup.'
+    }
 
     Invoke-PlatformTestCase 'Real module force imports preserve caller State commands and failure receipt writes' {
         $powershellPath = Join-Path $PSHOME 'powershell.exe'
