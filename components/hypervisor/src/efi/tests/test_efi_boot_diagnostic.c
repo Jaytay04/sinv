@@ -233,6 +233,61 @@ static int test_memory_policy_failure_details(void)
     return 1;
 }
 
+static int test_iommu_failure_details(void)
+{
+    uint32_t substep;
+    uint32_t stage;
+    uint32_t primary;
+    for (substep = HV_EFI_BOOT_DIAGNOSTIC_IOMMU_ARGUMENT;
+         substep <= HV_EFI_BOOT_DIAGNOSTIC_IOMMU_RUNTIME_INSTALL;
+         ++substep) {
+        for (stage = 0; stage <= 9; ++stage) {
+            for (primary = 0; primary <= 26; ++primary) {
+                const uint32_t finalStatus = primary == 0 ? 0 : 19;
+                const uint32_t detail = hv_efi_boot_diagnostic_iommu_detail(
+                    substep, stage, primary, finalStatus);
+                hv_boot_diagnostic_t record;
+                hv_efi_boot_diagnostic_snapshot_t snapshot = snapshot_values();
+                snapshot.Detail = detail;
+                snapshot.PreparedCpus = 20;
+                hv_boot_diagnostic_init(&record);
+                if (!hv_efi_boot_diagnostic_mark_entry(
+                        &record, (uint32_t)sizeof(record)) ||
+                    !hv_efi_boot_diagnostic_set_stage(
+                        &record, (uint32_t)sizeof(record),
+                        HV_BOOT_STAGE_AP_PREPARE,
+                        HV_BOOT_REASON_OPERATION_FAILED, detail) ||
+                    !hv_efi_boot_diagnostic_record_return(
+                        &record, (uint32_t)sizeof(record),
+                        HV_BOOT_STAGE_AP_PREPARE,
+                        HV_BOOT_REASON_OPERATION_FAILED,
+                        UINT64_C(0x800000000000001a), &snapshot) ||
+                    !check((record.Detail & UINT32_C(0x80000000)) != 0 &&
+                               ((record.Detail >> 24) & 127u) == substep &&
+                               ((record.Detail >> 16) & 255u) == stage &&
+                               ((record.Detail >> 8) & 255u) == primary &&
+                               (record.Detail & 255u) == finalStatus &&
+                               record.Status == UINT64_C(0x800000000000001a) &&
+                               record.PreparedCpus == 20,
+                           "IOMMU cause and cleanup result survive transport")) {
+                    return 0;
+                }
+            }
+        }
+    }
+    return check(hv_efi_boot_diagnostic_iommu_detail(3, 0, 255, 255) ==
+                     UINT32_C(0x8300ffff),
+                 "allocation detail marks runtime codes unavailable") &&
+        check(hv_efi_boot_diagnostic_iommu_detail(0, 0, 0, 0) == 4 &&
+                  hv_efi_boot_diagnostic_iommu_detail(10, 0, 0, 0) == 4 &&
+                  hv_efi_boot_diagnostic_iommu_detail(9, 10, 0, 0) == 4 &&
+                  hv_efi_boot_diagnostic_iommu_detail(9, 0, 256, 0) == 4 &&
+                  hv_efi_boot_diagnostic_iommu_detail(9, 0, 0, 256) == 4,
+              "malformed IOMMU fields fall back to the coarse legacy detail") &&
+        check(sizeof(hv_boot_diagnostic_t) == 80,
+              "IOMMU detail does not change the startup ABI");
+}
+
 int main(void)
 {
     if (!test_failure_snapshot() || !test_success_snapshot() ||
@@ -240,7 +295,7 @@ int main(void)
                                0) ||
         !reject_without_writes((uint32_t)sizeof(hv_boot_diagnostic_t), 1) ||
         !test_inconsistent_outcomes() || !test_stage_cannot_regress() ||
-        !test_memory_policy_failure_details()) {
+        !test_memory_policy_failure_details() || !test_iommu_failure_details()) {
         return 1;
     }
     return 0;

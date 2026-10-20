@@ -46,6 +46,34 @@ foreach ($substep in $substeps) {
 }
 Assert-True ($memoryPolicy -match 'return status;' -and $memoryPolicy -notmatch 'return EFI_ABORTED;') `
     'Memory-policy cleanup must preserve the failing EFI status.'
+$physicalIommu = Get-SourceRegion $source 'static EFI_STATUS HvEfiPreparePhysicalIommu(' 'typedef struct HV_EFI_AP_PREPARATION_CONTEXT'
+$iommuSubsteps = @(
+    @('ARGUMENT', 'context == NULL'),
+    @('STATE', 'state == NULL'),
+    @('ALLOC_MAPPED', 'status = gBS->AllocatePool('),
+    @('ALLOC_DENIED', 'status = gBS->AllocatePool('),
+    @('MEMORY_DESCRIPTOR', 'for (index = 0;'),
+    @('RMRR_OWNER', 'for (index = 0;'),
+    @('IDENTITY_DOMAIN', 'iommuStatus = HvEfiIommuBuildLegacyIdentityDomain('),
+    @('GPU_DOMAIN', 'status = HvEfiGpuBuildDmaDomain('),
+    @('RUNTIME_INSTALL', 'iommuStatus = HvEfiIommuInstallRuntimeIsolationWithDiagnostic(')
+)
+$previousOperation = -1
+foreach ($substep in $iommuSubsteps) {
+    $marker = $physicalIommu.IndexOf(('HV_EFI_BOOT_DIAGNOSTIC_IOMMU_' + $substep[0]), [StringComparison]::Ordinal)
+    $operation = if ($marker -ge 0) { $physicalIommu.IndexOf($substep[1], $marker, [StringComparison]::Ordinal) } else { -1 }
+    Assert-True ($marker -gt $previousOperation -and $operation -gt $marker) `
+        ('Physical IOMMU needs a BSP diagnostic before ' + $substep[0])
+    $previousOperation = $operation
+}
+$installResult = $physicalIommu.IndexOf('installDiagnostic.PrimaryStatus, installDiagnostic.FinalStatus', [StringComparison]::Ordinal)
+$failStop = $physicalIommu.IndexOf('HvEfiFailStop();', [StringComparison]::Ordinal)
+$freePlan = $physicalIommu.IndexOf('gBS->FreePool(denied);', [StringComparison]::Ordinal)
+Assert-True ($installResult -gt $previousOperation -and $failStop -gt $installResult -and $freePlan -gt $failStop) `
+    'Runtime IOMMU cause must be captured before fail-stop or plan cleanup.'
+Assert-True ($physicalIommu -match 'return EFI_ERROR\(status\) \? status :' -and
+    [regex]::Matches($bspPrepare, 'return EFI_ERROR\(status\) \? status : EFI_ABORTED;').Count -eq 2) `
+    'GPU/IOMMU EFI errors must survive AP preparation and its pool cleanup.'
 foreach ($name in @('efi_hypervisor.asm', 'efi_hypervisor.inc', 'efi_hypervisor.h')) {
     $text = Get-Content -Raw -LiteralPath (Join-Path $root $name)
     Assert-True ($text -notmatch 'HvEfiBootDiagnostic|hv_boot_diagnostic') `

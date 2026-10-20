@@ -1,5 +1,96 @@
 # GPU diagnostic payload failure investigation
 
+## Fourth physical run: IOMMU preparation failed
+
+Run `gpu-20261020T224018Z-31b7c15e56584f84a68d89b7b3ecb1a1` used source
+`69a3c3d94f33d1903778ef5ec5b0a1f015b1be29`. The collected 568-byte
+`esp-payload-diagnostic.txt` has SHA-256
+`89F6368DDAA5446CA95ABF05F77BFB93EACFDE5E3D777696DA1A660D62EC15D4`.
+It reports `ap_prepare`, `operation_failed`, EFI status
+`0x8000000000000015`, detail `4`, preparation failure `10`, and all three
+expected/prepared/VMX-ready counts equal to 20. Activation status and failure
+remain zero.
+
+This run passed the earlier memory-policy block and AP preparation callbacks.
+Detail 4 selects `HvEfiPreparePhysicalIommu`. Its caller converted every EFI
+error there to `MEMORY_POLICY` and ultimately returned `EFI_ABORTED`, so the
+record does not identify the failed IOMMU predicate. The previous MMIO-union
+correction removed the earlier blocker; successful VMX launch or GPU isolation
+has not been established.
+
+The historical DMAR capture described below has a GPU-only 72-MiB RMRR
+`[0x7c000000,0x80800000)` scoped to endpoint `00:02.0`. The GPU ownership path
+explicitly excludes that RMRR from the legacy guest domain. That table alone
+does not predict a scope or RMRR/deny rejection. It was not captured from this
+UEFI invocation, and the saved run contains no firmware memory map, VT-d
+capability/status values, or inner runtime result. A pre-enabled remapper,
+unsupported capabilities, map capacity, GPU-domain policy, and runtime
+callback failures remain candidates, not diagnoses. The PCR replay refusal
+still does not explain this independently attempted payload return.
+
+Recovery completed through the fixed firmware review. FinalVerify action
+`20261020T232519113Z-FinalVerify-5a786491a066456facce99b21b3bf06a` returned
+`FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED`.
+It recorded the post-disarm reset, Secure Boot enabled, 20 ABSENT CPUs, the
+unchanged Windows boot-manager hash, accepted reviewed firmware text, and no
+verification errors. Both fresh raw captures have BootNext absent, BootOrder
+`[0,1,2]`, and zero integrity findings. Archive subsequently removed the active
+selector and preserved the `Complete` journal. Retained stage files still
+require a run-specific retirement; the old `201140` profile does not own them.
+
+### IOMMU failure diagnostic refinement
+
+The existing 80-byte version-1 startup record and all legacy detail values
+remain unchanged. For new AP-preparation IOMMU results, the high bit of
+`startup_detail` identifies a packed observation:
+
+| Bits | Meaning |
+| --- | --- |
+| 30:24 | IOMMU preparation substep |
+| 23:16 | First failing runtime-install stage, or 0 outside that transaction |
+| 15:8 | Primary runtime enum before rollback/restore |
+| 7:0 | Final runtime enum actually returned |
+
+Substeps are argument validation (1), state validation (2), mapped-range pool
+allocation (3), denied-range pool allocation (4), memory descriptor validation
+(5), RMRR ownership (6), legacy identity domain (7), GPU domain (8), and runtime
+installation (9). Runtime codes 255 mean not applicable; the raw EFI error
+remains in `startup_status` and `payload_status`.
+
+The installer stage values are argument (1), PCI quiesce (2), programming plan
+(3), initialization (4), enable (5), audit (6), rollback (7), and PCI restore
+(8). Complete success is stage 9 with both statuses zero. Runtime enum values
+retain their definitions in `iommu_runtime.h`: for example, 10 is capacity,
+11 remapping unsupported, 15 already enabled, 16 callback failed, 17 timeout,
+18 audit failed, and 19 rollback failed. The first failure is retained even if
+later recovery replaces the returned enum. Rollback runs after a recorded
+failure, so its failure normally changes the final status while preserving
+the earlier stage. GPU-domain errors have runtime codes 255 and retain their
+EFI status. This does not attest a successful cleanup or guarantee that a
+fail-stop can return a diagnostic to the loader.
+
+For example, synthetic detail `0x89030F0F` means runtime installation,
+programming-plan stage, and `ALREADY_ENABLED` as both primary and final status.
+It is not an observation from this run. The existing loader prints this value
+as unsigned decimal `2298679055`; no loader production change is required.
+
+Physical preparation now preserves an EFI allocation/GPU-domain error through
+the AP caller instead of replacing it with `EFI_ABORTED`. Tagged details
+separate descriptor/RMRR/domain rejection from the runtime transaction.
+Existing policy predicates, runtime programming/rollback/PCI restore order,
+and fail-stop behavior remain in place. The diagnostic is caller-owned and
+allocation-free; AP callbacks and resident code do not access the loader record.
+
+The native-enabled Release EFI build passed its `.hvscan` audit at 54,870 bytes.
+The unsigned image is 187,904 bytes, SHA-256
+`4A236650B3BB1AA2FDEED97A4DCE0A7C5EFCBCDCAE263D358E446D1E65595450`.
+It was not signed, staged, armed, or executed. The loader formatter regression
+also passed for the tagged high-bit detail. All 41 hypervisor component tests
+passed, including callback-injected first/final failure preservation, the
+startup-record round trip, and BSP diagnostic lifetime contracts. This
+refinement fixes missing failure information; it does not establish or repair
+the physical IOMMU cause.
+
 ## Third physical run: memory-policy preparation aborted
 
 Run `gpu-20261020T201140Z-6e6e86230a2549b28be3274dfe56cec7` used source

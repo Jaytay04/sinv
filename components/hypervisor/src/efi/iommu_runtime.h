@@ -114,6 +114,25 @@ typedef enum HV_EFI_IOMMU_RUNTIME_STATUS {
     HV_EFI_IOMMU_RUNTIME_TAKEOVER_BLOCKED = 26
 } HV_EFI_IOMMU_RUNTIME_STATUS;
 
+/* Optional, allocation-free boot diagnostic for the runtime install
+ * transaction. This is caller-owned transient evidence, not resident state. */
+#define HV_EFI_IOMMU_INSTALL_STAGE_NONE UINT32_C(0)
+#define HV_EFI_IOMMU_INSTALL_STAGE_ARGUMENT UINT32_C(1)
+#define HV_EFI_IOMMU_INSTALL_STAGE_PCI_QUIESCE UINT32_C(2)
+#define HV_EFI_IOMMU_INSTALL_STAGE_PROGRAM_PLAN UINT32_C(3)
+#define HV_EFI_IOMMU_INSTALL_STAGE_INITIALIZE UINT32_C(4)
+#define HV_EFI_IOMMU_INSTALL_STAGE_ENABLE UINT32_C(5)
+#define HV_EFI_IOMMU_INSTALL_STAGE_AUDIT UINT32_C(6)
+#define HV_EFI_IOMMU_INSTALL_STAGE_ROLLBACK UINT32_C(7)
+#define HV_EFI_IOMMU_INSTALL_STAGE_PCI_RESTORE UINT32_C(8)
+#define HV_EFI_IOMMU_INSTALL_STAGE_COMPLETE UINT32_C(9)
+
+typedef struct HV_EFI_IOMMU_INSTALL_DIAGNOSTIC {
+    uint32_t Stage;
+    uint32_t PrimaryStatus;
+    uint32_t FinalStatus;
+} HV_EFI_IOMMU_INSTALL_DIAGNOSTIC;
+
 typedef struct HV_EFI_IOMMU_PHYSICAL_VIEW {
     const uint8_t *Bytes;
     uint64_t PhysicalBase;
@@ -608,6 +627,29 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolation(
     uint32_t pciStateCapacity,
     uint32_t *pciStateCount,
     volatile uint32_t *dmaQuiescedState);
+
+/* Diagnostic variant of the same transaction. Diagnostic is optional and
+ * does not change the install sequence or its returned status. */
+HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationWithDiagnostic(
+    const HV_EFI_IOMMU_DMAR_INFO *dmar,
+    const HV_EFI_IOMMU_UNIT_CONFIGURATION *configurations,
+    uint32_t configurationCount,
+    const HV_EFI_IOMMU_OWNERSHIP_POLICY *ownership,
+    const HV_EFI_IOMMU_RUNTIME_CALLBACKS *runtimeCallbacks,
+    const HV_EFI_IOMMU_PROGRAM_STORAGE *programStorage,
+    uint32_t pollLimit,
+    HV_EFI_IOMMU_PROGRAM_PLAN *plan,
+    HV_EFI_IOMMU_RUNTIME *runtime,
+    HV_EFI_IOMMU_UNIT_RUNTIME_STATE *unitStates,
+    uint32_t unitStateCount,
+    const HV_EFI_IOMMU_MCFG_SEGMENT *segments,
+    uint32_t segmentCount,
+    const HV_EFI_IOMMU_PCI_CALLBACKS *pciCallbacks,
+    HV_EFI_IOMMU_PCI_COMMAND_STATE *pciStates,
+    uint32_t pciStateCapacity,
+    uint32_t *pciStateCount,
+    volatile uint32_t *dmaQuiescedState,
+    HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic);
 
 #ifdef __cplusplus
 }

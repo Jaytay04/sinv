@@ -9,11 +9,11 @@ this guide does not change `AGENTS.md`.
 Use **`gpu-host-test.ps1` for this guide**, not `gpu-payload-test.ps1`.
 The latter's `Complete` result belongs to the VM, not your physical machine.
 
-Current run `224018` is disarmed and awaiting the
-[reviewed firmware completion](#current-224018-firmware-inspection) below.
-Finish that recovery before starting the fresh-run sequence. Its retained
-stage will need its own reviewed retirement after completion; the `201140`
-retirement profile below does not apply to `224018`.
+Run `224018` passed reviewed recovery verification and its selector is
+archived. The payload still failed physical IOMMU preparation; see the
+[investigation](GPU_PAYLOAD_FAILURE_INVESTIGATION.md#fourth-physical-run-iommu-preparation-failed).
+Its retained stage needs its own reviewed retirement before a fresh run;
+the `201140` retirement profile below does not apply to `224018`.
 
 The [startup diagnostic VM test](GPU_STARTUP_DIAGNOSTIC_VM_RESULT.md) passed
 signed EFI boot, the version-1 startup record, and four CPU health checks.
@@ -463,18 +463,20 @@ must match `[0,1,2]`; another device or firmware change still blocks completion.
 The baseline remains preserved, and historical raw BootOrder equality and
 unreferenced firmware variables remain outside this review's scope.
 
-From elevated PowerShell in the project folder, complete this run:
+The operator completed the reviewed recovery using:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 FinalVerify -ReviewedFirmwareDifference
 ```
 
-Require `FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED`,
-`Succeeded: true`, phase `Complete`, and no cleanup errors before Archive.
-The comparison will retain `TextEqual: false` and record
-`ReviewedDifferenceAccepted: true`. No additional rollback or power cycle is
-needed for this reviewed textual difference. Do not rewrite the baseline or
-use this approval for another run.
+The result was
+`FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED`,
+`Succeeded: true`, phase `Complete`, with an empty verification error list.
+The comparison retains `TextEqual: false` and records
+`ReviewedDifferenceAccepted: true`. Archive then returned `SELECTOR_ARCHIVED`;
+the selector is absent and the journal remains `Complete`. These are completed
+steps, not commands to repeat. Do not rewrite the baseline or use this approval
+for another run.
 
 The payload's physical IOMMU preparation failure (`startup_detail=4`) still
 requires investigation before another full boot test. Successful recovery

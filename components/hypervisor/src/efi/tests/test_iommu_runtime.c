@@ -22,6 +22,8 @@ typedef struct TEST_MMIO {
     uint32_t Writes;
     uint32_t Invalidations;
     uint32_t FailWriteOrdinal;
+    uint32_t FailWriteOrdinalSecondary;
+    uint32_t FailAuditRead;
     uint32_t OwnershipHeld;
     uint32_t DmaQuiesced;
 } TEST_MMIO;
@@ -189,6 +191,9 @@ static uint32_t TestRead(
     } else if (offset == 0x20 && width == 8) {
         *value = mmio->Root;
     } else if (offset == 0x34 && width == 4) {
+        if (mmio->FailAuditRead != 0 && mmio->Writes != 0) {
+            return 0;
+        }
         *value = mmio->Faults;
     } else {
         return 0;
@@ -204,6 +209,10 @@ static uint32_t TestWrite(
     ++mmio->Writes;
     if (mmio->FailWriteOrdinal != 0 &&
         mmio->Writes == mmio->FailWriteOrdinal) {
+        return 0;
+    }
+    if (mmio->FailWriteOrdinalSecondary != 0 &&
+        mmio->Writes == mmio->FailWriteOrdinalSecondary) {
         return 0;
     }
     if (address < TEST_DRHD_BASE) {
@@ -1162,6 +1171,7 @@ static int TestInjectedIsolationOrchestration(void)
     HV_EFI_IOMMU_PROGRAM_PLAN plan;
     HV_EFI_IOMMU_UNIT_RUNTIME_STATE unitStates[1];
     HV_EFI_IOMMU_RUNTIME runtime;
+    HV_EFI_IOMMU_INSTALL_DIAGNOSTIC diagnostic;
     HV_EFI_IOMMU_MCFG_SEGMENT segment;
     HV_EFI_IOMMU_PCI_COMMAND_STATE pciStates[2];
     TEST_MMIO mmio;
@@ -1225,6 +1235,112 @@ static int TestInjectedIsolationOrchestration(void)
                 mmio.Root == 0 && mmio.DmaQuiesced == 0 &&
                 ecam.Commands[0] == 7 && ecam.Commands[1] == 5,
                 "injected partial programming failure restores IOMMU and PCI");
+
+    InitializeCallbacks(&mmio, &runtimeCallbacks);
+    mmio.DmaQuiesced = 0;
+    TestZero(&ecam, sizeof(ecam));
+    ecam.Commands[0] = 7;
+    ecam.Commands[1] = 5;
+    diagnostic.Stage = UINT32_MAX;
+    diagnostic.PrimaryStatus = UINT32_MAX;
+    diagnostic.FinalStatus = UINT32_MAX;
+    TEST_ASSERT(HvEfiIommuInstallRuntimeIsolationWithDiagnostic(
+                    &info, &configuration, 1, &ownership,
+                    &runtimeCallbacks, &storage, 8, &plan, &runtime,
+                    unitStates, 1, &segment, 1, &pciCallbacks, pciStates, 2,
+                    &pciStateCount, &mmio.DmaQuiesced, &diagnostic) ==
+                    HV_EFI_IOMMU_RUNTIME_OK &&
+                diagnostic.Stage == HV_EFI_IOMMU_INSTALL_STAGE_COMPLETE &&
+                diagnostic.PrimaryStatus == HV_EFI_IOMMU_RUNTIME_OK &&
+                diagnostic.FinalStatus == HV_EFI_IOMMU_RUNTIME_OK,
+                "diagnostic install reports complete success with OK statuses");
+
+    InitializeCallbacks(&mmio, &runtimeCallbacks);
+    mmio.DmaQuiesced = 0;
+    mmio.Status = UINT32_C(1) << 31;
+    TestZero(&ecam, sizeof(ecam));
+    ecam.Commands[0] = 7;
+    ecam.Commands[1] = 5;
+    TEST_ASSERT(HvEfiIommuInstallRuntimeIsolationWithDiagnostic(
+                    &info, &configuration, 1, &ownership,
+                    &runtimeCallbacks, &storage, 8, &plan, &runtime,
+                    unitStates, 1, &segment, 1, &pciCallbacks, pciStates, 2,
+                    &pciStateCount, &mmio.DmaQuiesced, &diagnostic) ==
+                    HV_EFI_IOMMU_RUNTIME_ALREADY_ENABLED &&
+                diagnostic.Stage ==
+                    HV_EFI_IOMMU_INSTALL_STAGE_PROGRAM_PLAN &&
+                diagnostic.PrimaryStatus ==
+                    HV_EFI_IOMMU_RUNTIME_ALREADY_ENABLED &&
+                diagnostic.FinalStatus ==
+                    HV_EFI_IOMMU_RUNTIME_ALREADY_ENABLED &&
+                mmio.Writes == 0 && mmio.DmaQuiesced == 0 &&
+                ecam.Commands[0] == 7 && ecam.Commands[1] == 5,
+                "already-enabled plan is reported before any MMIO write");
+
+    InitializeCallbacks(&mmio, &runtimeCallbacks);
+    mmio.DmaQuiesced = 0;
+    TestZero(&ecam, sizeof(ecam));
+    ecam.Commands[0] = 7;
+    ecam.Commands[1] = 5;
+    ecam.FailWrite = 1;
+    TEST_ASSERT(HvEfiIommuInstallRuntimeIsolationWithDiagnostic(
+                    &info, &configuration, 1, &ownership,
+                    &runtimeCallbacks, &storage, 8, &plan, &runtime,
+                    unitStates, 1, &segment, 1, &pciCallbacks, pciStates, 2,
+                    &pciStateCount, &mmio.DmaQuiesced, &diagnostic) ==
+                    HV_EFI_IOMMU_RUNTIME_CALLBACK_FAILED &&
+                diagnostic.Stage ==
+                    HV_EFI_IOMMU_INSTALL_STAGE_PCI_QUIESCE &&
+                diagnostic.PrimaryStatus ==
+                    HV_EFI_IOMMU_RUNTIME_CALLBACK_FAILED &&
+                diagnostic.FinalStatus ==
+                    HV_EFI_IOMMU_RUNTIME_CALLBACK_FAILED &&
+                mmio.Writes == 0 && mmio.DmaQuiesced == 0 &&
+                ecam.Commands[0] == 7 && ecam.Commands[1] == 5,
+                "quiesce callback failure is attributed before programming");
+
+    InitializeCallbacks(&mmio, &runtimeCallbacks);
+    mmio.DmaQuiesced = 0;
+    mmio.FailWriteOrdinal = 2;
+    mmio.FailWriteOrdinalSecondary = 3;
+    TestZero(&ecam, sizeof(ecam));
+    ecam.Commands[0] = 7;
+    ecam.Commands[1] = 5;
+    TEST_ASSERT(HvEfiIommuInstallRuntimeIsolationWithDiagnostic(
+                    &info, &configuration, 1, &ownership,
+                    &runtimeCallbacks, &storage, 8, &plan, &runtime,
+                    unitStates, 1, &segment, 1, &pciCallbacks, pciStates, 2,
+                    &pciStateCount, &mmio.DmaQuiesced, &diagnostic) ==
+                    HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED &&
+                diagnostic.Stage == HV_EFI_IOMMU_INSTALL_STAGE_ENABLE &&
+                diagnostic.PrimaryStatus ==
+                    HV_EFI_IOMMU_RUNTIME_CALLBACK_FAILED &&
+                diagnostic.FinalStatus ==
+                    HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED &&
+                mmio.DmaQuiesced == 0 && ecam.Commands[0] == 7 &&
+                ecam.Commands[1] == 5,
+                "rollback override keeps the original enable callback cause");
+
+    InitializeCallbacks(&mmio, &runtimeCallbacks);
+    mmio.DmaQuiesced = 0;
+    mmio.FailAuditRead = 1;
+    TestZero(&ecam, sizeof(ecam));
+    ecam.Commands[0] = 7;
+    ecam.Commands[1] = 5;
+    ecam.FailWrite = 3;
+    TEST_ASSERT(HvEfiIommuInstallRuntimeIsolationWithDiagnostic(
+                    &info, &configuration, 1, &ownership,
+                    &runtimeCallbacks, &storage, 8, &plan, &runtime,
+                    unitStates, 1, &segment, 1, &pciCallbacks, pciStates, 2,
+                    &pciStateCount, &mmio.DmaQuiesced, &diagnostic) ==
+                    HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED &&
+                diagnostic.Stage == HV_EFI_IOMMU_INSTALL_STAGE_AUDIT &&
+                diagnostic.PrimaryStatus ==
+                    HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED &&
+                diagnostic.FinalStatus ==
+                    HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED &&
+                mmio.DmaQuiesced == 0,
+                "PCI restore override keeps the original audit failure cause");
     return 0;
 }
 

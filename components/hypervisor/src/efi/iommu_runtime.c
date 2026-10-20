@@ -1190,9 +1190,22 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuRuntimeRollback(
         HV_EFI_IOMMU_RUNTIME_OK;
 }
 
-HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuRuntimeEnable(
+static void HvRecordInstallFailure(
+    HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic,
+    uint32_t stage,
+    HV_EFI_IOMMU_RUNTIME_STATUS status)
+{
+    if (diagnostic != NULL &&
+        diagnostic->Stage == HV_EFI_IOMMU_INSTALL_STAGE_NONE) {
+        diagnostic->Stage = stage;
+        diagnostic->PrimaryStatus = (uint32_t)status;
+    }
+}
+
+static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuRuntimeEnableInternal(
     HV_EFI_IOMMU_RUNTIME *runtime,
-    const HV_EFI_IOMMU_RUNTIME_CALLBACKS *callbacks)
+    const HV_EFI_IOMMU_RUNTIME_CALLBACKS *callbacks,
+    HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic)
 {
     uint32_t unitIndex;
     if (runtime == NULL || runtime->Plan == NULL || callbacks == NULL ||
@@ -1219,11 +1232,19 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuRuntimeEnable(
             const HV_EFI_IOMMU_RUNTIME_STATUS status =
                 HvExecuteOperation(runtime->Plan, operation, callbacks);
             if (status != HV_EFI_IOMMU_RUNTIME_OK) {
+                HvRecordInstallFailure(
+                    diagnostic, HV_EFI_IOMMU_INSTALL_STAGE_ENABLE, status);
                 runtime->FailedUnitIndex = unitIndex;
                 runtime->State = HV_EFI_IOMMU_RUNTIME_FAILED;
-                if (HvEfiIommuRuntimeRollback(runtime, callbacks) !=
-                    HV_EFI_IOMMU_RUNTIME_OK) {
-                    return HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED;
+                {
+                    const HV_EFI_IOMMU_RUNTIME_STATUS rollbackStatus =
+                        HvEfiIommuRuntimeRollback(runtime, callbacks);
+                    if (rollbackStatus != HV_EFI_IOMMU_RUNTIME_OK) {
+                        HvRecordInstallFailure(
+                            diagnostic, HV_EFI_IOMMU_INSTALL_STAGE_ROLLBACK,
+                            rollbackStatus);
+                        return HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED;
+                    }
                 }
                 return status;
             }
@@ -1234,6 +1255,13 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuRuntimeEnable(
     }
     runtime->State = HV_EFI_IOMMU_RUNTIME_ENABLED;
     return HV_EFI_IOMMU_RUNTIME_OK;
+}
+
+HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuRuntimeEnable(
+    HV_EFI_IOMMU_RUNTIME *runtime,
+    const HV_EFI_IOMMU_RUNTIME_CALLBACKS *callbacks)
+{
+    return HvEfiIommuRuntimeEnableInternal(runtime, callbacks, NULL);
 }
 
 HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuRuntimeAudit(
@@ -3227,6 +3255,124 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuQuiescePciBusMasters(
     return HV_EFI_IOMMU_RUNTIME_OK;
 }
 
+static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationInternal(
+    const HV_EFI_IOMMU_DMAR_INFO *dmar,
+    const HV_EFI_IOMMU_UNIT_CONFIGURATION *configurations,
+    uint32_t configurationCount,
+    const HV_EFI_IOMMU_OWNERSHIP_POLICY *ownership,
+    const HV_EFI_IOMMU_RUNTIME_CALLBACKS *runtimeCallbacks,
+    const HV_EFI_IOMMU_PROGRAM_STORAGE *programStorage,
+    uint32_t pollLimit,
+    HV_EFI_IOMMU_PROGRAM_PLAN *plan,
+    HV_EFI_IOMMU_RUNTIME *runtime,
+    HV_EFI_IOMMU_UNIT_RUNTIME_STATE *unitStates,
+    uint32_t unitStateCount,
+    const HV_EFI_IOMMU_MCFG_SEGMENT *segments,
+    uint32_t segmentCount,
+    const HV_EFI_IOMMU_PCI_CALLBACKS *pciCallbacks,
+    HV_EFI_IOMMU_PCI_COMMAND_STATE *pciStates,
+    uint32_t pciStateCapacity,
+    uint32_t *pciStateCount,
+    volatile uint32_t *dmaQuiescedState,
+    HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic)
+{
+    HV_EFI_IOMMU_RUNTIME_STATUS status;
+    HV_EFI_IOMMU_RUNTIME_STATUS restoreStatus;
+    if (diagnostic != NULL) {
+        diagnostic->Stage = HV_EFI_IOMMU_INSTALL_STAGE_NONE;
+        diagnostic->PrimaryStatus = HV_EFI_IOMMU_RUNTIME_OK;
+        diagnostic->FinalStatus = HV_EFI_IOMMU_RUNTIME_OK;
+    }
+    if (runtimeCallbacks == NULL || plan == NULL || runtime == NULL ||
+        dmaQuiescedState == NULL || pciStateCount == NULL) {
+        status = HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+        HvRecordInstallFailure(
+            diagnostic, HV_EFI_IOMMU_INSTALL_STAGE_ARGUMENT, status);
+        if (diagnostic != NULL) {
+            diagnostic->FinalStatus = (uint32_t)status;
+        }
+        return status;
+    }
+    HvZero(runtime, sizeof(*runtime));
+    *dmaQuiescedState = 0;
+    *pciStateCount = 0;
+    status = HvEfiIommuQuiescePciBusMasters(
+        segments, segmentCount, pciCallbacks, pciStates, pciStateCapacity,
+        pciStateCount);
+    if (status != HV_EFI_IOMMU_RUNTIME_OK) {
+        HvRecordInstallFailure(
+            diagnostic, HV_EFI_IOMMU_INSTALL_STAGE_PCI_QUIESCE, status);
+        if (diagnostic != NULL) {
+            diagnostic->FinalStatus = (uint32_t)status;
+        }
+        return status;
+    }
+    *dmaQuiescedState = 1;
+    status = HvEfiIommuBuildProgrammingPlan(
+        dmar, configurations, configurationCount, ownership,
+        runtimeCallbacks, programStorage, pollLimit, plan);
+    if (status != HV_EFI_IOMMU_RUNTIME_OK) {
+        HvRecordInstallFailure(
+            diagnostic, HV_EFI_IOMMU_INSTALL_STAGE_PROGRAM_PLAN, status);
+    } else {
+        status = HvEfiIommuRuntimeInitialize(
+            runtime, plan, unitStates, unitStateCount);
+        if (status != HV_EFI_IOMMU_RUNTIME_OK) {
+            HvRecordInstallFailure(
+                diagnostic, HV_EFI_IOMMU_INSTALL_STAGE_INITIALIZE, status);
+        }
+    }
+    if (status == HV_EFI_IOMMU_RUNTIME_OK) {
+        status = HvEfiIommuRuntimeEnableInternal(
+            runtime, runtimeCallbacks, diagnostic);
+        if (status != HV_EFI_IOMMU_RUNTIME_OK) {
+            HvRecordInstallFailure(
+                diagnostic, HV_EFI_IOMMU_INSTALL_STAGE_ENABLE, status);
+        }
+    }
+    if (status == HV_EFI_IOMMU_RUNTIME_OK) {
+        status = HvEfiIommuRuntimeAudit(runtime, runtimeCallbacks);
+        if (status != HV_EFI_IOMMU_RUNTIME_OK) {
+            HvRecordInstallFailure(
+                diagnostic, HV_EFI_IOMMU_INSTALL_STAGE_AUDIT, status);
+        }
+    }
+    if (status != HV_EFI_IOMMU_RUNTIME_OK &&
+        (runtime->State == HV_EFI_IOMMU_RUNTIME_ENABLING ||
+         runtime->State == HV_EFI_IOMMU_RUNTIME_ENABLED ||
+         runtime->State == HV_EFI_IOMMU_RUNTIME_FAILED)) {
+        const HV_EFI_IOMMU_RUNTIME_STATUS rollbackStatus =
+            HvEfiIommuRuntimeRollback(runtime, runtimeCallbacks);
+        if (rollbackStatus != HV_EFI_IOMMU_RUNTIME_OK) {
+            HvRecordInstallFailure(
+                diagnostic, HV_EFI_IOMMU_INSTALL_STAGE_ROLLBACK,
+                rollbackStatus);
+            status = HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED;
+        }
+    }
+    restoreStatus = HvEfiIommuRestorePciBusMasters(
+        pciCallbacks, pciStates, *pciStateCount);
+    *dmaQuiescedState = 0;
+    if (restoreStatus != HV_EFI_IOMMU_RUNTIME_OK) {
+        HvRecordInstallFailure(
+            diagnostic, HV_EFI_IOMMU_INSTALL_STAGE_PCI_RESTORE,
+            restoreStatus);
+        if (diagnostic != NULL) {
+            diagnostic->FinalStatus = (uint32_t)restoreStatus;
+        }
+        return restoreStatus;
+    }
+    if (diagnostic != NULL) {
+        if (status == HV_EFI_IOMMU_RUNTIME_OK &&
+            diagnostic->Stage == HV_EFI_IOMMU_INSTALL_STAGE_NONE) {
+            diagnostic->Stage = HV_EFI_IOMMU_INSTALL_STAGE_COMPLETE;
+            diagnostic->PrimaryStatus = HV_EFI_IOMMU_RUNTIME_OK;
+        }
+        diagnostic->FinalStatus = (uint32_t)status;
+    }
+    return status;
+}
+
 HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolation(
     const HV_EFI_IOMMU_DMAR_INFO *dmar,
     const HV_EFI_IOMMU_UNIT_CONFIGURATION *configurations,
@@ -3247,49 +3393,38 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolation(
     uint32_t *pciStateCount,
     volatile uint32_t *dmaQuiescedState)
 {
-    HV_EFI_IOMMU_RUNTIME_STATUS status;
-    HV_EFI_IOMMU_RUNTIME_STATUS restoreStatus;
-    if (runtimeCallbacks == NULL || plan == NULL || runtime == NULL ||
-        dmaQuiescedState == NULL || pciStateCount == NULL) {
-        return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
-    }
-    HvZero(runtime, sizeof(*runtime));
-    *dmaQuiescedState = 0;
-    *pciStateCount = 0;
-    status = HvEfiIommuQuiescePciBusMasters(
-        segments, segmentCount, pciCallbacks, pciStates, pciStateCapacity,
-        pciStateCount);
-    if (status != HV_EFI_IOMMU_RUNTIME_OK) {
-        return status;
-    }
-    *dmaQuiescedState = 1;
-    status = HvEfiIommuBuildProgrammingPlan(
+    return HvEfiIommuInstallRuntimeIsolationInternal(
         dmar, configurations, configurationCount, ownership,
-        runtimeCallbacks, programStorage, pollLimit, plan);
-    if (status == HV_EFI_IOMMU_RUNTIME_OK) {
-        status = HvEfiIommuRuntimeInitialize(
-            runtime, plan, unitStates, unitStateCount);
-    }
-    if (status == HV_EFI_IOMMU_RUNTIME_OK) {
-        status = HvEfiIommuRuntimeEnable(runtime, runtimeCallbacks);
-    }
-    if (status == HV_EFI_IOMMU_RUNTIME_OK) {
-        status = HvEfiIommuRuntimeAudit(runtime, runtimeCallbacks);
-    }
-    if (status != HV_EFI_IOMMU_RUNTIME_OK &&
-        (runtime->State == HV_EFI_IOMMU_RUNTIME_ENABLING ||
-         runtime->State == HV_EFI_IOMMU_RUNTIME_ENABLED ||
-         runtime->State == HV_EFI_IOMMU_RUNTIME_FAILED)) {
-        if (HvEfiIommuRuntimeRollback(runtime, runtimeCallbacks) !=
-            HV_EFI_IOMMU_RUNTIME_OK) {
-            status = HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED;
-        }
-    }
-    restoreStatus = HvEfiIommuRestorePciBusMasters(
-        pciCallbacks, pciStates, *pciStateCount);
-    *dmaQuiescedState = 0;
-    if (restoreStatus != HV_EFI_IOMMU_RUNTIME_OK) {
-        return restoreStatus;
-    }
-    return status;
+        runtimeCallbacks, programStorage, pollLimit, plan, runtime,
+        unitStates, unitStateCount, segments, segmentCount, pciCallbacks,
+        pciStates, pciStateCapacity, pciStateCount, dmaQuiescedState, NULL);
+}
+
+HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationWithDiagnostic(
+    const HV_EFI_IOMMU_DMAR_INFO *dmar,
+    const HV_EFI_IOMMU_UNIT_CONFIGURATION *configurations,
+    uint32_t configurationCount,
+    const HV_EFI_IOMMU_OWNERSHIP_POLICY *ownership,
+    const HV_EFI_IOMMU_RUNTIME_CALLBACKS *runtimeCallbacks,
+    const HV_EFI_IOMMU_PROGRAM_STORAGE *programStorage,
+    uint32_t pollLimit,
+    HV_EFI_IOMMU_PROGRAM_PLAN *plan,
+    HV_EFI_IOMMU_RUNTIME *runtime,
+    HV_EFI_IOMMU_UNIT_RUNTIME_STATE *unitStates,
+    uint32_t unitStateCount,
+    const HV_EFI_IOMMU_MCFG_SEGMENT *segments,
+    uint32_t segmentCount,
+    const HV_EFI_IOMMU_PCI_CALLBACKS *pciCallbacks,
+    HV_EFI_IOMMU_PCI_COMMAND_STATE *pciStates,
+    uint32_t pciStateCapacity,
+    uint32_t *pciStateCount,
+    volatile uint32_t *dmaQuiescedState,
+    HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic)
+{
+    return HvEfiIommuInstallRuntimeIsolationInternal(
+        dmar, configurations, configurationCount, ownership,
+        runtimeCallbacks, programStorage, pollLimit, plan, runtime,
+        unitStates, unitStateCount, segments, segmentCount, pciCallbacks,
+        pciStates, pciStateCapacity, pciStateCount, dmaQuiescedState,
+        diagnostic);
 }

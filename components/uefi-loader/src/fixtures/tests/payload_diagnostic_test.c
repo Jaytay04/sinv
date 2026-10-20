@@ -232,6 +232,26 @@ int main(void)
             return 1;
         }
 
+        startup.Stage = HV_BOOT_STAGE_AP_PREPARE;
+        startup.Detail = 0x89030f0fu;
+        memset(startup_guarded, 0, sizeof(startup_guarded));
+        written = 0u;
+        if (!expect(payload_diagnostic_format_with_startup(
+                        &diagnostic, PAYLOAD_DIAG_STARTUP_VALID, &startup,
+                        startup_guarded + 1u, sizeof(startup_guarded) - 2u,
+                        &written),
+                    "tagged IOMMU detail fits the existing startup formatter") ||
+            !expect(written < sizeof(startup_guarded) - 2u &&
+                        strstr((const char *)(startup_guarded + 1u),
+                               "startup_stage=ap_prepare\n") != NULL &&
+                        strstr((const char *)(startup_guarded + 1u),
+                               "startup_detail=2298679055\n") != NULL,
+                    "high-bit IOMMU detail survives as unsigned decimal")) {
+            return 1;
+        }
+        startup.Stage = HV_BOOT_STAGE_GPU_PREPARE;
+        startup.Detail = 0x12345678u;
+
         memset(startup_guarded, 0xa5, sizeof(startup_guarded));
         written = 77u;
         if (!expect(!payload_diagnostic_format_with_startup(

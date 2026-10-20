@@ -24,6 +24,35 @@
 #define HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_DENY_INVENTORY UINT32_C(15)
 #define HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_SCANNER_ALLOWLIST UINT32_C(16)
 
+/* Tagged AP_PREPARE details retain IOMMU substep and runtime failure codes in
+ * the existing 32-bit Detail field. The startup Status remains an EFI_STATUS.
+ * Bits 30:24 are the substep, 23:16 the install stage, 15:8 the primary runtime
+ * status, and 7:0 the final runtime status. 255 means not applicable. */
+#define HV_EFI_BOOT_DIAGNOSTIC_IOMMU_TAG UINT32_C(0x80000000)
+#define HV_EFI_BOOT_DIAGNOSTIC_IOMMU_ARGUMENT UINT32_C(1)
+#define HV_EFI_BOOT_DIAGNOSTIC_IOMMU_STATE UINT32_C(2)
+#define HV_EFI_BOOT_DIAGNOSTIC_IOMMU_ALLOC_MAPPED UINT32_C(3)
+#define HV_EFI_BOOT_DIAGNOSTIC_IOMMU_ALLOC_DENIED UINT32_C(4)
+#define HV_EFI_BOOT_DIAGNOSTIC_IOMMU_MEMORY_DESCRIPTOR UINT32_C(5)
+#define HV_EFI_BOOT_DIAGNOSTIC_IOMMU_RMRR_OWNER UINT32_C(6)
+#define HV_EFI_BOOT_DIAGNOSTIC_IOMMU_IDENTITY_DOMAIN UINT32_C(7)
+#define HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_DOMAIN UINT32_C(8)
+#define HV_EFI_BOOT_DIAGNOSTIC_IOMMU_RUNTIME_INSTALL UINT32_C(9)
+#define HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE UINT32_C(255)
+
+static inline uint32_t hv_efi_boot_diagnostic_iommu_detail(
+    uint32_t substep, uint32_t installStage,
+    uint32_t primaryStatus, uint32_t finalStatus)
+{
+    if (substep < HV_EFI_BOOT_DIAGNOSTIC_IOMMU_ARGUMENT ||
+        substep > HV_EFI_BOOT_DIAGNOSTIC_IOMMU_RUNTIME_INSTALL ||
+        installStage > 9 || primaryStatus > 255 || finalStatus > 255) {
+        return HV_EFI_BOOT_DIAGNOSTIC_DETAIL_AP_PHYSICAL_IOMMU;
+    }
+    return HV_EFI_BOOT_DIAGNOSTIC_IOMMU_TAG | (substep << 24) |
+        (installStage << 16) | (primaryStatus << 8) | finalStatus;
+}
+
 typedef struct {
     uint32_t Processor;
     uint32_t Detail;

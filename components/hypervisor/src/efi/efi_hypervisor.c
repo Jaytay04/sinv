@@ -162,6 +162,14 @@ static void HvEfiBootDiagnosticSetDetail(uint32_t detail)
                            gHvEfiBootDiagnosticReason, detail);
 }
 
+static void HvEfiBootDiagnosticSetIommu(
+    uint32_t substep, uint32_t installStage,
+    uint32_t primaryStatus, uint32_t finalStatus)
+{
+    HvEfiBootDiagnosticSetDetail(hv_efi_boot_diagnostic_iommu_detail(
+        substep, installStage, primaryStatus, finalStatus));
+}
+
 typedef struct HV_EFI_PHYSICAL_IOMMU_STATE {
     uint64_t Signature;
     uint64_t OwnerToken;
@@ -2548,11 +2556,16 @@ static EFI_STATUS HvEfiPreparePhysicalIommu(
     HV_EFI_IOMMU_PCI_CALLBACKS pciCallbacks;
     HV_EFI_IOMMU_PROGRAM_STORAGE programStorage;
     HV_EFI_IOMMU_OWNERSHIP_POLICY ownership;
+    HV_EFI_IOMMU_INSTALL_DIAGNOSTIC installDiagnostic;
     uint32_t mappedCapacity;
     uint32_t mappedCount = 0;
     uint32_t index;
     HV_EFI_IOMMU_RUNTIME_STATUS iommuStatus;
     EFI_STATUS status;
+    HvEfiBootDiagnosticSetIommu(
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_ARGUMENT, 0,
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE,
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE);
     if (context == NULL || memoryMap == NULL || descriptorSize <
             sizeof(EFI_MEMORY_DESCRIPTOR) || memoryMapSize < descriptorSize ||
         eptDenyRanges == NULL || eptDenyRangeCount == 0) {
@@ -2563,6 +2576,10 @@ static EFI_STATUS HvEfiPreparePhysicalIommu(
     }
     state = (HV_EFI_PHYSICAL_IOMMU_STATE *)(uintptr_t)
         context->PhysicalIommuStatePhysical;
+    HvEfiBootDiagnosticSetIommu(
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_STATE, 0,
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE,
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE);
     if (state == NULL || state->Signature != HV_EFI_PHYSICAL_IOMMU_SIGNATURE ||
         state->Enabled != 0 || state->Dmar.UnitCount == 0 ||
         state->McfgCount == 0 ||
@@ -2571,11 +2588,19 @@ static EFI_STATUS HvEfiPreparePhysicalIommu(
     }
     mappedCapacity = (uint32_t)(memoryMapSize / descriptorSize) +
         state->Dmar.RmrrCount;
+    HvEfiBootDiagnosticSetIommu(
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_ALLOC_MAPPED, 0,
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE,
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE);
     status = gBS->AllocatePool(
         EfiLoaderData,
         (UINTN)mappedCapacity * sizeof(HV_EFI_IOMMU_PROTECTED_RANGE),
         (void **)&mapped);
     if (!EFI_ERROR(status)) {
+        HvEfiBootDiagnosticSetIommu(
+            HV_EFI_BOOT_DIAGNOSTIC_IOMMU_ALLOC_DENIED, 0,
+            HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE,
+            HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE);
         status = gBS->AllocatePool(
             EfiLoaderData,
             (UINTN)eptDenyRangeCount *
@@ -2588,6 +2613,10 @@ static EFI_STATUS HvEfiPreparePhysicalIommu(
         }
         return status;
     }
+    HvEfiBootDiagnosticSetIommu(
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_MEMORY_DESCRIPTOR, 0,
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE,
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE);
     for (index = 0; index < (uint32_t)(memoryMapSize / descriptorSize);
          ++index) {
         const EFI_MEMORY_DESCRIPTOR *descriptor =
@@ -2600,6 +2629,9 @@ static EFI_STATUS HvEfiPreparePhysicalIommu(
         if (descriptor->NumberOfPages == 0 ||
             descriptor->NumberOfPages > UINT64_MAX / HV_EFI_PAGE_SIZE) {
             iommuStatus = HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+            HvEfiBootDiagnosticSetIommu(
+                HV_EFI_BOOT_DIAGNOSTIC_IOMMU_MEMORY_DESCRIPTOR, 0,
+                (uint32_t)iommuStatus, (uint32_t)iommuStatus);
             goto cleanup;
         }
         mapped[mappedCount].PhysicalBase = descriptor->PhysicalStart;
@@ -2609,11 +2641,18 @@ static EFI_STATUS HvEfiPreparePhysicalIommu(
         mapped[mappedCount].Reserved = 0;
         ++mappedCount;
     }
+    HvEfiBootDiagnosticSetIommu(
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_RMRR_OWNER, 0,
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE,
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE);
     for (index = 0; index < state->Dmar.RmrrCount; ++index) {
         if (context->GpuStatePhysical != 0) {
             const int owner = HvEfiGpuRmrrOwner(state, &state->Dmar.Rmrrs[index]);
             if (owner < 0) {
                 iommuStatus = HV_EFI_IOMMU_RUNTIME_UNSUPPORTED_SCOPE;
+                HvEfiBootDiagnosticSetIommu(
+                    HV_EFI_BOOT_DIAGNOSTIC_IOMMU_RMRR_OWNER, 0,
+                    (uint32_t)iommuStatus, (uint32_t)iommuStatus);
                 goto cleanup;
             }
             if (owner == 1) continue;
@@ -2631,19 +2670,32 @@ static EFI_STATUS HvEfiPreparePhysicalIommu(
         denied[index].Kind = HV_EFI_IOMMU_PROTECTED_PRIVATE;
         denied[index].Reserved = 0;
     }
+    HvEfiBootDiagnosticSetIommu(
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_IDENTITY_DOMAIN, 0,
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE,
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE);
     iommuStatus = HvEfiIommuBuildLegacyIdentityDomain(
         (uint64_t *)(uintptr_t)context->PhysicalIommuTablePhysical,
         context->PhysicalIommuTablePages,
         context->PhysicalIommuTablePhysical,
         mapped, mappedCount, denied, eptDenyRangeCount, 1, &state->Tables);
     if (iommuStatus != HV_EFI_IOMMU_RUNTIME_OK) {
+        HvEfiBootDiagnosticSetIommu(
+            HV_EFI_BOOT_DIAGNOSTIC_IOMMU_IDENTITY_DOMAIN, 0,
+            (uint32_t)iommuStatus, (uint32_t)iommuStatus);
         goto cleanup;
     }
-    if (context->GpuStatePhysical != 0 &&
-        EFI_ERROR(HvEfiGpuBuildDmaDomain(context, state, mapped, mappedCount,
-                                        denied, eptDenyRangeCount))) {
-        iommuStatus = HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
-        goto cleanup;
+    if (context->GpuStatePhysical != 0) {
+        HvEfiBootDiagnosticSetIommu(
+            HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_DOMAIN, 0,
+            HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE,
+            HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE);
+        status = HvEfiGpuBuildDmaDomain(
+            context, state, mapped, mappedCount, denied, eptDenyRangeCount);
+        if (EFI_ERROR(status)) {
+            iommuStatus = HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+            goto cleanup;
+        }
     }
     callbacks.Context = state;
     callbacks.Read = HvEfiPhysicalIommuRead;
@@ -2679,14 +2731,21 @@ static EFI_STATUS HvEfiPreparePhysicalIommu(
     programStorage.Operations = state->Operations;
     programStorage.OperationCapacity =
         HV_EFI_PHYSICAL_IOMMU_MAX_OPERATIONS;
-    iommuStatus = HvEfiIommuInstallRuntimeIsolation(
+    HvEfiBootDiagnosticSetIommu(
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_RUNTIME_INSTALL, 0,
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE,
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE);
+    iommuStatus = HvEfiIommuInstallRuntimeIsolationWithDiagnostic(
         &state->Dmar, state->Configurations, state->Dmar.UnitCount,
         &ownership, &callbacks, &programStorage,
         HV_EFI_PHYSICAL_IOMMU_POLL_LIMIT, &state->Plan, &state->Runtime,
         state->UnitStates, HV_EFI_PHYSICAL_IOMMU_MAX_UNITS,
         state->Mcfg, state->McfgCount, &pciCallbacks, state->PciStates,
         HV_EFI_PHYSICAL_IOMMU_MAX_PCI_STATES, &state->PciStateCount,
-        &state->DmaQuiesced);
+        &state->DmaQuiesced, &installDiagnostic);
+    HvEfiBootDiagnosticSetIommu(
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_RUNTIME_INSTALL, installDiagnostic.Stage,
+        installDiagnostic.PrimaryStatus, installDiagnostic.FinalStatus);
     if (iommuStatus != HV_EFI_IOMMU_RUNTIME_OK) {
         /* Never return into generic allocation cleanup while a unit may
          * still reference resident tables that cleanup would release. */
@@ -2704,7 +2763,8 @@ static EFI_STATUS HvEfiPreparePhysicalIommu(
 cleanup:
     gBS->FreePool(denied);
     gBS->FreePool(mapped);
-    return iommuStatus == HV_EFI_IOMMU_RUNTIME_OK ?
+    return EFI_ERROR(status) ? status :
+        iommuStatus == HV_EFI_IOMMU_RUNTIME_OK ?
         EFI_SUCCESS : EFI_SECURITY_VIOLATION;
 }
 
@@ -3612,7 +3672,7 @@ static EFI_STATUS HvEfiPrepareApProcessorStates(HV_EFI_CONTEXT *context)
             HV_EFI_PROCESSOR_PREPARATION_FAILURE_MEMORY_POLICY;
         context->ProcessorPreparationStatus =
             HV_EFI_PROCESSOR_PREPARATION_FAILED;
-        return EFI_ABORTED;
+        return EFI_ERROR(status) ? status : EFI_ABORTED;
     }
     if (!preparationFailedBeforePoolRelease) {
         HvEfiBootDiagnosticSetDetail(preparationDetailBeforePoolRelease);
@@ -3642,7 +3702,7 @@ static EFI_STATUS HvEfiPrepareApProcessorStates(HV_EFI_CONTEXT *context)
         preparation.PreparedCount != context->EnabledProcessorCount) {
         context->ProcessorPreparationStatus =
             HV_EFI_PROCESSOR_PREPARATION_FAILED;
-        return EFI_ABORTED;
+        return EFI_ERROR(status) ? status : EFI_ABORTED;
     }
     context->ProcessorPreparationStatus =
         context->EnabledProcessorCount == 1 ?
