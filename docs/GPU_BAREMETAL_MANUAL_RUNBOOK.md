@@ -9,6 +9,12 @@ this guide does not change `AGENTS.md`.
 Use **`gpu-host-test.ps1` for this guide**, not `gpu-payload-test.ps1`.
 The latter's `Complete` result belongs to the VM, not your physical machine.
 
+Current run `224018` is disarmed and awaiting the
+[reviewed firmware completion](#current-224018-firmware-inspection) below.
+Finish that recovery before starting the fresh-run sequence. Its retained
+stage will need its own reviewed retirement after completion; the `201140`
+retirement profile below does not apply to `224018`.
+
 The [startup diagnostic VM test](GPU_STARTUP_DIAGNOSTIC_VM_RESULT.md) passed
 signed EFI boot, the version-1 startup record, and four CPU health checks.
 It used Windows 26200.9457, versus the host's
@@ -354,10 +360,10 @@ Only then archive the selector:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Archive
 ```
 
-Use ordinary FinalVerify for the new run. The old
-`-ReviewedFirmwareDifference` option is pinned to completed run `201140` and
-must not be carried over. If a fresh run's firmware comparison fails, preserve
-the captures for a new review.
+Use ordinary FinalVerify for a new run. `-ReviewedFirmwareDifference` accepts
+only the specifically reviewed runs and receipts encoded in the helper; it
+is not a general exception to the firmware comparison. If a fresh run's
+comparison fails, preserve its captures for a new review.
 
 Keep the journal, signed hashes, CTest/audit logs, console captures, monitor
 photograph, and external recovery copy. Stage files remain evidence until
@@ -439,12 +445,40 @@ no referenced staged entry, zero integrity findings, and unchanged raw boot
 selection during its observation window. It does not assume the old run's
 BootOrder or modify firmware.
 
-Preserve the complete result and its evidence path for review. This capture
-reports `RecoveryCompleted: false`; it does not authorize Archive or another
-Arm. The legacy `-ReviewedFirmwareDifference` approval remains pinned to run
-`201140` and must not be used for `224018`. A completion review must first be
-bound to this run's successful fresh inspection evidence. Do not rerun
-rollback or rewrite the baseline to resolve this textual mismatch.
+The inspection passed. Its saved receipt is
+`.analysis/gpu-final-firmware-review/1dccd9d33d1b4c808fd1059291a6d19b/result.json`,
+SHA-256 `0E7107911CF43F4144F4E67AEBB647623003AF543FA38974EBEAE518F0D1642E`
+(15415 bytes). Both raw captures have BootNext absent, BootOrder `[0,1,2]`,
+and zero integrity findings. Fresh health reported ABSENT on all 20 CPUs;
+the ESP was unmounted and the selector and journal remained unchanged.
+Preserve this receipt instead of rerunning inspection after this helper
+update or another recovery action changes the captured source or journal.
+
+The completion helper selects this fixed review only for run `224018`. It
+checks the pinned receipt and its underlying files, the original baseline,
+the exact reviewed current text, host and artifact identities, and the current
+FinalVerify intent. It then repeats the raw boot-selection and mounted
+firmware checks while ordinary FinalVerify owns the ESP mount. Fresh BootOrder
+must match `[0,1,2]`; another device or firmware change still blocks completion.
+The baseline remains preserved, and historical raw BootOrder equality and
+unreferenced firmware variables remain outside this review's scope.
+
+From elevated PowerShell in the project folder, complete this run:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 FinalVerify -ReviewedFirmwareDifference
+```
+
+Require `FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED`,
+`Succeeded: true`, phase `Complete`, and no cleanup errors before Archive.
+The comparison will retain `TextEqual: false` and record
+`ReviewedDifferenceAccepted: true`. No additional rollback or power cycle is
+needed for this reviewed textual difference. Do not rewrite the baseline or
+use this approval for another run.
+
+The payload's physical IOMMU preparation failure (`startup_detail=4`) still
+requires investigation before another full boot test. Successful recovery
+verification does not mark that payload test as passed.
 
 ### Historical 201140 recovery: already complete
 

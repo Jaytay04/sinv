@@ -1857,6 +1857,34 @@ catch {
                 ExpectedSucceeded = $true; ExpectedStatus = 'FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED'
             }
             [pscustomobject]@{
+                Name = 'review-accepted-224018'; ReviewAccepted = $true; ReviewThrows = $false
+                PreflightValid = $true; SecureBoot = $true; ResetPassed = $true
+                Phase = 'Disarmed'; RunId = 'gpu-20261020T224018Z-31b7c15e56584f84a68d89b7b3ecb1a1'
+                ExpectedCalls = 1; NativeSucceeded = $true; ExpectedSucceeded = $true
+                ExpectedStatus = 'FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED'
+            }
+            [pscustomobject]@{
+                Name = 'review-rejected-224018'; ReviewAccepted = $false; ReviewThrows = $false
+                PreflightValid = $true; SecureBoot = $true; ResetPassed = $true
+                Phase = 'Disarmed'; RunId = 'gpu-20261020T224018Z-31b7c15e56584f84a68d89b7b3ecb1a1'
+                ExpectedCalls = 1; NativeSucceeded = $true; ExpectedSucceeded = $false
+                ExpectedStatus = 'FINAL_VERIFY_FAILED_GPU_UNATTESTED'
+            }
+            [pscustomobject]@{
+                Name = 'preflight-failure-224018'; ReviewAccepted = $true; ReviewThrows = $false
+                PreflightValid = $false; SecureBoot = $true; ResetPassed = $true
+                Phase = 'Disarmed'; RunId = 'gpu-20261020T224018Z-31b7c15e56584f84a68d89b7b3ecb1a1'
+                ExpectedCalls = 0; NativeSucceeded = $true; ExpectedSucceeded = $false
+                ExpectedStatus = 'FINAL_VERIFY_FAILED_GPU_UNATTESTED'
+            }
+            [pscustomobject]@{
+                Name = 'wrong-run-id-224018'; ReviewAccepted = $true; ReviewThrows = $false
+                PreflightValid = $true; SecureBoot = $true; ResetPassed = $true
+                Phase = 'Disarmed'; RunId = 'gpu-20261020T224018Z-not-the-reviewed-run'
+                ExpectedCalls = 0; NativeSucceeded = $true; ExpectedSucceeded = $false
+                ExpectedStatus = 'FINAL_VERIFY_FAILED_GPU_UNATTESTED'
+            }
+            [pscustomobject]@{
                 Name = 'review-rejected'; ReviewAccepted = $false; ReviewThrows = $false
                 PreflightValid = $true; SecureBoot = $true; ResetPassed = $true
                 Phase = 'Disarmed'; RunId = $reviewRunId; ExpectedCalls = 1; NativeSucceeded = $true
@@ -1954,7 +1982,7 @@ catch {
                 $firmwareReviewState = $result.FinalVerification.FirmwareEnumeration
                 Assert-PlatformTrue ($null -ne $firmwareReviewState.PSObject.Properties['ReviewedDifferenceAccepted']) `
                     "Explicit review request was not recorded for $($reviewCase.Name)."
-                Assert-PlatformEqual ($reviewCase.Name -ceq 'review-accepted') ([bool]$firmwareReviewState.ReviewedDifferenceAccepted) `
+                Assert-PlatformEqual ([bool]$reviewCase.ExpectedSucceeded) ([bool]$firmwareReviewState.ReviewedDifferenceAccepted) `
                     "Review acceptance state differs for $($reviewCase.Name)."
             }
             if ($reviewCase.ExpectedCalls -eq 1) {
@@ -1968,7 +1996,7 @@ catch {
                 Assert-PlatformEqual $reviewCurrentText ([System.IO.File]::ReadAllText([string]$observations.ReviewCalls[0].FirmwarePath)) `
                     "Review helper received an unexpected firmware pin for $($reviewCase.Name)."
             }
-            if ($reviewCase.Name -ceq 'review-accepted') {
+            if ([bool]$reviewCase.ExpectedSucceeded) {
                 Assert-PlatformEqual $false ([bool]$result.FinalVerification.FirmwareEnumeration.TextEqual) 'Reviewed acceptance changed the full-text equality result.'
                 Assert-PlatformEqual $true ([bool]$result.FinalVerification.FirmwareEnumeration.ReviewedDifferenceAccepted) 'Accepted review was not recorded in firmware comparison.'
                 Assert-PlatformEqual 'fixture-reviewed-firmware-difference' ([string]$result.FinalVerification.FirmwareEnumeration.ReviewedDifference.ReviewId) 'Reviewed evidence was not propagated into the firmware comparison.'

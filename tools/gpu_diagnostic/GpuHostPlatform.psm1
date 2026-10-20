@@ -1826,8 +1826,10 @@ function Invoke-GpuFinalVerify {
     $errors = New-Object System.Collections.Generic.List[string]
     $firmwareReviewAccepted = $false
     if ($ReviewedFirmwareDifference -and
-        [string](Get-GpuObjectProperty -Object $State -Name 'RunId') -cne 'gpu-20261020T201140Z-6e6e86230a2549b28be3274dfe56cec7') {
-        $errors.Add('The reviewed firmware difference applies only to the fixed 201140 run.')
+        [string](Get-GpuObjectProperty -Object $State -Name 'RunId') -cnotin @(
+            'gpu-20261020T201140Z-6e6e86230a2549b28be3274dfe56cec7',
+            'gpu-20261020T224018Z-31b7c15e56584f84a68d89b7b3ecb1a1')) {
+        $errors.Add('The reviewed firmware difference applies only to the fixed 201140 and 224018 runs.')
     }
     $current = $null
     $preparedHost = Get-GpuObjectProperty -Object $State -Name 'Host'
