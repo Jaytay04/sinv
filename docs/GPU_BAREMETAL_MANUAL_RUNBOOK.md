@@ -346,6 +346,33 @@ reported verification issue and retry **FinalVerify**, not the already
 completed cleanup. Keep every previous receipt. A cleanup error is not success
 just because an entry is absent; do not reinterpret an installer's exit code.
 
+For the specific `gpu-20261020T201140Z-6e6e86230a2549b28be3274dfe56cec7`
+failure captured at `2026-10-20T20:50:30Z`, the only textual changes are three
+generic BCD entry identifiers and their printed application-block order. The
+reset, Secure Boot, 20-CPU ABSENT health, and boot-manager checks passed. That
+does not make the failed final verification complete.
+
+From elevated PowerShell in the main workspace, collect separate read-only
+evidence with the fixed-run inspection helper:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Inspect-GpuFinalFirmware.ps1
+```
+
+Require `READONLY_FIRMWARE_REVIEW_CAPTURED`, successful ESP cleanup, and unchanged
+selector/journal pins. The helper checks the two exact reviewed text captures,
+fresh health, the mounted ESP and Microsoft boot manager, and two raw
+boot-selection observations. It requires BootNext absent, zero audit findings,
+no staged toolkit reference among entries selected by BootOrder, and stable
+BootOrder during the observation window. It writes only new local evidence and
+temporarily mounts the ESP; it does not change boot selection or delete files.
+
+This helper is pinned to that failed run and capture. It reports
+`RecoveryCompleted: false` and cannot prove historical raw BootOrder equality;
+no raw pre-arm snapshot exists. Preserve its complete result for review before
+another FinalVerify or Archive. Do not run the older stage-retirement helper
+against this run.
+
 If Windows cannot boot, choose the original Windows Boot Manager through the
 verified firmware menu or use the prepared recovery media and full-system
 backup. These Windows scripts cannot recover an unbootable Windows session.

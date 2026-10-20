@@ -1,5 +1,90 @@
 # GPU diagnostic payload failure investigation
 
+## Third physical run: memory-policy preparation aborted
+
+Run `gpu-20261020T201140Z-6e6e86230a2549b28be3274dfe56cec7` used source
+`933b4c676318f26396cdf2c66de01c3ccbf1a950`. Its 567-byte collected diagnostic,
+SHA-256 `DCFDD2F7DA355781F73BDE7D5DA078CF757BD9F17CF2AD17833407FAB9DC2AAA`,
+contains a valid returned startup record:
+
+```text
+startup_stage=ap_prepare
+startup_reason=operation_failed
+startup_status=0x8000000000000015
+startup_detail=2
+startup_expected_cpus=20
+startup_prepared_cpus=1
+startup_vmx_ready_cpus=20
+startup_resource_status=0x00000002
+startup_preparation_status=0x00000003
+startup_preparation_failure=10
+startup_activation_status=0x00000000
+startup_activation_failure=0
+```
+
+Detail 2 is `AP_MEMORY_MAP`; preparation failure 10 is `MEMORY_POLICY`.
+The payload entry executed and returned `EFI_ABORTED` before AP preparation
+callbacks, GPU arming, and AP activation. The resource-ready result and
+VMX-ready count describe earlier setup and capability checks, not successful
+processor launches. The prepared count is initialized to one for the BSP.
+
+The failing block in `HvEfiPrepareApProcessorStates` combines two pool
+allocations, `HvEfiGetMemoryMap`, the descriptor-version check, the EPT
+memory-type plan, the EPT deny inventory, and the runtime scanner RAM
+allowlist. All failures in this block produce the same diagnostic. The saved
+run does not contain the firmware memory map, allocation results, deny
+inventory, or individual helper verdicts. Consequently, it cannot identify
+the rejected predicate or a specific physical hardware cause. Missing EPT
+coverage alone selects conservative UC memory; it is not a plan rejection.
+The separate PCR replay refusal does not explain this payload return.
+
+### Reset passed; firmware text still differs
+
+Rollback succeeded. FinalVerify at `2026-10-20T20:50:30Z` observed a changed
+boot ID, Secure Boot enabled, expected ABSENT health on all 20 CPUs, both
+display adapters, and the original Microsoft boot-manager hash. Its only
+reported error was the firmware textual comparison. The journal remains
+`Disarmed`; recovery completion and Archive have not been established.
+
+Both firmware captures are 4,336 bytes. The backup hash is
+`ECB8F364A0058CB7D60B313E3941FCF61760F0C8F814EA188FD9BE5122C478CE`; the final
+capture hash is
+`4A1535FACBC5A6E66F7BFA80275D70B63BEC583F779B734D668B48109A723FAE`.
+Offline comparison verified that all seven blocks agree after accounting for
+the following three identifier substitutions and the printed application-block
+order. The Windows Boot Manager and both USB application blocks are unchanged.
+
+| Description | Backup identifier | Final identifier |
+| --- | --- | --- |
+| UEFI:CD/DVD Drive | `1eb2958e-ccbc-11f1-8b18-806e6f6e6963` | `a81bb0ad-ccc7-11f1-8b1b-806e6f6e6963` |
+| UEFI:Removable Device | `1eb2958f-ccbc-11f1-8b18-806e6f6e6963` | `a81bb0ae-ccc7-11f1-8b1b-806e6f6e6963` |
+| UEFI:Network Device | `1eb29590-ccbc-11f1-8b18-806e6f6e6963` | `a81bb0af-ccc7-11f1-8b1b-806e6f6e6963` |
+
+These are BCD identifiers, not raw UEFI Boot numbers. The installer receipts
+report that Arm selected owned `Boot0006` and rollback cleared owned one-shot
+state without changing BootOrder. There is no saved raw pre-arm BootOrder
+snapshot, so historical raw restoration cannot be proved from these records.
+The comparison result does not justify deleting these generic entries,
+rewriting the original baseline, or treating the failed FinalVerify as passed.
+
+`Inspect-GpuFinalFirmware.ps1` collects a separate observation for this exact
+failed run. It pins the three imported modules, audit tool, health probe,
+reference log, and both reviewed firmware captures. It requires the same host,
+the post-disarm reset boundary, fresh 20-CPU ABSENT health, exact current
+mounted-ESP firmware text, and successful raw boot-selection checks before and
+after health. It releases only its owned temporary ESP mount and verifies that
+the selector, journal, and pinned inputs stayed unchanged. The raw audit scans
+BootNext and entries referenced by BootOrder; it does not enumerate orphan
+Boot variables. Its result explicitly leaves `RecoveryCompleted` false.
+
+Seven mocked cases with 18 assertions passed, covering preview, journal
+selection, successful capture, health failure, unmount failure, raw selection
+change, and failure of the second firmware capture. A separate non-admin
+preflight reached the expected administrator guard after validating the actual
+saved inputs; no raw capture or host query ran, and selector/journal hashes
+remained unchanged. Elevated physical-host observation remains an operator
+step. These checks do not mark FinalVerify successful or authorize Archive.
+
 ## Second physical run: entry returned EFI_ABORTED
 
 Run `gpu-20261020T150318Z-59a346ed3cb8422bafe4be60268b7df1` used clean source
