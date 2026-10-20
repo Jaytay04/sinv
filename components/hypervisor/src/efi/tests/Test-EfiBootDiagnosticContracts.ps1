@@ -74,6 +74,38 @@ Assert-True ($installResult -gt $previousOperation -and $failStop -gt $installRe
 Assert-True ($physicalIommu -match 'return EFI_ERROR\(status\) \? status :' -and
     [regex]::Matches($bspPrepare, 'return EFI_ERROR\(status\) \? status : EFI_ABORTED;').Count -eq 2) `
     'GPU/IOMMU EFI errors must survive AP preparation and its pool cleanup.'
+$gpuDomain = Get-SourceRegion $source 'static EFI_STATUS HvEfiGpuBuildDmaDomain(' 'static EFI_STATUS HvEfiPreparePhysicalIommu('
+$gpuPool = Get-SourceRegion $gpuDomain '#define GPU_POOL' 'HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_PROFILE'
+Assert-True ($gpuPool -match 'HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_ALLOCATE' -and
+    $gpuPool -match 'status = gBS->AllocatePool' -and $gpuPool -match 'EFI_ERROR\(status\)') `
+    'GPU allocation diagnostics must preserve the actual EFI status.'
+$gpuSubsteps = @(
+    @('PROFILE', 'gpu == NULL'),
+    @('UNIT_CAPABILITY', 'unit->Segment != 0'),
+    @('UNIT_SCOPE', 'for (scope = 0;'),
+    @('PCI_CAPACITY', 'deviceCount == HV_EFI_PHYSICAL_IOMMU_MAX_PCI_STATES'),
+    @('PCI_OWNER', 'for (unitIndex = 0;'),
+    @('NOT_FOUND', 'gpuIndex == UINT32_MAX'),
+    @('RMRR_OWNER', 'rootOwner < 0'),
+    @('RMRR_SCOPE', 'HvEfiGpuScopeBdf('),
+    @('RMRR_REQUESTER', 'd == deviceCount'),
+    @('MAPPING_CAPACITY', 'mappingCapacity == 0'),
+    @('IDENTITY_PLAN', 'plannerStatus = HvEfiIommuBuildIdentityPlan('),
+    @('ROOT_PLAN', 'plannerStatus = HvEfiIommuBuildRootDevicePlan('),
+    @('DOMAIN_ID', 'for (i = 0;'),
+    @('TABLES', 'runtimeStatus = HvEfiIommuBuildRootDeviceDomain(')
+)
+$previousOperation = -1
+foreach ($substep in $gpuSubsteps) {
+    $marker = $gpuDomain.IndexOf(('HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_' + $substep[0]), [StringComparison]::Ordinal)
+    $operation = if ($marker -ge 0) { $gpuDomain.IndexOf($substep[1], $marker, [StringComparison]::Ordinal) } else { -1 }
+    Assert-True ($marker -gt $previousOperation -and $operation -gt $marker) `
+        ('GPU DMA failure needs a separate diagnostic before ' + $substep[0])
+    $previousOperation = $operation
+}
+Assert-True ([regex]::Matches($gpuDomain, '\(uint32_t\)plannerStatus, \(uint32_t\)plannerStatus').Count -eq 2 -and
+    $gpuDomain -match '\(uint32_t\)runtimeStatus, \(uint32_t\)runtimeStatus') `
+    'GPU planners and table construction must retain their exact result enums.'
 foreach ($name in @('efi_hypervisor.asm', 'efi_hypervisor.inc', 'efi_hypervisor.h')) {
     $text = Get-Content -Raw -LiteralPath (Join-Path $root $name)
     Assert-True ($text -notmatch 'HvEfiBootDiagnostic|hv_boot_diagnostic') `

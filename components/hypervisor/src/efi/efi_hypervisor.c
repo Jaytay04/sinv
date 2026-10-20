@@ -170,6 +170,13 @@ static void HvEfiBootDiagnosticSetIommu(
         substep, installStage, primaryStatus, finalStatus));
 }
 
+static void HvEfiBootDiagnosticSetIommuStep(uint32_t substep)
+{
+    HvEfiBootDiagnosticSetIommu(
+        substep, 0, HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE,
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE);
+}
+
 typedef struct HV_EFI_PHYSICAL_IOMMU_STATE {
     uint64_t Signature;
     uint64_t OwnerToken;
@@ -2354,11 +2361,18 @@ static EFI_STATUS HvEfiGpuBuildDmaDomain(
     uint32_t i, deviceCount = 0, guestCount = 0, rmrrCount = 0;
     uint32_t gpuIndex = UINT32_MAX;
     uint64_t mappingCapacity;
+    HV_EFI_IOMMU_STATUS plannerStatus;
+    HV_EFI_IOMMU_RUNTIME_STATUS runtimeStatus;
     EFI_STATUS status = EFI_OUT_OF_RESOURCES;
 #define GPU_POOL(pointer, count) \
-    do { if (EFI_ERROR(gBS->AllocatePool(EfiLoaderData, \
-        (UINTN)(count) * sizeof(*(pointer)), (void **)&(pointer)))) \
+    do { HvEfiBootDiagnosticSetIommuStep( \
+             HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_ALLOCATE); \
+         status = gBS->AllocatePool(EfiLoaderData, \
+             (UINTN)(count) * sizeof(*(pointer)), (void **)&(pointer)); \
+         if (EFI_ERROR(status)) \
         goto cleanup; } while (0)
+    HvEfiBootDiagnosticSetIommuStep(
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_PROFILE);
     if (gpu == NULL || deniedCount > HV_EFI_EPT_MAX_DENY_RANGES ||
         state->McfgCount != 1 ||
         state->Mcfg[0].Segment != 0 || state->Mcfg[0].StartBus != 0 ||
@@ -2378,9 +2392,13 @@ static EFI_STATUS HvEfiGpuBuildDmaDomain(
         const uint64_t cap = *(volatile uint64_t *)(uintptr_t)(unit->RegisterBase + 8);
         const uint64_t ecap = *(volatile uint64_t *)(uintptr_t)(unit->RegisterBase + 16);
         uint32_t scope;
+        HvEfiBootDiagnosticSetIommuStep(
+            HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_UNIT_CAPABILITY);
         if (unit->Segment != 0 || ((cap >> 8) & 2) == 0) {
             status = EFI_UNSUPPORTED; goto cleanup;
         }
+        HvEfiBootDiagnosticSetIommuStep(
+            HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_UNIT_SCOPE);
         for (scope = 0; scope < unit->ScopeCount; ++scope) {
             const HV_EFI_IOMMU_DMAR_SCOPE *s =
                 &state->Dmar.Scopes[unit->FirstScope + scope];
@@ -2405,9 +2423,13 @@ static EFI_STATUS HvEfiGpuBuildDmaDomain(
         const uint64_t address = state->Mcfg[0].EcamBase + ((uint64_t)i << 12);
         uint32_t unitIndex, selected = UINT32_MAX, fallback = UINT32_MAX;
         if (*(volatile uint16_t *)(uintptr_t)address == UINT16_MAX) continue;
+        HvEfiBootDiagnosticSetIommuStep(
+            HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_PCI_CAPACITY);
         if (deviceCount == HV_EFI_PHYSICAL_IOMMU_MAX_PCI_STATES) {
             status = EFI_OUT_OF_RESOURCES; goto cleanup;
         }
+        HvEfiBootDiagnosticSetIommuStep(
+            HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_PCI_OWNER);
         for (unitIndex = 0; unitIndex < state->Dmar.UnitCount; ++unitIndex) {
             const HV_EFI_IOMMU_DMAR_UNIT *unit = &state->Dmar.Units[unitIndex];
             uint32_t scope;
@@ -2438,6 +2460,8 @@ static EFI_STATUS HvEfiGpuBuildDmaDomain(
         if (bus == 0 && device == 2 && function == 0) gpuIndex = deviceCount;
         ++deviceCount;
     }
+    HvEfiBootDiagnosticSetIommuStep(
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_NOT_FOUND);
     if (gpuIndex == UINT32_MAX) { status = EFI_UNSUPPORTED; goto cleanup; }
     /* Keep the root requester at index zero in the boot-only topology. */
     { HV_EFI_IOMMU_DEVICE swap = devices[0]; devices[0] = devices[gpuIndex];
@@ -2458,10 +2482,14 @@ static EFI_STATUS HvEfiGpuBuildDmaDomain(
         const HV_EFI_IOMMU_DMAR_RMRR *rmrr = &state->Dmar.Rmrrs[i];
         uint32_t scope;
         const int rootOwner = HvEfiGpuRmrrOwner(state, rmrr);
+        HvEfiBootDiagnosticSetIommuStep(
+            HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_RMRR_OWNER);
         if (rootOwner < 0) { status = EFI_UNSUPPORTED; goto cleanup; }
         if (rootOwner == 1) continue;
         for (scope = 0; scope < rmrr->ScopeCount; ++scope) {
             uint32_t bus, device, function, d;
+            HvEfiBootDiagnosticSetIommuStep(
+                HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_RMRR_SCOPE);
             if (!HvEfiGpuScopeBdf(state,
                     &state->Dmar.Scopes[rmrr->FirstScope + scope],
                     &bus, &device, &function)) {
@@ -2471,6 +2499,8 @@ static EFI_STATUS HvEfiGpuBuildDmaDomain(
                 if (devices[d].Bus == bus && devices[d].Device == device &&
                     devices[d].Function == function) break;
             }
+            HvEfiBootDiagnosticSetIommuStep(
+                HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_RMRR_REQUESTER);
             if (d == deviceCount) { status = EFI_UNSUPPORTED; goto cleanup; }
             rmrrs[rmrrCount].PhysicalBase = rmrr->PhysicalBase;
             rmrrs[rmrrCount].Size = rmrr->Size;
@@ -2479,7 +2509,11 @@ static EFI_STATUS HvEfiGpuBuildDmaDomain(
         }
     }
     mappingCapacity = ((uint64_t)guestCount + deniedCount + 1) * deviceCount + rmrrCount;
-    if (mappingCapacity == 0 || mappingCapacity > UINT32_MAX) goto cleanup;
+    HvEfiBootDiagnosticSetIommuStep(
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_MAPPING_CAPACITY);
+    if (mappingCapacity == 0 || mappingCapacity > UINT32_MAX) {
+        status = EFI_OUT_OF_RESOURCES; goto cleanup;
+    }
     GPU_POOL(mappings, mappingCapacity);
     topology.Platform.DmarPresent = 1;
     topology.Platform.DeviceEnumerationComplete = 1;
@@ -2502,14 +2536,31 @@ static EFI_STATUS HvEfiGpuBuildDmaDomain(
     rootRanges[1].Kind = HV_EFI_IOMMU_ROOT_DEVICE_RANGE_TRANSLATION;
     rootRanges[1].Access = HV_EFI_IOMMU_ROOT_DEVICE_ACCESS_READ;
     status = EFI_UNSUPPORTED;
-    if (HvEfiIommuBuildIdentityPlan(&topology, &storage, &plan) != HV_EFI_IOMMU_OK ||
-        HvEfiIommuBuildRootDevicePlan(&plan, 0, state->Tables.DomainId,
-            deviceCount + 1,
-            rootRanges, 2, &gpu->DmaPlan) != HV_EFI_IOMMU_OK)
+    HvEfiBootDiagnosticSetIommuStep(
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_IDENTITY_PLAN);
+    plannerStatus = HvEfiIommuBuildIdentityPlan(&topology, &storage, &plan);
+    if (plannerStatus != HV_EFI_IOMMU_OK) {
+        HvEfiBootDiagnosticSetIommu(
+            HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_IDENTITY_PLAN, 0,
+            (uint32_t)plannerStatus, (uint32_t)plannerStatus);
         goto cleanup;
+    }
+    HvEfiBootDiagnosticSetIommuStep(
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_ROOT_PLAN);
+    plannerStatus = HvEfiIommuBuildRootDevicePlan(
+        &plan, 0, state->Tables.DomainId, deviceCount + 1,
+        rootRanges, 2, &gpu->DmaPlan);
+    if (plannerStatus != HV_EFI_IOMMU_OK) {
+        HvEfiBootDiagnosticSetIommu(
+            HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_ROOT_PLAN, 0,
+            (uint32_t)plannerStatus, (uint32_t)plannerStatus);
+        goto cleanup;
+    }
     /* Planner DIDs 1..DeviceCount are reserved. Select their first unused
      * sibling, then verify that every unit sharing these context tables can
      * represent it. CAP.ND need not support all 65536 possible domain IDs. */
+    HvEfiBootDiagnosticSetIommuStep(
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_DOMAIN_ID);
     for (i = 0; i < state->Dmar.UnitCount; ++i) {
         const uint64_t cap = *(volatile uint64_t *)(uintptr_t)
             (state->Dmar.Units[i].RegisterBase + 8);
@@ -2519,12 +2570,20 @@ static EFI_STATUS HvEfiGpuBuildDmaDomain(
     HvEfiCopy(&gpu->LegacyTables, &state->Tables, sizeof(state->Tables));
     gpu->LegacyTablesPhysical = context->PhysicalIommuTablePhysical;
     gpu->LegacyTablePages = context->PhysicalIommuTablePages;
-    if (HvEfiIommuBuildRootDeviceDomain(
+    HvEfiBootDiagnosticSetIommuStep(
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_TABLES);
+    runtimeStatus = HvEfiIommuBuildRootDeviceDomain(
             (uint64_t *)(uintptr_t)context->PhysicalIommuTablePhysical,
             context->PhysicalIommuTablePages, context->PhysicalIommuTablePhysical,
             &state->Tables, (uint64_t *)(uintptr_t)gpu->DmaTablesPhysical,
             HV_GPU_NATIVE_DMA_PAGES, gpu->DmaTablesPhysical, &gpu->DmaPlan,
-            &gpu->DmaTables) != HV_EFI_IOMMU_RUNTIME_OK) goto cleanup;
+            &gpu->DmaTables);
+    if (runtimeStatus != HV_EFI_IOMMU_RUNTIME_OK) {
+        HvEfiBootDiagnosticSetIommu(
+            HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_TABLES, 0,
+            (uint32_t)runtimeStatus, (uint32_t)runtimeStatus);
+        goto cleanup;
+    }
     gpu->UnitCount = state->Dmar.UnitCount;
     for (i = 0; i < gpu->UnitCount; ++i) gpu->UnitBases[i] = state->Dmar.Units[i].RegisterBase;
     status = EFI_SUCCESS;

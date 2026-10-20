@@ -428,6 +428,125 @@ int TestRootDeviceDomainPlan()
     return 0;
 }
 
+void InitializePhysicalDmarAfterConversion(Fixture *fixture)
+{
+    Initialize(fixture);
+    fixture->Units[0] = {
+        UINT64_C(0xfed90000), 0, 0, 1, 1, 39, 0, 0, 0
+    };
+    fixture->Units[1] = {
+        UINT64_C(0xfed91000), 0, 1, 1, 1, 39, 0, 0, 0
+    };
+    fixture->Topology.Platform = { 1, 1, 39, 0, 0, 0, 0, 0 };
+    fixture->Topology.UnitCount = 2;
+    fixture->Devices[0] = {
+        0, 0, 2, 0, HV_EFI_IOMMU_DEVICE_INTEGRATED, 1, 0, 0
+    };
+    fixture->Devices[1] = {
+        0, 0, 1, 0, HV_EFI_IOMMU_DEVICE_DISCRETE, 1, 0, 1
+    };
+    fixture->Topology.DeviceCount = 2;
+    fixture->Guest[0] = { UINT64_C(0x100000), UINT64_C(0x800000) };
+    fixture->Topology.GuestRamRangeCount = 1;
+    fixture->Deny[0] = { UINT64_C(0x201000), UINT64_C(0x2000) };
+    fixture->Deny[1] = { UINT64_C(0x400000), UINT64_C(0x2000) };
+    fixture->Deny[2] = { UINT64_C(0x500000), UINT64_C(0x1000) };
+    fixture->Topology.HypervisorDenyRangeCount = 3;
+    /* The converted physical topology excludes GPU-only RMRRs. This is a
+     * synthetic planner fixture; it does not inspect or assert host firmware. */
+    fixture->Topology.RmrrRangeCount = 0;
+}
+
+int TestPhysicalDmarShapeAfterConversion()
+{
+    Fixture fixture;
+    HV_EFI_IOMMU_ROOT_DEVICE_RANGE ranges[2] = {
+        { UINT64_C(0x400000), UINT64_C(0x2000),
+          HV_EFI_IOMMU_ROOT_DEVICE_RANGE_FRAMEBUFFER,
+          HV_EFI_IOMMU_ROOT_DEVICE_ACCESS_READ },
+        { UINT64_C(0x500000), UINT64_C(0x1000),
+          HV_EFI_IOMMU_ROOT_DEVICE_RANGE_TRANSLATION,
+          HV_EFI_IOMMU_ROOT_DEVICE_ACCESS_READ }
+    };
+    HV_EFI_IOMMU_ROOT_DEVICE_PLAN rootPlan = {};
+    InitializePhysicalDmarAfterConversion(&fixture);
+
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_OK,
+                "converted two-unit physical DMAR topology builds an identity plan");
+    TEST_ASSERT(fixture.Plan.UnitCount == 2 &&
+                fixture.Plan.AddressBits == 39 && fixture.Plan.Flags == 0 &&
+                fixture.Assignments[0].RemappingUnitIndex == 0 &&
+                fixture.Assignments[1].RemappingUnitIndex == 1 &&
+                fixture.Plan.RmrrRangeCount == 0,
+                "GPU requester stays on the scoped unit while an ordinary requester uses IncludeAll");
+
+    const uint32_t rootDomainId = fixture.Plan.DeviceCount + 1;
+    TEST_ASSERT(HvEfiIommuBuildRootDevicePlan(
+                    &fixture.Plan, 0, 1, rootDomainId,
+                    ranges, 2, &rootPlan) == HV_EFI_IOMMU_OK &&
+                rootPlan.DeviceIndex == 0 &&
+                rootPlan.RemappingUnitIndex == 0 &&
+                rootPlan.DomainId == 3 && rootPlan.LegacyDomainId == 1 &&
+                rootPlan.MappingCount == 2 &&
+                rootPlan.Mappings[0].PhysicalBase == UINT64_C(0x400000) &&
+                rootPlan.Mappings[1].PhysicalBase == UINT64_C(0x500000) &&
+                rootPlan.Mappings[0].Access ==
+                    HV_EFI_IOMMU_ROOT_DEVICE_ACCESS_READ &&
+                rootPlan.Mappings[1].Access ==
+                    HV_EFI_IOMMU_ROOT_DEVICE_ACCESS_READ &&
+                HvEfiIommuValidateRootDevicePlan(
+                    &fixture.Plan, &rootPlan) == HV_EFI_IOMMU_OK,
+                "root plan uses DID deviceCount+1, preserves GPU unit, and is read-only");
+    rootPlan.DomainId = 2;
+    TEST_ASSERT(HvEfiIommuValidateRootDevicePlan(
+                    &fixture.Plan, &rootPlan) == HV_EFI_IOMMU_SCOPE_MISMATCH,
+                "root-plan audit rejects mutation that aliases an ordinary DID");
+
+    HV_EFI_IOMMU_MAPPING_RESULT mapping = {};
+    TEST_ASSERT(HvEfiIommuPlanMappingAt(
+                    &fixture.Plan, 1, UINT64_C(0x100000), &mapping) ==
+                    HV_EFI_IOMMU_OK && mapping.Mapped == 1 &&
+                (mapping.Flags & HV_EFI_IOMMU_MAPPING_GUEST_RAM) != 0,
+                "ordinary requester retains access to ordinary guest RAM");
+    for (uint32_t deviceIndex = 0;
+         deviceIndex < fixture.Plan.DeviceCount; ++deviceIndex) {
+        const uint64_t deniedAddresses[] = {
+            UINT64_C(0x201000), UINT64_C(0x400000), UINT64_C(0x500000)
+        };
+        for (uint32_t rangeIndex = 0;
+             rangeIndex < sizeof(deniedAddresses) / sizeof(deniedAddresses[0]);
+             ++rangeIndex) {
+            TEST_ASSERT(HvEfiIommuPlanMappingAt(
+                            &fixture.Plan, deviceIndex,
+                            deniedAddresses[rangeIndex], &mapping) ==
+                            HV_EFI_IOMMU_OK && mapping.Mapped == 0,
+                        "legacy requester domains cannot access private, framebuffer, or GGTT pages");
+        }
+    }
+
+    TEST_ASSERT(HvEfiIommuBuildRootDevicePlan(
+                    &fixture.Plan, 0, 1, 2, ranges, 2, &rootPlan) ==
+                    HV_EFI_IOMMU_SCOPE_MISMATCH,
+                "root DID cannot alias the ordinary discrete requester DID");
+    TEST_ASSERT(HvEfiIommuBuildRootDevicePlan(
+                    &fixture.Plan, 0, 1, 1, ranges, 2, &rootPlan) ==
+                    HV_EFI_IOMMU_SCOPE_MISMATCH,
+                "root DID cannot alias the legacy DID or GPU planner assignment");
+
+    InitializePhysicalDmarAfterConversion(&fixture);
+    fixture.Topology.HypervisorDenyRangeCount = 2;
+    TEST_ASSERT(HvEfiIommuBuildIdentityPlan(
+                    &fixture.Topology, &fixture.Storage, &fixture.Plan) ==
+                    HV_EFI_IOMMU_OK &&
+                HvEfiIommuBuildRootDevicePlan(
+                    &fixture.Plan, 0, 1, 3, ranges, 2, &rootPlan) ==
+                    HV_EFI_IOMMU_DENY_VIOLATION,
+                "root plan rejects a missing GGTT deny range");
+    return 0;
+}
+
 static_assert(sizeof(HV_EFI_IOMMU_PLATFORM) == 32, "platform ABI");
 static_assert(sizeof(HV_EFI_IOMMU_UNIT) == 40, "unit ABI");
 static_assert(sizeof(HV_EFI_IOMMU_DEVICE) == 32, "device ABI");
@@ -446,7 +565,8 @@ int main()
         TestAdmissionFailures() != 0 ||
         TestRangeScopeAndCapacityFailures() != 0 ||
         TestAuditRejectsTampering() != 0 ||
-        TestRootDeviceDomainPlan() != 0) {
+        TestRootDeviceDomainPlan() != 0 ||
+        TestPhysicalDmarShapeAfterConversion() != 0) {
         return 1;
     }
     fprintf(stdout, "IOMMU isolation tests: PASS\n");

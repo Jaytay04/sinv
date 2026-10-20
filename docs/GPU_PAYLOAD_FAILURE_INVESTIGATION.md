@@ -48,13 +48,13 @@ remain unchanged. For new AP-preparation IOMMU results, the high bit of
 | --- | --- |
 | 30:24 | IOMMU preparation substep |
 | 23:16 | First failing runtime-install stage, or 0 outside that transaction |
-| 15:8 | Primary runtime enum before rollback/restore |
-| 7:0 | Final runtime enum actually returned |
+| 15:8 | Primary result enum before rollback/restore |
+| 7:0 | Final result enum actually returned |
 
 Substeps are argument validation (1), state validation (2), mapped-range pool
 allocation (3), denied-range pool allocation (4), memory descriptor validation
 (5), RMRR ownership (6), legacy identity domain (7), GPU domain (8), and runtime
-installation (9). Runtime codes 255 mean not applicable; the raw EFI error
+installation (9). Result codes 255 mean not applicable; the raw EFI error
 remains in `startup_status` and `payload_status`.
 
 The installer stage values are argument (1), PCI quiesce (2), programming plan
@@ -65,8 +65,8 @@ retain their definitions in `iommu_runtime.h`: for example, 10 is capacity,
 18 audit failed, and 19 rollback failed. The first failure is retained even if
 later recovery replaces the returned enum. Rollback runs after a recorded
 failure, so its failure normally changes the final status while preserving
-the earlier stage. GPU-domain errors have runtime codes 255 and retain their
-EFI status. This does not attest a successful cleanup or guarantee that a
+the earlier stage. Boolean/EFI-only GPU gates have result codes 255 and retain
+their EFI status. This does not attest a successful cleanup or guarantee that a
 fail-stop can return a diagnostic to the loader.
 
 For example, synthetic detail `0x89030F0F` means runtime installation,
@@ -90,6 +90,63 @@ passed, including callback-injected first/final failure preservation, the
 startup-record round trip, and BSP diagnostic lifetime contracts. This
 refinement fixes missing failure information; it does not establish or repair
 the physical IOMMU cause.
+
+### VM coverage and GPU-domain diagnostic completion
+
+The maintained VM path cannot reveal the physical host's failing VT-d state.
+`HvEfiAdmitDmaIsolation` sees an outer hypervisor and selects external DMA
+isolation. `HvEfiPreparePhysicalIommu` returns without programming physical
+units when the isolation mode is not `VTD_MEDIATED`. A VM boot can validate
+startup/return and diagnostic transport, while callback-driven host tests can
+exercise synthetic planner and hardware-status failures. Neither recovers the
+unrecorded CAP/ECAP, PCI scope, memory map, or firmware enable state of run
+`224018`. No VM was started for this refinement.
+
+The generic GPU-domain substep 8 is now refined inside its builder so a future
+failure does not require another diagnostic revision merely to split that
+branch. Existing substeps 1 through 9 retain their values:
+
+| Substep | GPU-domain operation |
+| --- | --- |
+| 10 | Validate GPU/MCFG profile |
+| 11 | Allocate temporary planner storage |
+| 12 | Check remapping-unit capability |
+| 13 | Check unit scopes |
+| 14 | Check PCI requester capacity |
+| 15 | Resolve PCI requester ownership |
+| 16 | Require the integrated GPU requester |
+| 17 | Classify RMRR ownership |
+| 18 | Resolve RMRR endpoint scope |
+| 19 | Require the RMRR requester in the inventory |
+| 20 | Check mapping-storage capacity |
+| 21 | Build the ordinary identity plan |
+| 22 | Build the dedicated GPU plan |
+| 23 | Check the GPU DID against each unit's capability |
+| 24 | Build the dedicated GPU translation tables |
+
+Substeps 21 and 22 retain the exact `HV_EFI_IOMMU_STATUS` values from
+`iommu_isolation.h`, rather than the distinct runtime enum: for example,
+scope mismatch is 9, capacity 14, and deny violation 15. Substep 24 uses the
+runtime enum from `iommu_runtime.h`. These GPU substeps use install-stage zero;
+only substep 9 uses the runtime transaction's stages. Each failed allocation
+preserves the firmware's actual EFI status. The planner call order and all
+admission, domain separation, range limits, and cleanup behavior remain intact.
+
+A new pure planner fixture exercises the converted two-unit topology:
+segment-0 DRHDs at `FED90000` and `FED91000`, the exact integrated requester on
+the first unit, an include-all fallback on the second, and exclusion of the
+GPU-only RMRR from ordinary domains. With synthetic valid ranges and explicit
+capabilities, identity and root plans pass; aliased DIDs and omitted GGTT deny
+coverage still fail. This removes a model coverage gap without claiming the
+physical host used those synthetic values.
+
+The unsigned native-enabled Release image is 188,416 bytes, SHA-256
+`AC4F8665D66133CEEC60EBCEFBF4E1332879E72602A112E81E09EB0CEFF90723`.
+The `.hvscan` audit remains self-contained at 54,870 bytes. Six relevant host
+tests passed serially: static contracts, diagnostic transport, IOMMU isolation,
+IOMMU runtime, BSP diagnostic lifetime, and resident RVA tables. The image was
+not signed or booted. This is improved evidence collection, not a confirmed
+fix for the physical failure.
 
 ## Third physical run: memory-policy preparation aborted
 

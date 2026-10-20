@@ -239,7 +239,7 @@ static int test_iommu_failure_details(void)
     uint32_t stage;
     uint32_t primary;
     for (substep = HV_EFI_BOOT_DIAGNOSTIC_IOMMU_ARGUMENT;
-         substep <= HV_EFI_BOOT_DIAGNOSTIC_IOMMU_RUNTIME_INSTALL;
+         substep <= HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_TABLES;
          ++substep) {
         for (stage = 0; stage <= 9; ++stage) {
             for (primary = 0; primary <= 26; ++primary) {
@@ -279,7 +279,7 @@ static int test_iommu_failure_details(void)
                      UINT32_C(0x8300ffff),
                  "allocation detail marks runtime codes unavailable") &&
         check(hv_efi_boot_diagnostic_iommu_detail(0, 0, 0, 0) == 4 &&
-                  hv_efi_boot_diagnostic_iommu_detail(10, 0, 0, 0) == 4 &&
+                  hv_efi_boot_diagnostic_iommu_detail(25, 0, 0, 0) == 4 &&
                   hv_efi_boot_diagnostic_iommu_detail(9, 10, 0, 0) == 4 &&
                   hv_efi_boot_diagnostic_iommu_detail(9, 0, 256, 0) == 4 &&
                   hv_efi_boot_diagnostic_iommu_detail(9, 0, 0, 256) == 4,
