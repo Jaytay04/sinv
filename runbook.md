@@ -1,6 +1,12 @@
 # Intel UHD 770 diagnostic scanout: bare-metal test runbook
 
-For the current diagnostic build, follow the [scripted signed payload validation runbook](docs/GPU_PAYLOAD_SCRIPT_RUNBOOK.md). It provides separate Prepare, Build, Sign, clone creation, ValidateVm, and Report commands. The signed VM validation is complete; see [its results and limitations](docs/GPU_PAYLOAD_SIGNED_VM_RESULT.md). No additional boot or recovery command is needed for that completed run. The earlier physical run is recovered. Its historical physical procedure below is not the next retry sequence: experimental VMX/end-to-end execution must follow the repository's VM-only rule, and the retained host ESP stage remains untouched.
+For your requested **manual bare-metal retry**, use the
+[manual physical test guide](docs/GPU_BAREMETAL_MANUAL_RUNBOOK.md). Start with
+its readiness inspection, not a new Prepare. The old selector is archived;
+retained ESP stage files must be inspected before another run. The guide has
+one command per action and explicit recovery/reset steps.
+
+For the completed **VM validation**, see the [scripted signed payload runbook](docs/GPU_PAYLOAD_SCRIPT_RUNBOOK.md) and [its results and limitations](docs/GPU_PAYLOAD_SIGNED_VM_RESULT.md). That VM run needs no further boot or recovery command. Its completion does not complete a new physical test. The earlier physical run is recovered; the procedure below is historical context. Use the new manual guide above for the current operator-requested physical sequence. No host ESP or boot state was changed while preparing that guide.
 
 This runbook follows the script-per-action format in [`COMBINED_HOST_RUNBOOK.md`](spoof-handoff/docs/COMBINED_HOST_RUNBOOK.md). It uses a separate one-time, reboot-bounded GPU workflow. The first physical attempt, run `gpu-20261020T031023Z-9a2a92a17bf54b4faf4b60c6b7231ec7`, returned to Windows with `replay=ABORTED`, `payload=FAILED`, and the test hypervisor `ABSENT` on all 20 CPUs. Secure Boot remained enabled and the Windows Boot Manager hash matched its baseline. The payload failure cause is unresolved; this build attempts its payload independently of replay, so the replay verdict alone does not explain the launch failure. Physical scanout and GPU isolation remain unverified. The Windows VM passed its EFI boot, actual root WC render/drain/unmap, and synthetic GPU model checks, but it had no Intel GPU; it does not prove host scanout, GPU DMA isolation, or the Intel-excluded/NVIDIA-primary topology.
 
