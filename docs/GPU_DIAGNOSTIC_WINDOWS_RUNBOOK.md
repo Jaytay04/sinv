@@ -64,38 +64,13 @@ Run 19's authenticated Windows startup evidence also passed, but its overall con
 
 The VM-only EFI image uses `IB_PAYLOAD_REPLAY_INDEPENDENT=ON`; the Windows test worker copies the same test loader to `EFI\insecure-boot\shimx64.efi` and `grubx64.efi`. This fixture exists only to run the disposable test. It is not a production boot chain and must never be copied to a physical machine. Physical deployment requires an approved signed EFI chain and its normal platform security policy.
 
-## Physical lab gate
+## Physical test procedure
 
-The physical path remains unvalidated. Repository policy currently reserves all experimental VMX execution and end-to-end boot tests for disposable VMs, so this document does not authorize a bare-metal payload run or changes to the user's host. The steps below are for a future controlled lab run after the project establishes a production EFI chain and updates its execution policy.
+The VM-only loader fixture and its unsigned images remain unsuitable for physical deployment. A signed shim/collector chain has already succeeded on this host, as recorded in [EFI_INVENTORY_PATH_B.md](EFI_INVENTORY_PATH_B.md); that result does not cover the hypervisor or GPU isolation.
 
-### Before a lab run
+The separately requested operator-run first physical test is documented in the repository-root [runbook.md](../runbook.md). It uses fresh native hypervisor images and a separately signed loader with replay-independent payload launch, VM debug ports disabled, the existing resident-image launch contract, and the normal shim/legacy BootNext profile. That configuration has not been physically validated. The ordinary loader build can skip the payload after normal nonempty-PCR replay refusal, and the collector profile deliberately never launches it. There is no need to invent a new launch profile merely to describe this candidate; its firmware acceptance and native compatibility remain untested.
 
-1. Take a full system backup and confirm the machine-specific firmware recovery path before changing boot state. The project does not currently document board-specific recovery.
-2. From the repository root, save the read-only PnP inventory with `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\components\hypervisor\setup\Get-GpuDiagnosticPreflight.ps1 -OutputPath .\.codex-build\gpu-preflight.json`. On the inventoried host, it found an Intel UHD 770 (`8086:4680`) and an NVIDIA RTX 3080 (`10DE:2206`); both enumerated monitors were associated with NVIDIA, and Intel's `AssociatedMonitors` list was empty. This does not establish that the Intel HDMI/DP connector is accessible. Physically attach and verify the diagnostic display, then keep Windows on NVIDIA.
-3. From an x64 Visual Studio developer PowerShell at the repository root, configure a separate build with `HYPERSINV_GPU_DIAGNOSTIC_NATIVE=ON` and `HYPERSINV_GPU_DIAGNOSTIC_OUTPUT_CONFIRMED=ON`; set the latter only after physical output verification. For example:
-
-   ```powershell
-   cmake -S .\components\hypervisor -B .\.codex-build\gpu-native -G Ninja `
-     -DHYPERSINV_BUILD_UEFI=ON -DHYPERSINV_BUILD_CORE=OFF `
-     -DHYPERSINV_BUILD_DRIVER=OFF -DHYPERSINV_BUILD_LOADER=OFF `
-     -DHYPERSINV_GPU_DIAGNOSTIC_NATIVE=ON `
-     -DHYPERSINV_GPU_DIAGNOSTIC_OUTPUT_CONFIRMED=ON
-   cmake --build .\.codex-build\gpu-native
-   ctest --test-dir .\.codex-build\gpu-native --output-on-failure
-   ```
-
-   The component defaults `HYPERSINV_UEFI_SOURCE_DIR` to the sibling `components/uefi-loader` and its support directory to `src/vendor`. Native activation options default off and cannot be combined with `HYPERSINV_GPU_VM_SELFTEST`. Require a successful EFI build, `.hvscan`, and CTest run. Save the build log, `.hvscan` report, EFI hash, and source revision.
-4. Stop at EFI staging until a production EFI chain is available. The existing `ib-install stage` writes `EFI\insecure-boot`; `oneshot --mode bootnext` targets that directory. The UEFILoader README explicitly scopes this research toolkit and its test firmware to VMs, and the Windows VM fixture uses an unsigned replay-independent loader with Secure Boot disabled. Those files and commands are not a bare-metal deployment path. Do not use them on a physical system.
-
-### EFI staging, one-shot boot, and observation
-
-These actions require a production staging path that the repository does not currently provide. Once that exists, use its signed, policy-approved EFI chain and a recovery-tested lab machine; stage only to that machine's system EFI partition, arm only its owned one-shot entry, and verify BootNext readback before rebooting. Capture the full EFI serial output and confirm installed per-CPU PCI/EPT filters, the Intel VT-d domain, bounded root WC render, validated linear plane/live surface and reserved GGTT entries, write drain, and CPU-map removal before guest resume. Confirm the pattern appears on the Intel-attached display and Windows continues on NVIDIA. Preserve hashes, readbacks, logs, and a screen photograph. VMware cannot supply this evidence.
-
-Firmware and SMM are trusted prerequisites. If they write the plane or DMA the surface, root ownership can be silently violated; the ownership latch does not guarantee detection of these trusted writers. If plane, surface, or reserved GGTT validation fails, the HAL must stop, drain and unmap the CPU window, return `HV_GPU_NOT_SUPPORTED`, retain pinned scanout pages, and remain latched until reboot. There is no re-arm or runtime hand-back to Windows; runtime hand-back is future work.
-
-## Recovery
-
-Reboot is the ownership teardown boundary. Use a full platform reset only when it is known to quiesce the GPU and IOMMU; otherwise power-cycle the lab machine before reclaiming pinned pages. Do not attempt a mid-session hand-back to WDDM. If the experimental image cannot boot, use the machine's previously verified firmware recovery path to select Windows Boot Manager. This repository has no verified board-specific recovery instructions.
+The root runbook specifies preflight, physical display prerequisites, signing, explicit system-ESP selection and backup, one-shot staging/arming, evidence collection, reset-only teardown, and recovery. It documents the current native telemetry gap: Windows CPUID health and PnP inventory cannot independently attest plane/GGTT/DMA enforcement. Repository-default automated VMX and end-to-end execution remains VM-only; no host deployment was performed while writing either document.
 
 ## Validation status
 
