@@ -10,6 +10,44 @@ is closed. Its ESP stage still requires ownership-reviewed retirement before
 another stage. Capture a fresh readiness report for that cleanup; do not repeat
 the completed recovery commands below or use another run's retirement profile.
 
+Fresh readiness report `b6037d0adbbc4299af077f2afcf0691b` has only the retained
+stage blocker. Its seven files match the archived run's five installer-staged
+artifacts plus the two collected boot diagnostics. The `193833` profile binds
+that inventory to the completed journal, archived selector, immutable failed
+journal/result, read-only firmware review and successful final raw captures.
+
+If needed, load the exact report from elevated PowerShell in the main workspace:
+
+```powershell
+$readiness = Get-Content -Raw -LiteralPath '.\.analysis\gpu-baremetal-readiness\b6037d0adbbc4299af077f2afcf0691b\readiness.json' | ConvertFrom-Json
+```
+
+Review retirement:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun193833 -ReadinessPath $readiness.EvidencePath
+```
+
+Only after `REVIEWED_STAGE_READY_FOR_RETIREMENT` and `Succeeded: true`, apply:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun193833 -ReadinessPath $readiness.EvidencePath -Apply
+```
+
+Require `STAGE_RETIRED` and `Succeeded: true`, then capture readiness again:
+
+```powershell
+$readiness = powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Get-GpuBaremetalReadiness.ps1 | ConvertFrom-Json
+$readiness | Select-Object Status, Blockers, EvidencePath | ConvertTo-Json -Depth 8
+```
+
+Require `READY_FOR_FRESH_PREPARE` with no blockers. This cleanup does not resolve
+the payload's PCI quiesce refusal; it prepares the host for a later diagnostic
+run. Retirement copies and verifies the original evidence and seven stage files
+locally and on the recovery disk before deleting only those pinned files. It
+rechecks live stage inventory, boot selection, health and boot-manager integrity.
+It does not reboot or write firmware variables.
+
 Run `gpu-20261021T193833Z-c48461667089493988074edfaf008d56` returned
 `COLLECTED_HEALTH_FAIL_GPU_UNATTESTED`. The payload stopped at the PCI quiesce
 audit before IOMMU enablement or VMX activation. Diagnostic writes and the

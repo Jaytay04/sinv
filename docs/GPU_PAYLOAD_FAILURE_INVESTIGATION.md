@@ -85,6 +85,24 @@ the selector to the run's archive path; the active selector is absent. This
 closes recovery for the failed payload run. Ownership-reviewed stage retirement
 remains separate; no host workflow was executed by the investigation.
 
+Fresh readiness report `b6037d0adbbc4299af077f2afcf0691b`, SHA-256
+`3C8D0FB6E4A4B52F18AAD800DE6151C99026C9537C47ED9906E2F79C0DEE4779`
+(12050 bytes), reports exactly seven retained files, totaling 1,289,362 bytes.
+All names, sizes and hashes match the seven collected snapshots. Five also match
+the original Stage record; `handoff-status.txt` and `payload-diagnostic.txt` are
+the two boot-generated diagnostics. The completed journal is SHA-256
+`1841DB8A726043FE6D3D9A22A6BBA70FF0E6AF3008D2437103F8461E0193BE8B`
+(52111 bytes), while the immutable entry copy retains its earlier 45269-byte
+pin. The closed `CompletedRun193833` retirement profile distinguishes those
+states and verifies the successful final result and raw evidence before cleanup.
+
+Saved-file validation of the retirement profile passed against the actual
+completed evidence: seven reviewed stage pins and 53 preserved proof-pin
+records, including all seven Collection copies. Apply rechecks these copies
+before removal. All 25 related retirement, readiness and firmware-review CTests
+passed without a VM or live host workflow. The operator must still run the
+retirement review and Apply; this validation did not mount or change the ESP.
+
 File-only validation passed against the actual receipt, saved command outputs,
 failed result, raw selection files and module pins, using a scratch copy of the
 unchanged entry journal. The 193833 profile fixture passed 5 cases/45 assertions,
