@@ -1871,6 +1871,34 @@ catch {
                 ExpectedStatus = 'FINAL_VERIFY_FAILED_GPU_UNATTESTED'
             }
             [pscustomobject]@{
+                Name = 'review-accepted-042142'; ReviewAccepted = $true; ReviewThrows = $false
+                PreflightValid = $true; SecureBoot = $true; ResetPassed = $true
+                Phase = 'Disarmed'; RunId = 'gpu-20261021T042142Z-8137a024c456457b840ce906358bbac2'
+                ExpectedCalls = 1; NativeSucceeded = $true; ExpectedSucceeded = $true
+                ExpectedStatus = 'FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED'
+            }
+            [pscustomobject]@{
+                Name = 'review-rejected-042142'; ReviewAccepted = $false; ReviewThrows = $false
+                PreflightValid = $true; SecureBoot = $true; ResetPassed = $true
+                Phase = 'Disarmed'; RunId = 'gpu-20261021T042142Z-8137a024c456457b840ce906358bbac2'
+                ExpectedCalls = 1; NativeSucceeded = $true; ExpectedSucceeded = $false
+                ExpectedStatus = 'FINAL_VERIFY_FAILED_GPU_UNATTESTED'
+            }
+            [pscustomobject]@{
+                Name = 'preflight-failure-042142'; ReviewAccepted = $true; ReviewThrows = $false
+                PreflightValid = $false; SecureBoot = $true; ResetPassed = $true
+                Phase = 'Disarmed'; RunId = 'gpu-20261021T042142Z-8137a024c456457b840ce906358bbac2'
+                ExpectedCalls = 0; NativeSucceeded = $true; ExpectedSucceeded = $false
+                ExpectedStatus = 'FINAL_VERIFY_FAILED_GPU_UNATTESTED'
+            }
+            [pscustomobject]@{
+                Name = 'wrong-run-id-042142'; ReviewAccepted = $true; ReviewThrows = $false
+                PreflightValid = $true; SecureBoot = $true; ResetPassed = $true
+                Phase = 'Disarmed'; RunId = 'gpu-20261021T042142Z-not-the-reviewed-run'
+                ExpectedCalls = 0; NativeSucceeded = $true; ExpectedSucceeded = $false
+                ExpectedStatus = 'FINAL_VERIFY_FAILED_GPU_UNATTESTED'
+            }
+            [pscustomobject]@{
                 Name = 'preflight-failure-224018'; ReviewAccepted = $true; ReviewThrows = $false
                 PreflightValid = $false; SecureBoot = $true; ResetPassed = $true
                 Phase = 'Disarmed'; RunId = 'gpu-20261020T224018Z-31b7c15e56584f84a68d89b7b3ecb1a1'

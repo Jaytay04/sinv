@@ -85,6 +85,35 @@ function Assert-GpuSamePath([string]$Actual, [string]$Expected) {
     }
 }
 
+function Save-Gpu042142ReviewEntryJournal {
+    param([object]$State, [string]$ActionDirectory)
+
+    $expectedRun = Join-Path ([string]$State.WorkspaceRoot) '.analysis\gpu-baremetal\runs\gpu-20261021T042142Z-8137a024c456457b840ce906358bbac2'
+    if ([string]$State.RunId -cne 'gpu-20261021T042142Z-8137a024c456457b840ce906358bbac2') {
+        throw 'The entry-journal checkpoint supports only the fixed 042142 run.'
+    }
+    Assert-GpuSamePath ([string]$State.RunDirectory) $expectedRun
+    $null = Assert-GpuPathWithin -Path $ActionDirectory -Root (Join-Path $expectedRun 'actions') -MustExist
+    if ([IO.Path]::GetFileName($ActionDirectory) -cnotmatch '^[0-9]{8}T[0-9]{9}Z-FinalVerify-[0-9a-f]{32}$') {
+        throw 'The entry-journal checkpoint requires a FinalVerify action directory.'
+    }
+    $journalPath = Join-Path $expectedRun 'journal.json'
+    $originalPin = Get-GpuFilePin -Path $journalPath
+    if ($originalPin.Sha256 -cne '3287B5E86D018DD374748D56E16CF7BBDE0D245ECF426779EAAB80E5A2B08583' -or
+        $originalPin.Bytes -ne 44133L) {
+        throw 'The 042142 journal differs from the exact pre-retry inspection pin; preserve the existing intent.'
+    }
+    $copyPath = Join-Path $ActionDirectory 'reviewed-firmware-entry-journal.json'
+    $null = Assert-GpuPathWithin -Path $copyPath -Root $ActionDirectory
+    [IO.File]::Copy($journalPath, $copyPath, $false)
+    $copyPin = Get-GpuFilePin -Path $copyPath
+    if ($copyPin.Sha256 -cne $originalPin.Sha256 -or $copyPin.Bytes -ne $originalPin.Bytes) {
+        throw 'The 042142 pre-retry journal copy failed readback; preserve the original journal.'
+    }
+    Assert-GpuFilePin -Pin $originalPin
+    return $copyPin
+}
+
 function Assert-GpuRecordedState($State, [string]$Directory) {
     foreach ($Name in @('SchemaVersion','RunId','WorkspaceRoot','SourceRoot','SourceCommit',
         'RunDirectory','RecoveryBase','RecoveryRunDirectory','Phase','InProgress','SourcePins',
@@ -193,6 +222,7 @@ try {
 }
 $State = $null
 $ActionDirectory = $null
+$EntryJournalCheckpointPending = $false
 try {
     if ($Action -eq 'Prepare') {
         if ($RunDirectory) { throw 'Prepare creates a new run; do not supply -RunDirectory.' }
@@ -310,6 +340,13 @@ try {
         $null = Assert-GpuPathWithin -Path $ActionDirectory -Root $RunDirectory
         $null = New-Item -ItemType Directory -Path $ActionDirectory
     }
+    if ($Action -eq 'FinalVerify' -and $ReviewedFirmwareDifference -and
+        [string]$State.RunId -ceq 'gpu-20261021T042142Z-8137a024c456457b840ce906358bbac2') {
+        # Preserve the exact inspected journal before replacing its retry intent.
+        $EntryJournalCheckpointPending = $true
+        $null = Save-Gpu042142ReviewEntryJournal -State $State -ActionDirectory $ActionDirectory
+        $EntryJournalCheckpointPending = $false
+    }
     if ($null -ne $State.InProgress) {
         if ($null -eq $State.PSObject.Properties['RecoveryHistory']) {
             $State | Add-Member -NotePropertyName RecoveryHistory -NotePropertyValue @()
@@ -359,9 +396,11 @@ try {
 } catch {
     $Failure = $_.Exception.Message
     if ($null -ne $State -and $null -ne $ActionDirectory) {
-        $State.LastFailure = $Failure
-        $State.UpdatedUtc = [DateTime]::UtcNow.ToString('o')
-        try { Save-GpuJournal $State } catch { Write-Warning "Journal save failed: $($_.Exception.Message)" }
+        if (-not $EntryJournalCheckpointPending) {
+            $State.LastFailure = $Failure
+            $State.UpdatedUtc = [DateTime]::UtcNow.ToString('o')
+            try { Save-GpuJournal $State } catch { Write-Warning "Journal save failed: $($_.Exception.Message)" }
+        }
         try {
             Write-GpuJson -Path (Join-Path $ActionDirectory 'failure.json') -NoOverwrite -Value ([ordered]@{
                 Action=$Action; Failure=$Failure; RunDirectory=$RunDirectory

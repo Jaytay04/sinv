@@ -28,7 +28,7 @@ those operations.
 Rollback and the operator's full power-cycle completed. FinalVerify confirmed
 a changed boot ID, Secure Boot on, all 20 CPUs `ABSENT`, and the original
 Windows boot-manager hash. Its only error was a textual firmware-enumeration
-difference: the archived baseline is SHA-256
+difference: the saved baseline is SHA-256
 `66786928B0A56B57EE9E2137A0645783C9E6C090B6E9B65F88FBF5B91DAA5007`
 (2890 bytes), and the current capture is
 `7D975992028402E8B90F58AF695D0234F028C9B8B106E1BA36BCD5595E32D4E4`
@@ -39,33 +39,53 @@ are unchanged. This is only a text comparison. The run has no historical raw
 BootOrder capture, so it does not establish raw firmware-variable equality or
 that the added entries are benign.
 
-The journal remains `Disarmed` and the selector is retained. The failed
-FinalVerify intent is preserved, and no rollback is needed. Capture fresh
-evidence with the run-specific,
-read-only inspection:
+The operator captured fresh evidence with the run-specific read-only
+inspection:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Inspect-GpuFinalFirmware.ps1 -Run042142
 ```
 
-Require `READONLY_FIRMWARE_REVIEW_CAPTURED`, `Succeeded: true`,
-`SelectorAndJournalUnchanged: true`, `EspUnmounted: true`,
-`CleanupSucceeded: true`, and empty `Errors` and `CleanupErrors`. Also require
-health `ABSENT` on all 20 CPUs, stable firmware text, stable raw boot-selection
-captures, BootNext absent, no selected entry targeting the retained stage,
-and zero integrity findings. Preserve the full result and its evidence pin.
-The inspector does not complete recovery or prove historical raw BootOrder
-equality; its `RecoveryCompleted` field remains false. Wait for the
-receipt-bound completion instructions before retrying FinalVerify or
-archiving this selector. Do not use the reviewed-difference flag for this run
-without that explicit completion step. This pending review does not prove the
-payload failure cause or GPU isolation.
+The successful receipt is
+`.analysis/gpu-final-firmware-review/255f08b53f3a432cbe8cd2b386447781/result.json`,
+SHA-256 `AD43DF7601413CDAA13A561D499F6902E47AEC53932872014D55B009EB2EC736`
+(17,633 bytes). It reports unchanged selector/journal, successful ESP cleanup,
+no ESP or firmware writes, and no errors. Both raw captures have BootNext
+absent, BootOrder `[0,1,2,3,4,5]`, the saved Windows boot-manager and reference-log
+hashes, and zero integrity findings. The firmware text and raw captures are
+stable; health reports all 20 CPUs `ABSENT`. This establishes the reviewed
+current observations, without proving historical raw BootOrder equality or
+the cause of the image-start failure. GPU isolation remains unverified.
 
-Offline validation passed all five related firmware-inspection, review,
-module-scope, and host-platform tests. A separate file-only check matched all
-11 saved evidence/tool/source pins and the actual failed journal, verified
-the no-effects preview, and confirmed that the selector and journal stayed
-unchanged. No VM or live inspection was run during this validation.
+The journal remains `Disarmed` with the failed FinalVerify intent retained.
+The completion helper accepts only this exact receipt and run, rechecks its
+saved files and source pins, and requires fresh matching mounted-ESP text,
+raw BootNext/BootOrder, boot-manager integrity, reset, Secure Boot, and health
+checks. Run the updated helper in the same boot session:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 FinalVerify -ReviewedFirmwareDifference
+```
+
+Require `FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED`
+and `Succeeded: true`. Only after that result, archive the selector:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Archive
+```
+
+The original firmware baseline is preserved, `TextEqual` remains false,
+and the reviewed exception is recorded separately. This completes recovery
+when the required result succeeds; it does not establish GPU isolation.
+
+Offline validation passed all seven related firmware-inspection, review,
+entry-journal, module-scope, and host-platform tests. The new review fixtures
+cover accepted completion and reject changed receipts, source pins, failed
+results, journal copies, health, boot identities, raw selection, and integrity
+findings. A separate file-only validation checked the actual receipt and its
+saved files, the original failed journal context, and the current reviewed
+platform source. The selector and journal stayed unchanged. No VM or live
+inspection was run during this validation.
 
 ## Sixth physical run: VT-d supports only the 48-bit table format
 
