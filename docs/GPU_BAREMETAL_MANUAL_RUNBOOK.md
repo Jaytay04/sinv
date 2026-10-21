@@ -5,10 +5,24 @@
 Run `gpu-20261021T160027Z-672213bf26314f69990e6d2305c55fff` collected a health
 failure. Its video identifies the first failure as firmware `OpenVolume`
 returning `EFI_TIMEOUT` after payload startup reported success on all 20 CPUs.
-Later volume opens returned `EFI_DEVICE_ERROR`. Rollback has succeeded with
-`RECOVERY_PENDING_USER_POWER_CYCLE`; complete the manual power cycle and run
-`FinalVerify` before archiving or preparing another run. Older fixed review
-and retirement profiles below do not apply to this run.
+Later volume opens returned `EFI_DEVICE_ERROR`. Rollback and the operator's
+power cycle completed. FinalVerify passed reset, Secure Boot, all 20 `ABSENT`
+health observations, and the Windows boot-manager hash. Its only failure is a
+firmware-text difference: the three generic CD/DVD, removable-device and
+network application GUIDs and their display-order references changed. Windows
+and both USB entry blocks are unchanged. This does not prove historical raw
+firmware-variable equality.
+
+The next step is a read-only capture bound to the exact failed run:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Inspect-GpuFinalFirmware.ps1 -Run160027
+```
+
+Require `READONLY_FIRMWARE_REVIEW_CAPTURED` and preserve the output. This capture
+does not mark recovery complete. Its fresh receipt must be reviewed before
+the reviewed-difference completion step. Older fixed review and retirement
+profiles below do not apply to this run.
 
 The investigation found an unchecked PCI bus-master restoration path and
 reproduced its false-success behavior with a host fixture. The update verifies

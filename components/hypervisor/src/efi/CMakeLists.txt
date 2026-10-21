@@ -626,6 +626,10 @@ if(WIN32)
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
             -File "${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/gpu_diagnostic/tests/Test-GpuFinalFirmwareInspection062106.ps1"
             -ToolRoot "${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/gpu_diagnostic")
+    add_test(NAME uefi_hypervisor_gpu_final_firmware_inspection_160027_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/gpu_diagnostic/tests/Test-GpuFinalFirmwareInspection160027.ps1"
+            -ToolRoot "${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/gpu_diagnostic")
     add_test(NAME uefi_hypervisor_gpu_final_firmware_review_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
             -File "${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/gpu_diagnostic/tests/Test-GpuFinalFirmwareReview.ps1"

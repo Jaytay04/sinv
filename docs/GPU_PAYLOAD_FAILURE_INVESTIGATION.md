@@ -24,6 +24,25 @@ video tail or outer-shim message is asserted. The operator's rollback returned
 `RECOVERY_PENDING_USER_POWER_CYCLE`; final reset verification and archive
 were still pending at this investigation checkpoint.
 
+The subsequent operator-run FinalVerify action
+`20261021T165416133Z-FinalVerify-33a9f87568214ffbb7342a18fcfec7cc` observed boot ID
+`2026-10-21T16:52:47.5000000Z`, different from the disarmed boot. Reset, Secure
+Boot, 20 `ABSENT` health results, and the Windows boot-manager hash passed.
+The sole error is the firmware text comparison. The 4,336-byte baseline is
+`BC104DF2EBB63636540220FC2E085980F81AEA595B1EC77FE288116A245FA661`;
+the 4,336-byte current listing is
+`98E5ECE5B987B754CD1C059C34E9D87A1CFB569E758BCC21971CA21D4EDC2D80`.
+Only the three generic CD/DVD, removable-device and network application GUIDs
+and their display-order references changed; Windows and both USB entry blocks
+are identical. The run remains `Disarmed`. The new `-Run160027` inspection
+profile pins the exact failed journal, selector, captures, failed result,
+source modules, tools and boot identities for a read-only review capture.
+This is not completion approval or historical raw firmware-variable proof.
+All ten related inspection, review, entry-journal and module-scope host checks
+passed. A separate file-only validation matched the actual selector, failed
+journal, firmware captures, result, tools and source-module pins. The selector
+and journal stayed unchanged; no live inspection or ESP mount was run.
+
 ### Concrete verification defect and its causal limit
 
 The IOMMU installer disables bus mastering on discovered PCI functions and
