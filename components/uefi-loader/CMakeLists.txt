@@ -40,6 +40,9 @@ option(IB_STATIC_RUNTIME
 option(IB_PAYLOAD_REPLAY_INDEPENDENT
     "Launch payload.efi even when PCR replay cannot run"
     OFF)
+option(IB_FIRMWARE_STORAGE_PROBE
+    "Trace bounded read-only boot-volume probes around payload activation"
+    OFF)
 
 option(IB_QEMU_DEBUG_PORTS
     "Emit loader diagnostics to QEMU debug/serial I/O ports (VM-only)"
@@ -182,6 +185,16 @@ target_include_directories(efi_file_test PRIVATE
 )
 target_link_libraries(efi_file_test PRIVATE sha256)
 add_test(NAME efi_file_test COMMAND efi_file_test)
+
+add_executable(efi_storage_probe_test
+    src/fixtures/tests/efi_storage_probe_test.c
+    src/loader/efi_storage_probe.c)
+target_include_directories(efi_storage_probe_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/vendor
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/common
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/loader)
+target_link_libraries(efi_storage_probe_test PRIVATE sha256)
+add_test(NAME efi_storage_probe_test COMMAND efi_storage_probe_test)
 
 add_executable(handoff_diagnostic_test
     src/fixtures/tests/handoff_diagnostic_test.c
@@ -743,6 +756,10 @@ if(IB_PAYLOAD_REPLAY_INDEPENDENT)
     target_compile_definitions(loader PRIVATE
         IB_PAYLOAD_REPLAY_INDEPENDENT=1)
 endif()
+if(IB_FIRMWARE_STORAGE_PROBE)
+    target_sources(loader PRIVATE src/loader/efi_storage_probe.c)
+    target_compile_definitions(loader PRIVATE IB_FIRMWARE_STORAGE_PROBE=1)
+endif()
 if(MSVC)
     target_compile_options(loader PRIVATE "$<$<COMPILE_LANGUAGE:C>:/Oi->")
 endif()
@@ -847,7 +864,7 @@ if(IB_STATIC_RUNTIME AND MSVC)
                                reference_log tcglog_test
                                tcglog_ib_test pcr_gate_test replay_test
                                divergence_test sha256_test reference_log_test
-                               boot_restore_test efi_file_test image_launch_test payload_diagnostic_test handoff_diagnostic_test tcg2_test
+                               boot_restore_test efi_file_test efi_storage_probe_test image_launch_test payload_diagnostic_test handoff_diagnostic_test tcg2_test
                                inventory_entry_test shim_inventory_test shim_chain_test uefi_runtime_abi_test
                                replay_uefi_path_test
                                install_sign_test install_authenticode_test

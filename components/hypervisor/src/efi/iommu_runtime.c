@@ -3395,7 +3395,8 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuRestorePciBusMasters(
 {
     uint32_t index = stateCount;
     uint32_t failed = 0;
-    if (callbacks == NULL || callbacks->Write16 == NULL ||
+    if (callbacks == NULL || callbacks->Read16 == NULL ||
+        callbacks->Write16 == NULL ||
         (stateCount != 0 && states == NULL)) {
         return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
     }
@@ -3407,12 +3408,38 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuRestorePciBusMasters(
                                    state->OriginalCommand) == 0) {
                 failed = 1;
             } else {
-                state->Restored = 1;
+                uint16_t observedCommand = 0;
+                if (callbacks->Read16(callbacks->Context,
+                                      state->CommandAddress,
+                                      &observedCommand) == 0 ||
+                    observedCommand != state->OriginalCommand) {
+                    failed = 1;
+                } else {
+                    state->Restored = 1;
+                }
             }
         }
     }
     return failed == 0 ? HV_EFI_IOMMU_RUNTIME_OK :
         HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED;
+}
+
+static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuAbortPciQuiesce(
+    const HV_EFI_IOMMU_PCI_CALLBACKS *callbacks,
+    HV_EFI_IOMMU_PCI_COMMAND_STATE *states,
+    uint32_t attemptedCount,
+    HV_EFI_IOMMU_RUNTIME_STATUS failureStatus,
+    uint32_t *stateCount)
+{
+    const HV_EFI_IOMMU_RUNTIME_STATUS restoreStatus =
+        HvEfiIommuRestorePciBusMasters(callbacks, states, attemptedCount);
+    if (restoreStatus != HV_EFI_IOMMU_RUNTIME_OK) {
+        /* Keep every attempted record so the caller can retry incomplete cleanup. */
+        *stateCount = attemptedCount;
+        return HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED;
+    }
+    *stateCount = 0;
+    return failureStatus;
 }
 
 HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuQuiescePciBusMasters(
@@ -3453,11 +3480,11 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuQuiescePciBusMasters(
                             (vendor != UINT16_C(0xffff) &&
                              callbacks->Read16(callbacks->Context, base + 4,
                                                &command) == 0)) {
-                            if (pass != 0 && observed != 0) {
-                                *stateCount = observed;
-                                (void)HvEfiIommuRestorePciBusMasters(
-                                    callbacks, states, observed);
-                                *stateCount = 0;
+                            if (pass != 0) {
+                                return HvEfiIommuAbortPciQuiesce(
+                                    callbacks, states, observed,
+                                    HV_EFI_IOMMU_RUNTIME_CALLBACK_FAILED,
+                                    stateCount);
                             }
                             return HV_EFI_IOMMU_RUNTIME_CALLBACK_FAILED;
                         }
@@ -3470,11 +3497,9 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuQuiescePciBusMasters(
                             continue;
                         }
                         if (observed >= stateCapacity) {
-                            *stateCount = observed;
-                            (void)HvEfiIommuRestorePciBusMasters(
-                                callbacks, states, observed);
-                            *stateCount = 0;
-                            return HV_EFI_IOMMU_RUNTIME_CAPACITY;
+                            return HvEfiIommuAbortPciQuiesce(
+                                callbacks, states, observed,
+                                HV_EFI_IOMMU_RUNTIME_CAPACITY, stateCount);
                         }
                         states[observed].CommandAddress = base + 4;
                         states[observed].OriginalCommand = command;
@@ -3485,11 +3510,29 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuQuiescePciBusMasters(
                         states[observed].Restored = 0;
                         if (callbacks->Write16(callbacks->Context, base + 4,
                                                command & ~UINT16_C(4)) == 0) {
-                            *stateCount = observed + 1;
-                            (void)HvEfiIommuRestorePciBusMasters(
-                                callbacks, states, observed + 1);
-                            *stateCount = 0;
-                            return HV_EFI_IOMMU_RUNTIME_CALLBACK_FAILED;
+                            return HvEfiIommuAbortPciQuiesce(
+                                callbacks, states, observed + 1,
+                                HV_EFI_IOMMU_RUNTIME_CALLBACK_FAILED,
+                                stateCount);
+                        }
+                        {
+                            uint16_t quiescedCommand = 0;
+                            const uint16_t expectedCommand =
+                                command & (uint16_t)~UINT16_C(4);
+                            if (callbacks->Read16(
+                                    callbacks->Context, base + 4,
+                                    &quiescedCommand) == 0) {
+                                return HvEfiIommuAbortPciQuiesce(
+                                    callbacks, states, observed + 1,
+                                    HV_EFI_IOMMU_RUNTIME_CALLBACK_FAILED,
+                                    stateCount);
+                            }
+                            if (quiescedCommand != expectedCommand) {
+                                return HvEfiIommuAbortPciQuiesce(
+                                    callbacks, states, observed + 1,
+                                    HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED,
+                                    stateCount);
+                            }
                         }
                         ++observed;
                     }
@@ -3504,11 +3547,9 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuQuiescePciBusMasters(
         }
         if (pass != 0) {
             if (observed != required) {
-                *stateCount = observed;
-                (void)HvEfiIommuRestorePciBusMasters(
-                    callbacks, states, observed);
-                *stateCount = 0;
-                return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+                return HvEfiIommuAbortPciQuiesce(
+                    callbacks, states, observed,
+                    HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED, stateCount);
             }
             *stateCount = observed;
         }

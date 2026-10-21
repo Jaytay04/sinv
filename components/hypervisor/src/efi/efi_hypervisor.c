@@ -2839,9 +2839,10 @@ static EFI_STATUS HvEfiPreparePhysicalIommu(
                 installDiagnostic.Capability, installDiagnostic.FinalStatus));
     }
     if (iommuStatus != HV_EFI_IOMMU_RUNTIME_OK) {
-        /* Never return into generic allocation cleanup while a unit may
-         * still reference resident tables that cleanup would release. */
-        if (state->Runtime.State == HV_EFI_IOMMU_RUNTIME_ENABLED ||
+        /* Never return into generic cleanup with unverified PCI restoration
+         * or while a unit may still reference resident remapping tables. */
+        if (iommuStatus == HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED ||
+            state->Runtime.State == HV_EFI_IOMMU_RUNTIME_ENABLED ||
             state->Runtime.State == HV_EFI_IOMMU_RUNTIME_ENABLING ||
             state->Runtime.State == HV_EFI_IOMMU_RUNTIME_FAILED) {
             HvEfiFailStop();

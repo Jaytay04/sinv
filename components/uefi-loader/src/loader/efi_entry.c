@@ -5,6 +5,7 @@
 #include "boot_restore.h"
 #include "divergence.h"
 #include "efi_file.h"
+#include "efi_storage_probe.h"
 #include "handoff_diagnostic.h"
 #include "image_launch.h"
 #include "pcr_gate.h"
@@ -25,9 +26,16 @@
 #define IB_QEMU_DEBUG_PORTS 0
 #endif
 
+#ifndef IB_FIRMWARE_STORAGE_PROBE
+#define IB_FIRMWARE_STORAGE_PROBE 0
+#endif
+
 #if defined(_MSC_VER) && (defined(_M_IX86) || defined(_M_X64))
 #include <intrin.h>
 #pragma intrinsic(__outbyte)
+#if defined(_M_X64)
+#pragma intrinsic(__cpuidex, __readeflags)
+#endif
 #define IB_QEMU_DEBUGCON_AVAILABLE 1
 #else
 #define IB_QEMU_DEBUGCON_AVAILABLE 0
@@ -267,6 +275,95 @@ static void con_print_digest(const UINT8 digest[32])
     for (index = 0u; index < 32u; index++) { con_print_hex(digest[index], 2u); }
 }
 
+#if IB_FIRMWARE_STORAGE_PROBE
+static efi_storage_probe_state_t g_storage_probe;
+static int g_storage_probe_started;
+static int g_storage_probe_failure_sampled;
+
+static void con_print_storage_probe(const efi_storage_probe_result_t *result)
+{
+    con_print(L"storage probe[");
+    con_print(efi_storage_probe_stage_name(result->Stage));
+    con_print(L"] reason=");
+    con_print(efi_storage_probe_reason_name(result->Reason));
+    con_print(L" status=0x"); con_print_hex(result->EffectiveStatus, 16u);
+    con_print(L"\r\nloaded=0x"); con_print_hex(result->HandleLoadedImageStatus, 16u);
+    con_print(L" block_io=0x"); con_print_hex(result->HandleBlockIoStatus, 16u);
+    con_print(L" allocate=0x"); con_print_hex(result->AllocateStatus, 16u);
+    con_print(L"\r\nread_attempted="); con_print_hex(result->ReadAttempted, 1u);
+    con_print(L" read=0x"); con_print_hex(result->ReadStatus, 16u);
+    con_print(L" hash_valid="); con_print_hex(result->DigestValid, 1u);
+    con_print(L"\r\nmedia_valid="); con_print_hex(result->MediaSnapshotValid, 1u);
+    con_print(L" media_id=0x"); con_print_hex(result->MediaId, 8u);
+    con_print(L" block_size=0x"); con_print_hex(result->BlockSize, 8u);
+    con_print(L" io_align=0x"); con_print_hex(result->IoAlign, 8u);
+    con_print(L"\r\nlast_lba=0x"); con_print_hex(result->LastBlock, 16u);
+    con_print(L" present="); con_print_hex(result->MediaPresent, 1u);
+    con_print(L" partition="); con_print_hex(result->LogicalPartition, 1u);
+    con_print(L"\r\nidentity_compared="); con_print_hex(result->MediaIdentityCompared, 1u);
+    con_print(L" identity_match="); con_print_hex(result->MediaIdentityMatch, 1u);
+    con_print(L" content_compared="); con_print_hex(result->ContentCompared, 1u);
+    con_print(L" content_match="); con_print_hex(result->ContentMatch, 1u);
+    if (result->DigestValid) {
+        con_print(L"\r\nblock_sha256="); con_print_digest(result->Digest);
+    }
+    con_print(L"\r\n");
+}
+
+static void con_print_storage_cpu_state(void)
+{
+#if defined(_MSC_VER) && defined(_M_X64)
+    int registers[4];
+    UINT64 flags = __readeflags();
+    /* This existing read-only health leaf is safe even when no payload is
+     * resident. Raw register values are evidence, not an activation verdict. */
+    __cpuidex(registers, 0x48565031, 0);
+    con_print(L"storage cpu: rflags=0x"); con_print_hex(flags, 16u);
+    con_print(L" health_eax=0x"); con_print_hex((UINT32)registers[0], 8u);
+    con_print(L" health_ebx=0x"); con_print_hex((UINT32)registers[1], 8u);
+    con_print(L"\r\nhealth_ecx=0x"); con_print_hex((UINT32)registers[2], 8u);
+    con_print(L" health_edx=0x"); con_print_hex((UINT32)registers[3], 8u);
+    con_print(L"\r\n");
+#endif
+}
+
+static void storage_probe_before_payload(EFI_HANDLE image_handle)
+{
+    efi_storage_probe_result_t result;
+    EFI_STATUS status = efi_storage_probe_prepare(
+        image_handle, &g_storage_probe, &result);
+    con_print_storage_probe(&result);
+    g_storage_probe_failure_sampled = 0;
+    g_storage_probe_started = status == EFI_SUCCESS;
+    if (g_storage_probe_started) {
+        con_print_storage_cpu_state();
+        con_print(L"storage probe[baseline] read_begin\r\n");
+        (void)efi_storage_probe_sample(
+            &g_storage_probe, EFI_STORAGE_PROBE_STAGE_BASELINE, &result);
+        con_print_storage_probe(&result);
+    }
+}
+
+static void storage_probe_after_volume_failure(const efi_file_io_trace_t *trace)
+{
+    efi_storage_probe_result_t result;
+    if (!g_storage_probe_started || g_storage_probe_failure_sampled ||
+        trace->Operation != EFI_FILE_IO_OPEN_VOLUME ||
+        !EFI_ERROR(trace->RawStatus)) {
+        return;
+    }
+    /* Preserve the first traced volume error before this independent block read.
+     * Never retry OpenVolume or create an extra diagnostic file here. */
+    g_storage_probe_failure_sampled = 1;
+    con_print_storage_cpu_state();
+    con_print(L"storage probe[post_filesystem_failure] read_begin\r\n");
+    (void)efi_storage_probe_sample(&g_storage_probe,
+        EFI_STORAGE_PROBE_STAGE_POST_FILESYSTEM_FAILURE, &result);
+    con_print_storage_probe(&result);
+    efi_storage_probe_release(&g_storage_probe);
+}
+#endif
+
 static void con_print_file_io_failure(const CHAR16 *label,
                                       const efi_file_io_trace_t *trace)
 {
@@ -286,6 +383,9 @@ static void con_print_file_io_failure(const CHAR16 *label,
     con_print(L" size_out=0x");
     con_print_hex((UINT64)trace->ObservedSize, 16u);
     con_print(L"\r\n");
+#if IB_FIRMWARE_STORAGE_PROBE
+    storage_probe_after_volume_failure(trace);
+#endif
 }
 
 static void write_diagnostic_verified(EFI_HANDLE image_handle,
@@ -368,6 +468,16 @@ static void observe_handoff(void *context, const char *phase,
     con_print_ascii_bytes(g_handoff_diagnostic + prior, g_handoff_diagnostic_size - prior);
     write_diagnostic_verified(observer->ImageHandle, g_status_path, L"handoff status",
         g_handoff_diagnostic, g_handoff_diagnostic_size);
+#if IB_FIRMWARE_STORAGE_PROBE
+    if (!completed && observer->ReadLabel != NULL &&
+        phase[0] == 's' && phase[1] == 't' && phase[2] == 'a' &&
+        phase[3] == 'r' && phase[4] == 't' && phase[5] == 0) {
+        /* Windows may not return from StartImage. Release the diagnostic
+         * buffer before that boundary, after the last pre-start status write. */
+        efi_storage_probe_release(&g_storage_probe);
+        g_storage_probe_started = 0;
+    }
+#endif
 }
 
 static payload_diagnostic_launch_t payload_diagnostic_launch_from_result(
@@ -509,6 +619,9 @@ static EFI_STATUS restore_and_handoff(EFI_HANDLE image_handle,
         status = efi_file_exists(image_handle, g_payload_path);
         if (status == EFI_SUCCESS) {
             payload_present = 1;
+#if IB_FIRMWARE_STORAGE_PROBE
+            storage_probe_before_payload(image_handle);
+#endif
             launch = image_launch_start_resident_diagnostic(
                 image_handle, g_payload_path, &child_status,
                 &startup_record, &launch_diagnostic_state);
@@ -598,6 +711,9 @@ static EFI_STATUS restore_and_handoff(EFI_HANDLE image_handle,
         image_handle, g_boot_manager_path, &child_status, observe_handoff,
         &boot_observer, &boot_manager_read_trace);
     observe_handoff(&boot_observer, "return", TRUE, child_status);
+#if IB_FIRMWARE_STORAGE_PROBE
+    efi_storage_probe_release(&g_storage_probe);
+#endif
     if (launch != IMAGE_LAUNCH_OK) {
         con_print(L"loader production handoff: FAIL (boot manager launch)\r\n");
         return child_status;

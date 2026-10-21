@@ -1,5 +1,26 @@
 # Intel UHD 770 bare-metal diagnostic runbook
 
+## Current checkpoint: run 160027 requires recovery completion
+
+Run `gpu-20261021T160027Z-672213bf26314f69990e6d2305c55fff` collected a health
+failure. Its video identifies the first failure as firmware `OpenVolume`
+returning `EFI_TIMEOUT` after payload startup reported success on all 20 CPUs.
+Later volume opens returned `EFI_DEVICE_ERROR`. Rollback has succeeded with
+`RECOVERY_PENDING_USER_POWER_CYCLE`; complete the manual power cycle and run
+`FinalVerify` before archiving or preparing another run. Older fixed review
+and retirement profiles below do not apply to this run.
+
+The investigation found an unchecked PCI bus-master restoration path and
+reproduced its false-success behavior with a host fixture. The update verifies
+command-register readback and adds an optional, bounded Block I/O discriminator.
+It is not yet a demonstrated fix for this host. See the
+[current evidence, diagnostic scope and validation](GPU_PAYLOAD_FAILURE_INVESTIGATION.md#run-160027-volume-open-fails-after-successful-payload-return).
+The `062106` cleanup commands below are historical; do not use them for the
+retained `160027` stage. A fresh run must wait for this run's completed recovery
+and ownership-reviewed stage retirement.
+
+## Previous checkpoint: run 062106
+
 This procedure runs the physical-host GPU diagnostic and records where the
 payload-to-Windows handoff fails. It is not a VM test. Run
 `gpu-20261021T062106Z-d7c2add0ddc44d0fb3b06badc7018942` completed
@@ -35,7 +56,7 @@ The Windows System-log query for 06:00-07:20 UTC on October 21 found no
 storage, WHEA, audio, or device warnings/errors among its matching providers.
 Windows logs do not establish pre-OS device health or explain the EFI failure.
 
-## Current cleanup: archive and retire run 062106
+## Historical cleanup: archive and retire run 062106
 
 Use elevated 64-bit Windows PowerShell from the main workspace. Archive the
 completed run before starting another run. Then capture fresh readiness and,

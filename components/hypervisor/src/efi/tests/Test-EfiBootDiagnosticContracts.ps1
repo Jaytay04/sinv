@@ -79,6 +79,8 @@ $failStop = $physicalIommu.IndexOf('HvEfiFailStop();', [StringComparison]::Ordin
 $freePlan = $physicalIommu.IndexOf('gBS->FreePool(denied);', [StringComparison]::Ordinal)
 Assert-True ($installResult -gt $previousOperation -and $failStop -gt $installResult -and $freePlan -gt $failStop) `
     'Runtime IOMMU cause must be captured before fail-stop or plan cleanup.'
+Assert-True ($physicalIommu -match 'if \(iommuStatus == HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED \|\|\s*state->Runtime.State == HV_EFI_IOMMU_RUNTIME_ENABLED') `
+    'Unverified PCI restoration must fail-stop even when remapper activation has not begun.'
 $capabilityResult = $physicalIommu.IndexOf('hv_efi_boot_diagnostic_iommu_capability_detail(', [StringComparison]::Ordinal)
 Assert-True ($capabilityResult -gt $installResult -and $capabilityResult -lt $failStop -and
     $physicalIommu -match 'installDiagnostic\.Stage == HV_EFI_IOMMU_INSTALL_STAGE_PROGRAM_PLAN' -and

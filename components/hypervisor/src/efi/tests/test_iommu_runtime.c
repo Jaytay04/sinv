@@ -1225,7 +1225,13 @@ static int TestRootDeviceDomain(void)
 typedef struct TEST_PCI_ECAM {
     uint16_t Commands[2];
     uint32_t Writes;
+    uint32_t CommandReads;
     uint32_t FailWrite;
+    uint32_t FailWriteOrdinalSecondary;
+    uint32_t IgnoreWriteOrdinal;
+    uint32_t WrongWriteOrdinal;
+    uint16_t WrongWriteXor;
+    uint32_t FailCommandReadOrdinal;
 } TEST_PCI_ECAM;
 
 static uint32_t TestPciRead16(
@@ -1245,6 +1251,11 @@ static uint32_t TestPciRead16(
             return 1;
         }
         if (address == functionBase + 4) {
+            ++ecam->CommandReads;
+            if (ecam->FailCommandReadOrdinal != 0 &&
+                ecam->CommandReads == ecam->FailCommandReadOrdinal) {
+                return 0;
+            }
             *value = ecam->Commands[index];
             return 1;
         }
@@ -1259,13 +1270,25 @@ static uint32_t TestPciWrite16(
     TEST_PCI_ECAM *ecam = (TEST_PCI_ECAM *)context;
     uint32_t index;
     ++ecam->Writes;
-    if (ecam->FailWrite != 0 && ecam->Writes == ecam->FailWrite) {
+    if ((ecam->FailWrite != 0 && ecam->Writes == ecam->FailWrite) ||
+        (ecam->FailWriteOrdinalSecondary != 0 &&
+         ecam->Writes == ecam->FailWriteOrdinalSecondary)) {
         return 0;
     }
     for (index = 0; index < 2; ++index) {
         const uint64_t commandAddress = UINT64_C(0xe0000004) +
             (uint64_t)(index + 1) * UINT64_C(0x8000);
         if (address == commandAddress) {
+            if (ecam->IgnoreWriteOrdinal != 0 &&
+                ecam->Writes == ecam->IgnoreWriteOrdinal) {
+                return 1;
+            }
+            if (ecam->WrongWriteOrdinal != 0 &&
+                ecam->Writes == ecam->WrongWriteOrdinal) {
+                ecam->Commands[index] =
+                    value ^ ecam->WrongWriteXor;
+                return 1;
+            }
             ecam->Commands[index] = value;
             return 1;
         }
@@ -1654,6 +1677,106 @@ static int TestMcfgPciQuiesce(void)
                 stateCount == 0 && ecam.Commands[0] == 7 &&
                 ecam.Commands[1] == 5,
                 "partial PCI quiesce failure rolls prior device state back");
+
+    TestZero(&ecam, sizeof(ecam));
+    ecam.Commands[0] = 7;
+    ecam.IgnoreWriteOrdinal = 1;
+    TEST_ASSERT(HvEfiIommuQuiescePciBusMasters(
+                    segments, segmentCount, &callbacks,
+                    states, 2, &stateCount) ==
+                    HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED &&
+                stateCount == 0 && ecam.Commands[0] == 7,
+                "acknowledged but ignored bus-master clear fails readback and is rolled back");
+
+    TestZero(&ecam, sizeof(ecam));
+    ecam.Commands[0] = 7;
+    ecam.WrongWriteOrdinal = 1;
+    ecam.WrongWriteXor = 2;
+    TEST_ASSERT(HvEfiIommuQuiescePciBusMasters(
+                    segments, segmentCount, &callbacks,
+                    states, 2, &stateCount) ==
+                    HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED &&
+                stateCount == 0 && ecam.Commands[0] == 7,
+                "quiesce readback rejects changed non-BME command bits and restores the original command");
+
+    TestZero(&ecam, sizeof(ecam));
+    ecam.Commands[0] = 7;
+    ecam.FailCommandReadOrdinal = 4;
+    TEST_ASSERT(HvEfiIommuQuiescePciBusMasters(
+                    segments, segmentCount, &callbacks,
+                    states, 2, &stateCount) ==
+                    HV_EFI_IOMMU_RUNTIME_CALLBACK_FAILED &&
+                stateCount == 0 && ecam.Commands[0] == 7,
+                "quiesce readback callback failure is reported after successful rollback");
+
+    TestZero(&ecam, sizeof(ecam));
+    ecam.Commands[0] = 7;
+    TEST_ASSERT(HvEfiIommuQuiescePciBusMasters(
+                    segments, segmentCount, &callbacks,
+                    states, 2, &stateCount) == HV_EFI_IOMMU_RUNTIME_OK &&
+                stateCount == 1 && ecam.Commands[0] == 3,
+                "single PCI bus master reaches a verified quiesced state");
+    ecam.IgnoreWriteOrdinal = ecam.Writes + 1;
+    TEST_ASSERT(HvEfiIommuRestorePciBusMasters(
+                    &callbacks, states, stateCount) ==
+                    HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED &&
+                states[0].Restored == 0 && ecam.Commands[0] == 3,
+                "acknowledged but ignored restore remains unverified and retryable");
+    ecam.IgnoreWriteOrdinal = 0;
+    ecam.FailCommandReadOrdinal = ecam.CommandReads + 1;
+    TEST_ASSERT(HvEfiIommuRestorePciBusMasters(
+                    &callbacks, states, stateCount) ==
+                    HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED &&
+                states[0].Restored == 0 && ecam.Commands[0] == 7,
+                "restore readback callback failure does not claim restoration");
+    ecam.FailCommandReadOrdinal = 0;
+    ecam.WrongWriteOrdinal = ecam.Writes + 1;
+    ecam.WrongWriteXor = 2;
+    TEST_ASSERT(HvEfiIommuRestorePciBusMasters(
+                    &callbacks, states, stateCount) ==
+                    HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED &&
+                states[0].Restored == 0 && ecam.Commands[0] == 5,
+                "restore readback rejects an acknowledged wrong command value");
+    ecam.WrongWriteOrdinal = 0;
+    TEST_ASSERT(HvEfiIommuRestorePciBusMasters(
+                    &callbacks, states, stateCount) ==
+                    HV_EFI_IOMMU_RUNTIME_OK &&
+                states[0].Restored != 0 && ecam.Commands[0] == 7,
+                "failed restore evidence remains retryable until full command matches");
+
+    TestZero(&ecam, sizeof(ecam));
+    ecam.Commands[0] = 7;
+    ecam.Commands[1] = 5;
+    ecam.FailWrite = 2;
+    ecam.FailWriteOrdinalSecondary = 4;
+    TEST_ASSERT(HvEfiIommuQuiescePciBusMasters(
+                    segments, segmentCount, &callbacks,
+                    states, 2, &stateCount) ==
+                    HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED &&
+                stateCount == 2 && states[0].Restored == 0 &&
+                states[1].Restored != 0 && ecam.Commands[0] == 3 &&
+                ecam.Commands[1] == 5,
+                "partial quiesce cleanup failure preserves un-restored state and count");
+    ecam.FailWrite = 0;
+    ecam.FailWriteOrdinalSecondary = 0;
+    TEST_ASSERT(HvEfiIommuRestorePciBusMasters(
+                    &callbacks, states, stateCount) ==
+                    HV_EFI_IOMMU_RUNTIME_OK &&
+                states[0].Restored != 0 && states[1].Restored != 0 &&
+                ecam.Commands[0] == 7 && ecam.Commands[1] == 5,
+                "retained partial quiesce records permit explicit cleanup retry");
+
+    TestZero(&ecam, sizeof(ecam));
+    ecam.Commands[0] = 1;
+    ecam.Commands[1] = 2;
+    TEST_ASSERT(HvEfiIommuQuiescePciBusMasters(
+                    segments, segmentCount, &callbacks,
+                    states, 2, &stateCount) == HV_EFI_IOMMU_RUNTIME_OK &&
+                stateCount == 0 && ecam.Writes == 0 &&
+                HvEfiIommuRestorePciBusMasters(
+                    &callbacks, states, stateCount) ==
+                    HV_EFI_IOMMU_RUNTIME_OK,
+                "PCI inventory with no bus masters requires no writes or restore");
     return 0;
 }
 
@@ -1802,6 +1925,82 @@ static int TestInjectedIsolationOrchestration(void)
                 mmio.Writes == 0 && mmio.DmaQuiesced == 0 &&
                 ecam.Commands[0] == 7 && ecam.Commands[1] == 5,
                 "quiesce callback failure is attributed before programming");
+
+    InitializeCallbacks(&mmio, &runtimeCallbacks);
+    mmio.DmaQuiesced = 0;
+    TestZero(&ecam, sizeof(ecam));
+    ecam.Commands[0] = 7;
+    ecam.Commands[1] = 5;
+    ecam.IgnoreWriteOrdinal = 1;
+    TEST_ASSERT(HvEfiIommuInstallRuntimeIsolationWithDiagnostic(
+                    &info, &configuration, 1, &ownership,
+                    &runtimeCallbacks, &storage, 8, &plan, &runtime,
+                    unitStates, 1, &segment, 1, &pciCallbacks, pciStates, 2,
+                    &pciStateCount, &mmio.DmaQuiesced, &diagnostic) ==
+                    HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED &&
+                diagnostic.Stage ==
+                    HV_EFI_IOMMU_INSTALL_STAGE_PCI_QUIESCE &&
+                diagnostic.PrimaryStatus ==
+                    HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED &&
+                diagnostic.FinalStatus ==
+                    HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED &&
+                mmio.Writes == 0 && mmio.DmaQuiesced == 0 &&
+                ecam.Commands[0] == 7 && ecam.Commands[1] == 5,
+                "acknowledged ignored clear is a PCI quiesce audit failure before installer programming");
+
+    InitializeCallbacks(&mmio, &runtimeCallbacks);
+    mmio.DmaQuiesced = 0;
+    TestZero(&ecam, sizeof(ecam));
+    ecam.Commands[0] = 7;
+    ecam.Commands[1] = 5;
+    ecam.IgnoreWriteOrdinal = 1;
+    ecam.FailWrite = 2;
+    TEST_ASSERT(HvEfiIommuInstallRuntimeIsolationWithDiagnostic(
+                    &info, &configuration, 1, &ownership,
+                    &runtimeCallbacks, &storage, 8, &plan, &runtime,
+                    unitStates, 1, &segment, 1, &pciCallbacks, pciStates, 2,
+                    &pciStateCount, &mmio.DmaQuiesced, &diagnostic) ==
+                    HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED &&
+                diagnostic.Stage ==
+                    HV_EFI_IOMMU_INSTALL_STAGE_PCI_QUIESCE &&
+                diagnostic.PrimaryStatus ==
+                    HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED &&
+                diagnostic.FinalStatus ==
+                    HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED &&
+                pciStateCount == 1 && pciStates[0].Restored == 0 &&
+                runtime.State == HV_EFI_IOMMU_RUNTIME_RESET &&
+                mmio.DmaQuiesced == 0 && ecam.Commands[0] == 7 &&
+                ecam.Commands[1] == 5,
+                "installer retains failed quiesce cleanup evidence and reports PCI_QUIESCE rollback failure");
+    ecam.IgnoreWriteOrdinal = 0;
+    ecam.FailWrite = 0;
+    TEST_ASSERT(HvEfiIommuRestorePciBusMasters(
+                    &pciCallbacks, pciStates, pciStateCount) ==
+                    HV_EFI_IOMMU_RUNTIME_OK &&
+                pciStates[0].Restored != 0 && ecam.Commands[0] == 7,
+                "installer-retained PCI state supports verified explicit restore retry");
+
+    InitializeCallbacks(&mmio, &runtimeCallbacks);
+    mmio.DmaQuiesced = 0;
+    TestZero(&ecam, sizeof(ecam));
+    ecam.Commands[0] = 7;
+    ecam.Commands[1] = 5;
+    ecam.FailCommandReadOrdinal = 4;
+    TEST_ASSERT(HvEfiIommuInstallRuntimeIsolationWithDiagnostic(
+                    &info, &configuration, 1, &ownership,
+                    &runtimeCallbacks, &storage, 8, &plan, &runtime,
+                    unitStates, 1, &segment, 1, &pciCallbacks, pciStates, 2,
+                    &pciStateCount, &mmio.DmaQuiesced, &diagnostic) ==
+                    HV_EFI_IOMMU_RUNTIME_CALLBACK_FAILED &&
+                diagnostic.Stage ==
+                    HV_EFI_IOMMU_INSTALL_STAGE_PCI_QUIESCE &&
+                diagnostic.PrimaryStatus ==
+                    HV_EFI_IOMMU_RUNTIME_CALLBACK_FAILED &&
+                diagnostic.FinalStatus ==
+                    HV_EFI_IOMMU_RUNTIME_CALLBACK_FAILED &&
+                mmio.Writes == 0 && mmio.DmaQuiesced == 0 &&
+                ecam.Commands[0] == 7 && ecam.Commands[1] == 5,
+                "quiesce readback callback failure is attributed to PCI quiesce and rolled back");
 
     InitializeCallbacks(&mmio, &runtimeCallbacks);
     mmio.DmaQuiesced = 0;

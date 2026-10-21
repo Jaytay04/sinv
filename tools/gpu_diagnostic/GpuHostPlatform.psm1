@@ -1260,7 +1260,8 @@ function Invoke-GpuBuild {
     $configureLoader = Invoke-GpuNativeCommand -Program $cmake -Arguments @(
         '-S', $loaderSource, '-B', $paths.LoaderBuild, '-G', 'Ninja',
         '-DCMAKE_BUILD_TYPE=Release', '-DCMAKE_OBJECT_PATH_MAX=220', '-DIB_STATIC_RUNTIME=ON',
-        '-DIB_QEMU_DEBUG_PORTS=OFF', '-DIB_PAYLOAD_REPLAY_INDEPENDENT=ON'
+        '-DIB_QEMU_DEBUG_PORTS=OFF', '-DIB_PAYLOAD_REPLAY_INDEPENDENT=ON',
+        '-DIB_FIRMWARE_STORAGE_PROBE=ON'
     ) -ActionDirectory $ActionDirectory -Label 'cmake-configure-loader'
     Assert-GpuNativeSuccess -Result $configureLoader -Description 'Loader CMake configure'
     $buildLoader = Invoke-GpuNativeCommand -Program $cmake -Arguments @('--build', $paths.LoaderBuild, '--parallel', '4') -ActionDirectory $ActionDirectory -Label 'cmake-build-loader'

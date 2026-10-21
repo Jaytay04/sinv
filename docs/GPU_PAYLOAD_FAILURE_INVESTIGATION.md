@@ -1,5 +1,92 @@
 # GPU diagnostic payload failure investigation
 
+## Run 160027: volume open fails after successful payload return
+
+Run `gpu-20261021T160027Z-672213bf26314f69990e6d2305c55fff` used source
+`1be532253d6c6cc428ae2d4588a4c6e7aacadb3e`. The operator's `IMG_6818.mov`
+(SHA-256 `5618F8683C58FDA5F1E739AE0F8E4D262F382CD00B3DA48ED4D3DCFCB4555B98`)
+shows payload launch `PASS`, startup stage `return`, status zero, 20 expected,
+prepared and VMX-ready CPUs, and zero preparation or activation failures.
+The new operation trace then records `payload diagnostic / open_volume` with
+raw and effective `EFI_TIMEOUT` (`0x8000000000000012`). Subsequent handoff-status
+writes and the loader's boot-manager image read fail at `open_volume` with
+raw and effective `EFI_DEVICE_ERROR` (`0x8000000000000007`). These statuses
+come directly from `EFI_SIMPLE_FILE_SYSTEM_PROTOCOL.OpenVolume`, before a
+file open, create, delete, read, write, flush, or boot-manager image launch.
+The size fields are zero because OpenVolume has no size argument.
+
+Collection found all 20 custom health signatures `ABSENT`, and both diagnostic
+files absent. All five collected staged-file hashes match their journal pins.
+Frame findings and hashes are retained in
+`.analysis/gpu-video-6818/findings.json`. The decoder reported 109 frames but
+decoded 96; the analyzed frames show the failures above, and no unobserved
+video tail or outer-shim message is asserted. The operator's rollback returned
+`RECOVERY_PENDING_USER_POWER_CYCLE`; final reset verification and archive
+were still pending at this investigation checkpoint.
+
+### Concrete verification defect and its causal limit
+
+The IOMMU installer disables bus mastering on discovered PCI functions and
+later restores their saved PCI Command values. Previously it trusted the
+write callback without reading back the register; the physical callback
+reports that a volatile ECAM store was issued. A new model fixture that
+acknowledges but ignores a command write reproduces a false success in the
+original implementation. This is a demonstrated verification defect. It
+could leave a storage controller unable to DMA, but the physical run captured
+neither the NVMe command register nor a post-failure VT-d fault record, so it
+does not prove this caused the timeout.
+
+The corrected quiesce and restore paths verify the complete command value.
+Restore marks a device restored only after matching readback and continues
+attempting the other saved devices on failure. An incomplete quiesce cleanup
+retains its state count and reports `ROLLBACK_FAILED`; the physical caller
+fail-stops instead of returning to firmware with unverified restoration,
+even if remapper activation never began. No retry or weakened isolation
+policy was added. Host fixtures cover dropped and incorrect writes, failed
+readbacks, partial cleanup, and installer-level failure attribution.
+
+Source review found no demonstrated missing mapping for ordinary EFI storage
+buffers, unconditional BSP interrupt interception, TSC offset, or firmware
+return ABI mismatch that explains the captured failure. These negative
+findings are not hardware attestations. Firmware queues, DMA addresses,
+interrupt activity, and post-failure VT-d FSTS/FRCD were not captured.
+The loader has no existing safe interface for those root-only fault registers;
+reading their guest-denied MMIO directly would enter the fatal EPT path.
+
+### Bounded storage discriminator
+
+The diagnostic host Build now enables `IB_FIRMWARE_STORAGE_PROBE=ON`; the
+component's default remains OFF. After confirming the payload file exists,
+the loader resolves Block I/O on its own loaded-image device handle and
+allocates an aligned buffer before payload launch. It reads one logical
+block at partition-local LBA 0 for a baseline, then makes at most one further
+read after its first **traced** OpenVolume failure returns through the file
+helper's existing cleanup, before the loader starts another filesystem
+operation. It preserves the original filesystem error first.
+There is no device enumeration, fallback, reset, write, flush, or read retry.
+
+Console records include media identity and geometry, raw statuses, exact-success
+hashes, comparison validity flags, BSP RFLAGS, and raw results from the existing
+health CPUID leaf. Changed device/protocol/media identity prevents the second
+read. Failed or warning reads never produce a valid digest. The buffer is
+released after the failure sample, or before boot-manager StartImage if no
+sample was needed. The probe does not cover earlier untraced existence checks
+or filesystem calls inside a child image. A successful block read is not proof
+of uncached hardware access or working DMA/interrupt delivery; the two samples
+only narrow the failing layer. The extra read can change timing and cache state.
+The private protocol declarations follow the
+[EDK II Block I/O interface](https://github.com/tianocore/edk2/blob/master/MdePkg/Include/Protocol/BlockIo.h).
+
+Both unsigned EFI images built. All 52 hypervisor host checks and all 32 loader
+host tests passed, including the new storage probe test; the hypervisor's
+55,478-byte `.hvscan` audit passed. The PCI regression failed for the intended
+ignored-write case against the committed original implementation and passed
+against the correction. Independent source review checked the readback/cleanup
+and storage-probe contracts. No VM, EFI execution, signing, staging, firmware
+write, or live privileged test was performed. The host's underlying failure
+remains unconfirmed; this update closes a false-success path and adds evidence
+for a later controlled observation.
+
 ## Seventh physical run: AP preparation succeeds; later image start reports Device Error
 
 Run `gpu-20261021T042142Z-8137a024c456457b840ce906358bbac2` used source
