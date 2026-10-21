@@ -253,7 +253,9 @@ full-system backup.
 ## Validation of this guide
 
 The 042142 retirement proof matched all 47 saved evidence pins without changing
-the archived journal, selector, or result. The static build and 14 related host
-test suites passed, including the new five-file retirement fixture. All 23
+the archived journal, selector, or result. The static build passed, and all 48
+hypervisor host tests passed after updating the dispatcher fixture's allowlist
+for the local 042142 entry-journal helper. This includes the new five-file
+retirement fixture. All 23
 PowerShell command blocks parsed successfully. This validation did not start a
 VM, mount the ESP, retire files, or change firmware or boot selection.
