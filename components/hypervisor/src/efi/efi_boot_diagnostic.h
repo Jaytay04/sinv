@@ -69,6 +69,39 @@ static inline uint32_t hv_efi_boot_diagnostic_iommu_detail(
         (installStage << 16) | (primaryStatus << 8) | finalStatus;
 }
 
+/* Capability-rejection details use substeps 32..63. The substep is
+ * 32 + unitIndex * 4 + (failure - 1), where failure is VERSION/SAGAW/MGAW/
+ * SLLPS (1..4). PROGRAM_PLAN and primary REMAPPING_UNSUPPORTED are implicit.
+ * Bits 23:19 retain the final runtime result, bit 18 selects requested AGAW
+ * 48 (otherwise 39), bit 17 is CAP.SLLPS 2MiB support, bits 16:11 are encoded
+ * CAP.MGAW (add 1), bits 10:6 are CAP.SAGAW, bits 5:2 are VER major, and
+ * bits 1:0 are reserved. Unrepresentable observations retain the old detail
+ * instead of truncating a unit index or cleanup result. The 80-byte ABI and
+ * all older detail encodings remain unchanged. */
+#define HV_EFI_BOOT_DIAGNOSTIC_IOMMU_CAPABILITY_BASE UINT32_C(32)
+static inline uint32_t hv_efi_boot_diagnostic_iommu_capability_detail(
+    uint32_t unitIndex, uint32_t failure, uint32_t requestedAddressBits,
+    uint64_t version, uint64_t capability, uint32_t finalStatus)
+{
+    const uint32_t fallback = hv_efi_boot_diagnostic_iommu_detail(
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_RUNTIME_INSTALL, 3, 11, finalStatus);
+    uint32_t substep;
+    if (unitIndex >= 8 || failure < 1 || failure > 4 ||
+        (requestedAddressBits != 39 && requestedAddressBits != 48) ||
+        finalStatus == 0 || finalStatus > 31) {
+        return fallback;
+    }
+    substep = HV_EFI_BOOT_DIAGNOSTIC_IOMMU_CAPABILITY_BASE +
+        unitIndex * 4 + failure - 1;
+    return HV_EFI_BOOT_DIAGNOSTIC_IOMMU_TAG | (substep << 24) |
+        (finalStatus << 19) |
+        (requestedAddressBits == 48 ? UINT32_C(1) << 18 : 0) |
+        ((capability & (UINT64_C(1) << 34)) != 0 ? UINT32_C(1) << 17 : 0) |
+        ((uint32_t)((capability >> 16) & UINT64_C(0x3f)) << 11) |
+        ((uint32_t)((capability >> 8) & UINT64_C(0x1f)) << 6) |
+        ((uint32_t)((version >> 4) & UINT64_C(0x0f)) << 2);
+}
+
 typedef struct {
     uint32_t Processor;
     uint32_t Detail;

@@ -2805,6 +2805,17 @@ static EFI_STATUS HvEfiPreparePhysicalIommu(
     HvEfiBootDiagnosticSetIommu(
         HV_EFI_BOOT_DIAGNOSTIC_IOMMU_RUNTIME_INSTALL, installDiagnostic.Stage,
         installDiagnostic.PrimaryStatus, installDiagnostic.FinalStatus);
+    if (installDiagnostic.Stage == HV_EFI_IOMMU_INSTALL_STAGE_PROGRAM_PLAN &&
+        installDiagnostic.PrimaryStatus ==
+            HV_EFI_IOMMU_RUNTIME_REMAPPING_UNSUPPORTED &&
+        installDiagnostic.CapabilityFailure !=
+            HV_EFI_IOMMU_CAPABILITY_FAILURE_NONE) {
+        HvEfiBootDiagnosticSetDetail(
+            hv_efi_boot_diagnostic_iommu_capability_detail(
+                installDiagnostic.UnitIndex, installDiagnostic.CapabilityFailure,
+                installDiagnostic.RequestedAddressBits, installDiagnostic.Version,
+                installDiagnostic.Capability, installDiagnostic.FinalStatus));
+    }
     if (iommuStatus != HV_EFI_IOMMU_RUNTIME_OK) {
         /* Never return into generic allocation cleanup while a unit may
          * still reference resident tables that cleanup would release. */

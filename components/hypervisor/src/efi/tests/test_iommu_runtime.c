@@ -13,6 +13,8 @@
 #define TEST_DRHD_BASE UINT64_C(0xfed90000)
 
 typedef struct TEST_MMIO {
+    uint64_t CapabilityValues[2];
+    uint64_t VersionValues[2];
     uint64_t Root;
     uint64_t Iqa;
     uint64_t Iqt;
@@ -20,6 +22,10 @@ typedef struct TEST_MMIO {
     uint32_t Status;
     uint32_t Faults;
     uint32_t Writes;
+    uint32_t Reads;
+    uint32_t FailReadOrdinal;
+    uint32_t CapabilityOverrideMask;
+    uint32_t VersionOverrideMask;
     uint32_t Invalidations;
     uint32_t FailWriteOrdinal;
     uint32_t FailWriteOrdinalSecondary;
@@ -173,15 +179,29 @@ static uint32_t TestRead(
 {
     TEST_MMIO *mmio = (TEST_MMIO *)context;
     uint64_t offset;
+    uint32_t unitIndex;
+    ++mmio->Reads;
+    if (mmio->FailReadOrdinal != 0 &&
+        mmio->Reads == mmio->FailReadOrdinal) {
+        return 0;
+    }
     if (value == NULL || address < TEST_DRHD_BASE) {
         return 0;
     }
-    offset = address - TEST_DRHD_BASE;
+    unitIndex = (uint32_t)((address - TEST_DRHD_BASE) / UINT64_C(0x1000));
+    if (unitIndex >= 2) {
+        return 0;
+    }
+    offset = (address - TEST_DRHD_BASE) % UINT64_C(0x1000);
     if (offset == 0 && width == 4) {
-        *value = UINT64_C(0x10);
+        *value = (mmio->VersionOverrideMask & (UINT32_C(1) << unitIndex)) != 0 ?
+            mmio->VersionValues[unitIndex] : UINT64_C(0x10);
     } else if (offset == 8 && width == 8) {
-        *value = (UINT64_C(1) << (8 + 1)) |
-            (UINT64_C(47) << 16) | (UINT64_C(1) << 34);
+        *value = (mmio->CapabilityOverrideMask &
+                  (UINT32_C(1) << unitIndex)) != 0 ?
+            mmio->CapabilityValues[unitIndex] :
+            ((UINT64_C(1) << (8 + 1)) |
+             (UINT64_C(47) << 16) | (UINT64_C(1) << 34));
     } else if (offset == 0x10 && width == 8) {
         *value = (UINT64_C(1) << 1) |
             (UINT64_C(1) << 3) |
@@ -1083,6 +1103,245 @@ static uint32_t TestPciWrite16(
     return 0;
 }
 
+static HV_EFI_IOMMU_RUNTIME_STATUS RunCapabilityDiagnosticInstall(
+    HV_EFI_IOMMU_DMAR_INFO *info,
+    HV_EFI_IOMMU_UNIT_CONFIGURATION *configurations,
+    uint32_t unitCount,
+    TEST_MMIO *mmio,
+    HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic,
+    uint32_t failPciRestore)
+{
+    HV_EFI_IOMMU_OWNERSHIP_POLICY ownership;
+    HV_EFI_IOMMU_RUNTIME_CALLBACKS runtimeCallbacks;
+    HV_EFI_IOMMU_PCI_CALLBACKS pciCallbacks;
+    HV_EFI_IOMMU_UNIT_PROGRAM programs[2];
+    HV_EFI_IOMMU_MMIO_OPERATION operations[24];
+    HV_EFI_IOMMU_PROGRAM_STORAGE storage;
+    HV_EFI_IOMMU_PROGRAM_PLAN plan;
+    HV_EFI_IOMMU_UNIT_RUNTIME_STATE unitStates[2];
+    HV_EFI_IOMMU_RUNTIME runtime;
+    HV_EFI_IOMMU_MCFG_SEGMENT segment;
+    HV_EFI_IOMMU_PCI_COMMAND_STATE pciStates[2];
+    TEST_PCI_ECAM ecam;
+    uint32_t pciStateCount = 0;
+
+    info->UnitCount = unitCount;
+    for (uint32_t index = 0; index < unitCount; ++index) {
+        TestZero(&configurations[index], sizeof(configurations[index]));
+        configurations[index].RootTablePhysical =
+            UINT64_C(0x400000) + (uint64_t)index * UINT64_C(0x1000);
+        configurations[index].AddressBits = 39;
+    }
+    TestZero(&ownership, sizeof(ownership));
+    ownership.Mode = HV_EFI_IOMMU_OWNERSHIP_EPT_TRAPPED;
+    ownership.DmarMmioGuestDenied = 1;
+    ownership.RemappingTablesGuestDenied = 1;
+    ownership.RemappingTablesDmaDenied = 1;
+    ownership.ContinuousAuditEnabled = 1;
+    ownership.RequireDmaQuiesce = 1;
+    ownership.OwnerToken = UINT64_C(0x12345678);
+    mmio->OwnershipHeld = 1;
+    mmio->DmaQuiesced = 1;
+    runtimeCallbacks.Context = mmio;
+    runtimeCallbacks.Read = TestRead;
+    runtimeCallbacks.Write = TestWrite;
+    runtimeCallbacks.Invalidate = TestInvalidate;
+    runtimeCallbacks.OwnershipHeld = TestOwnership;
+    runtimeCallbacks.DmaQuiesced = TestQuiesced;
+    storage.Units = programs;
+    storage.UnitCapacity = 2;
+    storage.Operations = operations;
+    storage.OperationCapacity = 24;
+    TestZero(&ecam, sizeof(ecam));
+    if (failPciRestore != 0) {
+        ecam.Commands[0] = 7;
+        ecam.FailWrite = 2;
+    }
+    pciCallbacks.Context = &ecam;
+    pciCallbacks.Read16 = TestPciRead16;
+    pciCallbacks.Write16 = TestPciWrite16;
+    segment.EcamBase = UINT64_C(0xe0000000);
+    segment.Segment = 0;
+    segment.StartBus = 0;
+    segment.EndBus = 0;
+    return HvEfiIommuInstallRuntimeIsolationWithDiagnostic(
+        info, configurations, unitCount, &ownership, &runtimeCallbacks,
+        &storage, 8, &plan, &runtime, unitStates, unitCount,
+        &segment, 1, &pciCallbacks, pciStates, 2, &pciStateCount,
+        &mmio->DmaQuiesced, diagnostic);
+}
+
+static void SetCapabilityDiagnosticSentinel(
+    HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic)
+{
+    diagnostic->Stage = UINT32_MAX;
+    diagnostic->PrimaryStatus = UINT32_MAX;
+    diagnostic->FinalStatus = UINT32_MAX;
+    diagnostic->CapabilityFailure = UINT32_MAX;
+    diagnostic->UnitIndex = 0;
+    diagnostic->RequestedAddressBits = UINT32_MAX;
+    diagnostic->Version = UINT64_MAX;
+    diagnostic->Capability = UINT64_MAX;
+}
+
+static int TestCapabilityFailureDiagnostics(void)
+{
+    uint8_t image[0x4000];
+    HV_EFI_IOMMU_DMAR_UNIT units[2];
+    HV_EFI_IOMMU_DMAR_RMRR rmrrs[2];
+    HV_EFI_IOMMU_DMAR_SCOPE scopes[4];
+    HV_EFI_IOMMU_DEVICE_PATH_ELEMENT paths[4];
+    HV_EFI_IOMMU_DMAR_INFO info;
+    HV_EFI_IOMMU_UNIT_CONFIGURATION configurations[2];
+    HV_EFI_IOMMU_INSTALL_DIAGNOSTIC diagnostic;
+    TEST_MMIO mmio;
+    const uint64_t validCapability =
+        (UINT64_C(1) << 9) | (UINT64_C(47) << 16) | (UINT64_C(1) << 34);
+    const uint64_t sagawFailureCapability =
+        (UINT64_C(1) << 10) | (UINT64_C(47) << 16) | (UINT64_C(1) << 34);
+    const uint64_t mgawFailureCapability =
+        (UINT64_C(1) << 9) | (UINT64_C(37) << 16) | (UINT64_C(1) << 34);
+    const uint64_t sllpsFailureCapability =
+        (UINT64_C(1) << 9) | (UINT64_C(47) << 16);
+
+    TEST_ASSERT(ParseFixture(image, &info, units, rmrrs, scopes, paths),
+                "capability diagnostics fixture DMAR parses");
+    TestZero(&mmio, sizeof(mmio));
+    mmio.VersionOverrideMask = 1;
+    mmio.VersionValues[0] = 0;
+    mmio.CapabilityOverrideMask = 1;
+    mmio.CapabilityValues[0] = sagawFailureCapability;
+    SetCapabilityDiagnosticSentinel(&diagnostic);
+    TEST_ASSERT(RunCapabilityDiagnosticInstall(
+                    &info, configurations, 1, &mmio, &diagnostic, 0) ==
+                    HV_EFI_IOMMU_RUNTIME_REMAPPING_UNSUPPORTED &&
+                diagnostic.Stage ==
+                    HV_EFI_IOMMU_INSTALL_STAGE_PROGRAM_PLAN &&
+                diagnostic.PrimaryStatus ==
+                    HV_EFI_IOMMU_RUNTIME_REMAPPING_UNSUPPORTED &&
+                diagnostic.FinalStatus ==
+                    HV_EFI_IOMMU_RUNTIME_REMAPPING_UNSUPPORTED &&
+                diagnostic.CapabilityFailure ==
+                    HV_EFI_IOMMU_CAPABILITY_FAILURE_VERSION &&
+                diagnostic.UnitIndex == 0 &&
+                diagnostic.RequestedAddressBits == 39 &&
+                diagnostic.Version == 0 &&
+                diagnostic.Capability == sagawFailureCapability &&
+                mmio.Writes == 0,
+        "version gate precedes SAGAW and records raw evidence before programming");
+
+    TestZero(&mmio, sizeof(mmio));
+    mmio.CapabilityOverrideMask = 1;
+    mmio.CapabilityValues[0] = sagawFailureCapability;
+    TEST_ASSERT(RunCapabilityDiagnosticInstall(
+                    &info, configurations, 1, &mmio, &diagnostic, 0) ==
+                    HV_EFI_IOMMU_RUNTIME_REMAPPING_UNSUPPORTED &&
+                diagnostic.CapabilityFailure ==
+                    HV_EFI_IOMMU_CAPABILITY_FAILURE_SAGAW &&
+                diagnostic.UnitIndex == 0 &&
+                diagnostic.RequestedAddressBits == 39 &&
+                diagnostic.Version == UINT64_C(0x10) &&
+                diagnostic.Capability == sagawFailureCapability &&
+                mmio.Writes == 0,
+                "SAGAW failure records the observed unit and raw capability");
+
+    TestZero(&mmio, sizeof(mmio));
+    mmio.CapabilityOverrideMask = 1;
+    mmio.CapabilityValues[0] = mgawFailureCapability;
+    TEST_ASSERT(RunCapabilityDiagnosticInstall(
+                    &info, configurations, 1, &mmio, &diagnostic, 0) ==
+                    HV_EFI_IOMMU_RUNTIME_REMAPPING_UNSUPPORTED &&
+                diagnostic.CapabilityFailure ==
+                    HV_EFI_IOMMU_CAPABILITY_FAILURE_MGAW &&
+                diagnostic.Capability == mgawFailureCapability &&
+                mmio.Writes == 0,
+                "MGAW failure is distinguished without runtime writes");
+
+    TestZero(&mmio, sizeof(mmio));
+    mmio.CapabilityOverrideMask = 1;
+    mmio.CapabilityValues[0] = sllpsFailureCapability;
+    TEST_ASSERT(RunCapabilityDiagnosticInstall(
+                    &info, configurations, 1, &mmio, &diagnostic, 0) ==
+                    HV_EFI_IOMMU_RUNTIME_REMAPPING_UNSUPPORTED &&
+                diagnostic.CapabilityFailure ==
+                    HV_EFI_IOMMU_CAPABILITY_FAILURE_SLLPS &&
+                diagnostic.Capability == sllpsFailureCapability &&
+                mmio.Writes == 0,
+                "SLLPS failure is distinguished without runtime writes");
+
+    units[1] = units[0];
+    units[1].RegisterBase += UINT64_C(0x1000);
+    TestZero(&mmio, sizeof(mmio));
+    mmio.CapabilityOverrideMask = 3;
+    mmio.CapabilityValues[0] = validCapability;
+    mmio.CapabilityValues[1] = mgawFailureCapability;
+    TEST_ASSERT(RunCapabilityDiagnosticInstall(
+                    &info, configurations, 2, &mmio, &diagnostic, 0) ==
+                    HV_EFI_IOMMU_RUNTIME_REMAPPING_UNSUPPORTED &&
+                diagnostic.CapabilityFailure ==
+                    HV_EFI_IOMMU_CAPABILITY_FAILURE_MGAW &&
+                diagnostic.UnitIndex == 1 &&
+                diagnostic.RequestedAddressBits == 39 &&
+                diagnostic.Version == UINT64_C(0x10) &&
+                diagnostic.Capability == mgawFailureCapability &&
+                mmio.Writes == 0,
+                "second DMAR unit rejection reports its exact index");
+
+    TestZero(&mmio, sizeof(mmio));
+    mmio.CapabilityOverrideMask = 1;
+    mmio.CapabilityValues[0] = sagawFailureCapability;
+    TEST_ASSERT(RunCapabilityDiagnosticInstall(
+                    &info, configurations, 1, &mmio, &diagnostic, 1) ==
+                    HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED &&
+                diagnostic.Stage ==
+                    HV_EFI_IOMMU_INSTALL_STAGE_PROGRAM_PLAN &&
+                diagnostic.PrimaryStatus ==
+                    HV_EFI_IOMMU_RUNTIME_REMAPPING_UNSUPPORTED &&
+                diagnostic.FinalStatus ==
+                    HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED &&
+                diagnostic.CapabilityFailure ==
+                    HV_EFI_IOMMU_CAPABILITY_FAILURE_SAGAW &&
+                mmio.Writes == 0,
+        "PCI restore overrides final status but preserves the primary capability failure");
+
+    TestZero(&mmio, sizeof(mmio));
+    mmio.CapabilityOverrideMask = 1;
+    mmio.CapabilityValues[0] = sagawFailureCapability;
+    mmio.FailReadOrdinal = 2;
+    TEST_ASSERT(RunCapabilityDiagnosticInstall(
+                    &info, configurations, 1, &mmio, &diagnostic, 0) ==
+                    HV_EFI_IOMMU_RUNTIME_CALLBACK_FAILED &&
+                diagnostic.Stage ==
+                    HV_EFI_IOMMU_INSTALL_STAGE_PROGRAM_PLAN &&
+                diagnostic.PrimaryStatus ==
+                    HV_EFI_IOMMU_RUNTIME_CALLBACK_FAILED &&
+                diagnostic.FinalStatus ==
+                    HV_EFI_IOMMU_RUNTIME_CALLBACK_FAILED &&
+                diagnostic.CapabilityFailure ==
+                    HV_EFI_IOMMU_CAPABILITY_FAILURE_NONE &&
+                diagnostic.UnitIndex == UINT32_MAX &&
+                diagnostic.RequestedAddressBits == 0 &&
+                diagnostic.Version == 0 && diagnostic.Capability == 0 &&
+                mmio.Writes == 0,
+                "incomplete register observation leaves capability evidence empty");
+
+    TestZero(&mmio, sizeof(mmio));
+    SetCapabilityDiagnosticSentinel(&diagnostic);
+    TEST_ASSERT(RunCapabilityDiagnosticInstall(
+                    &info, configurations, 1, &mmio, &diagnostic, 0) ==
+                    HV_EFI_IOMMU_RUNTIME_OK &&
+                diagnostic.Stage == HV_EFI_IOMMU_INSTALL_STAGE_COMPLETE &&
+                diagnostic.PrimaryStatus == HV_EFI_IOMMU_RUNTIME_OK &&
+                diagnostic.FinalStatus == HV_EFI_IOMMU_RUNTIME_OK &&
+                diagnostic.CapabilityFailure ==
+                    HV_EFI_IOMMU_CAPABILITY_FAILURE_NONE &&
+                diagnostic.UnitIndex == UINT32_MAX &&
+                diagnostic.RequestedAddressBits == 0 &&
+                diagnostic.Version == 0 && diagnostic.Capability == 0,
+                "a later successful install reinitializes all capability diagnostic fields");
+    return 0;
+}
+
 static int TestMcfgPciQuiesce(void)
 {
     uint8_t image[0x4000];
@@ -1356,6 +1615,7 @@ int main(void)
         TestLegacyIdentityDomain() != 0 ||
         TestRootDeviceDomain() != 0 ||
         TestMcfgPciQuiesce() != 0 ||
+        TestCapabilityFailureDiagnostics() != 0 ||
         TestInjectedIsolationOrchestration() != 0) {
         return 1;
     }

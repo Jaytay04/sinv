@@ -1,5 +1,13 @@
 # Manual Intel UHD 770 bare-metal test
 
+**Current state:** run `023306` completed FinalVerify and Archive after a VT-d
+capability rejection. Its retained stage is a new prerequisite for another
+run. The `-CompletedRun224018` commands below describe the preceding retirement
+and cannot remove `023306` files. A new retirement procedure must match that
+completed run before the forward steps can be repeated. The
+[latest investigation](GPU_PAYLOAD_FAILURE_INVESTIGATION.md#fifth-physical-run-vt-d-programming-plan-capability-rejection)
+records the result and the additional diagnostics prepared for a future run.
+
 This is the operator-run physical test you requested, using the existing
 `gpu-host-test.ps1` workflow. It is separate from the completed VM test.
 The agent has not staged, armed, rebooted, or changed the primary host for this

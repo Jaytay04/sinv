@@ -127,10 +127,21 @@ typedef enum HV_EFI_IOMMU_RUNTIME_STATUS {
 #define HV_EFI_IOMMU_INSTALL_STAGE_PCI_RESTORE UINT32_C(8)
 #define HV_EFI_IOMMU_INSTALL_STAGE_COMPLETE UINT32_C(9)
 
+#define HV_EFI_IOMMU_CAPABILITY_FAILURE_NONE UINT32_C(0)
+#define HV_EFI_IOMMU_CAPABILITY_FAILURE_VERSION UINT32_C(1)
+#define HV_EFI_IOMMU_CAPABILITY_FAILURE_SAGAW UINT32_C(2)
+#define HV_EFI_IOMMU_CAPABILITY_FAILURE_MGAW UINT32_C(3)
+#define HV_EFI_IOMMU_CAPABILITY_FAILURE_SLLPS UINT32_C(4)
+
 typedef struct HV_EFI_IOMMU_INSTALL_DIAGNOSTIC {
     uint32_t Stage;
     uint32_t PrimaryStatus;
     uint32_t FinalStatus;
+    uint32_t CapabilityFailure;
+    uint32_t UnitIndex;
+    uint32_t RequestedAddressBits;
+    uint64_t Version;
+    uint64_t Capability;
 } HV_EFI_IOMMU_INSTALL_DIAGNOSTIC;
 
 typedef struct HV_EFI_IOMMU_PHYSICAL_VIEW {

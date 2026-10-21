@@ -71,6 +71,11 @@ $failStop = $physicalIommu.IndexOf('HvEfiFailStop();', [StringComparison]::Ordin
 $freePlan = $physicalIommu.IndexOf('gBS->FreePool(denied);', [StringComparison]::Ordinal)
 Assert-True ($installResult -gt $previousOperation -and $failStop -gt $installResult -and $freePlan -gt $failStop) `
     'Runtime IOMMU cause must be captured before fail-stop or plan cleanup.'
+$capabilityResult = $physicalIommu.IndexOf('hv_efi_boot_diagnostic_iommu_capability_detail(', [StringComparison]::Ordinal)
+Assert-True ($capabilityResult -gt $installResult -and $capabilityResult -lt $failStop -and
+    $physicalIommu -match 'installDiagnostic\.Stage == HV_EFI_IOMMU_INSTALL_STAGE_PROGRAM_PLAN' -and
+    $physicalIommu -match 'installDiagnostic\.PrimaryStatus ==\s*HV_EFI_IOMMU_RUNTIME_REMAPPING_UNSUPPORTED') `
+    'Capability observations must be captured on the BSP after the matching failed plan and before cleanup.'
 Assert-True ($physicalIommu -match 'return EFI_ERROR\(status\) \? status :' -and
     [regex]::Matches($bspPrepare, 'return EFI_ERROR\(status\) \? status : EFI_ABORTED;').Count -eq 2) `
     'GPU/IOMMU EFI errors must survive AP preparation and its pool cleanup.'

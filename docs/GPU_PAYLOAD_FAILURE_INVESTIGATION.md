@@ -1,5 +1,96 @@
 # GPU diagnostic payload failure investigation
 
+## Fifth physical run: VT-d programming-plan capability rejection
+
+Run `gpu-20261021T023306Z-f33dfae1e322470ca9315bbbf8d49185` used clean source
+`49fbf270093f5e65a3f00fd63077b113d662f301`. Its collected 577-byte
+`esp-payload-diagnostic.txt` has SHA-256
+`32C75210326A2C0253270A5CDD38F17B0F9E83C6253F4BACC9814B212797BC36`.
+The operator did not see the diagnostic console, but the saved valid startup
+record reports payload entry, `ap_prepare`, all 20 CPUs prepared and VMX-ready,
+and `startup_detail=2298678027` (`0x89030B0B`). This decodes to IOMMU runtime
+installation (substep 9), programming-plan construction (stage 3), and
+`REMAPPING_UNSUPPORTED` (11) as both primary and final result. The payload
+returned `EFI_SECURITY_VIOLATION` (`0x800000000000001A`) from its own guard;
+firmware image loading had returned success. Activation status/failure are zero.
+
+The failing planner reads VER/CAP/ECAP/GSTS/RTADDR/FSTS before checking the
+remapper's version and capability fields. At this exact stage, status 11 can
+come from major version zero, absent support for the requested adjusted guest
+address width (SAGAW), insufficient maximum address width (MGAW), or absent
+2 MiB second-level page support (SLLPS). This failure precedes runtime register
+programming. Its diagnostic does not record which unit or predicate failed,
+and the saved run contains no raw register values that disambiguate them.
+
+The physical implementation requests 39-bit adjusted address width and builds
+matching three-level tables. Its ordinary identity and dedicated GPU table
+builders, validators, and range limits also assume 39 bits. Intel specifies
+SAGAW bit 1 for 39-bit tables and bit 2 for 48-bit tables; hardware must support
+the table format software selects. A 48-bit-only remapper is therefore a
+compatibility candidate, not an established diagnosis of this host. Changing
+only the requested width would leave the table format inconsistent. See the
+[Intel capability-register definitions](https://edc.intel.com/content/www/us/en/design/publications/13th-generation-core-processor-datasheet-volume-2-of-2/capability-register-cap-reg-0-0-0-vtdbar-offset-8/).
+
+Rollback succeeded, followed by the operator's shutdown/power-on boundary.
+FinalVerify action `20261021T024702343Z-FinalVerify-d4bc5edd8707406f8b22c2fa341b6217`
+returned `FINAL_RESET_VERIFIED_GPU_UNATTESTED` with no errors: Secure Boot on,
+20 ABSENT CPUs, unchanged Windows Boot Manager, and the mounted firmware text
+equal to its saved baseline (`66786928...1DAA5007`). Archive removed the selector;
+the journal is `Complete` with no action in progress, SHA-256
+`AF913F6952E4614AB3A806DBC9C82667D62E5CA2CD955950030934D172DABAAC`.
+This run needs no further recovery commands. Its retained stage belongs to
+`023306`; the older `-CompletedRun224018` retirement profile cannot remove it.
+
+### Capability evidence for a future diagnostic run
+
+The planner now records the first rejected capability predicate and its unit
+index, requested width, VER, and CAP in caller-owned transient storage. It
+uses the existing reads, retains the original predicate order and status 11,
+and preserves a later PCI-restore failure as the final status. An incomplete
+register read leaves capability evidence unavailable. Every installer call
+initializes the evidence so a later invocation cannot reuse stale values.
+
+The BSP packs the fields used by the four checks into the existing 32-bit
+`startup_detail`. The 80-byte version-1 record and all previous detail values
+remain unchanged. Tagged substeps 1..24 retain the older layout below.
+Capability rejections use substeps 32..63 with this separate layout:
+
+| Field | Meaning |
+| --- | --- |
+| Bit 31 | Tagged detail |
+| Bits 30:24 | `32 + unitIndex * 4 + (failure - 1)` |
+| Bits 23:19 | Final runtime result enum |
+| Bit 18 | Requested adjusted width: 0 = 39, 1 = 48 |
+| Bit 17 | CAP.SLLPS 2 MiB support |
+| Bits 16:11 | Encoded CAP.MGAW; add 1 for the address width |
+| Bits 10:6 | CAP.SAGAW mask |
+| Bits 5:2 | VER major version |
+| Bits 1:0 | Reserved, zero |
+
+The unit index is zero-based in that invocation's parsed DMAR unit list.
+Failure values are VERSION (1), SAGAW (2), MGAW (3), and SLLPS (4).
+Programming-plan stage 3 and primary status 11 are implicit in this detail
+group. Unrepresentable indices or result values fall back to the old
+substep-9 record; they are not truncated. Only the check inputs are persisted,
+not unrelated CAP/ECAP fields or a complete raw-register dump.
+
+For example, **synthetic** detail `0xA55B3104` (unsigned `2774216964`) reports
+unit 1, SAGAW rejection, requested width 39, major version 1, SAGAW mask 4
+(48-bit tables only), MGAW 39, 2 MiB support, and final status 11. This is a
+transport fixture, not a measurement from the host. The existing loader saves
+it without a production formatter change, even if console text is missed.
+
+The unsigned native Release image is 188,928 bytes, SHA-256
+`3A198EA3BFA4C669B5143A75A2B0B94D7BD6AF855B5913AE78A6762FE89C6BD5`.
+Its `.hvscan` audit passed at 54,870 bytes. Six relevant hypervisor host tests
+and the loader formatter regression passed serially. Callback fixtures cover
+all four predicates, failure on the second unit, unavailable reads, stale
+evidence reset, and preservation of the primary cause when PCI restore fails.
+The new image was not signed, staged, armed, or booted; no VM was started.
+This supplies missing evidence and does not repair or bypass the capability
+rejection. Another physical measurement is needed to establish this host's
+specific capability mismatch.
+
 ## Fourth physical run: IOMMU preparation failed
 
 Run `gpu-20261020T224018Z-31b7c15e56584f84a68d89b7b3ecb1a1` used source

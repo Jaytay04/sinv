@@ -249,6 +249,18 @@ int main(void)
                     "high-bit IOMMU detail survives as unsigned decimal")) {
             return 1;
         }
+        startup.Detail = 0xa55b3104u;
+        memset(startup_guarded, 0, sizeof(startup_guarded));
+        written = 0u;
+        if (!expect(payload_diagnostic_format_with_startup(
+                        &diagnostic, PAYLOAD_DIAG_STARTUP_VALID, &startup,
+                        startup_guarded + 1u, sizeof(startup_guarded) - 2u,
+                        &written) &&
+                    strstr((const char *)(startup_guarded + 1u),
+                           "startup_detail=2774216964\n") != NULL,
+                    "capability snapshot survives as unsigned decimal")) {
+            return 1;
+        }
         startup.Stage = HV_BOOT_STAGE_GPU_PREPARE;
         startup.Detail = 0x12345678u;
 

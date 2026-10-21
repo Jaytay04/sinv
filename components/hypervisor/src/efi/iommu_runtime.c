@@ -608,7 +608,26 @@ static void HvEmitOperation(
     ++*count;
 }
 
-HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildProgrammingPlan(
+static void HvRecordCapabilityFailure(
+    HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic,
+    uint32_t failure,
+    uint32_t unitIndex,
+    uint32_t requestedAddressBits,
+    uint64_t version,
+    uint64_t capability)
+{
+    if (diagnostic != NULL &&
+        diagnostic->CapabilityFailure ==
+            HV_EFI_IOMMU_CAPABILITY_FAILURE_NONE) {
+        diagnostic->CapabilityFailure = failure;
+        diagnostic->UnitIndex = unitIndex;
+        diagnostic->RequestedAddressBits = requestedAddressBits;
+        diagnostic->Version = version;
+        diagnostic->Capability = capability;
+    }
+}
+
+static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildProgrammingPlanInternal(
     const HV_EFI_IOMMU_DMAR_INFO *dmar,
     const HV_EFI_IOMMU_UNIT_CONFIGURATION *configurations,
     uint32_t configurationCount,
@@ -616,7 +635,8 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildProgrammingPlan(
     const HV_EFI_IOMMU_RUNTIME_CALLBACKS *callbacks,
     const HV_EFI_IOMMU_PROGRAM_STORAGE *storage,
     uint32_t pollLimit,
-    HV_EFI_IOMMU_PROGRAM_PLAN *plan)
+    HV_EFI_IOMMU_PROGRAM_PLAN *plan,
+    HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic)
 {
     uint32_t requiredOperations = 0;
     uint32_t unitIndex;
@@ -853,15 +873,31 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildProgrammingPlan(
             return HV_EFI_IOMMU_RUNTIME_CALLBACK_FAILED;
         }
         if (((version >> 4) & UINT64_C(0x0f)) == 0) {
+            HvRecordCapabilityFailure(
+                diagnostic, HV_EFI_IOMMU_CAPABILITY_FAILURE_VERSION,
+                unitIndex, configuration->AddressBits, version, capability);
             return HV_EFI_IOMMU_RUNTIME_REMAPPING_UNSUPPORTED;
         }
         sagaw = (uint32_t)((capability >> HV_VTD_CAP_SAGAW_SHIFT) &
                            HV_VTD_CAP_SAGAW_MASK);
         mgaw = (uint32_t)((capability >> HV_VTD_CAP_MGAW_SHIFT) &
                           HV_VTD_CAP_MGAW_MASK) + 1;
-        if ((sagaw & (UINT32_C(1) << agawBit)) == 0 ||
-            mgaw < configuration->AddressBits ||
-            (capability & HV_VTD_CAP_SLLPS_2MB) == 0) {
+        if ((sagaw & (UINT32_C(1) << agawBit)) == 0) {
+            HvRecordCapabilityFailure(
+                diagnostic, HV_EFI_IOMMU_CAPABILITY_FAILURE_SAGAW,
+                unitIndex, configuration->AddressBits, version, capability);
+            return HV_EFI_IOMMU_RUNTIME_REMAPPING_UNSUPPORTED;
+        }
+        if (mgaw < configuration->AddressBits) {
+            HvRecordCapabilityFailure(
+                diagnostic, HV_EFI_IOMMU_CAPABILITY_FAILURE_MGAW,
+                unitIndex, configuration->AddressBits, version, capability);
+            return HV_EFI_IOMMU_RUNTIME_REMAPPING_UNSUPPORTED;
+        }
+        if ((capability & HV_VTD_CAP_SLLPS_2MB) == 0) {
+            HvRecordCapabilityFailure(
+                diagnostic, HV_EFI_IOMMU_CAPABILITY_FAILURE_SLLPS,
+                unitIndex, configuration->AddressBits, version, capability);
             return HV_EFI_IOMMU_RUNTIME_REMAPPING_UNSUPPORTED;
         }
         if ((statusValue & (HV_VTD_GSTS_TES | HV_VTD_GSTS_QIES |
@@ -997,6 +1033,21 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildProgrammingPlan(
     plan->PollLimit = pollLimit;
     plan->Reserved = 0;
     return HV_EFI_IOMMU_RUNTIME_OK;
+}
+
+HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildProgrammingPlan(
+    const HV_EFI_IOMMU_DMAR_INFO *dmar,
+    const HV_EFI_IOMMU_UNIT_CONFIGURATION *configurations,
+    uint32_t configurationCount,
+    const HV_EFI_IOMMU_OWNERSHIP_POLICY *ownership,
+    const HV_EFI_IOMMU_RUNTIME_CALLBACKS *callbacks,
+    const HV_EFI_IOMMU_PROGRAM_STORAGE *storage,
+    uint32_t pollLimit,
+    HV_EFI_IOMMU_PROGRAM_PLAN *plan)
+{
+    return HvEfiIommuBuildProgrammingPlanInternal(
+        dmar, configurations, configurationCount, ownership, callbacks,
+        storage, pollLimit, plan, NULL);
 }
 
 HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuRuntimeInitialize(
@@ -3282,6 +3333,12 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationInternal(
         diagnostic->Stage = HV_EFI_IOMMU_INSTALL_STAGE_NONE;
         diagnostic->PrimaryStatus = HV_EFI_IOMMU_RUNTIME_OK;
         diagnostic->FinalStatus = HV_EFI_IOMMU_RUNTIME_OK;
+        diagnostic->CapabilityFailure =
+            HV_EFI_IOMMU_CAPABILITY_FAILURE_NONE;
+        diagnostic->UnitIndex = UINT32_MAX;
+        diagnostic->RequestedAddressBits = 0;
+        diagnostic->Version = 0;
+        diagnostic->Capability = 0;
     }
     if (runtimeCallbacks == NULL || plan == NULL || runtime == NULL ||
         dmaQuiescedState == NULL || pciStateCount == NULL) {
@@ -3308,9 +3365,9 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationInternal(
         return status;
     }
     *dmaQuiescedState = 1;
-    status = HvEfiIommuBuildProgrammingPlan(
+    status = HvEfiIommuBuildProgrammingPlanInternal(
         dmar, configurations, configurationCount, ownership,
-        runtimeCallbacks, programStorage, pollLimit, plan);
+        runtimeCallbacks, programStorage, pollLimit, plan, diagnostic);
     if (status != HV_EFI_IOMMU_RUNTIME_OK) {
         HvRecordInstallFailure(
             diagnostic, HV_EFI_IOMMU_INSTALL_STAGE_PROGRAM_PLAN, status);
