@@ -102,6 +102,51 @@ static inline uint32_t hv_efi_boot_diagnostic_iommu_capability_detail(
         ((uint32_t)((version >> 4) & UINT64_C(0x0f)) << 2);
 }
 
+/* PCI quiesce audit details use substeps 64..66 only after verified PCI
+ * restoration and final AUDIT_FAILED (18). Readback substeps distinguish
+ * bus mastering still enabled (64) from drift in another command bit (65).
+ * Their low 24 bits contain segment[7:0], bus[7:0], device[4:0], function[2:0].
+ * Count mismatch (66) stores required[11:0] then observed[11:0]. These bounded
+ * observations do not transport full command values or change the 80-byte ABI.
+ * Unrepresentable inputs retain the existing cause/result encoding. */
+#define HV_EFI_BOOT_DIAGNOSTIC_IOMMU_PCI_BME_READBACK UINT32_C(64)
+#define HV_EFI_BOOT_DIAGNOSTIC_IOMMU_PCI_COMMAND_READBACK UINT32_C(65)
+#define HV_EFI_BOOT_DIAGNOSTIC_IOMMU_PCI_SCAN_COUNT UINT32_C(66)
+
+static inline uint32_t hv_efi_boot_diagnostic_iommu_pci_readback_detail(
+    uint32_t segment, uint32_t bus, uint32_t device, uint32_t function,
+    uint32_t expectedCommand, uint32_t observedCommand, uint32_t finalStatus)
+{
+    const uint32_t fallback = hv_efi_boot_diagnostic_iommu_detail(
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_RUNTIME_INSTALL, 2, 18, finalStatus);
+    uint32_t substep;
+    if (segment > 255 || bus > 255 || device > 31 || function > 7 ||
+        expectedCommand > UINT16_MAX || observedCommand > UINT16_MAX ||
+        (expectedCommand & UINT32_C(4)) != 0 ||
+        expectedCommand == observedCommand || finalStatus != 18) {
+        return fallback;
+    }
+    substep = (observedCommand & UINT32_C(4)) != 0 ?
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_PCI_BME_READBACK :
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_PCI_COMMAND_READBACK;
+    return HV_EFI_BOOT_DIAGNOSTIC_IOMMU_TAG | (substep << 24) |
+        (segment << 16) | (bus << 8) | (device << 3) | function;
+}
+
+static inline uint32_t hv_efi_boot_diagnostic_iommu_pci_count_detail(
+    uint32_t requiredCount, uint32_t observedCount, uint32_t finalStatus)
+{
+    const uint32_t fallback = hv_efi_boot_diagnostic_iommu_detail(
+        HV_EFI_BOOT_DIAGNOSTIC_IOMMU_RUNTIME_INSTALL, 2, 18, finalStatus);
+    if (requiredCount > 4095 || observedCount > 4095 ||
+        requiredCount == observedCount || finalStatus != 18) {
+        return fallback;
+    }
+    return HV_EFI_BOOT_DIAGNOSTIC_IOMMU_TAG |
+        (HV_EFI_BOOT_DIAGNOSTIC_IOMMU_PCI_SCAN_COUNT << 24) |
+        (requiredCount << 12) | observedCount;
+}
+
 typedef struct {
     uint32_t Processor;
     uint32_t Detail;

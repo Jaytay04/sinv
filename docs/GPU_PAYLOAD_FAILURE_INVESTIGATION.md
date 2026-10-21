@@ -50,11 +50,11 @@ was not triggered in the observed path. The baseline alone cannot establish
 storage behavior under active VMX/IOMMU isolation. The current Windows
 inventory cannot recover the firmware-time PCI command mismatch or scan counts.
 
-The next diagnostic should distinguish the two quiesce audit branches and
+The follow-up diagnostic needed to distinguish the two quiesce audit branches and
 retain the first failing segment/BDF, original/requested/readback command
 values and restoration result, or the two scan counts. The existing audit
-and restoration checks must remain enforced. No new payload change or live
-test was performed in this investigation.
+and restoration checks must remain enforced. That investigation did not change
+the payload or perform a live test; the candidate below adds bounded evidence.
 
 The operator subsequently completed rollback and reset. FinalVerify at
 `20261021T200510255Z-FinalVerify-38149ac12747467cbb64e46552b7abae` passed reset,
@@ -100,8 +100,13 @@ Saved-file validation of the retirement profile passed against the actual
 completed evidence: seven reviewed stage pins and 53 preserved proof-pin
 records, including all seven Collection copies. Apply rechecks these copies
 before removal. All 25 related retirement, readiness and firmware-review CTests
-passed without a VM or live host workflow. The operator must still run the
-retirement review and Apply; this validation did not mount or change the ESP.
+passed without a VM or live host workflow. This validation did not mount or change
+the ESP. The operator subsequently completed Review and Apply. Receipt
+`88f79a180fdb4c76a5aa3e6175a5fa44` records all seven files removed, no cleanup errors,
+an unmounted ESP and no host boot-state change. Fresh readiness
+`338f73c7e43b4948b9e59a24dd91bbbb`, SHA-256
+`BFEB69BB84528F91CD9818513D4F74923ECB9CAB3BB600D3A1AF6F03E8042F1A`,
+reports no selector, no stage and `READY_FOR_FRESH_PREPARE` with no blockers.
 
 File-only validation passed against the actual receipt, saved command outputs,
 failed result, raw selection files and module pins, using a scratch copy of the
@@ -128,6 +133,49 @@ retirement and firmware-review suites passed. The audit boundary was mocked;
 no VM, ESP mount, firmware capture/write, payload launch or live recovery action
 was executed. The new tests are registered in the component's Windows CTest
 suite so the next Build runs them.
+
+## Next candidate: PCI quiesce audit diagnostics
+
+The runtime installer now captures the first command readback mismatch or
+two-pass eligible-device count mismatch into its caller-owned transient
+diagnostic before the existing restoration call. The public quiesce API remains
+unchanged. No PCI callbacks, retries, acceptance rules or restoration operations
+were added. Tests retain the original rejection, zero remapper writes, restored
+commands and cleared state count; restoration failure still retains incomplete
+cleanup state and follows the existing fail-stop path.
+
+For a PCI quiesce audit failure with successful restoration, the BSP encodes
+the observation in the existing `startup_detail` field. Bit 31 remains the
+IOMMU tag and bits 30:24 select one of these new substeps:
+
+| Substep | Observation | Low 24 bits |
+| --- | --- | --- |
+| 64 (`0xC0` high byte) | Command readback still has bus mastering enabled | Segment in bits 23:16, bus 15:8, device 7:3, function 2:0 |
+| 65 (`0xC1` high byte) | Bus mastering is clear, but another command bit differs | Same segment/BDF layout |
+| 66 (`0xC2` high byte) | Eligible-device count changed between scans | Required count in bits 23:12, observed count 11:0 |
+
+These details are emitted only for install stage `PCI_QUIESCE`, primary and
+final `AUDIT_FAILED` (18). A later restoration failure keeps its original runtime
+result and fail-stop behavior. Segment values above 255, counts above 4095 or
+inconsistent inputs fall back to the older cause/result detail without truncation.
+The physical path's current PCI-state capacity is 512. The original 80-byte
+startup record, stage/status/count fields and earlier detail encodings remain
+unchanged. Full original/requested/readback command values are held only in the
+transient install diagnostic and tested there; they are not present in the
+persisted 80-byte transport. A fail-stop cannot return a new diagnostic file.
+
+This candidate adds evidence for the next returned failure. It does not prove
+the failing branch or PCI address in `193833`, resolve the payload failure, or
+validate physical isolation. No VM or bare-metal execution was performed for
+this change.
+
+Validation passed: the native-enabled Release EFI payload built, all 62
+component CTests passed, and the unsigned image's 55,478-byte `.hvscan` section
+passed the self-containment audit. New unit cases cover both readback classes,
+scan-count drift, complete restoration, retained evidence on restoration failure,
+diagnostic reset, encoding boundaries and the unchanged startup-record transport.
+The archived journal, selector copy and post-retirement readiness hashes remain
+unchanged; the active selector remains absent. Nothing was signed, staged or booted.
 
 ## Run 160027: volume open fails after successful payload return
 

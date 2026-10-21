@@ -133,6 +133,10 @@ typedef enum HV_EFI_IOMMU_RUNTIME_STATUS {
 #define HV_EFI_IOMMU_CAPABILITY_FAILURE_MGAW UINT32_C(3)
 #define HV_EFI_IOMMU_CAPABILITY_FAILURE_SLLPS UINT32_C(4)
 
+#define HV_EFI_IOMMU_PCI_FAILURE_NONE UINT32_C(0)
+#define HV_EFI_IOMMU_PCI_FAILURE_COMMAND_READBACK UINT32_C(1)
+#define HV_EFI_IOMMU_PCI_FAILURE_SCAN_COUNT UINT32_C(2)
+
 typedef struct HV_EFI_IOMMU_INSTALL_DIAGNOSTIC {
     uint32_t Stage;
     uint32_t PrimaryStatus;
@@ -142,6 +146,18 @@ typedef struct HV_EFI_IOMMU_INSTALL_DIAGNOSTIC {
     uint32_t RequestedAddressBits;
     uint64_t Version;
     uint64_t Capability;
+    /* Transient PCI quiesce evidence. Command fields are populated only for
+     * readback mismatches; observed count includes the mismatching function. */
+    uint32_t PciFailure;
+    uint32_t PciSegment;
+    uint32_t PciBus;
+    uint32_t PciDevice;
+    uint32_t PciFunction;
+    uint32_t PciOriginalCommand;
+    uint32_t PciExpectedCommand;
+    uint32_t PciObservedCommand;
+    uint32_t PciRequiredCount;
+    uint32_t PciObservedCount;
 } HV_EFI_IOMMU_INSTALL_DIAGNOSTIC;
 
 typedef struct HV_EFI_IOMMU_PHYSICAL_VIEW {

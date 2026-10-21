@@ -2838,6 +2838,27 @@ static EFI_STATUS HvEfiPreparePhysicalIommu(
                 installDiagnostic.RequestedAddressBits, installDiagnostic.Version,
                 installDiagnostic.Capability, installDiagnostic.FinalStatus));
     }
+    if (installDiagnostic.Stage == HV_EFI_IOMMU_INSTALL_STAGE_PCI_QUIESCE &&
+        installDiagnostic.PrimaryStatus == HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED &&
+        installDiagnostic.FinalStatus == HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED) {
+        if (installDiagnostic.PciFailure ==
+                HV_EFI_IOMMU_PCI_FAILURE_COMMAND_READBACK) {
+            HvEfiBootDiagnosticSetDetail(
+                hv_efi_boot_diagnostic_iommu_pci_readback_detail(
+                    installDiagnostic.PciSegment, installDiagnostic.PciBus,
+                    installDiagnostic.PciDevice, installDiagnostic.PciFunction,
+                    installDiagnostic.PciExpectedCommand,
+                    installDiagnostic.PciObservedCommand,
+                    installDiagnostic.FinalStatus));
+        } else if (installDiagnostic.PciFailure ==
+                       HV_EFI_IOMMU_PCI_FAILURE_SCAN_COUNT) {
+            HvEfiBootDiagnosticSetDetail(
+                hv_efi_boot_diagnostic_iommu_pci_count_detail(
+                    installDiagnostic.PciRequiredCount,
+                    installDiagnostic.PciObservedCount,
+                    installDiagnostic.FinalStatus));
+        }
+    }
     if (iommuStatus != HV_EFI_IOMMU_RUNTIME_OK) {
         /* Never return into generic cleanup with unverified PCI restoration
          * or while a unit may still reference resident remapping tables. */

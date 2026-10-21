@@ -348,6 +348,79 @@ static int test_iommu_capability_details(void)
                  "unrepresentable capability evidence retains the original cause/result");
 }
 
+static int test_iommu_pci_audit_details(void)
+{
+    const uint32_t bme = hv_efi_boot_diagnostic_iommu_pci_readback_detail(
+        0x12, 0x34, 0x1a, 6, 3, 7, 18);
+    const uint32_t drift = hv_efi_boot_diagnostic_iommu_pci_readback_detail(
+        0x12, 0x34, 0x1a, 6, 3, 1, 18);
+    const uint32_t counts = hv_efi_boot_diagnostic_iommu_pci_count_detail(
+        20, 19, 18);
+    const uint32_t details[] = {bme, drift, counts};
+    const uint32_t invalid[][6] = {
+        {256, 0, 0, 0, 3, 7}, {0, 256, 0, 0, 3, 7},
+        {0, 0, 32, 0, 3, 7}, {0, 0, 0, 8, 3, 7},
+        {0, 0, 0, 0, 65536, 7}, {0, 0, 0, 0, 3, 65536},
+        {0, 0, 0, 0, 7, 3}, {0, 0, 0, 0, 3, 3}
+    };
+    uint32_t index;
+    if (!check(bme == UINT32_C(0xc01234d6) &&
+                   drift == UINT32_C(0xc11234d6) &&
+                   counts == UINT32_C(0xc2014013),
+               "PCI audit detail distinguishes retained BME, other bit drift, and scan count")) {
+        return 0;
+    }
+    if (!check(((bme >> 16) & 255u) == 0x12 &&
+                   ((bme >> 8) & 255u) == 0x34 &&
+                   ((bme >> 3) & 31u) == 0x1a && (bme & 7u) == 6 &&
+                   ((counts >> 12) & 4095u) == 20 && (counts & 4095u) == 19 &&
+                   hv_efi_boot_diagnostic_iommu_pci_readback_detail(
+                       255, 255, 31, 7, 0, 4, 18) == UINT32_C(0xc0ffffff) &&
+                   hv_efi_boot_diagnostic_iommu_pci_count_detail(
+                       4095, 4094, 18) == UINT32_C(0xc2fffffe),
+               "PCI address and count boundaries round trip without truncation")) {
+        return 0;
+    }
+    for (index = 0; index < sizeof(details) / sizeof(details[0]); ++index) {
+        hv_boot_diagnostic_t record;
+        hv_efi_boot_diagnostic_snapshot_t snapshot = snapshot_values();
+        snapshot.Detail = details[index];
+        hv_boot_diagnostic_init(&record);
+        if (!hv_efi_boot_diagnostic_mark_entry(&record, (uint32_t)sizeof(record)) ||
+            !hv_efi_boot_diagnostic_set_stage(&record, (uint32_t)sizeof(record),
+                HV_BOOT_STAGE_AP_PREPARE, HV_BOOT_REASON_OPERATION_FAILED,
+                details[index]) ||
+            !hv_efi_boot_diagnostic_record_return(&record, (uint32_t)sizeof(record),
+                HV_BOOT_STAGE_AP_PREPARE, HV_BOOT_REASON_OPERATION_FAILED,
+                UINT64_C(0x800000000000001a), &snapshot) ||
+            !check(record.Detail == details[index] && sizeof(record) == 80 &&
+                       record.Status == UINT64_C(0x800000000000001a),
+                   "PCI audit evidence survives the unchanged startup record")) {
+            return 0;
+        }
+    }
+    for (index = 0; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
+        const uint32_t *args = invalid[index];
+        if (!check(hv_efi_boot_diagnostic_iommu_pci_readback_detail(
+                       args[0], args[1], args[2], args[3], args[4], args[5], 18) ==
+                       UINT32_C(0x89021212),
+                   "unrepresentable or inconsistent PCI address evidence keeps legacy detail")) {
+            return 0;
+        }
+    }
+    return check(hv_efi_boot_diagnostic_iommu_pci_count_detail(4096, 1, 18) ==
+                     UINT32_C(0x89021212) &&
+                 hv_efi_boot_diagnostic_iommu_pci_count_detail(1, 4096, 18) ==
+                     UINT32_C(0x89021212) &&
+                 hv_efi_boot_diagnostic_iommu_pci_count_detail(1, 1, 18) ==
+                     UINT32_C(0x89021212) &&
+                 hv_efi_boot_diagnostic_iommu_pci_count_detail(20, 19, 19) ==
+                     UINT32_C(0x89021213) &&
+                 hv_efi_boot_diagnostic_iommu_pci_readback_detail(
+                     0, 0, 1, 0, 3, 7, 19) == UINT32_C(0x89021213),
+                 "count overflow and cleanup failure retain original cause and final status");
+}
+
 int main(void)
 {
     if (!test_failure_snapshot() || !test_success_snapshot() ||
@@ -356,7 +429,7 @@ int main(void)
         !reject_without_writes((uint32_t)sizeof(hv_boot_diagnostic_t), 1) ||
         !test_inconsistent_outcomes() || !test_stage_cannot_regress() ||
         !test_memory_policy_failure_details() || !test_iommu_failure_details() ||
-        !test_iommu_capability_details()) {
+        !test_iommu_capability_details() || !test_iommu_pci_audit_details()) {
         return 1;
     }
     return 0;

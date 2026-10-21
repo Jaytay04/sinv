@@ -1,14 +1,85 @@
 # Intel UHD 770 bare-metal diagnostic runbook
 
-## Current checkpoint: run 193833 archived; stage retirement pending
+## Current checkpoint: run 193833 closed and stage retired
+
+Retirement receipt `88f79a180fdb4c76a5aa3e6175a5fa44` reports `STAGE_RETIRED`,
+all seven reviewed files removed, no cleanup errors, ESP unmounted and no host
+boot-state change. Readiness `338f73c7e43b4948b9e59a24dd91bbbb` then reports
+`READY_FOR_FRESH_PREPARE`, no selector, no retained stage and no blockers.
+
+The next candidate adds PCI quiesce diagnostics; it does not fix the refusal
+observed in `193833`. It distinguishes bus mastering still enabled, another
+command bit changing, and different eligible-device counts between scans.
+Readback details include a bounded segment/BDF; count details retain both counts.
+The original audit and verified-restoration requirements remain enforced. The
+80-byte handoff stays unchanged; full command values are not transported.
+
+Use elevated 64-bit PowerShell from the main workspace. Execute one command at
+a time and require `Succeeded: true` before advancing through Arm. No VM is
+required by these host scripts.
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Prepare -PhysicalOutputConfirmed -RecoveryReady
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Build
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Sign
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Backup
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Stage
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Arm
+```
+
+Expected statuses, in order: `PREPARED_READONLY_GATE_PASS`,
+`BUILD_AND_TESTS_PASS`, `SIGNATURE_AND_AUDIT_PASS`, `ESP_BACKUP_VERIFIED`,
+`STAGE_READBACK_PASS`, `ARMED_MANUAL_REBOOT_REQUIRED`. Prepare flags confirm
+the physical Intel display connection and recovery readiness; verify both
+before using them.
+
+After successful Arm, reboot manually, then collect in Windows:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Collect
+```
+
+A further PCI audit refusal will still produce `COLLECTED_HEALTH_FAIL_GPU_UNATTESTED`.
+Preserve the new run's collected `esp-payload-diagnostic.txt` and any boot video.
+Its `startup_detail` now distinguishes the audit branches; the
+[investigation](GPU_PAYLOAD_FAILURE_INVESTIGATION.md#next-candidate-pci-quiesce-audit-diagnostics)
+defines the encoding and its limits. Do not repeat Arm or Stage after failure.
+
+Recover after collection:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-rollback.ps1
+```
+
+If rollback reports `RECOVERY_PENDING_USER_POWER_CYCLE`, perform the manual
+power cycle before FinalVerify:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 FinalVerify
+```
+
+The fresh run uses the version-1 firmware comparison policy below. If any
+verification error remains, preserve its evidence and stop; previous run-specific
+review switches do not apply to the new run. Only after successful FinalVerify
+and phase `Complete`, archive:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Archive
+```
+
+Archive preserves the run evidence. Retained ESP files require a separate
+ownership-reviewed retirement before a later run; the historical `193833`
+profile below must not be reused for a different run.
+
+## Previous checkpoint: run 193833 retirement review
 
 The operator completed the reviewed FinalVerify below with
 `FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED`, then Archive
 returned `SELECTOR_ARCHIVED`. The saved journal is `Complete`, has no action in
 progress and retains no final errors; the active selector is absent. The run
-is closed. Its ESP stage still requires ownership-reviewed retirement before
-another stage. Capture a fresh readiness report for that cleanup; do not repeat
-the completed recovery commands below or use another run's retirement profile.
+is closed. The operator subsequently completed stage retirement and fresh
+readiness, as recorded above. The commands in this section record those completed
+steps; do not repeat them or use this retirement profile for another run.
 
 Fresh readiness report `b6037d0adbbc4299af077f2afcf0691b` has only the retained
 stage blocker. Its seven files match the archived run's five installer-staged

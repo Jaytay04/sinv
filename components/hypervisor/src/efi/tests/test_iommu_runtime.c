@@ -1226,12 +1226,14 @@ typedef struct TEST_PCI_ECAM {
     uint16_t Commands[2];
     uint32_t Writes;
     uint32_t CommandReads;
+    uint32_t VendorReads;
     uint32_t FailWrite;
     uint32_t FailWriteOrdinalSecondary;
     uint32_t IgnoreWriteOrdinal;
     uint32_t WrongWriteOrdinal;
     uint16_t WrongWriteXor;
     uint32_t FailCommandReadOrdinal;
+    uint32_t HideFirstDeviceOnSecondScan;
 } TEST_PCI_ECAM;
 
 static uint32_t TestPciRead16(
@@ -1243,10 +1245,18 @@ static uint32_t TestPciRead16(
     if (value == NULL || address < UINT64_C(0xe0000000)) {
         return 0;
     }
+    if ((address & UINT64_C(0xfff)) == 0) {
+        ++ecam->VendorReads;
+    }
     for (index = 0; index < 2; ++index) {
         functionBase = UINT64_C(0xe0000000) +
             (uint64_t)(index + 1) * UINT64_C(0x8000);
         if (address == functionBase) {
+            if (index == 0 && ecam->HideFirstDeviceOnSecondScan != 0 &&
+                ecam->VendorReads > UINT32_C(256)) {
+                *value = UINT16_C(0xffff);
+                return 1;
+            }
             *value = (uint16_t)(UINT16_C(0x1234) + index);
             return 1;
         }
@@ -1403,6 +1413,16 @@ static void SetCapabilityDiagnosticSentinel(
     diagnostic->RequestedAddressBits = UINT32_MAX;
     diagnostic->Version = UINT64_MAX;
     diagnostic->Capability = UINT64_MAX;
+    diagnostic->PciFailure = UINT32_MAX;
+    diagnostic->PciSegment = UINT32_MAX;
+    diagnostic->PciBus = UINT32_MAX;
+    diagnostic->PciDevice = UINT32_MAX;
+    diagnostic->PciFunction = UINT32_MAX;
+    diagnostic->PciOriginalCommand = UINT32_MAX;
+    diagnostic->PciExpectedCommand = UINT32_MAX;
+    diagnostic->PciObservedCommand = UINT32_MAX;
+    diagnostic->PciRequiredCount = UINT32_MAX;
+    diagnostic->PciObservedCount = UINT32_MAX;
 }
 
 static int TestCapabilityFailureDiagnostics(void)
@@ -1868,9 +1888,7 @@ static int TestInjectedIsolationOrchestration(void)
     TestZero(&ecam, sizeof(ecam));
     ecam.Commands[0] = 7;
     ecam.Commands[1] = 5;
-    diagnostic.Stage = UINT32_MAX;
-    diagnostic.PrimaryStatus = UINT32_MAX;
-    diagnostic.FinalStatus = UINT32_MAX;
+    SetCapabilityDiagnosticSentinel(&diagnostic);
     TEST_ASSERT(HvEfiIommuInstallRuntimeIsolationWithDiagnostic(
                     &info, &configuration, 1, &ownership,
                     &runtimeCallbacks, &storage, 8, &plan, &runtime,
@@ -1879,8 +1897,16 @@ static int TestInjectedIsolationOrchestration(void)
                     HV_EFI_IOMMU_RUNTIME_OK &&
                 diagnostic.Stage == HV_EFI_IOMMU_INSTALL_STAGE_COMPLETE &&
                 diagnostic.PrimaryStatus == HV_EFI_IOMMU_RUNTIME_OK &&
-                diagnostic.FinalStatus == HV_EFI_IOMMU_RUNTIME_OK,
-                "diagnostic install reports complete success with OK statuses");
+                diagnostic.FinalStatus == HV_EFI_IOMMU_RUNTIME_OK &&
+                diagnostic.PciFailure == HV_EFI_IOMMU_PCI_FAILURE_NONE &&
+                diagnostic.PciSegment == 0 && diagnostic.PciBus == 0 &&
+                diagnostic.PciDevice == 0 && diagnostic.PciFunction == 0 &&
+                diagnostic.PciOriginalCommand == 0 &&
+                diagnostic.PciExpectedCommand == 0 &&
+                diagnostic.PciObservedCommand == 0 &&
+                diagnostic.PciRequiredCount == 0 &&
+                diagnostic.PciObservedCount == 0,
+                "diagnostic install resets PCI fields and reports complete success");
 
     InitializeCallbacks(&mmio, &runtimeCallbacks);
     mmio.DmaQuiesced = 0;
@@ -1944,9 +1970,70 @@ static int TestInjectedIsolationOrchestration(void)
                     HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED &&
                 diagnostic.FinalStatus ==
                     HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED &&
+                diagnostic.PciFailure ==
+                    HV_EFI_IOMMU_PCI_FAILURE_COMMAND_READBACK &&
+                diagnostic.PciSegment == 0 && diagnostic.PciBus == 0 &&
+                diagnostic.PciDevice == 1 && diagnostic.PciFunction == 0 &&
+                diagnostic.PciOriginalCommand == 7 &&
+                diagnostic.PciExpectedCommand == 3 &&
+                diagnostic.PciObservedCommand == 7 &&
+                diagnostic.PciRequiredCount == 2 &&
+                diagnostic.PciObservedCount == 1 && pciStateCount == 0 &&
+                runtime.State == HV_EFI_IOMMU_RUNTIME_RESET &&
                 mmio.Writes == 0 && mmio.DmaQuiesced == 0 &&
                 ecam.Commands[0] == 7 && ecam.Commands[1] == 5,
-                "acknowledged ignored clear is a PCI quiesce audit failure before installer programming");
+                "PCI diagnostic identifies a bus-master bit that stayed set after verified restoration");
+
+    InitializeCallbacks(&mmio, &runtimeCallbacks);
+    mmio.DmaQuiesced = 0;
+    TestZero(&ecam, sizeof(ecam));
+    ecam.Commands[0] = 7;
+    ecam.Commands[1] = 5;
+    ecam.WrongWriteOrdinal = 1;
+    ecam.WrongWriteXor = 1;
+    TEST_ASSERT(HvEfiIommuInstallRuntimeIsolationWithDiagnostic(
+                    &info, &configuration, 1, &ownership,
+                    &runtimeCallbacks, &storage, 8, &plan, &runtime,
+                    unitStates, 1, &segment, 1, &pciCallbacks, pciStates, 2,
+                    &pciStateCount, &mmio.DmaQuiesced, &diagnostic) ==
+                    HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED &&
+                diagnostic.PciFailure ==
+                    HV_EFI_IOMMU_PCI_FAILURE_COMMAND_READBACK &&
+                diagnostic.PciOriginalCommand == 7 &&
+                diagnostic.PciExpectedCommand == 3 &&
+                diagnostic.PciObservedCommand == 2 && pciStateCount == 0 &&
+                runtime.State == HV_EFI_IOMMU_RUNTIME_RESET &&
+                mmio.DmaQuiesced == 0 && ecam.Commands[0] == 7 &&
+                ecam.Commands[1] == 5,
+                "PCI diagnostic distinguishes unrelated command-register drift and retains it after restoration");
+
+    InitializeCallbacks(&mmio, &runtimeCallbacks);
+    mmio.DmaQuiesced = 0;
+    TestZero(&ecam, sizeof(ecam));
+    ecam.Commands[0] = 7;
+    ecam.Commands[1] = 5;
+    ecam.HideFirstDeviceOnSecondScan = 1;
+    TEST_ASSERT(HvEfiIommuInstallRuntimeIsolationWithDiagnostic(
+                    &info, &configuration, 1, &ownership,
+                    &runtimeCallbacks, &storage, 8, &plan, &runtime,
+                    unitStates, 1, &segment, 1, &pciCallbacks, pciStates, 2,
+                    &pciStateCount, &mmio.DmaQuiesced, &diagnostic) ==
+                    HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED &&
+                diagnostic.Stage ==
+                    HV_EFI_IOMMU_INSTALL_STAGE_PCI_QUIESCE &&
+                diagnostic.PciFailure ==
+                    HV_EFI_IOMMU_PCI_FAILURE_SCAN_COUNT &&
+                diagnostic.PciRequiredCount == 2 &&
+                diagnostic.PciObservedCount == 1 &&
+                diagnostic.PciSegment == 0 && diagnostic.PciBus == 0 &&
+                diagnostic.PciDevice == 0 && diagnostic.PciFunction == 0 &&
+                diagnostic.PciOriginalCommand == 0 &&
+                diagnostic.PciExpectedCommand == 0 &&
+                diagnostic.PciObservedCommand == 0 && pciStateCount == 0 &&
+                runtime.State == HV_EFI_IOMMU_RUNTIME_RESET &&
+                mmio.DmaQuiesced == 0 && ecam.Commands[0] == 7 &&
+                ecam.Commands[1] == 5,
+                "PCI diagnostic separates a two-pass device-count mismatch from command readback and confirms restore");
 
     InitializeCallbacks(&mmio, &runtimeCallbacks);
     mmio.DmaQuiesced = 0;
@@ -1967,6 +2054,15 @@ static int TestInjectedIsolationOrchestration(void)
                     HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED &&
                 diagnostic.FinalStatus ==
                     HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED &&
+                diagnostic.PciFailure ==
+                    HV_EFI_IOMMU_PCI_FAILURE_COMMAND_READBACK &&
+                diagnostic.PciSegment == 0 && diagnostic.PciBus == 0 &&
+                diagnostic.PciDevice == 1 && diagnostic.PciFunction == 0 &&
+                diagnostic.PciOriginalCommand == 7 &&
+                diagnostic.PciExpectedCommand == 3 &&
+                diagnostic.PciObservedCommand == 7 &&
+                diagnostic.PciRequiredCount == 2 &&
+                diagnostic.PciObservedCount == 1 &&
                 pciStateCount == 1 && pciStates[0].Restored == 0 &&
                 runtime.State == HV_EFI_IOMMU_RUNTIME_RESET &&
                 mmio.DmaQuiesced == 0 && ecam.Commands[0] == 7 &&

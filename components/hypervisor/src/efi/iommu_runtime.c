@@ -3442,13 +3442,74 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuAbortPciQuiesce(
     return failureStatus;
 }
 
-HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuQuiescePciBusMasters(
+static void HvResetInstallPciDiagnostic(
+    HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic)
+{
+    if (diagnostic == NULL) {
+        return;
+    }
+    diagnostic->PciFailure = HV_EFI_IOMMU_PCI_FAILURE_NONE;
+    diagnostic->PciSegment = 0;
+    diagnostic->PciBus = 0;
+    diagnostic->PciDevice = 0;
+    diagnostic->PciFunction = 0;
+    diagnostic->PciOriginalCommand = 0;
+    diagnostic->PciExpectedCommand = 0;
+    diagnostic->PciObservedCommand = 0;
+    diagnostic->PciRequiredCount = 0;
+    diagnostic->PciObservedCount = 0;
+}
+
+static void HvRecordPciCommandReadbackFailure(
+    HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic,
+    const HV_EFI_IOMMU_MCFG_SEGMENT *segment,
+    uint32_t bus,
+    uint32_t device,
+    uint32_t function,
+    uint16_t originalCommand,
+    uint16_t expectedCommand,
+    uint16_t observedCommand,
+    uint32_t requiredCount,
+    uint32_t observedCount)
+{
+    if (diagnostic == NULL ||
+        diagnostic->PciFailure != HV_EFI_IOMMU_PCI_FAILURE_NONE) {
+        return;
+    }
+    diagnostic->PciFailure = HV_EFI_IOMMU_PCI_FAILURE_COMMAND_READBACK;
+    diagnostic->PciSegment = segment->Segment;
+    diagnostic->PciBus = bus;
+    diagnostic->PciDevice = device;
+    diagnostic->PciFunction = function;
+    diagnostic->PciOriginalCommand = originalCommand;
+    diagnostic->PciExpectedCommand = expectedCommand;
+    diagnostic->PciObservedCommand = observedCommand;
+    diagnostic->PciRequiredCount = requiredCount;
+    diagnostic->PciObservedCount = observedCount;
+}
+
+static void HvRecordPciScanCountFailure(
+    HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic,
+    uint32_t requiredCount,
+    uint32_t observedCount)
+{
+    if (diagnostic == NULL ||
+        diagnostic->PciFailure != HV_EFI_IOMMU_PCI_FAILURE_NONE) {
+        return;
+    }
+    diagnostic->PciFailure = HV_EFI_IOMMU_PCI_FAILURE_SCAN_COUNT;
+    diagnostic->PciRequiredCount = requiredCount;
+    diagnostic->PciObservedCount = observedCount;
+}
+
+static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuQuiescePciBusMastersInternal(
     const HV_EFI_IOMMU_MCFG_SEGMENT *segments,
     uint32_t segmentCount,
     const HV_EFI_IOMMU_PCI_CALLBACKS *callbacks,
     HV_EFI_IOMMU_PCI_COMMAND_STATE *states,
     uint32_t stateCapacity,
-    uint32_t *stateCount)
+    uint32_t *stateCount,
+    HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic)
 {
     uint32_t pass;
     uint32_t required = 0;
@@ -3528,6 +3589,11 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuQuiescePciBusMasters(
                                     stateCount);
                             }
                             if (quiescedCommand != expectedCommand) {
+                                HvRecordPciCommandReadbackFailure(
+                                    diagnostic, &segments[segmentIndex], bus,
+                                    device, function, command,
+                                    expectedCommand, quiescedCommand, required,
+                                    observed + 1);
                                 return HvEfiIommuAbortPciQuiesce(
                                     callbacks, states, observed + 1,
                                     HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED,
@@ -3547,6 +3613,8 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuQuiescePciBusMasters(
         }
         if (pass != 0) {
             if (observed != required) {
+                HvRecordPciScanCountFailure(
+                    diagnostic, required, observed);
                 return HvEfiIommuAbortPciQuiesce(
                     callbacks, states, observed,
                     HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED, stateCount);
@@ -3555,6 +3623,19 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuQuiescePciBusMasters(
         }
     }
     return HV_EFI_IOMMU_RUNTIME_OK;
+}
+
+HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuQuiescePciBusMasters(
+    const HV_EFI_IOMMU_MCFG_SEGMENT *segments,
+    uint32_t segmentCount,
+    const HV_EFI_IOMMU_PCI_CALLBACKS *callbacks,
+    HV_EFI_IOMMU_PCI_COMMAND_STATE *states,
+    uint32_t stateCapacity,
+    uint32_t *stateCount)
+{
+    return HvEfiIommuQuiescePciBusMastersInternal(
+        segments, segmentCount, callbacks, states, stateCapacity, stateCount,
+        NULL);
 }
 
 static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationInternal(
@@ -3591,6 +3672,7 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationInternal(
         diagnostic->RequestedAddressBits = 0;
         diagnostic->Version = 0;
         diagnostic->Capability = 0;
+        HvResetInstallPciDiagnostic(diagnostic);
     }
     if (runtimeCallbacks == NULL || plan == NULL || runtime == NULL ||
         dmaQuiescedState == NULL || pciStateCount == NULL) {
@@ -3605,9 +3687,9 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationInternal(
     HvZero(runtime, sizeof(*runtime));
     *dmaQuiescedState = 0;
     *pciStateCount = 0;
-    status = HvEfiIommuQuiescePciBusMasters(
+    status = HvEfiIommuQuiescePciBusMastersInternal(
         segments, segmentCount, pciCallbacks, pciStates, pciStateCapacity,
-        pciStateCount);
+        pciStateCount, diagnostic);
     if (status != HV_EFI_IOMMU_RUNTIME_OK) {
         HvRecordInstallFailure(
             diagnostic, HV_EFI_IOMMU_INSTALL_STAGE_PCI_QUIESCE, status);
@@ -3775,6 +3857,7 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationWithAdjustedWidth(
             diagnostic->RequestedAddressBits = 0;
             diagnostic->Version = 0;
             diagnostic->Capability = 0;
+            HvResetInstallPciDiagnostic(diagnostic);
         }
         return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
     }
