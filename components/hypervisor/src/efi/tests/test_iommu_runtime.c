@@ -66,6 +66,55 @@ static int TestDomainIdCapability(void)
     return 0;
 }
 
+static int TestAdjustedWidthSelection(void)
+{
+    const uint64_t sagaw39 = UINT64_C(1) << 9;
+    const uint64_t sagaw48 = UINT64_C(1) << 10;
+    const uint64_t sagawBoth = sagaw39 | sagaw48;
+    uint64_t capabilities[2];
+    uint32_t adjustedAddressBits = UINT32_MAX;
+    capabilities[0] = sagaw39;
+    TEST_ASSERT(HvEfiIommuSelectLegacyAdjustedWidth(
+                    capabilities, 1, 39, &adjustedAddressBits) ==
+                    HV_EFI_IOMMU_RUNTIME_OK && adjustedAddressBits == 39,
+                "common 39-bit SAGAW retains the three-level table format");
+    capabilities[0] = sagawBoth;
+    capabilities[1] = sagaw39;
+    TEST_ASSERT(HvEfiIommuSelectLegacyAdjustedWidth(
+                    capabilities, 2, 39, &adjustedAddressBits) ==
+                    HV_EFI_IOMMU_RUNTIME_OK && adjustedAddressBits == 39,
+                "39-bit format is preferred when every unit supports it");
+    capabilities[0] = sagaw48;
+    capabilities[1] = sagawBoth;
+    TEST_ASSERT(HvEfiIommuSelectLegacyAdjustedWidth(
+                    capabilities, 2, 39, &adjustedAddressBits) ==
+                    HV_EFI_IOMMU_RUNTIME_OK && adjustedAddressBits == 48,
+                "48-bit format is selected when it is the only common SAGAW");
+    capabilities[0] = sagaw39;
+    capabilities[1] = sagaw48;
+    adjustedAddressBits = UINT32_MAX;
+    TEST_ASSERT(HvEfiIommuSelectLegacyAdjustedWidth(
+                    capabilities, 2, 39, &adjustedAddressBits) ==
+                    HV_EFI_IOMMU_RUNTIME_REMAPPING_UNSUPPORTED &&
+                adjustedAddressBits == 0,
+                "disjoint SAGAW masks fail closed with no chosen format");
+    TEST_ASSERT(HvEfiIommuSelectLegacyAdjustedWidth(
+                    capabilities, 2, 48, &adjustedAddressBits) ==
+                    HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT &&
+                adjustedAddressBits == 0 &&
+                HvEfiIommuSelectLegacyAdjustedWidth(
+                    NULL, 1, 39, &adjustedAddressBits) ==
+                    HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT &&
+                HvEfiIommuSelectLegacyAdjustedWidth(
+                    capabilities, 0, 39, &adjustedAddressBits) ==
+                    HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT &&
+                HvEfiIommuSelectLegacyAdjustedWidth(
+                    capabilities, 1, 39, NULL) ==
+                    HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT,
+                "selector rejects invalid DMA widths and empty inputs");
+    return 0;
+}
+
 static void Write16(uint8_t *bytes, uint16_t value)
 {
     bytes[0] = (uint8_t)value;
@@ -880,6 +929,36 @@ static int TestLegacyIdentityDomain(void)
                     HV_EFI_IOMMU_RUNTIME_CAPACITY &&
                 result.PagesUsed == 0 && gTestVtdStorage[0] == 0,
                 "insufficient split capacity clears partial VT-d tables");
+    TEST_ASSERT(HvEfiIommuBuildLegacyIdentityDomainWithAdjustedWidth(
+                    gTestVtdStorage, 772, storagePhysical,
+                    &mapped, 1, &denied, 1, 7, 48, &result) ==
+                    HV_EFI_IOMMU_RUNTIME_OK &&
+                result.SecondLevelRootPhysical ==
+                    storagePhysical + UINT64_C(257) * UINT64_C(4096) &&
+                result.PagesUsed == 772 &&
+                gTestVtdStorage[257 * 512] ==
+                    (storagePhysical + UINT64_C(258) * UINT64_C(4096) |
+                     UINT64_C(3)) &&
+                gTestVtdStorage[257 * 512 + 1] == 0 &&
+                gTestVtdStorage[258 * 512] ==
+                    (storagePhysical + UINT64_C(259) * UINT64_C(4096) |
+                     UINT64_C(3)) &&
+                gTestVtdStorage[258 * 512 + 1] ==
+                    (storagePhysical + UINT64_C(260) * UINT64_C(4096) |
+                     UINT64_C(3)) &&
+                gTestVtdStorage[512 + 1] == UINT64_C(0x702) &&
+                gTestVtdStorage[771 * 512 + 1] == 0,
+                "48-bit contexts use a one-entry PML4 while retaining the 39-bit deny map");
+    mapped.PhysicalBase = UINT64_C(1) << 39;
+    mapped.Size = UINT64_C(0x1000);
+    TEST_ASSERT(HvEfiIommuBuildLegacyIdentityDomainWithAdjustedWidth(
+                    gTestVtdStorage, 772, storagePhysical,
+                    &mapped, 1, &denied, 1, 7, 48, &result) ==
+                    HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT &&
+                result.PagesUsed == 0,
+                "48-bit table format never expands the usable DMA range");
+    mapped.PhysicalBase = 0;
+    mapped.Size = UINT64_C(0x400000);
     mapped.Kind = HV_EFI_IOMMU_MAPPING_RMRR;
     TEST_ASSERT(HvEfiIommuBuildLegacyIdentityDomain(
                     gTestVtdStorage, 772, storagePhysical,
@@ -1049,6 +1128,97 @@ static int TestRootDeviceDomain(void)
                 contexts[(2 * 8) * 2] ==
                     (legacyResult.SecondLevelRootPhysical | UINT64_C(1)),
                 "insufficient GPU table capacity leaves no patched context or partial mapping");
+
+    TEST_ASSERT(HvEfiIommuBuildLegacyIdentityDomainWithAdjustedWidth(
+                    gTestVtdStorage, 772, legacyStoragePhysical,
+                    &mapped, 1, denied, 2, 7, 48, &legacyResult) ==
+                    HV_EFI_IOMMU_RUNTIME_OK &&
+                HvEfiIommuBuildRootDeviceDomain(
+                    gTestVtdStorage, 772, legacyStoragePhysical,
+                    &legacyResult, gTestRootDeviceStorage,
+                    HV_EFI_IOMMU_ROOT_DEVICE_TABLE_MAX_PAGES,
+                    rootStoragePhysical, &rootPlan, &rootResult) ==
+                    HV_EFI_IOMMU_RUNTIME_OK &&
+                rootResult.PagesUsed == 4 &&
+                HvEfiIommuAuditRootDeviceDomain(
+                    gTestVtdStorage, 772, legacyStoragePhysical,
+                    &legacyResult, gTestRootDeviceStorage,
+                    HV_EFI_IOMMU_ROOT_DEVICE_TABLE_MAX_PAGES,
+                    rootStoragePhysical, &rootPlan, &rootResult) ==
+                    HV_EFI_IOMMU_RUNTIME_OK,
+                "four-level root-device arena builds and audits within the 39-bit DMA limit");
+    contexts = gTestVtdStorage + 512;
+    rootPd = gTestRootDeviceStorage + 2 * 512;
+    rootPt = gTestRootDeviceStorage + 3 * 512;
+    TEST_ASSERT(gTestVtdStorage[257 * 512] ==
+                    (legacyStoragePhysical + UINT64_C(258) *
+                        UINT64_C(4096) | UINT64_C(3)) &&
+                gTestVtdStorage[257 * 512 + 1] == 0 &&
+                contexts[(2 * 8) * 2] ==
+                    (rootStoragePhysical | UINT64_C(1)) &&
+                contexts[(2 * 8) * 2 + 1] == UINT64_C(0x802) &&
+                contexts[(3 * 8 + 1) * 2 + 1] == UINT64_C(0x702) &&
+                gTestRootDeviceStorage[0] ==
+                    (rootStoragePhysical + UINT64_C(0x1000) |
+                     UINT64_C(3)) &&
+                gTestRootDeviceStorage[512] ==
+                    (rootStoragePhysical + UINT64_C(0x2000) |
+                     UINT64_C(3)) &&
+                rootPd[0] ==
+                    (rootStoragePhysical + UINT64_C(0x3000) |
+                     UINT64_C(3)) &&
+                rootPt[1] == UINT64_C(0x1001) &&
+                rootPt[3] == UINT64_C(0x3001) &&
+                rootPt[5] == 0 &&
+                gTestVtdStorage[771 * 512 + 1] == 0 &&
+                gTestVtdStorage[771 * 512 + 3] == 0,
+                "four-level PML4 links and AW2 contexts preserve private-page denial and read-only GPU mappings");
+    gTestVtdStorage[257 * 512 + 1] = UINT64_C(3);
+    TEST_ASSERT(HvEfiIommuAuditRootDeviceDomain(
+                    gTestVtdStorage, 772, legacyStoragePhysical,
+                    &legacyResult, gTestRootDeviceStorage,
+                    HV_EFI_IOMMU_ROOT_DEVICE_TABLE_MAX_PAGES,
+                    rootStoragePhysical, &rootPlan, &rootResult) ==
+                    HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED,
+                "legacy 48-bit audit rejects upper PML4 aliases");
+    gTestVtdStorage[257 * 512 + 1] = 0;
+    gTestRootDeviceStorage[1] = rootStoragePhysical + UINT64_C(0x1000) |
+        UINT64_C(3);
+    TEST_ASSERT(HvEfiIommuAuditRootDeviceDomain(
+                    gTestVtdStorage, 772, legacyStoragePhysical,
+                    &legacyResult, gTestRootDeviceStorage,
+                    HV_EFI_IOMMU_ROOT_DEVICE_TABLE_MAX_PAGES,
+                    rootStoragePhysical, &rootPlan, &rootResult) ==
+                    HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED,
+                "GPU 48-bit audit rejects upper PML4 aliases");
+    gTestRootDeviceStorage[1] = 0;
+    saved = contexts[(2 * 8) * 2 + 1];
+    contexts[(2 * 8) * 2 + 1] = UINT64_C(0x801);
+    TEST_ASSERT(HvEfiIommuAuditRootDeviceDomain(
+                    gTestVtdStorage, 772, legacyStoragePhysical,
+                    &legacyResult, gTestRootDeviceStorage,
+                    HV_EFI_IOMMU_ROOT_DEVICE_TABLE_MAX_PAGES,
+                    rootStoragePhysical, &rootPlan, &rootResult) ==
+                    HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED,
+                "four-level audit rejects a context with mismatched AW");
+    contexts[(2 * 8) * 2 + 1] = saved;
+
+    TestZero(gTestRootDeviceStorage, sizeof(gTestRootDeviceStorage));
+    TEST_ASSERT(HvEfiIommuBuildLegacyIdentityDomainWithAdjustedWidth(
+                    gTestVtdStorage, 772, legacyStoragePhysical,
+                    &mapped, 1, denied, 2, 7, 48, &legacyResult) ==
+                    HV_EFI_IOMMU_RUNTIME_OK &&
+                HvEfiIommuBuildRootDeviceDomain(
+                    gTestVtdStorage, 772, legacyStoragePhysical,
+                    &legacyResult, gTestRootDeviceStorage, 3,
+                    rootStoragePhysical, &rootPlan, &rootResult) ==
+                    HV_EFI_IOMMU_RUNTIME_CAPACITY &&
+                rootResult.PagesUsed == 0 &&
+                gTestRootDeviceStorage[0] == 0 &&
+                contexts[(2 * 8) * 2] ==
+                    (legacyResult.SecondLevelRootPhysical | UINT64_C(1)) &&
+                contexts[(2 * 8) * 2 + 1] == UINT64_C(0x702),
+                "four-level sparse-table capacity failure clears storage and leaves contexts unchanged");
     return 0;
 }
 
@@ -1103,13 +1273,15 @@ static uint32_t TestPciWrite16(
     return 0;
 }
 
-static HV_EFI_IOMMU_RUNTIME_STATUS RunCapabilityDiagnosticInstall(
+static HV_EFI_IOMMU_RUNTIME_STATUS RunCapabilityDiagnosticInstallInternal(
     HV_EFI_IOMMU_DMAR_INFO *info,
     HV_EFI_IOMMU_UNIT_CONFIGURATION *configurations,
     uint32_t unitCount,
     TEST_MMIO *mmio,
     HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic,
-    uint32_t failPciRestore)
+    uint32_t failPciRestore,
+    uint32_t adjustedAddressBits,
+    uint32_t *programAddressBits)
 {
     HV_EFI_IOMMU_OWNERSHIP_POLICY ownership;
     HV_EFI_IOMMU_RUNTIME_CALLBACKS runtimeCallbacks;
@@ -1124,6 +1296,7 @@ static HV_EFI_IOMMU_RUNTIME_STATUS RunCapabilityDiagnosticInstall(
     HV_EFI_IOMMU_PCI_COMMAND_STATE pciStates[2];
     TEST_PCI_ECAM ecam;
     uint32_t pciStateCount = 0;
+    HV_EFI_IOMMU_RUNTIME_STATUS status;
 
     info->UnitCount = unitCount;
     for (uint32_t index = 0; index < unitCount; ++index) {
@@ -1164,11 +1337,36 @@ static HV_EFI_IOMMU_RUNTIME_STATUS RunCapabilityDiagnosticInstall(
     segment.Segment = 0;
     segment.StartBus = 0;
     segment.EndBus = 0;
-    return HvEfiIommuInstallRuntimeIsolationWithDiagnostic(
-        info, configurations, unitCount, &ownership, &runtimeCallbacks,
-        &storage, 8, &plan, &runtime, unitStates, unitCount,
-        &segment, 1, &pciCallbacks, pciStates, 2, &pciStateCount,
-        &mmio->DmaQuiesced, diagnostic);
+    if (adjustedAddressBits == 0) {
+        status = HvEfiIommuInstallRuntimeIsolationWithDiagnostic(
+            info, configurations, unitCount, &ownership, &runtimeCallbacks,
+            &storage, 8, &plan, &runtime, unitStates, unitCount,
+            &segment, 1, &pciCallbacks, pciStates, 2, &pciStateCount,
+            &mmio->DmaQuiesced, diagnostic);
+    } else {
+        status = HvEfiIommuInstallRuntimeIsolationWithAdjustedWidth(
+            info, configurations, unitCount, &ownership, &runtimeCallbacks,
+            &storage, 8, &plan, &runtime, unitStates, unitCount,
+            &segment, 1, &pciCallbacks, pciStates, 2, &pciStateCount,
+            &mmio->DmaQuiesced, adjustedAddressBits, diagnostic);
+    }
+    if (programAddressBits != NULL && status == HV_EFI_IOMMU_RUNTIME_OK) {
+        *programAddressBits = programs[0].AddressBits;
+    }
+    return status;
+}
+
+static HV_EFI_IOMMU_RUNTIME_STATUS RunCapabilityDiagnosticInstall(
+    HV_EFI_IOMMU_DMAR_INFO *info,
+    HV_EFI_IOMMU_UNIT_CONFIGURATION *configurations,
+    uint32_t unitCount,
+    TEST_MMIO *mmio,
+    HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic,
+    uint32_t failPciRestore)
+{
+    return RunCapabilityDiagnosticInstallInternal(
+        info, configurations, unitCount, mmio, diagnostic,
+        failPciRestore, 0, NULL);
 }
 
 static void SetCapabilityDiagnosticSentinel(
@@ -1203,6 +1401,10 @@ static int TestCapabilityFailureDiagnostics(void)
         (UINT64_C(1) << 9) | (UINT64_C(37) << 16) | (UINT64_C(1) << 34);
     const uint64_t sllpsFailureCapability =
         (UINT64_C(1) << 9) | (UINT64_C(47) << 16);
+    const uint64_t sagaw48Mgaw39Capability =
+        (UINT64_C(1) << 10) | (UINT64_C(38) << 16) |
+        (UINT64_C(1) << 34);
+    uint32_t programAddressBits = UINT32_MAX;
 
     TEST_ASSERT(ParseFixture(image, &info, units, rmrrs, scopes, paths),
                 "capability diagnostics fixture DMAR parses");
@@ -1339,6 +1541,49 @@ static int TestCapabilityFailureDiagnostics(void)
                 diagnostic.RequestedAddressBits == 0 &&
                 diagnostic.Version == 0 && diagnostic.Capability == 0,
                 "a later successful install reinitializes all capability diagnostic fields");
+
+    TestZero(&mmio, sizeof(mmio));
+    mmio.CapabilityOverrideMask = 1;
+    mmio.CapabilityValues[0] = validCapability;
+    TEST_ASSERT(RunCapabilityDiagnosticInstallInternal(
+                    &info, configurations, 1, &mmio, &diagnostic, 0, 48,
+                    NULL) == HV_EFI_IOMMU_RUNTIME_REMAPPING_UNSUPPORTED &&
+                diagnostic.CapabilityFailure ==
+                    HV_EFI_IOMMU_CAPABILITY_FAILURE_SAGAW &&
+                diagnostic.RequestedAddressBits == 48 &&
+                diagnostic.Capability == validCapability &&
+                mmio.Writes == 0,
+                "explicit four-level admission rejects a unit that only supports three-level tables before MMIO writes");
+
+    TestZero(&mmio, sizeof(mmio));
+    mmio.CapabilityOverrideMask = 1;
+    mmio.CapabilityValues[0] =
+        (UINT64_C(1) << 10) | (UINT64_C(38) << 16);
+    TEST_ASSERT(RunCapabilityDiagnosticInstallInternal(
+                    &info, configurations, 1, &mmio, &diagnostic, 0, 48,
+                    NULL) == HV_EFI_IOMMU_RUNTIME_REMAPPING_UNSUPPORTED &&
+                diagnostic.CapabilityFailure ==
+                    HV_EFI_IOMMU_CAPABILITY_FAILURE_SLLPS &&
+                diagnostic.RequestedAddressBits == 48 &&
+                mmio.Writes == 0,
+                "four-level format still requires the existing 2-MiB capability");
+
+    TestZero(&mmio, sizeof(mmio));
+    mmio.VersionOverrideMask = 1;
+    mmio.VersionValues[0] = UINT64_C(0x40);
+    mmio.CapabilityOverrideMask = 1;
+    mmio.CapabilityValues[0] = sagaw48Mgaw39Capability;
+    programAddressBits = UINT32_MAX;
+    SetCapabilityDiagnosticSentinel(&diagnostic);
+    TEST_ASSERT(RunCapabilityDiagnosticInstallInternal(
+                    &info, configurations, 1, &mmio, &diagnostic, 0, 48,
+                    &programAddressBits) == HV_EFI_IOMMU_RUNTIME_OK &&
+                diagnostic.Stage == HV_EFI_IOMMU_INSTALL_STAGE_COMPLETE &&
+                diagnostic.PrimaryStatus == HV_EFI_IOMMU_RUNTIME_OK &&
+                diagnostic.FinalStatus == HV_EFI_IOMMU_RUNTIME_OK &&
+                diagnostic.RequestedAddressBits == 0 &&
+                programAddressBits == 39 && mmio.Writes != 0,
+                "four-level plan accepts MGAW=39 while programmed DMA width remains 39");
     return 0;
 }
 
@@ -1605,7 +1850,8 @@ static int TestInjectedIsolationOrchestration(void)
 
 int main(void)
 {
-    if (TestDomainIdCapability() != 0 || TestDmarParsing() != 0 ||
+    if (TestDomainIdCapability() != 0 ||
+        TestAdjustedWidthSelection() != 0 || TestDmarParsing() != 0 ||
         TestProgrammingAndRuntime() != 0 ||
         TestOwnershipAndTransactionalFailure() != 0 ||
         TestPhysicalAdmissionAndMediation() != 0 ||

@@ -1,5 +1,72 @@
 # GPU diagnostic payload failure investigation
 
+## Sixth physical run: VT-d supports only the 48-bit table format
+
+Run `gpu-20261021T032117Z-e70cc55505f948aab50c6c830b9048b1` used clean source
+`c6a36ffcda3e7d599ceff57439b8d7d6049f40da`. Its collected 577-byte
+`esp-payload-diagnostic.txt` has SHA-256
+`1E162092649E707EB6D185816BB33C4B0F09B0B70CE548EF02432ABFB960FB8D`.
+The packed startup detail is `2707108112` (`0xA15B3110`): unit 0 rejected the
+requested SAGAW format. VER major is 4, SAGAW mask `4` advertises 48-bit
+tables only, MGAW is 39 bits, and 2 MiB pages are supported. Software
+requested 39-bit tables. This identifies the incompatibility: the table
+format is unsupported even though the remapper's maximum guest address width
+is 39 bits.
+Intel defines SAGAW and MGAW as separate VT-d capabilities in its
+[VT-d specification](https://cdrdv2-public.intel.com/671081/vt-directed-io-spec.pdf).
+
+The image shows the separate PCR replay gate refusing to replay because the
+PCR banks are not empty. That refusal is not the payload failure: the loader
+continued the Windows handoff, loaded the payload successfully, and the
+payload returned `EFI_SECURITY_VIOLATION` (`0x800000000000001A`) after AP
+preparation. All 20 CPUs were prepared and VMX-ready; activation status and
+failure were zero. The recorded SAGAW rejection identifies the payload's
+preparation failure independently of the PCR replay gate.
+
+The offline fix now chooses one second-level table format
+supported by every remapping unit, preferring 39-bit when common and otherwise
+using 48-bit when common. Both formats retain the 39-bit DMA and table-address
+limits. For the four-level format, the legacy domain activates the reserved
+PML4 page 257, with entry 0 pointing to PDPT page 258; the sparse GPU domain
+uses one additional page for its PDPT. Builders and resident audits verify
+matching context AW values and require unused PML4 entries to remain zero,
+preventing aliases above the allowed range. The native DMA-denial walker
+recognizes both geometries. Runtime installation rechecks the selected SAGAW
+on every unit before remapper writes, while MGAW and DMAR host-width checks
+still use the separate configured DMA limit. Existing entry points preserve
+their prior semantics through wrappers; all structure layouts and the 80-byte
+version-1 handoff record remain unchanged.
+
+The unsigned native Release image is 189,952 bytes, SHA-256
+`08C480BF64C437DC3D619556C166E2A6207D69753807C258C260A8B640EF9852`.
+Its resident `.hvscan` audit passed at 55,478 bytes, and all 43 host tests
+passed serially. New fixtures cover common/disjoint SAGAW masks, the measured
+major-4/SAGAW-4/MGAW-39 capability tuple, AW2 contexts, private-page denial,
+read-only GPU mappings, upper-PML4 aliases, the unchanged 39-bit boundary,
+and cleanup on insufficient table capacity. Independent source review found
+no blocking issue. Build logs are retained locally under
+`.analysis/vtd-four-level-validation/`.
+
+The rebuilt image also exposed a compiler-emitted bounded RVA jump-table
+shape using `movsxd` that the resident-image checker did not recognize.
+The checker now recognizes that exact unsigned-bound/register-flow pattern
+and validates every table target and raw/virtual bound. Regression fixtures
+retain detection of genuine external references and reject mismatched
+registers, missing bounds, corrupt targets, and invalid table extents.
+No audit bypass or image-specific exemption was added.
+
+This corrects the measured table-format mismatch in source and host models.
+The new image has not been signed, staged, armed, or booted; no VM was started.
+Successful physical activation and GPU isolation remain unverified.
+
+FinalVerify completed with Secure Boot enabled, all 20 CPUs ABSENT, the reset
+boundary passed, the Windows boot-manager and firmware-text baselines matched,
+and no verification errors. Archive removed the selector and preserved the
+`Complete` journal (SHA-256
+`152259205B75D5E2CAB6F0D036041707E0AAA9DDD3A2431BFF239C421F38699F`). No
+further recovery commands are needed. The retained stage belongs to
+`032117`; retirement profiles for older runs cannot remove it.
+
 ## Fifth physical run: VT-d programming-plan capability rejection
 
 Run `gpu-20261021T023306Z-f33dfae1e322470ca9315bbbf8d49185` used clean source

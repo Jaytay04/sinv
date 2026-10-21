@@ -69,11 +69,11 @@ extern "C" {
 
 #define HV_EFI_IOMMU_LEGACY_ROOT_PAGES UINT32_C(1)
 #define HV_EFI_IOMMU_LEGACY_CONTEXT_PAGES UINT32_C(256)
-/* The reserved PML4 slot preserves storage sizing; AW=1 uses a 3-level walk. */
+/* The PML4 slot is reserved for AGAW=39 and active for AGAW=48. */
 #define HV_EFI_IOMMU_SL_PML4_PAGES UINT32_C(1)
 #define HV_EFI_IOMMU_SL_PDPT_PAGES UINT32_C(1)
 #define HV_EFI_IOMMU_SL_PD_PAGES UINT32_C(512)
-/* The context points at the PDPT at page 258; there is no active PML4 level. */
+/* The PDPT remains at page 258 for both supported adjusted widths. */
 #define HV_EFI_IOMMU_LEGACY_BASE_PAGES \
     (HV_EFI_IOMMU_LEGACY_ROOT_PAGES + \
      HV_EFI_IOMMU_LEGACY_CONTEXT_PAGES + \
@@ -470,6 +470,28 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildProgrammingPlan(
     uint32_t pollLimit,
     HV_EFI_IOMMU_PROGRAM_PLAN *plan);
 
+/* Chooses a table-walk format supported by every unit while keeping the
+ * usable DMA address width at 39 bits. CAP.SAGAW bit 1 represents 39-bit
+ * three-level tables and bit 2 represents 48-bit four-level tables. */
+HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuSelectLegacyAdjustedWidth(
+    const uint64_t *capabilities,
+    uint32_t capabilityCount,
+    uint32_t dmaAddressBits,
+    uint32_t *adjustedAddressBits);
+
+/* Explicit-format programming plan. AddressBits in each configuration
+ * remains the usable DMA/address limit; adjustedAddressBits selects AGAW. */
+HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildProgrammingPlanWithAdjustedWidth(
+    const HV_EFI_IOMMU_DMAR_INFO *dmar,
+    const HV_EFI_IOMMU_UNIT_CONFIGURATION *configurations,
+    uint32_t configurationCount,
+    const HV_EFI_IOMMU_OWNERSHIP_POLICY *ownership,
+    const HV_EFI_IOMMU_RUNTIME_CALLBACKS *callbacks,
+    const HV_EFI_IOMMU_PROGRAM_STORAGE *storage,
+    uint32_t pollLimit,
+    uint32_t adjustedAddressBits,
+    HV_EFI_IOMMU_PROGRAM_PLAN *plan);
+
 HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuRuntimeInitialize(
     HV_EFI_IOMMU_RUNTIME *runtime,
     const HV_EFI_IOMMU_PROGRAM_PLAN *plan,
@@ -559,6 +581,18 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildLegacyIdentityDomain(
     const HV_EFI_IOMMU_PROTECTED_RANGE *denyRanges,
     uint32_t denyRangeCount,
     uint16_t domainId,
+    HV_EFI_IOMMU_LEGACY_TABLE_RESULT *result);
+
+HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildLegacyIdentityDomainWithAdjustedWidth(
+    uint64_t *storage,
+    uint32_t storagePages,
+    uint64_t storagePhysical,
+    const HV_EFI_IOMMU_PROTECTED_RANGE *mappedRanges,
+    uint32_t mappedRangeCount,
+    const HV_EFI_IOMMU_PROTECTED_RANGE *denyRanges,
+    uint32_t denyRangeCount,
+    uint16_t domainId,
+    uint32_t adjustedAddressBits,
     HV_EFI_IOMMU_LEGACY_TABLE_RESULT *result);
 
 /*
@@ -660,6 +694,31 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationWithDiagnostic(
     uint32_t pciStateCapacity,
     uint32_t *pciStateCount,
     volatile uint32_t *dmaQuiescedState,
+    HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic);
+
+/* An unsupported width returns before invoking callbacks. Caller-owned output
+ * state is left unchanged on that early rejection; diagnostic, when supplied,
+ * records an argument failure. */
+HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationWithAdjustedWidth(
+    const HV_EFI_IOMMU_DMAR_INFO *dmar,
+    const HV_EFI_IOMMU_UNIT_CONFIGURATION *configurations,
+    uint32_t configurationCount,
+    const HV_EFI_IOMMU_OWNERSHIP_POLICY *ownership,
+    const HV_EFI_IOMMU_RUNTIME_CALLBACKS *runtimeCallbacks,
+    const HV_EFI_IOMMU_PROGRAM_STORAGE *programStorage,
+    uint32_t pollLimit,
+    HV_EFI_IOMMU_PROGRAM_PLAN *plan,
+    HV_EFI_IOMMU_RUNTIME *runtime,
+    HV_EFI_IOMMU_UNIT_RUNTIME_STATE *unitStates,
+    uint32_t unitStateCount,
+    const HV_EFI_IOMMU_MCFG_SEGMENT *segments,
+    uint32_t segmentCount,
+    const HV_EFI_IOMMU_PCI_CALLBACKS *pciCallbacks,
+    HV_EFI_IOMMU_PCI_COMMAND_STATE *pciStates,
+    uint32_t pciStateCapacity,
+    uint32_t *pciStateCount,
+    volatile uint32_t *dmaQuiescedState,
+    uint32_t adjustedAddressBits,
     HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic);
 
 #ifdef __cplusplus

@@ -108,6 +108,176 @@ Assert-True ($references.Count -eq 1 -and
     $references[0].SourceAddress -eq ($imageBase + 0x1100)) `
     'Only the genuine external call outside the table remains checked.'
 
+$movsxdDisassembly = @'
+0000000140001100: call 000000018F01C66C
+0000000140001200: cmp ecx, 1
+0000000140001203: ja 0000000140001300
+0000000140001209: movsxd rax, ecx
+000000014000120C: lea rdx, [140000000h]
+0000000140001213: mov ecx, dword ptr [rdx+rax*4+1C494h]
+000000014000121B: add rcx, rdx
+000000014000121E: jmp rcx
+0000000140001300: ret
+000000014001C3E8: ret
+000000014001C40F: ret
+000000014001C494: call 000000018F01C66C
+'@
+$movsxdRanges = @(Get-EfiResidentRvaTableRanges `
+    -DisassemblyText $movsxdDisassembly `
+    -ImageBytes $image `
+    -ImageBase $imageBase `
+    -SectionRva $sectionRva `
+    -SectionVirtualSize $sectionVirtualSize `
+    -SectionRawOffset $sectionRawOffset `
+    -SectionRawSize $sectionRawSize)
+Assert-True ($movsxdRanges.Count -eq 1 -and
+    $movsxdRanges[0].StartRva -eq 0x1c494 -and
+    $movsxdRanges[0].ByteLength -eq 8 -and
+    $movsxdRanges[0].EntryCount -eq 2) `
+    'A bounded movsxd dispatch exempts exactly its two RVA entries.'
+$movsxdReferences = @(Get-EfiResidentExternalReferences `
+    -DisassemblyText $movsxdDisassembly `
+    -DataRanges $movsxdRanges `
+    -ImageBase $imageBase `
+    -SectionRva $sectionRva `
+    -SectionVirtualSize $sectionVirtualSize)
+Assert-True ($movsxdReferences.Count -eq 1 -and
+    $movsxdReferences[0].SourceAddress -eq ($imageBase + 0x1100)) `
+    'The movsxd table does not hide genuine external references.'
+
+$mismatchedMovsxdSource = $movsxdDisassembly.Replace(
+    'movsxd rax, ecx', 'movsxd rax, edx')
+$mismatchedSourceRanges = @(Get-EfiResidentRvaTableRanges `
+    -DisassemblyText $mismatchedMovsxdSource `
+    -ImageBytes $image `
+    -ImageBase $imageBase `
+    -SectionRva $sectionRva `
+    -SectionVirtualSize $sectionVirtualSize `
+    -SectionRawOffset $sectionRawOffset `
+    -SectionRawSize $sectionRawSize)
+Assert-True ($mismatchedSourceRanges.Count -eq 0) `
+    'A movsxd source different from the compared 32-bit index is not exempted.'
+
+$mismatchedMovsxdLoadIndex = $movsxdDisassembly.Replace(
+    '[rdx+rax*4+1C494h]', '[rdx+r8*4+1C494h]')
+$mismatchedLoadIndexRanges = @(Get-EfiResidentRvaTableRanges `
+    -DisassemblyText $mismatchedMovsxdLoadIndex `
+    -ImageBytes $image `
+    -ImageBase $imageBase `
+    -SectionRva $sectionRva `
+    -SectionVirtualSize $sectionVirtualSize `
+    -SectionRawOffset $sectionRawOffset `
+    -SectionRawSize $sectionRawSize)
+Assert-True ($mismatchedLoadIndexRanges.Count -eq 0) `
+    'A table load index different from the movsxd destination is not exempted.'
+
+$movsxdAbsentBound = $movsxdDisassembly.Replace(
+    'cmp ecx, 1', 'test ecx, ecx')
+$movsxdAbsentBoundRanges = @(Get-EfiResidentRvaTableRanges `
+    -DisassemblyText $movsxdAbsentBound `
+    -ImageBytes $image `
+    -ImageBase $imageBase `
+    -SectionRva $sectionRva `
+    -SectionVirtualSize $sectionVirtualSize `
+    -SectionRawOffset $sectionRawOffset `
+    -SectionRawSize $sectionRawSize)
+Assert-True ($movsxdAbsentBoundRanges.Count -eq 0) `
+    'A movsxd dispatch without the unsigned index bound is not exempted.'
+$movsxdAbsentBoundReferences = @(Get-EfiResidentExternalReferences `
+    -DisassemblyText $movsxdAbsentBound `
+    -DataRanges $movsxdAbsentBoundRanges `
+    -ImageBase $imageBase `
+    -SectionRva $sectionRva `
+    -SectionVirtualSize $sectionVirtualSize)
+Assert-True (@($movsxdAbsentBoundReferences | Where-Object {
+    $_.SourceAddress -eq ($imageBase + 0x1c494)
+}).Count -eq 1) `
+    'The candidate table remains audited when its unsigned bound is absent.'
+
+$movsxdClobberedBase = $movsxdDisassembly.Replace(
+    'lea rdx, [140000000h]', 'lea rax, [140000000h]').Replace(
+    '[rdx+rax*4+1C494h]', '[rax+rax*4+1C494h]').Replace(
+    'add rcx, rdx', 'add rcx, rax')
+$movsxdClobberedBaseRanges = @(Get-EfiResidentRvaTableRanges `
+    -DisassemblyText $movsxdClobberedBase `
+    -ImageBytes $image `
+    -ImageBase $imageBase `
+    -SectionRva $sectionRva `
+    -SectionVirtualSize $sectionVirtualSize `
+    -SectionRawOffset $sectionRawOffset `
+    -SectionRawSize $sectionRawSize)
+Assert-True ($movsxdClobberedBaseRanges.Count -eq 0) `
+    'A base register that aliases and overwrites the movsxd index is not exempted.'
+
+$movsxdConflictingDispatch = $movsxdDisassembly.Replace(
+    'mov ecx, dword ptr [rdx+rax*4+1C494h]',
+    'mov eax, dword ptr [rdx+rax*4+1C494h]').Replace(
+    'add rcx, rdx', 'add rax, rdx').Replace(
+    'jmp rcx', 'jmp rax')
+$movsxdConflictingDispatchRanges = @(Get-EfiResidentRvaTableRanges `
+    -DisassemblyText $movsxdConflictingDispatch `
+    -ImageBytes $image `
+    -ImageBase $imageBase `
+    -SectionRva $sectionRva `
+    -SectionVirtualSize $sectionVirtualSize `
+    -SectionRawOffset $sectionRawOffset `
+    -SectionRawSize $sectionRawSize)
+Assert-True ($movsxdConflictingDispatchRanges.Count -eq 1 -and
+    $movsxdConflictingDispatchRanges[0].StartRva -eq 0x1c494 -and
+    $movsxdConflictingDispatchRanges[0].ByteLength -eq 8) `
+    'The table index may alias the dispatch destination after the load reads it.'
+
+$movsxdConflictingBaseDestination = $movsxdDisassembly.Replace(
+    'lea rdx, [140000000h]', 'lea rcx, [140000000h]').Replace(
+    '[rdx+rax*4+1C494h]', '[rcx+rax*4+1C494h]').Replace(
+    'add rcx, rdx', 'add rcx, rcx')
+$movsxdConflictingBaseDestinationRanges = @(Get-EfiResidentRvaTableRanges `
+    -DisassemblyText $movsxdConflictingBaseDestination `
+    -ImageBytes $image `
+    -ImageBase $imageBase `
+    -SectionRva $sectionRva `
+    -SectionVirtualSize $sectionVirtualSize `
+    -SectionRawOffset $sectionRawOffset `
+    -SectionRawSize $sectionRawSize)
+Assert-True ($movsxdConflictingBaseDestinationRanges.Count -eq 0) `
+    'A base register aliasing the loaded dispatch destination is not exempted.'
+
+$movsxdBadTargetImage = [byte[]]$image.Clone()
+$movsxdTableOffset = 0x200 + (0x1c494 - 0x1000)
+Set-UInt32 $movsxdBadTargetImage $movsxdTableOffset 0x900000
+Assert-Throws {
+    Get-EfiResidentRvaTableRanges `
+        -DisassemblyText $movsxdDisassembly `
+        -ImageBytes $movsxdBadTargetImage `
+        -ImageBase $imageBase `
+        -SectionRva $sectionRva `
+        -SectionVirtualSize $sectionVirtualSize `
+        -SectionRawOffset $sectionRawOffset `
+        -SectionRawSize $sectionRawSize
+} 'A movsxd table with a corrupt target fails closed.'
+
+Assert-Throws {
+    Get-EfiResidentRvaTableRanges `
+        -DisassemblyText $movsxdDisassembly `
+        -ImageBytes $image `
+        -ImageBase $imageBase `
+        -SectionRva $sectionRva `
+        -SectionVirtualSize $sectionVirtualSize `
+        -SectionRawOffset $sectionRawOffset `
+        -SectionRawSize ([uint64]0x1b498)
+} 'A movsxd table crossing the raw section boundary fails closed.'
+
+Assert-Throws {
+    Get-EfiResidentRvaTableRanges `
+        -DisassemblyText $movsxdDisassembly `
+        -ImageBytes $image `
+        -ImageBase $imageBase `
+        -SectionRva $sectionRva `
+        -SectionVirtualSize ([uint64]0x1b498) `
+        -SectionRawOffset $sectionRawOffset `
+        -SectionRawSize $sectionRawSize
+} 'A movsxd table crossing the virtual section boundary fails closed.'
+
 $absentBound = $boundedDisassembly.Replace(
     '0000000140001200: cmp eax, 1',
     '0000000140001200: test eax, eax')

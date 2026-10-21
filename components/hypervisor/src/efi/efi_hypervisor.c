@@ -2343,7 +2343,8 @@ static int HvEfiGpuRmrrOwner(const HV_EFI_PHYSICAL_IOMMU_STATE *state,
 static EFI_STATUS HvEfiGpuBuildDmaDomain(
     HV_EFI_CONTEXT *context, HV_EFI_PHYSICAL_IOMMU_STATE *state,
     const HV_EFI_IOMMU_PROTECTED_RANGE *mapped, uint32_t mappedCount,
-    const HV_EFI_IOMMU_PROTECTED_RANGE *denied, uint32_t deniedCount)
+    const HV_EFI_IOMMU_PROTECTED_RANGE *denied, uint32_t deniedCount,
+    uint32_t adjustedAddressBits)
 {
     HV_GPU_NATIVE_STATE *gpu = (HV_GPU_NATIVE_STATE *)(uintptr_t)
         context->GpuStatePhysical;
@@ -2394,7 +2395,9 @@ static EFI_STATUS HvEfiGpuBuildDmaDomain(
         uint32_t scope;
         HvEfiBootDiagnosticSetIommuStep(
             HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_UNIT_CAPABILITY);
-        if (unit->Segment != 0 || ((cap >> 8) & 2) == 0) {
+        if (unit->Segment != 0 ||
+            (adjustedAddressBits != 39 && adjustedAddressBits != 48) ||
+            ((cap >> 8) & (adjustedAddressBits == 39 ? 2u : 4u)) == 0) {
             status = EFI_UNSUPPORTED; goto cleanup;
         }
         HvEfiBootDiagnosticSetIommuStep(
@@ -2616,6 +2619,8 @@ static EFI_STATUS HvEfiPreparePhysicalIommu(
     HV_EFI_IOMMU_PROGRAM_STORAGE programStorage;
     HV_EFI_IOMMU_OWNERSHIP_POLICY ownership;
     HV_EFI_IOMMU_INSTALL_DIAGNOSTIC installDiagnostic;
+    uint64_t capabilities[HV_EFI_PHYSICAL_IOMMU_MAX_UNITS];
+    uint32_t adjustedAddressBits = 0;
     uint32_t mappedCapacity;
     uint32_t mappedCount = 0;
     uint32_t index;
@@ -2641,6 +2646,7 @@ static EFI_STATUS HvEfiPreparePhysicalIommu(
         HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE);
     if (state == NULL || state->Signature != HV_EFI_PHYSICAL_IOMMU_SIGNATURE ||
         state->Enabled != 0 || state->Dmar.UnitCount == 0 ||
+        state->Dmar.UnitCount > HV_EFI_PHYSICAL_IOMMU_MAX_UNITS ||
         state->McfgCount == 0 ||
         memoryMapSize / descriptorSize > UINT32_MAX - state->Dmar.RmrrCount) {
         return EFI_SECURITY_VIOLATION;
@@ -2733,11 +2739,26 @@ static EFI_STATUS HvEfiPreparePhysicalIommu(
         HV_EFI_BOOT_DIAGNOSTIC_IOMMU_IDENTITY_DOMAIN, 0,
         HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE,
         HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE);
-    iommuStatus = HvEfiIommuBuildLegacyIdentityDomain(
+    /* All remappers share these context tables. Select their common walk
+     * format without widening the 39-bit DMA or table-address policy. */
+    for (index = 0; index < state->Dmar.UnitCount; ++index) {
+        capabilities[index] = *(volatile uint64_t *)(uintptr_t)
+            (state->Dmar.Units[index].RegisterBase + 8);
+    }
+    iommuStatus = HvEfiIommuSelectLegacyAdjustedWidth(
+        capabilities, state->Dmar.UnitCount, 39, &adjustedAddressBits);
+    if (iommuStatus != HV_EFI_IOMMU_RUNTIME_OK) {
+        HvEfiBootDiagnosticSetIommu(
+            HV_EFI_BOOT_DIAGNOSTIC_IOMMU_IDENTITY_DOMAIN, 0,
+            (uint32_t)iommuStatus, (uint32_t)iommuStatus);
+        goto cleanup;
+    }
+    iommuStatus = HvEfiIommuBuildLegacyIdentityDomainWithAdjustedWidth(
         (uint64_t *)(uintptr_t)context->PhysicalIommuTablePhysical,
         context->PhysicalIommuTablePages,
         context->PhysicalIommuTablePhysical,
-        mapped, mappedCount, denied, eptDenyRangeCount, 1, &state->Tables);
+        mapped, mappedCount, denied, eptDenyRangeCount, 1,
+        adjustedAddressBits, &state->Tables);
     if (iommuStatus != HV_EFI_IOMMU_RUNTIME_OK) {
         HvEfiBootDiagnosticSetIommu(
             HV_EFI_BOOT_DIAGNOSTIC_IOMMU_IDENTITY_DOMAIN, 0,
@@ -2750,7 +2771,8 @@ static EFI_STATUS HvEfiPreparePhysicalIommu(
             HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE,
             HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE);
         status = HvEfiGpuBuildDmaDomain(
-            context, state, mapped, mappedCount, denied, eptDenyRangeCount);
+            context, state, mapped, mappedCount, denied, eptDenyRangeCount,
+            adjustedAddressBits);
         if (EFI_ERROR(status)) {
             iommuStatus = HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
             goto cleanup;
@@ -2794,14 +2816,14 @@ static EFI_STATUS HvEfiPreparePhysicalIommu(
         HV_EFI_BOOT_DIAGNOSTIC_IOMMU_RUNTIME_INSTALL, 0,
         HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE,
         HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE);
-    iommuStatus = HvEfiIommuInstallRuntimeIsolationWithDiagnostic(
+    iommuStatus = HvEfiIommuInstallRuntimeIsolationWithAdjustedWidth(
         &state->Dmar, state->Configurations, state->Dmar.UnitCount,
         &ownership, &callbacks, &programStorage,
         HV_EFI_PHYSICAL_IOMMU_POLL_LIMIT, &state->Plan, &state->Runtime,
         state->UnitStates, HV_EFI_PHYSICAL_IOMMU_MAX_UNITS,
         state->Mcfg, state->McfgCount, &pciCallbacks, state->PciStates,
         HV_EFI_PHYSICAL_IOMMU_MAX_PCI_STATES, &state->PciStateCount,
-        &state->DmaQuiesced, &installDiagnostic);
+        &state->DmaQuiesced, adjustedAddressBits, &installDiagnostic);
     HvEfiBootDiagnosticSetIommu(
         HV_EFI_BOOT_DIAGNOSTIC_IOMMU_RUNTIME_INSTALL, installDiagnostic.Stage,
         installDiagnostic.PrimaryStatus, installDiagnostic.FinalStatus);

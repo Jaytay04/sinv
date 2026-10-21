@@ -1,5 +1,13 @@
 # Manual Intel UHD 770 bare-metal test
 
+**Archived run instructions.** This guide produced run `032117`, which is now
+recovered, complete, and archived. Its saved diagnostic confirms a VT-d
+table-format mismatch; see the
+[sixth-run investigation](GPU_PAYLOAD_FAILURE_INVESTIGATION.md#sixth-physical-run-vt-d-supports-only-the-48-bit-table-format).
+The `-CompletedRun023306` retirement commands below do not own the retained
+`032117` stage. A new run requires its own retirement review and an updated
+guide after offline verification of the table-format fix.
+
 This is the operator-run physical test you requested, using the existing
 `gpu-host-test.ps1` workflow. It is separate from the completed VM test.
 The agent has not staged, armed, rebooted, or changed the primary host for this

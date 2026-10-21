@@ -627,6 +627,45 @@ static void HvRecordCapabilityFailure(
     }
 }
 
+HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuSelectLegacyAdjustedWidth(
+    const uint64_t *capabilities,
+    uint32_t capabilityCount,
+    uint32_t dmaAddressBits,
+    uint32_t *adjustedAddressBits)
+{
+    uint32_t supports39 = 1;
+    uint32_t supports48 = 1;
+    uint32_t index;
+    if (adjustedAddressBits == NULL) {
+        return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+    }
+    *adjustedAddressBits = 0;
+    if (capabilities == NULL || capabilityCount == 0 ||
+        dmaAddressBits != 39) {
+        return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+    }
+    for (index = 0; index < capabilityCount; ++index) {
+        const uint32_t sagaw = (uint32_t)(
+            (capabilities[index] >> HV_VTD_CAP_SAGAW_SHIFT) &
+            HV_VTD_CAP_SAGAW_MASK);
+        if ((sagaw & (UINT32_C(1) << 1)) == 0) {
+            supports39 = 0;
+        }
+        if ((sagaw & (UINT32_C(1) << 2)) == 0) {
+            supports48 = 0;
+        }
+    }
+    if (supports39 != 0) {
+        *adjustedAddressBits = 39;
+        return HV_EFI_IOMMU_RUNTIME_OK;
+    }
+    if (supports48 != 0) {
+        *adjustedAddressBits = 48;
+        return HV_EFI_IOMMU_RUNTIME_OK;
+    }
+    return HV_EFI_IOMMU_RUNTIME_REMAPPING_UNSUPPORTED;
+}
+
 static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildProgrammingPlanInternal(
     const HV_EFI_IOMMU_DMAR_INFO *dmar,
     const HV_EFI_IOMMU_UNIT_CONFIGURATION *configurations,
@@ -636,6 +675,7 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildProgrammingPlanInternal(
     const HV_EFI_IOMMU_PROGRAM_STORAGE *storage,
     uint32_t pollLimit,
     HV_EFI_IOMMU_PROGRAM_PLAN *plan,
+    uint32_t adjustedAddressBits,
     HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic)
 {
     uint32_t requiredOperations = 0;
@@ -662,6 +702,8 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildProgrammingPlanInternal(
         const HV_EFI_IOMMU_UNIT_CONFIGURATION *configuration =
             &configurations[unitIndex];
         uint32_t unitOperations = 8;
+        const uint32_t unitAdjustedAddressBits = adjustedAddressBits == 0 ?
+            configuration->AddressBits : adjustedAddressBits;
         if (!HvBooleanValid(configuration->EnableQueuedInvalidation) ||
             !HvBooleanValid(configuration->EnableInterruptRemapping) ||
             !HvBooleanValid(configuration->EnableExtendedInterruptMode) ||
@@ -671,7 +713,10 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildProgrammingPlanInternal(
              HV_EFI_IOMMU_RUNTIME_PAGE_MASK) != 0 ||
             configuration->AddressBits > dmar->HostAddressBits ||
             (configuration->AddressBits != 39 &&
-             configuration->AddressBits != 48)) {
+             configuration->AddressBits != 48) ||
+            (unitAdjustedAddressBits != 39 &&
+             unitAdjustedAddressBits != 48) ||
+            unitAdjustedAddressBits < configuration->AddressBits) {
             return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
         }
         if (!HvRangeBelowWidth(
@@ -841,6 +886,8 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildProgrammingPlanInternal(
         const HV_EFI_IOMMU_UNIT_CONFIGURATION *configuration =
             &configurations[unitIndex];
         HV_EFI_IOMMU_UNIT_PROGRAM *program = &storage->Units[unitIndex];
+        const uint32_t unitAdjustedAddressBits = adjustedAddressBits == 0 ?
+            configuration->AddressBits : adjustedAddressBits;
         uint64_t version;
         uint64_t capability;
         uint64_t extendedCapability;
@@ -851,7 +898,7 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildProgrammingPlanInternal(
         uint32_t mgaw;
         uint32_t desiredStatus = HV_VTD_GSTS_TES;
         uint32_t command = 0;
-        uint32_t agawBit = configuration->AddressBits == 39 ? 1 : 2;
+        uint32_t agawBit = unitAdjustedAddressBits == 39 ? 1 : 2;
         if (callbacks->Read(callbacks->Context,
                             unit->RegisterBase + HV_VTD_VERSION,
                             4, &version) == 0 ||
@@ -875,7 +922,7 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildProgrammingPlanInternal(
         if (((version >> 4) & UINT64_C(0x0f)) == 0) {
             HvRecordCapabilityFailure(
                 diagnostic, HV_EFI_IOMMU_CAPABILITY_FAILURE_VERSION,
-                unitIndex, configuration->AddressBits, version, capability);
+                unitIndex, unitAdjustedAddressBits, version, capability);
             return HV_EFI_IOMMU_RUNTIME_REMAPPING_UNSUPPORTED;
         }
         sagaw = (uint32_t)((capability >> HV_VTD_CAP_SAGAW_SHIFT) &
@@ -885,19 +932,19 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildProgrammingPlanInternal(
         if ((sagaw & (UINT32_C(1) << agawBit)) == 0) {
             HvRecordCapabilityFailure(
                 diagnostic, HV_EFI_IOMMU_CAPABILITY_FAILURE_SAGAW,
-                unitIndex, configuration->AddressBits, version, capability);
+                unitIndex, unitAdjustedAddressBits, version, capability);
             return HV_EFI_IOMMU_RUNTIME_REMAPPING_UNSUPPORTED;
         }
         if (mgaw < configuration->AddressBits) {
             HvRecordCapabilityFailure(
                 diagnostic, HV_EFI_IOMMU_CAPABILITY_FAILURE_MGAW,
-                unitIndex, configuration->AddressBits, version, capability);
+                unitIndex, unitAdjustedAddressBits, version, capability);
             return HV_EFI_IOMMU_RUNTIME_REMAPPING_UNSUPPORTED;
         }
         if ((capability & HV_VTD_CAP_SLLPS_2MB) == 0) {
             HvRecordCapabilityFailure(
                 diagnostic, HV_EFI_IOMMU_CAPABILITY_FAILURE_SLLPS,
-                unitIndex, configuration->AddressBits, version, capability);
+                unitIndex, unitAdjustedAddressBits, version, capability);
             return HV_EFI_IOMMU_RUNTIME_REMAPPING_UNSUPPORTED;
         }
         if ((statusValue & (HV_VTD_GSTS_TES | HV_VTD_GSTS_QIES |
@@ -1047,7 +1094,29 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildProgrammingPlan(
 {
     return HvEfiIommuBuildProgrammingPlanInternal(
         dmar, configurations, configurationCount, ownership, callbacks,
-        storage, pollLimit, plan, NULL);
+        storage, pollLimit, plan, 0, NULL);
+}
+
+HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildProgrammingPlanWithAdjustedWidth(
+    const HV_EFI_IOMMU_DMAR_INFO *dmar,
+    const HV_EFI_IOMMU_UNIT_CONFIGURATION *configurations,
+    uint32_t configurationCount,
+    const HV_EFI_IOMMU_OWNERSHIP_POLICY *ownership,
+    const HV_EFI_IOMMU_RUNTIME_CALLBACKS *callbacks,
+    const HV_EFI_IOMMU_PROGRAM_STORAGE *storage,
+    uint32_t pollLimit,
+    uint32_t adjustedAddressBits,
+    HV_EFI_IOMMU_PROGRAM_PLAN *plan)
+{
+    if (adjustedAddressBits != 39 && adjustedAddressBits != 48) {
+        if (plan != NULL) {
+            HvZero(plan, sizeof(*plan));
+        }
+        return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+    }
+    return HvEfiIommuBuildProgrammingPlanInternal(
+        dmar, configurations, configurationCount, ownership, callbacks,
+        storage, pollLimit, plan, adjustedAddressBits, NULL);
 }
 
 HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuRuntimeInitialize(
@@ -2125,7 +2194,7 @@ static int HvIommuRangeContained(
     return 0;
 }
 
-HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildLegacyIdentityDomain(
+HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildLegacyIdentityDomainWithAdjustedWidth(
     uint64_t *storage,
     uint32_t storagePages,
     uint64_t storagePhysical,
@@ -2134,18 +2203,21 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildLegacyIdentityDomain(
     const HV_EFI_IOMMU_PROTECTED_RANGE *denyRanges,
     uint32_t denyRangeCount,
     uint16_t domainId,
+    uint32_t adjustedAddressBits,
     HV_EFI_IOMMU_LEGACY_TABLE_RESULT *result)
 {
     const uint64_t limit = UINT64_C(1) << 39;
     uint32_t bus;
     uint32_t pdptIndex;
     uint32_t nextSplitPage = HV_EFI_IOMMU_LEGACY_BASE_PAGES;
+    uint64_t *pml4;
     uint64_t *pdpt;
     if (result != NULL) {
         HvZero(result, sizeof(*result));
     }
     if (storage == NULL || result == NULL ||
         storagePages < HV_EFI_IOMMU_LEGACY_BASE_PAGES ||
+        (adjustedAddressBits != 39 && adjustedAddressBits != 48) ||
         storagePhysical == 0 ||
         (storagePhysical & HV_EFI_IOMMU_RUNTIME_PAGE_MASK) != 0 ||
         (uint64_t)storagePages >
@@ -2178,13 +2250,20 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildLegacyIdentityDomain(
     }
     HvZero(storage, (size_t)storagePages *
         (size_t)HV_EFI_IOMMU_RUNTIME_PAGE_SIZE);
-    /* AW=1 is a 39-bit, three-level walk. The context points directly at
-     * this top-level page; page 257 remains reserved for buffer compatibility
-     * but is not an additional translation level. */
+    /* Keep the PDPT at page 258 so the existing bounded storage layout and
+     * split-page allocator remain stable. AGAW=48 activates page 257 as the
+     * single-entry PML4; its only reachable addresses stay below 2^39. */
+    pml4 = storage +
+        (size_t)(HV_EFI_IOMMU_LEGACY_ROOT_PAGES +
+                 HV_EFI_IOMMU_LEGACY_CONTEXT_PAGES) * 512;
     pdpt = storage +
         (size_t)(HV_EFI_IOMMU_LEGACY_ROOT_PAGES +
                  HV_EFI_IOMMU_LEGACY_CONTEXT_PAGES +
                  HV_EFI_IOMMU_SL_PML4_PAGES) * 512;
+    if (adjustedAddressBits == 48) {
+        pml4[0] = storagePhysical +
+            UINT64_C(258) * HV_EFI_IOMMU_RUNTIME_PAGE_SIZE | UINT64_C(3);
+    }
 
     for (bus = 0; bus < 256; ++bus) {
         uint32_t deviceFunction;
@@ -2194,10 +2273,12 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildLegacyIdentityDomain(
         storage[bus * 2] = contextPhysical | UINT64_C(1);
         for (deviceFunction = 0; deviceFunction < 256; ++deviceFunction) {
             contexts[deviceFunction * 2] =
-                storagePhysical + UINT64_C(258) *
+                storagePhysical + (adjustedAddressBits == 39 ?
+                    UINT64_C(258) : UINT64_C(257)) *
                     HV_EFI_IOMMU_RUNTIME_PAGE_SIZE | UINT64_C(1);
             contexts[deviceFunction * 2 + 1] =
-                ((uint64_t)domainId << 8) | UINT64_C(1);
+                ((uint64_t)domainId << 8) |
+                (adjustedAddressBits == 39 ? UINT64_C(1) : UINT64_C(2));
         }
     }
 
@@ -2258,10 +2339,27 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildLegacyIdentityDomain(
     }
     result->RootTablePhysical = storagePhysical;
     result->SecondLevelRootPhysical = storagePhysical +
-        UINT64_C(258) * HV_EFI_IOMMU_RUNTIME_PAGE_SIZE;
+        (adjustedAddressBits == 39 ? UINT64_C(258) : UINT64_C(257)) *
+            HV_EFI_IOMMU_RUNTIME_PAGE_SIZE;
     result->PagesUsed = nextSplitPage;
     result->DomainId = domainId;
     return HV_EFI_IOMMU_RUNTIME_OK;
+}
+
+HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildLegacyIdentityDomain(
+    uint64_t *storage,
+    uint32_t storagePages,
+    uint64_t storagePhysical,
+    const HV_EFI_IOMMU_PROTECTED_RANGE *mappedRanges,
+    uint32_t mappedRangeCount,
+    const HV_EFI_IOMMU_PROTECTED_RANGE *denyRanges,
+    uint32_t denyRangeCount,
+    uint16_t domainId,
+    HV_EFI_IOMMU_LEGACY_TABLE_RESULT *result)
+{
+    return HvEfiIommuBuildLegacyIdentityDomainWithAdjustedWidth(
+        storage, storagePages, storagePhysical, mappedRanges,
+        mappedRangeCount, denyRanges, denyRangeCount, domainId, 39, result);
 }
 
 #define HV_ROOT_VTD_READ UINT64_C(1)
@@ -2361,6 +2459,34 @@ static int HvRootPlanOverlaps(
     return 0;
 }
 
+static HV_EFI_IOMMU_RUNTIME_STATUS HvRootGetAdjustedAddressBits(
+    uint64_t legacyStoragePhysical,
+    const HV_EFI_IOMMU_LEGACY_TABLE_RESULT *legacyResult,
+    uint32_t *adjustedAddressBits)
+{
+    uint64_t threeLevelRoot;
+    uint64_t fourLevelRoot;
+    if (legacyResult == NULL || adjustedAddressBits == NULL ||
+        !HvRootAddU64(legacyStoragePhysical,
+            UINT64_C(258) * HV_EFI_IOMMU_RUNTIME_PAGE_SIZE,
+            &threeLevelRoot) ||
+        !HvRootAddU64(legacyStoragePhysical,
+            UINT64_C(257) * HV_EFI_IOMMU_RUNTIME_PAGE_SIZE,
+            &fourLevelRoot)) {
+        return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+    }
+    *adjustedAddressBits = 0;
+    if (legacyResult->SecondLevelRootPhysical == threeLevelRoot) {
+        *adjustedAddressBits = 39;
+        return HV_EFI_IOMMU_RUNTIME_OK;
+    }
+    if (legacyResult->SecondLevelRootPhysical == fourLevelRoot) {
+        *adjustedAddressBits = 48;
+        return HV_EFI_IOMMU_RUNTIME_OK;
+    }
+    return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+}
+
 static HV_EFI_IOMMU_RUNTIME_STATUS HvRootValidatePlan(
     const HV_EFI_IOMMU_ROOT_DEVICE_PLAN *plan)
 {
@@ -2456,6 +2582,7 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvRootValidateInputs(
     uint64_t legacyStorageEnd;
     uint64_t rootStorageEnd;
     uint32_t index;
+    uint32_t adjustedAddressBits;
     HV_EFI_IOMMU_RUNTIME_STATUS status = HvRootValidatePlan(rootPlan);
     if (status != HV_EFI_IOMMU_RUNTIME_OK) {
         return status;
@@ -2469,13 +2596,13 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvRootValidateInputs(
         legacyResult->PagesUsed < HV_EFI_IOMMU_LEGACY_BASE_PAGES ||
         legacyResult->PagesUsed > legacyStoragePages ||
         legacyResult->RootTablePhysical != legacyStoragePhysical ||
-        legacyResult->SecondLevelRootPhysical != legacyStoragePhysical +
-            (uint64_t)(HV_EFI_IOMMU_LEGACY_ROOT_PAGES +
-                       HV_EFI_IOMMU_LEGACY_CONTEXT_PAGES +
-                       HV_EFI_IOMMU_SL_PML4_PAGES) *
-                HV_EFI_IOMMU_RUNTIME_PAGE_SIZE ||
         legacyResult->DomainId == 0 ||
         legacyResult->DomainId != rootPlan->LegacyDomainId) {
+        return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+    }
+    if (HvRootGetAdjustedAddressBits(
+            legacyStoragePhysical, legacyResult,
+            &adjustedAddressBits) != HV_EFI_IOMMU_RUNTIME_OK) {
         return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
     }
     if (rootStoragePages < 2 ||
@@ -2532,12 +2659,20 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvRootAuditLegacyContexts(
     uint32_t rootInstalled)
 {
     uint32_t bus;
+    uint32_t adjustedAddressBits;
+    if (HvRootGetAdjustedAddressBits(
+            legacyStoragePhysical, legacyResult,
+            &adjustedAddressBits) != HV_EFI_IOMMU_RUNTIME_OK) {
+        return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+    }
     const uint64_t legacyRootEntry =
         legacyResult->SecondLevelRootPhysical | UINT64_C(1);
     const uint64_t legacyDomainEntry =
-        ((uint64_t)legacyResult->DomainId << 8) | UINT64_C(1);
+        ((uint64_t)legacyResult->DomainId << 8) |
+        (adjustedAddressBits == 39 ? UINT64_C(1) : UINT64_C(2));
     const uint64_t rootDomainEntry =
-        ((uint64_t)rootPlan->DomainId << 8) | UINT64_C(1);
+        ((uint64_t)rootPlan->DomainId << 8) |
+        (adjustedAddressBits == 39 ? UINT64_C(1) : UINT64_C(2));
     for (bus = 0; bus < 256; ++bus) {
         const uint64_t expectedContextPhysical = legacyStoragePhysical +
             (uint64_t)(1 + bus) * HV_EFI_IOMMU_RUNTIME_PAGE_SIZE;
@@ -2571,7 +2706,8 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvRootAuditLegacyContexts(
 
 static HV_EFI_IOMMU_RUNTIME_STATUS HvRootAuditLegacySecondLevelRoot(
     const uint64_t *legacyStorage,
-    uint64_t legacyStoragePhysical)
+    uint64_t legacyStoragePhysical,
+    const HV_EFI_IOMMU_LEGACY_TABLE_RESULT *legacyResult)
 {
     const uint64_t *reserved = legacyStorage +
         (size_t)(HV_EFI_IOMMU_LEGACY_ROOT_PAGES +
@@ -2580,9 +2716,19 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvRootAuditLegacySecondLevelRoot(
         (size_t)(HV_EFI_IOMMU_LEGACY_ROOT_PAGES +
                  HV_EFI_IOMMU_LEGACY_CONTEXT_PAGES +
                  HV_EFI_IOMMU_SL_PML4_PAGES) * 512;
+    uint32_t adjustedAddressBits;
     uint32_t pdptIndex;
+    if (HvRootGetAdjustedAddressBits(
+            legacyStoragePhysical, legacyResult,
+            &adjustedAddressBits) != HV_EFI_IOMMU_RUNTIME_OK) {
+        return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+    }
     for (pdptIndex = 0; pdptIndex < 512; ++pdptIndex) {
-        if (reserved[pdptIndex] != 0) {
+        const uint64_t expectedPml4 = adjustedAddressBits == 48 &&
+            pdptIndex == 0 ?
+            legacyStoragePhysical + UINT64_C(258) *
+                HV_EFI_IOMMU_RUNTIME_PAGE_SIZE | UINT64_C(3) : 0;
+        if (reserved[pdptIndex] != expectedPml4) {
             return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
         }
     }
@@ -2613,13 +2759,29 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvRootLegacyPageUnmapped(
     uint64_t entry;
     uint64_t pageIndex;
     uint32_t pdIndex;
+    uint32_t adjustedAddressBits;
     if (unmapped == NULL || page >=
             (UINT64_C(1) << HV_EFI_IOMMU_ROOT_DEVICE_ADDRESS_BITS) ||
         (page & HV_EFI_IOMMU_RUNTIME_PAGE_MASK) != 0) {
         return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
     }
     *unmapped = 0;
-    /* AW=1 walks the PDPT at index 258, then one of the PDs from index 259. */
+    if (HvRootGetAdjustedAddressBits(
+            legacyStoragePhysical, legacyResult,
+            &adjustedAddressBits) != HV_EFI_IOMMU_RUNTIME_OK) {
+        return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+    }
+    if (adjustedAddressBits == 48) {
+        const uint64_t *pml4 = legacyStorage +
+            (size_t)(HV_EFI_IOMMU_LEGACY_ROOT_PAGES +
+                     HV_EFI_IOMMU_LEGACY_CONTEXT_PAGES) * 512;
+        const uint64_t expected = legacyStoragePhysical +
+            UINT64_C(258) * HV_EFI_IOMMU_RUNTIME_PAGE_SIZE | UINT64_C(3);
+        if (pml4[0] != expected) {
+            return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+        }
+    }
+    /* Both formats reach the PDPT at page 258 for the supported DMA range. */
     root = legacyStorage +
         (size_t)(HV_EFI_IOMMU_LEGACY_ROOT_PAGES +
                  HV_EFI_IOMMU_LEGACY_CONTEXT_PAGES +
@@ -2709,13 +2871,39 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvRootAuditSecondLevel(
     const uint64_t *rootStorage,
     uint32_t rootStoragePages,
     uint64_t rootStoragePhysical,
+    uint64_t legacyStoragePhysical,
+    const HV_EFI_IOMMU_LEGACY_TABLE_RESULT *legacyResult,
     const HV_EFI_IOMMU_ROOT_DEVICE_PLAN *rootPlan,
     const HV_EFI_IOMMU_ROOT_DEVICE_TABLE_RESULT *result)
 {
-    uint32_t nextPage = 1;
+    uint32_t nextPage;
     uint32_t mappedPages = 0;
     uint32_t pdptIndex;
-    const uint64_t *root = rootStorage;
+    uint32_t adjustedAddressBits;
+    const uint64_t *root;
+    if (HvRootGetAdjustedAddressBits(
+            legacyStoragePhysical, legacyResult,
+            &adjustedAddressBits) != HV_EFI_IOMMU_RUNTIME_OK) {
+        return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+    }
+    if (adjustedAddressBits == 48) {
+        uint32_t pml4Index;
+        const uint64_t expected = rootStoragePhysical +
+            HV_EFI_IOMMU_RUNTIME_PAGE_SIZE | HV_ROOT_VTD_PRESENT_READ_WRITE;
+        if (rootStoragePages < 2 || rootStorage[0] != expected) {
+            return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+        }
+        for (pml4Index = 1; pml4Index < 512; ++pml4Index) {
+            if (rootStorage[pml4Index] != 0) {
+                return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+            }
+        }
+        root = rootStorage + 512;
+        nextPage = 2;
+    } else {
+        root = rootStorage;
+        nextPage = 1;
+    }
     for (pdptIndex = 0; pdptIndex < 512; ++pdptIndex) {
         const uint64_t oneGiBBase = (uint64_t)pdptIndex << 30;
         const uint64_t oneGiBSize = UINT64_C(1) << 30;
@@ -2806,6 +2994,7 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuAuditRootDeviceDomain(
     const HV_EFI_IOMMU_ROOT_DEVICE_TABLE_RESULT *result)
 {
     uint32_t index;
+    uint32_t adjustedAddressBits;
     uint64_t legacyBytes;
     uint64_t rootBytes;
     HV_EFI_IOMMU_RUNTIME_STATUS status;
@@ -2819,6 +3008,11 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuAuditRootDeviceDomain(
     if (status != HV_EFI_IOMMU_RUNTIME_OK) {
         return status;
     }
+    if (HvRootGetAdjustedAddressBits(
+            legacyStoragePhysical, legacyResult,
+            &adjustedAddressBits) != HV_EFI_IOMMU_RUNTIME_OK) {
+        return HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED;
+    }
     if (
         result->RootPhysical != rootStoragePhysical ||
         result->DeviceIndex != rootPlan->DeviceIndex ||
@@ -2828,7 +3022,8 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuAuditRootDeviceDomain(
         result->Function != rootPlan->Function ||
         result->DomainId != rootPlan->DomainId ||
         result->LegacyDomainId != rootPlan->LegacyDomainId ||
-        result->PagesUsed < 3 || result->PagesUsed > rootStoragePages) {
+        result->PagesUsed < (adjustedAddressBits == 48 ? 4u : 3u) ||
+        result->PagesUsed > rootStoragePages) {
         return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
     }
     legacyBytes = (uint64_t)legacyStoragePages *
@@ -2842,13 +3037,13 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuAuditRootDeviceDomain(
         return status;
     }
     status = HvRootAuditLegacySecondLevelRoot(
-        legacyStorage, legacyStoragePhysical);
+        legacyStorage, legacyStoragePhysical, legacyResult);
     if (status != HV_EFI_IOMMU_RUNTIME_OK) {
         return status;
     }
     status = HvRootAuditSecondLevel(
         rootStorage, rootStoragePages, rootStoragePhysical,
-        rootPlan, result);
+        legacyStoragePhysical, legacyResult, rootPlan, result);
     if (status != HV_EFI_IOMMU_RUNTIME_OK) {
         return status;
     }
@@ -2891,9 +3086,10 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildRootDeviceDomain(
     uint64_t *targetContext;
     uint64_t previousTargetLow;
     uint64_t previousTargetHigh;
-    uint32_t nextPage = 1;
+    uint32_t nextPage;
     uint32_t mappedPages = 0;
     uint32_t pdptIndex;
+    uint32_t adjustedAddressBits;
     HV_EFI_IOMMU_RUNTIME_STATUS status;
     if (result != NULL) {
         HvRootZero(result, sizeof(*result));
@@ -2906,6 +3102,11 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildRootDeviceDomain(
         return status != HV_EFI_IOMMU_RUNTIME_OK ? status :
             HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
     }
+    status = HvRootGetAdjustedAddressBits(
+        legacyStoragePhysical, legacyResult, &adjustedAddressBits);
+    if (status != HV_EFI_IOMMU_RUNTIME_OK) {
+        return status;
+    }
     status = HvRootAuditLegacyContexts(
         legacyStorage, legacyStoragePhysical, legacyResult,
         rootStoragePhysical, rootPlan, 0);
@@ -2914,7 +3115,15 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildRootDeviceDomain(
     }
     HvRootZero(rootStorage, (size_t)rootStoragePages *
         (size_t)HV_EFI_IOMMU_RUNTIME_PAGE_SIZE);
-    root = rootStorage;
+    if (adjustedAddressBits == 48) {
+        rootStorage[0] = rootStoragePhysical +
+            HV_EFI_IOMMU_RUNTIME_PAGE_SIZE | HV_ROOT_VTD_PRESENT_READ_WRITE;
+        root = rootStorage + 512;
+        nextPage = 2;
+    } else {
+        root = rootStorage;
+        nextPage = 1;
+    }
     for (pdptIndex = 0; pdptIndex < 512; ++pdptIndex) {
         const uint64_t oneGiBBase = (uint64_t)pdptIndex << 30;
         if (!HvRootPlanOverlaps(
@@ -2979,7 +3188,8 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuBuildRootDeviceDomain(
     previousTargetLow = targetContext[0];
     previousTargetHigh = targetContext[1];
     targetContext[0] &= ~UINT64_C(1);
-    targetContext[1] = ((uint64_t)rootPlan->DomainId << 8) | UINT64_C(1);
+    targetContext[1] = ((uint64_t)rootPlan->DomainId << 8) |
+        (adjustedAddressBits == 39 ? UINT64_C(1) : UINT64_C(2));
     targetContext[0] = rootStoragePhysical | UINT64_C(1);
     status = HvEfiIommuAuditRootDeviceDomain(
         legacyStorage, legacyStoragePages, legacyStoragePhysical,
@@ -3325,6 +3535,7 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationInternal(
     uint32_t pciStateCapacity,
     uint32_t *pciStateCount,
     volatile uint32_t *dmaQuiescedState,
+    uint32_t adjustedAddressBits,
     HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic)
 {
     HV_EFI_IOMMU_RUNTIME_STATUS status;
@@ -3367,7 +3578,8 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationInternal(
     *dmaQuiescedState = 1;
     status = HvEfiIommuBuildProgrammingPlanInternal(
         dmar, configurations, configurationCount, ownership,
-        runtimeCallbacks, programStorage, pollLimit, plan, diagnostic);
+        runtimeCallbacks, programStorage, pollLimit, plan,
+        adjustedAddressBits, diagnostic);
     if (status != HV_EFI_IOMMU_RUNTIME_OK) {
         HvRecordInstallFailure(
             diagnostic, HV_EFI_IOMMU_INSTALL_STAGE_PROGRAM_PLAN, status);
@@ -3454,7 +3666,8 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolation(
         dmar, configurations, configurationCount, ownership,
         runtimeCallbacks, programStorage, pollLimit, plan, runtime,
         unitStates, unitStateCount, segments, segmentCount, pciCallbacks,
-        pciStates, pciStateCapacity, pciStateCount, dmaQuiescedState, NULL);
+        pciStates, pciStateCapacity, pciStateCount, dmaQuiescedState, 0,
+        NULL);
 }
 
 HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationWithDiagnostic(
@@ -3483,5 +3696,51 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationWithDiagnostic(
         runtimeCallbacks, programStorage, pollLimit, plan, runtime,
         unitStates, unitStateCount, segments, segmentCount, pciCallbacks,
         pciStates, pciStateCapacity, pciStateCount, dmaQuiescedState,
-        diagnostic);
+        0, diagnostic);
+}
+
+HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationWithAdjustedWidth(
+    const HV_EFI_IOMMU_DMAR_INFO *dmar,
+    const HV_EFI_IOMMU_UNIT_CONFIGURATION *configurations,
+    uint32_t configurationCount,
+    const HV_EFI_IOMMU_OWNERSHIP_POLICY *ownership,
+    const HV_EFI_IOMMU_RUNTIME_CALLBACKS *runtimeCallbacks,
+    const HV_EFI_IOMMU_PROGRAM_STORAGE *programStorage,
+    uint32_t pollLimit,
+    HV_EFI_IOMMU_PROGRAM_PLAN *plan,
+    HV_EFI_IOMMU_RUNTIME *runtime,
+    HV_EFI_IOMMU_UNIT_RUNTIME_STATE *unitStates,
+    uint32_t unitStateCount,
+    const HV_EFI_IOMMU_MCFG_SEGMENT *segments,
+    uint32_t segmentCount,
+    const HV_EFI_IOMMU_PCI_CALLBACKS *pciCallbacks,
+    HV_EFI_IOMMU_PCI_COMMAND_STATE *pciStates,
+    uint32_t pciStateCapacity,
+    uint32_t *pciStateCount,
+    volatile uint32_t *dmaQuiescedState,
+    uint32_t adjustedAddressBits,
+    HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic)
+{
+    if (adjustedAddressBits != 39 && adjustedAddressBits != 48) {
+        if (diagnostic != NULL) {
+            diagnostic->Stage = HV_EFI_IOMMU_INSTALL_STAGE_ARGUMENT;
+            diagnostic->PrimaryStatus =
+                HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+            diagnostic->FinalStatus =
+                HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+            diagnostic->CapabilityFailure =
+                HV_EFI_IOMMU_CAPABILITY_FAILURE_NONE;
+            diagnostic->UnitIndex = UINT32_MAX;
+            diagnostic->RequestedAddressBits = 0;
+            diagnostic->Version = 0;
+            diagnostic->Capability = 0;
+        }
+        return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+    }
+    return HvEfiIommuInstallRuntimeIsolationInternal(
+        dmar, configurations, configurationCount, ownership,
+        runtimeCallbacks, programStorage, pollLimit, plan, runtime,
+        unitStates, unitStateCount, segments, segmentCount, pciCallbacks,
+        pciStates, pciStateCapacity, pciStateCount, dmaQuiescedState,
+        adjustedAddressBits, diagnostic);
 }

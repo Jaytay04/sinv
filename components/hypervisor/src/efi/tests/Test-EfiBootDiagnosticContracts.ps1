@@ -54,9 +54,9 @@ $iommuSubsteps = @(
     @('ALLOC_DENIED', 'status = gBS->AllocatePool('),
     @('MEMORY_DESCRIPTOR', 'for (index = 0;'),
     @('RMRR_OWNER', 'for (index = 0;'),
-    @('IDENTITY_DOMAIN', 'iommuStatus = HvEfiIommuBuildLegacyIdentityDomain('),
+    @('IDENTITY_DOMAIN', 'iommuStatus = HvEfiIommuBuildLegacyIdentityDomainWithAdjustedWidth('),
     @('GPU_DOMAIN', 'status = HvEfiGpuBuildDmaDomain('),
-    @('RUNTIME_INSTALL', 'iommuStatus = HvEfiIommuInstallRuntimeIsolationWithDiagnostic(')
+    @('RUNTIME_INSTALL', 'iommuStatus = HvEfiIommuInstallRuntimeIsolationWithAdjustedWidth(')
 )
 $previousOperation = -1
 foreach ($substep in $iommuSubsteps) {
@@ -66,6 +66,14 @@ foreach ($substep in $iommuSubsteps) {
         ('Physical IOMMU needs a BSP diagnostic before ' + $substep[0])
     $previousOperation = $operation
 }
+$selectWidth = $physicalIommu.IndexOf('HvEfiIommuSelectLegacyAdjustedWidth(', [StringComparison]::Ordinal)
+$buildTables = $physicalIommu.IndexOf('HvEfiIommuBuildLegacyIdentityDomainWithAdjustedWidth(', [StringComparison]::Ordinal)
+Assert-True ($selectWidth -gt 0 -and $selectWidth -lt $buildTables -and
+    $physicalIommu -match 'capabilities, state->Dmar\.UnitCount, 39, &adjustedAddressBits' -and
+    $physicalIommu -match 'eptDenyRangeCount, 1,\s*adjustedAddressBits, &state->Tables' -and
+    $physicalIommu -match '&state->DmaQuiesced, adjustedAddressBits, &installDiagnostic' -and
+    $physicalIommu -match 'Configurations\[index\]\.AddressBits = 39;') `
+    'Physical VT-d must select one common table format before construction and retain its 39-bit DMA limit through installation.'
 $installResult = $physicalIommu.IndexOf('installDiagnostic.PrimaryStatus, installDiagnostic.FinalStatus', [StringComparison]::Ordinal)
 $failStop = $physicalIommu.IndexOf('HvEfiFailStop();', [StringComparison]::Ordinal)
 $freePlan = $physicalIommu.IndexOf('gBS->FreePool(denied);', [StringComparison]::Ordinal)

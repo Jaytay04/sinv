@@ -330,7 +330,27 @@ function Get-EfiResidentRvaTableRanges {
 
         $sequence = $index + 2
         $hasCdqe = $instructions[$sequence].Text -match '^cdqe$'
-        if ($hasCdqe) { ++$sequence }
+        $hasMovsxd = $false
+        $extendedIndex64 = $null
+        if ($hasCdqe) {
+            ++$sequence
+        } else {
+            $movsxd = [regex]::Match($instructions[$sequence].Text,
+                '^movsxd\s+(?<dst>r(?:ax|bx|cx|dx|si|di|bp|8|9|1[0-5]))\s*,\s*(?<src>e(?:ax|bx|cx|dx|si|di|sp|bp)|r(?:8|9|1[0-5])d)$',
+                [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+            if ($movsxd.Success) {
+                # A signed extension is safe after the unsigned `ja` guard only
+                # when it extends the exact value that was compared. The load
+                # below must then use this same 64-bit destination as its index.
+                if ($movsxd.Groups['src'].Value -ine $compare.Groups['index'].Value) {
+                    continue
+                }
+                $hasMovsxd = $true
+                $extendedIndex64 = Get-EfiResidentRegisterAlias64 `
+                    $movsxd.Groups['dst'].Value
+                ++$sequence
+            }
+        }
         if ($sequence + 2 -ge $instructions.Count) { continue }
 
         $lea = [regex]::Match($instructions[$sequence].Text,
@@ -353,7 +373,11 @@ function Get-EfiResidentRvaTableRanges {
             [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
         if (-not $add.Success -or -not $jump.Success) { continue }
 
-        $index64 = Get-EfiResidentRegister64 $compare.Groups['index'].Value
+        $index64 = if ($hasMovsxd) {
+            $extendedIndex64
+        } else {
+            Get-EfiResidentRegister64 $compare.Groups['index'].Value
+        }
         $dst64 = Get-EfiResidentRegister64 $load.Groups['dst'].Value
         $baseRegister = if ($lea.Success) {
             $lea.Groups['base'].Value.ToLowerInvariant()

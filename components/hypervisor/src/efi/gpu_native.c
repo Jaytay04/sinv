@@ -358,12 +358,21 @@ static uint32_t OrdinaryDmaDenied(HV_GPU_NATIVE_STATE *s, uint64_t start,
     uint64_t cursor = start;
     const uint64_t tables = s->LegacyTablesPhysical;
     const uint64_t tableBytes = (uint64_t)s->LegacyTablePages * 4096;
+    uint32_t rootShift;
     if (bytes == 0 || start + bytes < start ||
-        start + bytes > (UINT64_C(1) << 39)) return 0;
+        start + bytes > (UINT64_C(1) << 39) ||
+        s->LegacyTablePages < HV_EFI_IOMMU_LEGACY_BASE_PAGES ||
+        tables + tableBytes < tables ||
+        tables + tableBytes > (UINT64_C(1) << 39)) return 0;
+    if (s->LegacyTables.SecondLevelRootPhysical == tables + 257 * 4096)
+        rootShift = 39;
+    else if (s->LegacyTables.SecondLevelRootPhysical == tables + 258 * 4096)
+        rootShift = 30;
+    else return 0;
     while (cursor < start + bytes) {
         uint64_t next = s->LegacyTables.SecondLevelRootPhysical;
         uint32_t shift;
-        for (shift = 30; shift >= 12; shift -= 9) {
+        for (shift = rootShift; shift >= 12; shift -= 9) {
             uint64_t entry;
             uint64_t end;
             if (next < tables || next - tables >= tableBytes ||
