@@ -1,5 +1,62 @@
 # GPU diagnostic payload failure investigation
 
+## Run 193833: PCI quiesce audit stops activation; Windows handoff proceeds
+
+Run `gpu-20261021T193833Z-c48461667089493988074edfaf008d56` used source
+`15842e7d789eddaea401754734ce9540a10b69e7`. Its loader build cache enables
+`IB_FIRMWARE_STORAGE_PROBE=ON`. Collection at
+`20261021T195255483Z-Collect-eb9e5c37e9a6497ba033c8bb1b9413c3` found all 20
+custom Windows health signatures `ABSENT`. All seven collected files match
+their saved pins; the five installer-staged files also match their Stage pins.
+Both diagnostic files were written and read back successfully on this run.
+
+The saved 577-byte `esp-payload-diagnostic.txt` is SHA-256
+`E7679BC5BE861DC410088D2C8104EF1DEE3B2EB1A1CF963E02B45B09F7D42226`.
+It records a valid startup return with stage `ap_prepare`, reason
+`operation_failed`, EFI status `0x800000000000001A` (`EFI_SECURITY_VIOLATION`),
+and detail `2298614290` (`0x89021212`). All 20 processors are prepared and
+VMX-ready, preparation failure is 10 (`MEMORY_POLICY`), and activation has not
+begun. The physical IOMMU preparation error is classified under AP preparation
+after the AP callbacks have completed; these counts do not identify a failing AP.
+
+The detail decodes to IOMMU runtime install substep 9, install stage 2
+(`PCI_QUIESCE`), primary and final runtime status 18 (`AUDIT_FAILED`). The
+runtime installer returns at this stage before constructing the programming
+plan or enabling VT-d. Two quiesce branches return that status: command-register
+readback differs from the requested bus-master-cleared value, or the number
+of eligible devices differs between the two PCI scans. The first branch is
+the new readback guard. This record cannot distinguish them or identify the
+segment/BDF or command values. A failed restoration would instead return
+`ROLLBACK_FAILED` and take the physical fail-stop path. The observed result
+is consistent with an audit rejection whose attempted PCI changes were restored.
+
+The operator's `IMG_6820.MOV` is SHA-256
+`63F1D3D0B294075B1CD100D0CFEBA1E85C6F04FD08C27176F76DC9A8DB299C5B`.
+The decoder reports 64 frames and decodes 62, through 2.033 seconds. Frame 0
+shows successful storage preparation and baseline Block I/O read with a valid
+digest. Frame 36 shows diagnostic write/readback success and successful
+Windows boot-manager read, device-path construction and LoadImage, followed
+by its start-begin marker. The saved 617-byte `esp-handoff-status.txt`, SHA-256
+`D371E06861AE50638D36023BA06A6A233E69208ED3BA119E9565236FD9C29C55`,
+contains those same successful handoff phases and `payload=FAILED`.
+Begin status `0x8000000000000013` is the trace's `EFI_NOT_STARTED` placeholder,
+not a returned StartImage error. The operator reports Windows booted normally
+without a forced power-off. The short video does not show the later Windows UI.
+
+This is a clean fallback after an earlier payload refusal; it does not exercise
+the prior post-activation storage failure. No traced OpenVolume failure is
+observed in these records, so the optional post-filesystem-failure block read
+was not triggered in the observed path. The baseline alone cannot establish
+storage behavior under active VMX/IOMMU isolation. The current Windows
+inventory cannot recover the firmware-time PCI command mismatch or scan counts.
+
+The next diagnostic should distinguish the two quiesce audit branches and
+retain the first failing segment/BDF, original/requested/readback command
+values and restoration result, or the two scan counts. The existing audit
+and restoration checks must remain enforced. No new payload change or live
+test was performed in this investigation. The journal remains `Collected`;
+operator rollback and final reset verification are still required.
+
 ## Run 160027: volume open fails after successful payload return
 
 Run `gpu-20261021T160027Z-672213bf26314f69990e6d2305c55fff` used source

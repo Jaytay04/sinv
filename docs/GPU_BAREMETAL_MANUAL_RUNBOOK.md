@@ -1,6 +1,31 @@
 # Intel UHD 770 bare-metal diagnostic runbook
 
-## Current checkpoint: run 160027 archived; stage retirement pending
+## Current checkpoint: run 193833 collected; rollback pending
+
+Run `gpu-20261021T193833Z-c48461667089493988074edfaf008d56` returned
+`COLLECTED_HEALTH_FAIL_GPU_UNATTESTED`. The payload stopped at the PCI quiesce
+audit before IOMMU enablement or VMX activation. Diagnostic writes and the
+Windows boot-manager read/load phases succeeded; the operator reports a normal
+Windows boot. This does not verify the previous post-activation storage failure
+is fixed. See the [run 193833 investigation](GPU_PAYLOAD_FAILURE_INVESTIGATION.md#run-193833-pci-quiesce-audit-stops-activation-windows-handoff-proceeds).
+
+Run the existing rollback workflow from elevated PowerShell:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-rollback.ps1
+```
+
+If it returns `RECOVERY_PENDING_USER_POWER_CYCLE`, complete that reset boundary
+manually, then run `gpu-host-test.ps1 FinalVerify`. Do not Archive until final
+verification succeeds. Older run-specific review and retirement switches below
+do not apply to `193833`. No recovery action was run by the investigation.
+
+## Previous checkpoint: run 160027 archived and stage retired
+
+The operator completed the retirement steps in this historical section and
+readiness report `a9b21b6bec5348799bfad9d677792b30` returned
+`READY_FOR_FRESH_PREPARE`, with the prior stage absent. Do not repeat these
+commands for the active `193833` run.
 
 Run `gpu-20261021T160027Z-672213bf26314f69990e6d2305c55fff` collected a health
 failure. Its video identifies the first failure as firmware `OpenVolume`
