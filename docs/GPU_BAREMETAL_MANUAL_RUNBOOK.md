@@ -1,6 +1,6 @@
 # Intel UHD 770 bare-metal diagnostic runbook
 
-## Current checkpoint: run 160027 requires recovery completion
+## Current checkpoint: run 160027 archived; stage retirement pending
 
 Run `gpu-20261021T160027Z-672213bf26314f69990e6d2305c55fff` collected a health
 failure. Its video identifies the first failure as firmware `OpenVolume`
@@ -13,19 +13,51 @@ network application GUIDs and their display-order references changed. Windows
 and both USB entry blocks are unchanged. This does not prove historical raw
 firmware-variable equality.
 
-The operator completed the run-specific read-only capture with
-`READONLY_FIRMWARE_REVIEW_CAPTURED`. Its receipt and saved observations passed
-file-only review. The completion helper is now bound to that exact receipt,
-the original failed journal, and fresh reset/health/integrity checks. Run:
+The operator completed the run-specific read-only capture, followed by
+`FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED` and
+`SELECTOR_ARCHIVED`. The journal is `Complete`, with no action in progress;
+the selector copy and original evidence are preserved. The original firmware
+baseline remains preserved and `TextEqual` remains false. Completion records
+the specific reviewed difference separately. GPU isolation remains unattested.
+
+Fresh readiness report
+`.analysis/gpu-baremetal-readiness/22b660f2d7de488c82b0ee9d1abc6150/readiness.json`
+has exactly one blocker: the five retained stage files. The `160027` retirement
+profile binds those files to the completed journal, archived selector,
+collection snapshots, and reviewed final-verification evidence. Use elevated
+64-bit Windows PowerShell from the main workspace.
+
+If `$readiness` is no longer set, load the exact saved report:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 FinalVerify -ReviewedFirmwareDifference
+$readiness = Get-Content -Raw -LiteralPath '.\.analysis\gpu-baremetal-readiness\22b660f2d7de488c82b0ee9d1abc6150\readiness.json' | ConvertFrom-Json
 ```
 
-Require `FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED`
-before Archive. The original baseline remains preserved and `TextEqual`
-remains false; completion records the specific reviewed difference separately.
-Older fixed review and retirement profiles below do not apply to this run.
+Review retirement first:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun160027 -ReadinessPath $readiness.EvidencePath
+```
+
+Only after `REVIEWED_STAGE_READY_FOR_RETIREMENT` with `Succeeded: true`, apply:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun160027 -ReadinessPath $readiness.EvidencePath -Apply
+```
+
+Require `STAGE_RETIRED` and `Succeeded: true`, then inspect again:
+
+```powershell
+$readiness = powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Get-GpuBaremetalReadiness.ps1 | Out-String | ConvertFrom-Json
+$readiness | Select-Object Status, Blockers, EvidencePath | ConvertTo-Json -Depth 8
+```
+
+Require `READY_FOR_FRESH_PREPARE` before a new Prepare. Stop on any failure;
+preserve the evidence and do not retry a partial removal or delete EFI files
+manually. Retirement still requires fresh live health, boot-manager integrity,
+raw boot-selection and file-hash checks, plus verified local and external copies
+before removal. It does not execute the payload. Older fixed review and
+retirement profiles below do not apply to this run.
 
 The investigation found an unchecked PCI bus-master restoration path and
 reproduced its false-success behavior with a host fixture. The update verifies
@@ -33,8 +65,8 @@ command-register readback and adds an optional, bounded Block I/O discriminator.
 It is not yet a demonstrated fix for this host. See the
 [current evidence, diagnostic scope and validation](GPU_PAYLOAD_FAILURE_INVESTIGATION.md#run-160027-volume-open-fails-after-successful-payload-return).
 The `062106` cleanup commands below are historical; do not use them for the
-retained `160027` stage. A fresh run must wait for this run's completed recovery
-and ownership-reviewed stage retirement.
+retained `160027` stage. A fresh run must wait for ownership-reviewed stage
+retirement and a passing readiness inspection.
 
 ## Previous checkpoint: run 062106
 

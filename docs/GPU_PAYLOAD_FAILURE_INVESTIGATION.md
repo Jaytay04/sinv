@@ -69,6 +69,31 @@ fixture passed 5 cases with 44 assertions; its entry-journal fixture passed
 original journal copy, current platform pin, two saved raw observations, and
 five saved command receipts. The active selector and journal stayed unchanged.
 
+The operator subsequently completed reviewed FinalVerify in action
+`20261021T191509538Z-FinalVerify-5f519cfe082b43f1a9e6b2ffb7f96433`, then archived
+the selector. The completed 50,987-byte journal is SHA-256
+`0978A1DEC6A586D08844CDD1C52D9E8382B603363FA6E15C1581EA8127ABAE83`;
+the archived 533-byte selector is
+`4A0E31FA7F4773F7191A70EA151BB41FCA8363042E8F289620156337F1ABD930`.
+The journal is `Complete`, `InProgress` is null, and GPU isolation remains
+unattested. The original firmware baseline and `TextEqual=false` are preserved.
+
+Readiness report `22b660f2d7de488c82b0ee9d1abc6150` reports only the retained
+stage blocker. Its five file hashes match the journal's Stage and collected
+snapshots; both diagnostic files are explicitly absent in collection. The
+`-CompletedRun160027` retirement profile binds this evidence to the exact
+successful result and earlier review chain. Original build, read-only
+inspection, and successful final-verification platform pins are distinct
+and checked separately. The helper preserves the existing fresh health,
+boot-selection, backup-copy, and exact file-ownership gates. No live retirement
+or ESP change was performed while implementing the profile.
+
+Validation passed all 21 related host checks, including earlier retirement
+profiles and firmware review/module-scope regressions. The new profile fixture
+passed 12 cases with 66 assertions. File-only validation of the actual readiness,
+completed journal, archive, collection inventory, and 45 proof pins also passed;
+the journal, archive and readiness hashes remained unchanged.
+
 ### Concrete verification defect and its causal limit
 
 The IOMMU installer disables bus mastering on discovered PCI functions and
