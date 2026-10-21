@@ -78,7 +78,12 @@ firmware captures match the current 2890-byte text. Secure Boot and all 20
 completion profile binds those observations and the original failed result,
 preserves an immutable pre-retry journal copy, and requires fresh observations
 before accepting the specific firmware-text difference. Completion and Archive
-are still operator steps; no host workflow was executed by this update.
+were subsequently completed by the operator. FinalVerify action
+`20261021T205810551Z-FinalVerify-8b145aca1e984c25b4558edcb91fd2cc` succeeded,
+with phase `Complete` and no errors. Archive preserved the journal and copied
+the selector to the run's archive path; the active selector is absent. This
+closes recovery for the failed payload run. Ownership-reviewed stage retirement
+remains separate; no host workflow was executed by the investigation.
 
 File-only validation passed against the actual receipt, saved command outputs,
 failed result, raw selection files and module pins, using a scratch copy of the

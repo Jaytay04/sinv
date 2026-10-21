@@ -1,6 +1,14 @@
 # Intel UHD 770 bare-metal diagnostic runbook
 
-## Current checkpoint: run 193833 review captured; completion pending
+## Current checkpoint: run 193833 archived; stage retirement pending
+
+The operator completed the reviewed FinalVerify below with
+`FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED`, then Archive
+returned `SELECTOR_ARCHIVED`. The saved journal is `Complete`, has no action in
+progress and retains no final errors; the active selector is absent. The run
+is closed. Its ESP stage still requires ownership-reviewed retirement before
+another stage. Capture a fresh readiness report for that cleanup; do not repeat
+the completed recovery commands below or use another run's retirement profile.
 
 Run `gpu-20261021T193833Z-c48461667089493988074edfaf008d56` returned
 `COLLECTED_HEALTH_FAIL_GPU_UNATTESTED`. The payload stopped at the PCI quiesce
@@ -21,14 +29,14 @@ zero integrity findings and the saved boot-manager/reference-log hashes. Secure
 Boot and all 20 `ABSENT` observations pass. The selector and journal are unchanged;
 the ESP is unmounted and cleanup succeeded.
 
-Complete recovery from elevated PowerShell:
+The completed recovery sequence was:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 FinalVerify -ReviewedFirmwareDifference
 ```
 
-Require `FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED`,
-`Succeeded: true` and phase `Complete`. Only then archive:
+It returned `FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED`,
+`Succeeded: true` and phase `Complete`, followed by:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Archive
