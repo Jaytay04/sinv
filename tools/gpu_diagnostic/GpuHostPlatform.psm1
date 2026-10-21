@@ -523,6 +523,7 @@ function Get-GpuExpectedToolPaths {
         Installer = Join-Path $paths.LoaderBuild 'ib-install.exe'
         Probe = Join-Path $paths.LoaderBuild 'ib-tcg-dump.exe'
         Verifier = Join-Path $paths.LoaderBuild 'install_authenticode_test.exe'
+        Audit = Join-Path $paths.LoaderBuild 'ibaudit.exe'
         Shim = Join-Path $sourceRoot 'components\uefi-loader\src\vendor\shimx64.efi'
         Certificate = Join-Path $sourceRoot 'components\hypervisor\hypersinv.cer'
     }
@@ -573,6 +574,9 @@ function Assert-GpuToolPins {
     $expected = Get-GpuExpectedToolPaths -State $State
     foreach ($name in @('Installer', 'Probe', 'Verifier', 'Shim', 'Certificate')) {
         Assert-GpuNamedPin -PinSet $State.Tools -Name $name -ExpectedPath $expected.$name -Description 'Tool' | Out-Null
+    }
+    if ($null -ne (Get-GpuObjectProperty -Object $State -Name 'FirmwareComparisonVersion')) {
+        Assert-GpuNamedPin -PinSet $State.Tools -Name 'Audit' -ExpectedPath $expected.Audit -Description 'Firmware audit tool' | Out-Null
     }
 }
 
@@ -1276,6 +1280,9 @@ function Invoke-GpuBuild {
     foreach ($name in @('Installer', 'Probe', 'Verifier', 'Shim', 'Certificate')) {
         $toolPins[$name] = Get-GpuFilePin -Path $expectedTools.$name
     }
+    if ($null -ne (Get-GpuObjectProperty -Object $State -Name 'FirmwareComparisonVersion')) {
+        $toolPins['Audit'] = Get-GpuFilePin -Path $expectedTools.Audit
+    }
     $expectedArtifacts = Get-GpuExpectedBuildArtifactPaths -State $State
     $artifactPins = [ordered]@{
         EFI = Get-GpuFilePin -Path $expectedArtifacts.EFI
@@ -1356,6 +1363,217 @@ function Invoke-GpuSign {
     })
 }
 
+function Get-GpuFirmwareComparisonModule {
+    param([object]$State)
+
+    $version = Get-GpuObjectProperty -Object $State -Name 'FirmwareComparisonVersion'
+    if ($version -isnot [int] -and $version -isnot [long]) { throw 'Firmware comparison policy version is missing or malformed.' }
+    if ([int]$version -ne 1) { throw 'Unsupported firmware comparison policy version.' }
+    $sourceRoot = [string]$State.SourceRoot
+    $path = Assert-GpuPathWithin -Path (Join-Path $sourceRoot 'tools\gpu_diagnostic\GpuFirmwareComparison.psm1') -Root $sourceRoot -MustExist
+    $pins = @($State.SourcePins | Where-Object { [string]::Equals([string]$_.Path, [string]$path, [StringComparison]::OrdinalIgnoreCase) })
+    if ($pins.Count -ne 1) { throw 'Firmware comparison module lacks its unique Prepare source pin.' }
+    Assert-GpuFilePin -Pin $pins[0]
+    # Do not force a nested import: it can evict dispatcher exports in Windows PowerShell.
+    $module = Import-Module $path -DisableNameChecking -PassThru -ErrorAction Stop | Select-Object -First 1
+    return [pscustomobject]@{ Module=$module; Pin=$pins[0] }
+}
+
+function Get-GpuFirmwareBootSelectionSnapshot {
+    param([object]$Document, [string]$BootManagerSha256, [string]$ReferenceLogSha256)
+
+    if ($null -eq $Document -or $null -eq $Document.PSObject.Properties['boot_next'] -or
+        $null -eq $Document.PSObject.Properties['boot_order'] -or $Document.boot_order -isnot [array] -or $Document.schema -ne 1 -or
+        [string]$Document.kind -cne 'boot-selection' -or $null -ne $Document.boot_next -or
+        ($Document.schema -isnot [int] -and $Document.schema -isnot [long]) -or
+        ($Document.findings -isnot [int] -and $Document.findings -isnot [long]) -or
+        $Document.findings -ne 0 -or [string]$Document.bootmgfw_sha256 -ine $BootManagerSha256 -or
+        [string]$Document.log_sha256 -ine $ReferenceLogSha256) {
+        throw 'Firmware boot-selection capture has pending BootNext, integrity findings, or mismatched hashes/schema.'
+    }
+    $order = @($Document.boot_order)
+    if ($order.Count -lt 1 -or $order.Count -gt 64) { throw 'Firmware BootOrder has an unsupported entry count.' }
+    $seen = @{}
+    foreach ($entry in $order) {
+        if (($entry -isnot [int] -and $entry -isnot [long]) -or $entry -lt 0 -or $entry -gt 65535 -or $seen.ContainsKey([int]$entry)) {
+            throw 'Firmware BootOrder contains a malformed or duplicate entry.'
+        }
+        $seen[[int]$entry] = $true
+    }
+    return [pscustomobject]@{
+        SchemaVersion=1; BootNext=$null; BootOrder=$order
+        BootManagerSha256=$BootManagerSha256; ReferenceLogSha256=$ReferenceLogSha256; Findings=0
+    }
+}
+
+function Invoke-GpuFirmwareBootSelectionCapture {
+    param([object]$State, [object]$ReferenceLogPin, [string]$BootManagerSha256,
+          [string]$ActionDirectory, [string]$Label)
+
+    if ($Label -cnotmatch '^firmware-(baseline|final-before|final-after)$') { throw 'Unsupported firmware capture label.' }
+    $audit = Assert-GpuNamedPin -PinSet $State.Tools -Name 'Audit' -ExpectedPath ((Get-GpuExpectedToolPaths -State $State).Audit) -Description 'Firmware audit tool'
+    Assert-GpuFilePin -Pin $ReferenceLogPin
+    $path = Join-Path $ActionDirectory ($Label + '-boot-selection.json')
+    Assert-GpuFreshPath -Path $path
+    $command = Invoke-GpuNativeCommand -Program ([string]$audit.Path) -Arguments @(
+        'boot-selection', '--log', [string]$ReferenceLogPin.Path, '--output', $path,
+        '--esp-root', 'S:\', '--expected-hash', $BootManagerSha256
+    ) -ActionDirectory $ActionDirectory -Label $Label
+    Assert-GpuNativeSuccess -Result $command -Description 'Read-only firmware boot-selection capture'
+    $pins = @()
+    foreach ($file in @($path,[string]$command.ReceiptPath,[string]$command.StdoutPath,[string]$command.StderrPath)) {
+        $null = Assert-GpuPathWithin -Path $file -Root $ActionDirectory -MustExist
+        $pins += Get-GpuFilePin -Path $file
+    }
+    if (-not [string]::IsNullOrWhiteSpace([IO.File]::ReadAllText([string]$command.StderrPath))) { throw 'Firmware boot-selection capture wrote unexpected stderr.' }
+    $document = [IO.File]::ReadAllText($path) | ConvertFrom-Json -ErrorAction Stop
+    $snapshot = Get-GpuFirmwareBootSelectionSnapshot -Document $document -BootManagerSha256 $BootManagerSha256 -ReferenceLogSha256 ([string]$ReferenceLogPin.Sha256)
+    Assert-GpuFilePin -Pin $audit
+    Assert-GpuFilePin -Pin $ReferenceLogPin
+    return [pscustomobject]@{ Snapshot=$snapshot; Pin=$pins[0]; EvidencePins=$pins; AuditToolPin=$audit }
+}
+
+function New-GpuFirmwareComparisonBackup {
+    param([object]$State, [object]$FirmwarePin, [object]$ReferenceLogPin,
+          [string]$BootManagerSha256, [string]$RecoveryRunDirectory, [string]$ActionDirectory)
+
+    $comparison = Get-GpuFirmwareComparisonModule -State $State
+    Assert-GpuFilePin -Pin $FirmwarePin
+    $normalized = & $comparison.Module { param($text) ConvertFrom-GpuFirmwareText -Text $text } ([IO.File]::ReadAllText([string]$FirmwarePin.Path))
+    $raw = Invoke-GpuFirmwareBootSelectionCapture -State $State -ReferenceLogPin $ReferenceLogPin -BootManagerSha256 $BootManagerSha256 -ActionDirectory $ActionDirectory -Label 'firmware-baseline'
+    $baselinePath = Join-Path $ActionDirectory 'firmware-comparison-baseline.json'
+    $baseline = [pscustomobject]@{
+        SchemaVersion=1; Policy='StableEntriesAndGenericTailV1'; RunId=[string]$State.RunId
+        FirmwarePin=$FirmwarePin; ModulePin=$comparison.Pin; AuditToolPin=$raw.AuditToolPin
+        StableSha256=$normalized.StableSha256; StableEntryCount=$normalized.StableEntryCount
+        GenericEntries=@($normalized.GenericEntries); RawBaseline=$raw
+        Scope='Stable BCD entries plus three empty generic tail placeholders; not historical raw BootOrder or full firmware-variable attestation.'
+    }
+    Write-GpuJson -Path $baselinePath -Value $baseline -NoOverwrite
+    $baselinePin = Get-GpuFilePin -Path $baselinePath
+    $externalDirectory = Join-Path $RecoveryRunDirectory 'firmware-comparison-before'
+    $null = Assert-GpuPathWithin -Path $externalDirectory -Root $RecoveryRunDirectory
+    Assert-GpuFreshPath -Path $externalDirectory
+    $null = New-Item -ItemType Directory -Path $externalDirectory -ErrorAction Stop
+    $copies = @()
+    foreach ($sourcePin in @($baselinePin,$FirmwarePin) + @($raw.EvidencePins)) {
+        Assert-GpuFilePin -Pin $sourcePin
+        $null = Assert-GpuPathWithin -Path ([string]$sourcePin.Path) -Root $ActionDirectory -MustExist
+        $destination = Join-Path $externalDirectory ([IO.Path]::GetFileName([string]$sourcePin.Path))
+        $null = Assert-GpuPathWithin -Path $destination -Root $externalDirectory
+        [IO.File]::Copy([string]$sourcePin.Path, $destination, $false)
+        $copyPin = Get-GpuFilePin -Path $destination
+        if ($copyPin.Sha256 -cne $sourcePin.Sha256 -or $copyPin.Bytes -ne $sourcePin.Bytes) { throw 'External firmware comparison evidence readback differs.' }
+        $copies += [pscustomobject]@{ Source=$sourcePin; External=$copyPin }
+    }
+    Assert-GpuFilePin -Pin $comparison.Pin
+    return [pscustomobject]@{
+        SchemaVersion=1; Policy='StableEntriesAndGenericTailV1'; BaselinePin=$baselinePin
+        ModulePin=$comparison.Pin; AuditToolPin=$raw.AuditToolPin; BaselineRaw=$raw
+        ExternalCopies=$copies; ExternalDirectory=$externalDirectory
+    }
+}
+
+function Get-GpuStableFirmwareBaseline {
+    param([object]$State)
+
+    $comparison = Get-GpuFirmwareComparisonModule -State $State
+    $backup = $State.Backup
+    $record = Get-GpuObjectProperty -Object $backup -Name 'FirmwareComparison'
+    if ($null -eq $record -or $record.SchemaVersion -ne 1 -or [string]$record.Policy -cne 'StableEntriesAndGenericTailV1') { throw 'The versioned firmware comparison baseline is unavailable or unsupported.' }
+    foreach ($pair in @(@($record.ModulePin,$comparison.Pin), @($record.AuditToolPin,(Assert-GpuNamedPin -PinSet $State.Tools -Name 'Audit' -ExpectedPath ((Get-GpuExpectedToolPaths -State $State).Audit) -Description 'Firmware audit tool')))) {
+        if ([string]$pair[0].Path -ine [string]$pair[1].Path -or [string]$pair[0].Sha256 -cne [string]$pair[1].Sha256 -or [long]$pair[0].Bytes -ne [long]$pair[1].Bytes) { throw 'Firmware policy dependency differs from the Backup pin.' }
+        Assert-GpuFilePin -Pin $pair[0]
+    }
+    $backupDirectory = Split-Path -Parent ([string]$backup.FirmwareEnumeration.Path)
+    $null = Assert-GpuPathWithin -Path $backupDirectory -Root (Join-Path ([string]$State.RunDirectory) 'actions') -MustExist
+    if ((Split-Path -Leaf $backupDirectory) -cnotmatch '^[0-9]{8}T[0-9]{9}Z-Backup-[0-9a-f]{32}$') { throw 'Firmware baseline is outside an identified Backup action.' }
+    $expectedBaselinePath = Join-Path $backupDirectory 'firmware-comparison-baseline.json'
+    if ([IO.Path]::GetFullPath([string]$record.BaselinePin.Path) -ine [IO.Path]::GetFullPath($expectedBaselinePath)) { throw 'Firmware comparison baseline is outside its Backup action.' }
+    Assert-GpuFilePin -Pin $record.BaselinePin
+    $baseline = [IO.File]::ReadAllText([string]$record.BaselinePin.Path) | ConvertFrom-Json -ErrorAction Stop
+    if ($baseline.SchemaVersion -ne 1 -or [string]$baseline.Policy -cne [string]$record.Policy -or [string]$baseline.RunId -cne [string]$State.RunId) { throw 'Firmware comparison baseline identity differs.' }
+    foreach ($pair in @(@($baseline.ModulePin,$record.ModulePin), @($baseline.AuditToolPin,$record.AuditToolPin))) {
+        if ([string]$pair[0].Path -ine [string]$pair[1].Path -or [string]$pair[0].Sha256 -cne [string]$pair[1].Sha256 -or [long]$pair[0].Bytes -ne [long]$pair[1].Bytes) { throw 'Firmware baseline dependency pin differs from its recorded Backup dependency.' }
+    }
+    if ([string]$baseline.FirmwarePin.Path -ine [string]$backup.FirmwareEnumeration.Path -or [string]$baseline.FirmwarePin.Sha256 -cne [string]$backup.FirmwareEnumeration.Sha256 -or [long]$baseline.FirmwarePin.Bytes -ne [long]$backup.FirmwareEnumeration.Bytes) { throw 'Firmware comparison baseline changed the original text pin.' }
+    Assert-GpuFilePin -Pin $backup.FirmwareEnumeration
+    $copies = @($record.ExternalCopies)
+    if ($copies.Count -ne 6) { throw 'The firmware comparison baseline requires all six verified external evidence copies.' }
+    $expectedCopySources = @([string]$record.BaselinePin.Path,[string]$backup.FirmwareEnumeration.Path) + @($baseline.RawBaseline.EvidencePins | ForEach-Object { [string]$_.Path })
+    if ($expectedCopySources.Count -ne 6) { throw 'Firmware comparison raw evidence is incomplete.' }
+    $seenCopies = @{}
+    $expectedExternal = Join-Path ([string]$State.RecoveryRunDirectory) 'firmware-comparison-before'
+    foreach ($copy in $copies) {
+        $sourcePath = [IO.Path]::GetFullPath([string]$copy.Source.Path)
+        if ($expectedCopySources -inotcontains $sourcePath -or $seenCopies.ContainsKey($sourcePath)) { throw 'Firmware comparison evidence has an unexpected or duplicate copy.' }
+        $seenCopies[$sourcePath] = $true
+        if ([IO.Path]::GetFullPath([string]$copy.External.Path) -ine [IO.Path]::GetFullPath((Join-Path $expectedExternal ([IO.Path]::GetFileName($sourcePath))))) { throw 'Firmware comparison external copy escaped its recovery directory.' }
+        Assert-GpuFilePin -Pin $copy.Source
+        Assert-GpuFilePin -Pin $copy.External
+        if ([string]$copy.Source.Sha256 -cne [string]$copy.External.Sha256 -or [long]$copy.Source.Bytes -ne [long]$copy.External.Bytes) { throw 'Firmware comparison external evidence differs from its source.' }
+    }
+    $rawPins = @($baseline.RawBaseline.EvidencePins)
+    $rawPath = Join-Path $backupDirectory 'firmware-baseline-boot-selection.json'
+    if ($rawPins.Count -ne 4 -or [string]$baseline.RawBaseline.Pin.Path -ine $rawPath -or
+        [string]$rawPins[0].Path -ine $rawPath -or [string]$rawPins[0].Sha256 -cne [string]$baseline.RawBaseline.Pin.Sha256 -or
+        [long]$rawPins[0].Bytes -ne [long]$baseline.RawBaseline.Pin.Bytes) { throw 'Firmware baseline raw selection pin differs from its evidence set.' }
+    $seenRawPaths = @{}
+    foreach ($pin in $rawPins) {
+        $null = Assert-GpuPathWithin -Path ([string]$pin.Path) -Root $backupDirectory -MustExist
+        if ($seenRawPaths.ContainsKey([string]$pin.Path)) { throw 'Firmware baseline raw evidence contains duplicate paths.' }
+        $seenRawPaths[[string]$pin.Path] = $true
+        Assert-GpuFilePin -Pin $pin
+    }
+    Assert-GpuFilePin -Pin $baseline.RawBaseline.Pin
+    $oldRaw = [IO.File]::ReadAllText([string]$baseline.RawBaseline.Pin.Path) | ConvertFrom-Json -ErrorAction Stop
+    $null = Get-GpuFirmwareBootSelectionSnapshot -Document $oldRaw -BootManagerSha256 ([string]$backup.BootManagerSha256) -ReferenceLogSha256 ([string]$backup.ReferenceLog.Sha256)
+    $baselineText = [IO.File]::ReadAllText([string]$backup.FirmwareEnumeration.Path)
+    $normalized = & $comparison.Module { param($text) ConvertFrom-GpuFirmwareText -Text $text } $baselineText
+    if ([string]$normalized.StableSha256 -cne [string]$baseline.StableSha256) { throw 'Firmware comparison canonical baseline differs from its original text.' }
+    return [pscustomobject]@{ ComparisonModule=$comparison; Record=$record; Text=$baselineText }
+}
+
+function Invoke-GpuStableFirmwareFinal {
+    param([object]$State, [object]$CurrentFirmwarePin, [string]$ActionDirectory, [object]$RawBefore)
+
+    $context = Get-GpuStableFirmwareBaseline -State $State
+    $comparison = $context.ComparisonModule
+    $record = $context.Record
+    $baselineText = $context.Text
+    $backup = $State.Backup
+    Assert-GpuFilePin -Pin $CurrentFirmwarePin
+    $before = $RawBefore
+    if ($null -eq $before) {
+        $before = Invoke-GpuFirmwareBootSelectionCapture -State $State -ReferenceLogPin $backup.ReferenceLog -BootManagerSha256 ([string]$backup.BootManagerSha256) -ActionDirectory $ActionDirectory -Label 'firmware-final-before'
+    }
+    $expectedBeforePath = Join-Path $ActionDirectory 'firmware-final-before-boot-selection.json'
+    if ([IO.Path]::GetFullPath([string]$before.Pin.Path) -ine [IO.Path]::GetFullPath($expectedBeforePath) -or @($before.EvidencePins).Count -ne 4) { throw 'Current raw boot-selection evidence is outside this FinalVerify action.' }
+    if ([string]$before.EvidencePins[0].Path -ine [string]$before.Pin.Path -or
+        [string]$before.EvidencePins[0].Sha256 -cne [string]$before.Pin.Sha256 -or
+        [long]$before.EvidencePins[0].Bytes -ne [long]$before.Pin.Bytes) { throw 'Current raw boot-selection pin differs from its evidence set.' }
+    Assert-GpuFilePin -Pin $before.Pin
+    $seenBeforePaths = @{}
+    foreach ($pin in @($before.EvidencePins)) {
+        $null = Assert-GpuPathWithin -Path ([string]$pin.Path) -Root $ActionDirectory -MustExist
+        if ($seenBeforePaths.ContainsKey([string]$pin.Path)) { throw 'Current raw boot-selection evidence contains duplicate paths.' }
+        $seenBeforePaths[[string]$pin.Path] = $true
+        Assert-GpuFilePin -Pin $pin
+    }
+    $beforeDocument = [IO.File]::ReadAllText([string]$before.Pin.Path) | ConvertFrom-Json -ErrorAction Stop
+    $beforeSnapshot = Get-GpuFirmwareBootSelectionSnapshot -Document $beforeDocument -BootManagerSha256 ([string]$backup.BootManagerSha256) -ReferenceLogSha256 ([string]$backup.ReferenceLog.Sha256)
+    $result = & $comparison.Module { param($old,$current) Compare-GpuFirmwareText -BaselineText $old -CurrentText $current } $baselineText ([IO.File]::ReadAllText([string]$CurrentFirmwarePin.Path))
+    $after = Invoke-GpuFirmwareBootSelectionCapture -State $State -ReferenceLogPin $backup.ReferenceLog -BootManagerSha256 ([string]$backup.BootManagerSha256) -ActionDirectory $ActionDirectory -Label 'firmware-final-after'
+    if ((@($beforeSnapshot.BootOrder) -join ',') -cne (@($after.Snapshot.BootOrder) -join ',')) { throw 'Current raw BootOrder changed during final firmware comparison.' }
+    foreach ($pin in @($record.BaselinePin,$comparison.Pin,$CurrentFirmwarePin) + @($before.EvidencePins) + @($after.EvidencePins)) { Assert-GpuFilePin -Pin $pin }
+    return [pscustomobject]@{
+        SchemaVersion=1; Policy=[string]$record.Policy; Accepted=[bool]$result.Equivalent
+        Comparison=$result; RawBefore=$before; RawAfter=$after; CurrentRawBootSelectionStable=$true
+        HistoricalRawBootOrderUnchangedProven=$false; FullBootVariableNamespaceAttested=$false
+        Scope='Stable BCD entries and current raw BootNext/BootOrder stability; generic empty tail placeholders may differ. Historical raw BootOrder equality is not attested.'
+    }
+}
+
 function Invoke-GpuBackup {
     param([object]$State, [string]$ActionDirectory)
 
@@ -1401,6 +1619,12 @@ function Invoke-GpuBackup {
         $firmware = Invoke-GpuNativeCommand -Program (Get-GpuApplicationPath 'bcdedit.exe') -Arguments @('/enum', 'firmware', '/v') -ActionDirectory $ActionDirectory -Label 'firmware-enumeration-backup'
         Assert-GpuNativeSuccess -Result $firmware -Description 'Firmware boot-entry baseline capture'
         $firmwarePin = Get-GpuFilePin -Path $firmware.StdoutPath
+        $firmwareComparisonBackup = $null
+        if ($null -ne (Get-GpuObjectProperty -Object $State -Name 'FirmwareComparisonVersion')) {
+            $firmwareComparisonBackup = New-GpuFirmwareComparisonBackup -State $State -FirmwarePin $firmwarePin `
+                -ReferenceLogPin $referenceLogPin -BootManagerSha256 ([string]$bootManagerPin.Sha256) `
+                -RecoveryRunDirectory $recoveryLocation.RunDirectory -ActionDirectory $ActionDirectory
+        }
         $manifest = [pscustomobject]@{
             SchemaVersion = 2
             RunId = [string]$State.RunId
@@ -1424,6 +1648,7 @@ function Invoke-GpuBackup {
             }
         }
         $localManifestPath = Join-Path $ActionDirectory 'esp-manifest.json'
+        if ($null -ne $firmwareComparisonBackup) { $manifest | Add-Member -NotePropertyName FirmwareComparison -NotePropertyValue $firmwareComparisonBackup }
         $externalManifestPath = Join-Path $recoveryLocation.RunDirectory 'esp-manifest.json'
         Write-GpuJson -Path $localManifestPath -Value $manifest -NoOverwrite
         Write-GpuJson -Path $externalManifestPath -Value $manifest -NoOverwrite
@@ -1453,6 +1678,7 @@ function Invoke-GpuBackup {
             Files = @($treeCopy.Files)
         }
         Set-GpuStateProperty -Object $State -Name 'Backup' -Value $backup
+        if ($null -ne $firmwareComparisonBackup) { $backup | Add-Member -NotePropertyName FirmwareComparison -NotePropertyValue $firmwareComparisonBackup }
         return New-GpuPlatformResult -Status 'ESP_BACKUP_VERIFIED' -Succeeded $true -Data ([ordered]@{
             Backup = $backup
             LocalManifestPath = $localManifestPath
@@ -1907,8 +2133,15 @@ function Invoke-GpuFinalVerify {
             # Backup records bcdedit output with the system ESP mounted at S:.
             # Capture in the same state: an unmounted ESP is instead printed as
             # \Device\HarddiskVolumeN, making a byte comparison fail spuriously.
-            # Keep the complete text comparison, including every boot entry.
+            # Preserve full text equality; new runs also use their pinned policy.
             try {
+                $firmwarePolicyVersion = Get-GpuObjectProperty -Object $State -Name 'FirmwareComparisonVersion'
+                $rawBefore = $null
+                if ($null -ne $firmwarePolicyVersion) {
+                    $null = Get-GpuStableFirmwareBaseline -State $State
+                    $rawBefore = Invoke-GpuFirmwareBootSelectionCapture -State $State -ReferenceLogPin $backup.ReferenceLog `
+                        -BootManagerSha256 ([string]$backup.BootManagerSha256) -ActionDirectory $ActionDirectory -Label 'firmware-final-before'
+                }
                 $firmwareNow = Invoke-GpuNativeCommand -Program (Get-GpuApplicationPath 'bcdedit.exe') -Arguments @('/enum', 'firmware', '/v') -ActionDirectory $ActionDirectory -Label 'firmware-enumeration-final'
                 if (-not $firmwareNow.Succeeded) { throw "bcdedit failed with exit $($firmwareNow.ExitCode)." }
                 $currentPin = Get-GpuFilePin -Path $firmwareNow.StdoutPath
@@ -1926,7 +2159,13 @@ function Invoke-GpuFinalVerify {
                     CaptureContext = 'SystemEspMountedAtS'
                     Meaning = 'Textual bcdedit enumeration comparison with the system ESP mounted at S: for both captures; not a raw firmware-variable attestation.'
                 }
-                if ($null -ne $baselineText -and -not [bool]$firmwareComparison.TextEqual) {
+                if ($null -ne $firmwarePolicyVersion) {
+                    $stableReview = Invoke-GpuStableFirmwareFinal -State $State -CurrentFirmwarePin $currentPin -ActionDirectory $ActionDirectory -RawBefore $rawBefore
+                    $firmwareComparison | Add-Member -NotePropertyName ComparisonPolicy -NotePropertyValue $stableReview
+                    $firmwareComparison | Add-Member -NotePropertyName StableEntriesEqual -NotePropertyValue ([bool]$stableReview.Accepted)
+                    if (-not [bool]$stableReview.Accepted) { $errors.Add('Stable firmware boot entries differ from the saved baseline.') }
+                }
+                elseif ($null -ne $baselineText -and -not [bool]$firmwareComparison.TextEqual) {
                     if ($ReviewedFirmwareDifference) {
                         $firmwareComparison | Add-Member -NotePropertyName ReviewedDifferenceAccepted -NotePropertyValue $false
                         if ($errors.Count -eq 0 -and $everArm -and $resetBoundaryPassed -and

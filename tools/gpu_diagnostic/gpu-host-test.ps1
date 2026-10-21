@@ -213,12 +213,30 @@ function Assert-GpuRecordedState($State, [string]$Directory) {
             Payload = Join-Path $Expected.SignedDirectory 'payload.efi'
         }
     }
+    if ($null -ne $State.PSObject.Properties['FirmwareComparisonVersion']) {
+        if ($State.FirmwareComparisonVersion -ne 1 -or
+            ($State.FirmwareComparisonVersion -isnot [int] -and $State.FirmwareComparisonVersion -isnot [long])) {
+            throw 'Unsupported firmware comparison policy version in the run journal.'
+        }
+        $ExpectedPinPaths.Tools['Audit'] = Join-Path $Expected.LoaderBuild 'ibaudit.exe'
+    }
     foreach ($Group in @('Tools','BuildArtifacts','SignedArtifacts')) {
         if ($null -eq $State.$Group) { continue }
         foreach ($Name in $ExpectedPinPaths[$Group].Keys) {
             if ($null -eq $State.$Group.PSObject.Properties[$Name]) { throw "Missing $Group pin: $Name" }
             Assert-GpuSamePath $State.$Group.$Name.Path $ExpectedPinPaths[$Group][$Name]
         }
+    }
+}
+
+function Assert-GpuFinalPolicySourcePins($State) {
+    $names = @('gpu-host-test.ps1','gpu-host-rollback.ps1','GpuHostState.psm1','GpuHostPlatform.psm1','GpuFirmwareComparison.psm1')
+    if (@($State.SourcePins).Count -ne $names.Count) { throw 'Versioned FinalVerify requires all five Prepare source pins.' }
+    foreach ($name in $names) {
+        $expectedPath = Join-Path $PSScriptRoot $name
+        $pins = @($State.SourcePins | Where-Object { [string]$_.Path -ieq $expectedPath })
+        if ($pins.Count -ne 1) { throw "Versioned FinalVerify lacks a unique source pin: $name" }
+        Assert-GpuFilePin -Pin $pins[0]
     }
 }
 
@@ -292,7 +310,7 @@ try {
         }
         $Commit = Get-GpuSourceCommit
         $SourcePins = @(foreach ($Name in @('gpu-host-test.ps1','gpu-host-rollback.ps1',
-            'GpuHostState.psm1','GpuHostPlatform.psm1')) {
+            'GpuHostState.psm1','GpuHostPlatform.psm1','GpuFirmwareComparison.psm1')) {
             Get-GpuFilePin -Path (Join-Path $PSScriptRoot $Name)
         })
         $RecoveryBase = [IO.Path]::GetFullPath($RecoveryDirectory)
@@ -307,6 +325,7 @@ try {
         $null = New-Item -ItemType Directory -Path $RunDirectory
         $State = [pscustomobject][ordered]@{
             SchemaVersion=1; RunId=$RunId; WorkspaceRoot=$WorkspaceRoot
+            FirmwareComparisonVersion=1
             SourceRoot=$SourceRoot; SourceCommit=$Commit; RunDirectory=$RunDirectory
             RecoveryBase=$RecoveryBase; RecoveryRunDirectory=(Join-Path $RecoveryBase $RunId)
             Phase='Preparing'; InProgress=$null; SourcePins=$SourcePins; RecoveryHistory=@()
@@ -391,6 +410,9 @@ try {
             if ((Get-GpuSourceCommit) -cne $State.SourceCommit) { throw 'Source revision changed after Prepare.' }
             foreach ($Pin in $State.SourcePins) { Assert-GpuFilePin -Pin $Pin }
         }
+        if ($Action -eq 'FinalVerify' -and $null -ne $State.PSObject.Properties['FirmwareComparisonVersion']) {
+            Assert-GpuFinalPolicySourcePins $State
+        }
     }
     if ($null -eq $ActionDirectory) {
         $ActionId = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ') + '-' + $Action + '-' + [guid]::NewGuid().ToString('N')
@@ -437,6 +459,9 @@ try {
     if ($Result.Succeeded -and $Action -in @('Build','Sign','Backup','Stage','Arm')) {
         if ((Get-GpuSourceCommit) -cne $State.SourceCommit) { throw 'Source revision changed during the action.' }
         foreach ($Pin in $State.SourcePins) { Assert-GpuFilePin -Pin $Pin }
+    }
+    if ($Result.Succeeded -and $Action -eq 'FinalVerify' -and $null -ne $State.PSObject.Properties['FirmwareComparisonVersion']) {
+        Assert-GpuFinalPolicySourcePins $State
     }
     $NextPhase = @{
         Prepare='Prepared'; Build='Built'; Sign='Signed'; Backup='BackedUp'

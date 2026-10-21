@@ -161,7 +161,7 @@ function New-GpuDispatcherFixture {
     $workspaceRoot = Join-Path $fixtureRoot 'source workspace'
     $fixtureToolRoot = Join-Path $workspaceRoot 'tools\gpu_diagnostic'
     New-Item -ItemType Directory -Path $fixtureToolRoot -Force | Out-Null
-    foreach ($fileName in @('gpu-host-test.ps1', 'gpu-host-rollback.ps1', 'GpuHostState.psm1')) {
+    foreach ($fileName in @('gpu-host-test.ps1', 'gpu-host-rollback.ps1', 'GpuHostState.psm1', 'GpuFirmwareComparison.psm1')) {
         Copy-Item -LiteralPath (Join-Path $ToolRoot $fileName) -Destination (Join-Path $fixtureToolRoot $fileName)
     }
 
@@ -814,7 +814,7 @@ try {
     Invoke-TestCase 'Fixture dispatcher command allowlist contains only local logic and intercepted git' {
         $fixture = New-GpuDispatcherFixture -Parent $runRoot -Name 'allowlist'
         $allowedCommands = @(
-            'Assert-GpuActionAllowed', 'Assert-GpuFilePin', 'Assert-GpuNoReparsePath',
+            'Assert-GpuActionAllowed', 'Assert-GpuFilePin', 'Assert-GpuFinalPolicySourcePins', 'Assert-GpuNoReparsePath',
             'Assert-GpuPathWithin', 'Assert-GpuSafeFilePath',
             'Assert-GpuRecordedState', 'Assert-GpuSamePath', 'ConvertFrom-Json',
             'ConvertTo-Json', 'Copy-GpuRecoveryJournal', 'Export-ModuleMember', 'Add-Member',
@@ -825,7 +825,7 @@ try {
             'Save-Gpu042142ReviewEntryJournal', 'Save-Gpu062106ReviewEntryJournal',
             'Save-Gpu160027ReviewEntryJournal', 'Save-GpuJournal', 'Set-StrictMode',
             'Split-Path', 'Test-GpuFinalVerifyRetry', 'Test-GpuReparsePoint', 'Test-Path', 'Write-GpuJson',
-            'Write-Warning', 'git'
+            'Where-Object', 'Write-Warning', 'git'
         )
         foreach ($path in @(
             (Join-Path $fixture.ToolRoot 'gpu-host-test.ps1'),
@@ -1184,6 +1184,33 @@ try {
         Assert-Equal 'Prepared' $journal.Phase 'Pin drift advanced the phase.'
         Assert-True ($null -eq $journal.InProgress) 'Pin drift persisted a platform intent.'
         Assert-Equal 1 @(Get-GpuFixturePlatformCalls -Fixture $fixture).Count 'Pin drift reached the fake Build platform.'
+    }
+
+    Invoke-TestCase 'Versioned FinalVerify rejects source drift before platform execution' {
+        $fixture = New-GpuDispatcherFixture -Parent $runRoot -Name 'final-pin-drift'
+        $null = Assert-GpuFixtureActionSucceeded -Fixture $fixture -Action Prepare
+        $null = Assert-GpuFixtureActionSucceeded -Fixture $fixture -Action Disarm
+        $before = @(Get-GpuFixturePlatformCalls -Fixture $fixture).Count
+        [IO.File]::AppendAllText((Join-Path $fixture.ToolRoot 'GpuHostPlatform.psm1'), "`r`n# fixture-only drift`r`n")
+        $verify = Invoke-GpuFixtureAction -Fixture $fixture -Action FinalVerify
+        Assert-True ($verify.ExitCode -ne 0) 'Versioned FinalVerify accepted a changed Platform pin.'
+        Assert-True ($verify.StdErr -match 'Pinned file has drifted') 'FinalVerify source drift failed for an unrelated reason.'
+        Assert-Equal $before @(Get-GpuFixturePlatformCalls -Fixture $fixture).Count 'Source drift reached the fake FinalVerify platform.'
+        Assert-Equal 'Disarmed' (Get-GpuFixtureJournal -Fixture $fixture).Phase 'Source drift completed the run.'
+    }
+
+    Invoke-TestCase 'Versioned FinalVerify rejects missing source pins' {
+        $fixture = New-GpuDispatcherFixture -Parent $runRoot -Name 'final-missing-pin'
+        $null = Assert-GpuFixtureActionSucceeded -Fixture $fixture -Action Prepare
+        $null = Assert-GpuFixtureActionSucceeded -Fixture $fixture -Action Disarm
+        $journal = Get-GpuFixtureJournal -Fixture $fixture
+        $journal.SourcePins = @($journal.SourcePins | Where-Object { (Split-Path -Leaf $_.Path) -cne 'GpuHostPlatform.psm1' })
+        Write-GpuJson -Path (Join-Path $journal.RunDirectory 'journal.json') -Value $journal
+        $before = @(Get-GpuFixturePlatformCalls -Fixture $fixture).Count
+        $verify = Invoke-GpuFixtureAction -Fixture $fixture -Action FinalVerify
+        Assert-True ($verify.ExitCode -ne 0) 'Versioned FinalVerify accepted an omitted Platform pin.'
+        Assert-True ($verify.StdErr -match 'requires all five Prepare source pins') 'Missing source pin failed for an unrelated reason.'
+        Assert-Equal $before @(Get-GpuFixturePlatformCalls -Fixture $fixture).Count 'Missing source pin reached the fake FinalVerify platform.'
     }
 
     Invoke-TestCase 'Hermetic dispatcher rejects malformed, escaped, and mismatched selectors' {

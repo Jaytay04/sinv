@@ -763,6 +763,26 @@ function Assert-GpuBackupState {
     param([object]$State)
 }
 
+function Get-GpuStableFirmwareBaseline {
+    param([object]$State)
+    if (-not $script:GpuFinalVerifyFixtureMounted) { throw 'Fixture policy baseline checked outside mounted ESP context.' }
+}
+
+function Invoke-GpuFirmwareBootSelectionCapture {
+    param([object]$State, [object]$ReferenceLogPin, [string]$BootManagerSha256, [string]$ActionDirectory, [string]$Label)
+    if (-not $script:GpuFinalVerifyFixtureMounted -or $Label -cne 'firmware-final-before' -or
+        $script:GpuFinalVerifyFixtureFirmwareMountStates.Count -ne 0) { throw 'Fixture policy raw-before capture was not before bcdedit.' }
+    return [pscustomobject]@{ FixtureRawBefore = $true }
+}
+
+function Invoke-GpuStableFirmwareFinal {
+    param([object]$State, [object]$CurrentFirmwarePin, [string]$ActionDirectory, [object]$RawBefore)
+    if (-not $script:GpuFinalVerifyFixtureMounted -or $RawBefore.FixtureRawBefore -ne $true -or
+        $script:GpuFinalVerifyFixtureFirmwareMountStates.Count -ne 1) { throw 'Fixture policy comparison was not bracketed around bcdedit.' }
+    if ([bool](Get-GpuObjectProperty -Object $script:GpuFinalVerifyFixtureScenario -Name 'PolicyThrows' -Default $false)) { throw 'Synthetic versioned firmware policy rejected its evidence.' }
+    return [pscustomobject]@{ Accepted = [bool]$script:GpuFinalVerifyFixtureScenario.PolicyAccepted; Policy = 'StableEntriesAndGenericTailV1' }
+}
+
 function Get-GpuEspMount {
     param([string]$ActionDirectory)
     if ($script:GpuFinalVerifyFixtureMounted) { throw 'Fixture ESP was already mounted.' }
@@ -773,6 +793,7 @@ function Get-GpuEspMount {
 
 function Assert-GpuMountedEspMatchesBackup {
     param([object]$MountedEsp, [object]$Backup, [string]$Description)
+    if ([bool](Get-GpuObjectProperty -Object $script:GpuFinalVerifyFixtureScenario -Name 'EspMismatch' -Default $false)) { throw 'Synthetic ESP identity or hash mismatch.' }
     return [pscustomobject]@{ Sha256 = [string]$Backup.BootManagerSha256 }
 }
 
@@ -794,7 +815,8 @@ function Invoke-GpuNativeCommand {
     if ($Label -ceq 'post-disarm-absent-health') {
         $stdoutPath = Join-Path $ActionDirectory 'fixture-post-disarm-health.stdout.txt'
         $stderrPath = Join-Path $ActionDirectory 'fixture-post-disarm-health.stderr.txt'
-        [System.IO.File]::WriteAllText($stdoutPath, "UEFI_HYPERVISOR_WINDOWS_CPU:0:0:ABSENT`r`nUEFI_HYPERVISOR_WINDOWS_CPUID:ABSENT`r`n")
+        $healthResult = [string](Get-GpuObjectProperty -Object $script:GpuFinalVerifyFixtureScenario -Name 'HealthResult' -Default 'ABSENT')
+        [System.IO.File]::WriteAllText($stdoutPath, "UEFI_HYPERVISOR_WINDOWS_CPU:0:0:$healthResult`r`nUEFI_HYPERVISOR_WINDOWS_CPUID:$healthResult`r`n")
         [System.IO.File]::WriteAllText($stderrPath, '')
         return [pscustomobject]@{ Succeeded = $true; ExitCode = 0; StdoutPath = $stdoutPath; StderrPath = $stderrPath; ReceiptPath = $stdoutPath }
     }
@@ -1754,6 +1776,7 @@ catch {
         }
         $backup = [pscustomobject]@{
             FirmwareEnumeration = $baselinePin
+            ReferenceLog = $baselinePin
             BootManagerSha256 = ('A' * 64)
             EspVolume = $mountedEsp.Volume
             EspDiskNumber = $mountedEsp.DiskNumber
@@ -2029,6 +2052,47 @@ catch {
                 Assert-PlatformEqual $true ([bool]$result.FinalVerification.FirmwareEnumeration.ReviewedDifferenceAccepted) 'Accepted review was not recorded in firmware comparison.'
                 Assert-PlatformEqual 'fixture-reviewed-firmware-difference' ([string]$result.FinalVerification.FirmwareEnumeration.ReviewedDifference.ReviewId) 'Reviewed evidence was not propagated into the firmware comparison.'
                 Assert-PlatformEqual 'SystemEspMountedAtS' ([string]$result.FinalVerification.FirmwareEnumeration.CaptureContext) 'Reviewed comparison omitted mounted capture context.'
+            }
+        }
+    }
+
+    Invoke-PlatformTestCase 'Versioned firmware acceptance retains all FinalVerify recovery gates' {
+        $baselinePath = Join-Path $runRoot 'policy-final-baseline.txt'
+        [IO.File]::WriteAllText($baselinePath, 'original complete firmware listing')
+        $baselinePin = Get-GpuFilePin -Path $baselinePath
+        $probePath = Join-Path $runRoot 'policy-final-probe.exe'
+        [IO.File]::WriteAllBytes($probePath, [byte[]]@(1,2,3))
+        $probePin = Get-GpuFilePin -Path $probePath
+        $mountedEsp = [pscustomobject]@{ Volume='fixture-volume'; DiskNumber=0; PartitionGuid='fixture-partition' }
+        $backup = [pscustomobject]@{ FirmwareEnumeration=$baselinePin; ReferenceLog=$baselinePin; BootManagerSha256=('A' * 64) }
+        foreach ($caseName in @('accepted','stable-change','raw-rejection','secure-boot','reset','health','preflight','esp','native-failure')) {
+            $actionDirectory = Join-Path $runRoot ('policy-final-' + $caseName)
+            $null = New-Item -ItemType Directory -Path $actionDirectory
+            $state = [pscustomobject]@{
+                Host=[pscustomobject]@{ LogicalCpus=1 }; RunId='fixture-policy-run'; FirmwareComparisonVersion=1
+                Phase='Disarmed'; EverArmIntent=$true; Tools=[pscustomobject]@{ Probe=$probePin }; Backup=$backup
+                DisarmedBootId=if ($caseName -ceq 'reset') { 'boot-current' } else { 'boot-before' }
+            }
+            $scenario = [pscustomobject]@{
+                Current=[pscustomobject]@{ BootId='boot-current'; SecureBoot=($caseName -cne 'secure-boot'); LogicalCpus=1 }
+                ProbePin=$probePin; MountedEsp=$mountedEsp; PreflightValid=($caseName -cne 'preflight')
+                FirmwareTextWhenMounted='current complete firmware listing'; FirmwareTextWhenUnmounted='wrong context'
+                FirmwareNativeSucceeded=($caseName -cne 'native-failure'); PolicyAccepted=($caseName -cne 'stable-change')
+                PolicyThrows=($caseName -ceq 'raw-rejection'); EspMismatch=($caseName -ceq 'esp')
+                HealthResult=if ($caseName -ceq 'health') { 'PASS' } else { 'ABSENT' }
+            }
+            Set-GpuFinalVerifyFixtureScenario $scenario
+            $result = Invoke-GpuFinalVerify -State $state -ActionDirectory $actionDirectory
+            $observations = Get-GpuFinalVerifyFixtureObservations
+            $expected = ($caseName -ceq 'accepted')
+            Assert-PlatformEqual $expected ([bool]$result.Succeeded) "Versioned policy bypassed the $caseName recovery gate."
+            Assert-PlatformEqual $(if ($expected) { 'FINAL_RESET_VERIFIED_GPU_UNATTESTED' } else { 'FINAL_VERIFY_FAILED_GPU_UNATTESTED' }) ([string]$result.Status) "Policy status differs for $caseName."
+            Assert-PlatformTrue (-not $observations.Mounted) "Policy path retained its ESP mount after $caseName."
+            Assert-PlatformEqual 0 $observations.ReviewCalls.Count 'Versioned policy invoked a legacy run-specific review.'
+            if ($expected) {
+                Assert-PlatformEqual $false $result.FinalVerification.FirmwareEnumeration.TextEqual 'Policy acceptance overwrote full-text inequality.'
+                Assert-PlatformEqual $true $result.FinalVerification.FirmwareEnumeration.StableEntriesEqual 'Policy acceptance was not recorded separately.'
+                Assert-PlatformEqual 0 @($result.FinalVerification.Errors).Count 'Healthy policy completion retained errors.'
             }
         }
     }

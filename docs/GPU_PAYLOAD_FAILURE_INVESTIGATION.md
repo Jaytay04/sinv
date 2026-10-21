@@ -54,8 +54,37 @@ The next diagnostic should distinguish the two quiesce audit branches and
 retain the first failing segment/BDF, original/requested/readback command
 values and restoration result, or the two scan counts. The existing audit
 and restoration checks must remain enforced. No new payload change or live
-test was performed in this investigation. The journal remains `Collected`;
-operator rollback and final reset verification are still required.
+test was performed in this investigation.
+
+The operator subsequently completed rollback and reset. FinalVerify at
+`20261021T200510255Z-FinalVerify-38149ac12747467cbb64e46552b7abae` passed reset,
+Secure Boot, all 20 `ABSENT` results and the boot-manager hash. Only textual
+firmware equality failed: baseline SHA-256 `98E5ECE5…EDC2D80` contains the three
+empty generic CD/DVD/removable/network application blocks and their tail
+display-order references; current SHA-256 `66786928…A5007` omits them. Windows
+and both USB blocks and their retained order match. This saved-text comparison
+does not prove historical raw firmware-variable equality. The fixed
+`Inspect-GpuFinalFirmware.ps1 -Run193833` profile captures fresh read-only
+evidence for the existing run's review without changing its selector or journal.
+
+Future Prepare journals use a separately pinned version-1 policy that compares
+all retained firmware entries while allowing only those exact empty generic
+tail placeholders to change independently. Backup retains full text and raw
+selection evidence, with external readback-verified copies. FinalVerify keeps
+`TextEqual` and original hashes, adds the structured policy verdict, and
+requires clean, stable fresh raw BootNext/BootOrder observations around the
+comparison. The existing reset, health, Secure Boot, ESP and preflight gates
+remain required. Old journals keep strict text comparison. The policy fixes
+this recurring recovery false failure; it does not fix the PCI quiesce refusal
+or prove GPU isolation.
+
+Validation used saved files and hermetic host fixtures only: 26 comparison
+cases, 21 Backup/final-comparison cases, 20 platform cases (including all final
+recovery gates), 53 dispatcher/state cases, and the related readiness,
+retirement and firmware-review suites passed. The audit boundary was mocked;
+no VM, ESP mount, firmware capture/write, payload launch or live recovery action
+was executed. The new tests are registered in the component's Windows CTest
+suite so the next Build runs them.
 
 ## Run 160027: volume open fails after successful payload return
 

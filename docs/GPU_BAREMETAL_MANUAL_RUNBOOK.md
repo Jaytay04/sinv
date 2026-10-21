@@ -1,6 +1,6 @@
 # Intel UHD 770 bare-metal diagnostic runbook
 
-## Current checkpoint: run 193833 collected; rollback pending
+## Current checkpoint: run 193833 needs firmware-difference review
 
 Run `gpu-20261021T193833Z-c48461667089493988074edfaf008d56` returned
 `COLLECTED_HEALTH_FAIL_GPU_UNATTESTED`. The payload stopped at the PCI quiesce
@@ -9,16 +9,48 @@ Windows boot-manager read/load phases succeeded; the operator reports a normal
 Windows boot. This does not verify the previous post-activation storage failure
 is fixed. See the [run 193833 investigation](GPU_PAYLOAD_FAILURE_INVESTIGATION.md#run-193833-pci-quiesce-audit-stops-activation-windows-handoff-proceeds).
 
-Run the existing rollback workflow from elevated PowerShell:
+Rollback and the operator's reset have completed. FinalVerify passed Secure
+Boot, reset, all 20 `ABSENT` observations and the original boot-manager hash.
+Its remaining failure is the removal of three empty generic firmware entries
+(CD/DVD, removable device and network) and their display-order references.
+Windows Boot Manager and both physical USB entries are unchanged in the saved
+text. Capture fresh read-only review evidence from elevated PowerShell:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-rollback.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Inspect-GpuFinalFirmware.ps1 -Run193833
 ```
 
-If it returns `RECOVERY_PENDING_USER_POWER_CYCLE`, complete that reset boundary
-manually, then run `gpu-host-test.ps1 FinalVerify`. Do not Archive until final
-verification succeeds. Older run-specific review and retirement switches below
-do not apply to `193833`. No recovery action was run by the investigation.
+Require `READONLY_FIRMWARE_REVIEW_CAPTURED`. This does not complete recovery or
+authorize retirement. Preserve its receipt for the run-specific completion
+review; do not use another run's review or retirement switch. No live recovery
+action was run by the investigation.
+
+## Firmware comparison for new runs
+
+New `Prepare` journals record `FirmwareComparisonVersion: 1`. Build pins the
+run's `ibaudit.exe`; Backup saves the complete original firmware listing, a
+pinned comparison baseline, raw boot-selection evidence and six verified
+external evidence copies. FinalVerify checks those pins and preserves the
+original hashes and `TextEqual` result.
+
+The additional policy permits only empty `UEFI:CD/DVD Drive`,
+`UEFI:Removable Device` and `UEFI:Network Device` application blocks and their
+references to appear, disappear or change GUIDs. Each type must be unique and
+referenced exactly once; their references must form the tail of the boot list
+in that order, after all retained entries. Subsets of those types are allowed.
+Every other entry, field and retained order must match. Physical USB removal,
+Windows boot-path changes, unknown entries and malformed listings still fail.
+
+Fresh raw captures bracket final enumeration and comparison. They require no
+pending BootNext, no integrity findings, the saved boot-manager and reference-log
+hashes, and an unchanged ordered BootOrder during that observation. This does
+not attest historical raw BootOrder equality or the full firmware-variable
+namespace. Reset, Secure Boot, health, preflight and ESP checks remain required.
+Successful recovery still reports GPU isolation as unattested.
+
+Existing journals, including `193833`, retain their original exact-text policy
+and reviewed-difference workflow. Do not retrofit the new version into them.
+The new rule applies after a fresh Prepare; it does not resolve payload startup.
 
 ## Previous checkpoint: run 160027 archived and stage retired
 
