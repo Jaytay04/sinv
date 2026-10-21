@@ -1,6 +1,7 @@
 #include "iommu_runtime.h"
 
 #include <stdio.h>
+#include <string.h>
 
 #define TEST_ASSERT(condition, message) \
     do { \
@@ -1224,9 +1225,26 @@ static int TestRootDeviceDomain(void)
 
 typedef struct TEST_PCI_ECAM {
     uint16_t Commands[2];
+    uint16_t HostBridgeCommand;
+    uint16_t HostBridgeVendor;
+    uint16_t HostBridgeDevice;
+    uint16_t HostBridgeRevision;
+    uint16_t HostBridgeProgrammingInterface;
+    uint16_t HostBridgeSubclass;
+    uint16_t HostBridgeClass;
+    uint16_t HostBridgeHeaderType;
     uint32_t Writes;
+    uint32_t ReadCalls;
     uint32_t CommandReads;
     uint32_t VendorReads;
+    uint32_t HostBridgePresent;
+    uint32_t HostBridgeReadOnlyBme;
+    uint32_t HostBridgeWrites;
+    uint32_t HostBridgeReadCount;
+    uint32_t FailHostBridgeReadOrdinal;
+    uint32_t DriftHostBridgeOnSecondPass;
+    uint32_t DriftHostBridgeCommandOnSecondPass;
+    uint32_t DisappearHostBridgeOnSecondPass;
     uint32_t FailWrite;
     uint32_t FailWriteOrdinalSecondary;
     uint32_t IgnoreWriteOrdinal;
@@ -1244,6 +1262,61 @@ static uint32_t TestPciRead16(
     uint32_t index;
     if (value == NULL || address < UINT64_C(0xe0000000)) {
         return 0;
+    }
+    ++ecam->ReadCalls;
+    if (address >= UINT64_C(0xe0000000) &&
+        address < UINT64_C(0xe0001000)) {
+        const uint32_t offset = (uint32_t)(address - UINT64_C(0xe0000000));
+        if (ecam->HostBridgePresent == 0 ||
+            (ecam->DisappearHostBridgeOnSecondPass != 0 &&
+             ecam->HostBridgeReadCount >= 6)) {
+            *value = UINT16_C(0xffff);
+            return 1;
+        }
+        ++ecam->HostBridgeReadCount;
+        if (ecam->FailHostBridgeReadOrdinal != 0 &&
+            ecam->HostBridgeReadCount == ecam->FailHostBridgeReadOrdinal) {
+            return 0;
+        }
+        switch (offset) {
+        case 0:
+            ++ecam->VendorReads;
+            *value = ecam->HostBridgeVendor;
+            return 1;
+        case 2:
+            *value = ecam->HostBridgeDevice;
+            if (ecam->DriftHostBridgeOnSecondPass != 0 &&
+                ecam->HostBridgeReadCount > 6) {
+                *value ^= UINT16_C(1);
+            }
+            return 1;
+        case 4:
+            ++ecam->CommandReads;
+            if (ecam->FailCommandReadOrdinal != 0 &&
+                ecam->CommandReads == ecam->FailCommandReadOrdinal) {
+                return 0;
+            }
+            *value = ecam->HostBridgeCommand;
+            if (ecam->DriftHostBridgeCommandOnSecondPass != 0 &&
+                ecam->HostBridgeReadCount > 6) {
+                *value ^= UINT16_C(4);
+            }
+            return 1;
+        case 8:
+            *value = (uint16_t)(ecam->HostBridgeRevision |
+                (uint16_t)(ecam->HostBridgeProgrammingInterface << 8));
+            return 1;
+        case 10:
+            *value = (uint16_t)(ecam->HostBridgeSubclass |
+                (uint16_t)(ecam->HostBridgeClass << 8));
+            return 1;
+        case 14:
+            *value = ecam->HostBridgeHeaderType;
+            return 1;
+        default:
+            *value = UINT16_C(0xffff);
+            return 1;
+        }
     }
     if ((address & UINT64_C(0xfff)) == 0) {
         ++ecam->VendorReads;
@@ -1285,6 +1358,27 @@ static uint32_t TestPciWrite16(
          ecam->Writes == ecam->FailWriteOrdinalSecondary)) {
         return 0;
     }
+    if (address == UINT64_C(0xe0000004) &&
+        ecam->HostBridgePresent != 0) {
+        ++ecam->HostBridgeWrites;
+        if (ecam->IgnoreWriteOrdinal != 0 &&
+            ecam->Writes == ecam->IgnoreWriteOrdinal) {
+            return 1;
+        }
+        if (ecam->WrongWriteOrdinal != 0 &&
+            ecam->Writes == ecam->WrongWriteOrdinal) {
+            ecam->HostBridgeCommand =
+                value ^ ecam->WrongWriteXor;
+            return 1;
+        }
+        if (ecam->HostBridgeReadOnlyBme != 0 &&
+            (ecam->HostBridgeCommand & UINT16_C(4)) != 0) {
+            ecam->HostBridgeCommand = value | UINT16_C(4);
+        } else {
+            ecam->HostBridgeCommand = value;
+        }
+        return 1;
+    }
     for (index = 0; index < 2; ++index) {
         const uint64_t commandAddress = UINT64_C(0xe0000004) +
             (uint64_t)(index + 1) * UINT64_C(0x8000);
@@ -1304,6 +1398,34 @@ static uint32_t TestPciWrite16(
         }
     }
     return 0;
+}
+
+static void ConfigureAlderLakeSPciPolicy(
+    HV_EFI_IOMMU_PCI_QUIESCE_POLICY *policy)
+{
+    TestZero(policy, sizeof(*policy));
+    policy->Kind =
+        HV_EFI_IOMMU_PCI_POLICY_ALDER_LAKE_S_HOST_BRIDGE;
+    policy->CpuVendorEbx = UINT32_C(0x756e6547);
+    policy->CpuVendorEdx = UINT32_C(0x49656e69);
+    policy->CpuVendorEcx = UINT32_C(0x6c65746e);
+    policy->CpuSignature = UINT32_C(0x00090672);
+    policy->CpuFeatureEcx = UINT32_C(0x7ffafbbf);
+    policy->EnabledProcessorCount = 20;
+}
+
+static void ConfigureAlderLakeSPciHostBridge(TEST_PCI_ECAM *ecam)
+{
+    ecam->HostBridgePresent = 1;
+    ecam->HostBridgeVendor = UINT16_C(0x8086);
+    ecam->HostBridgeDevice = UINT16_C(0x4601);
+    ecam->HostBridgeCommand = UINT16_C(7);
+    ecam->HostBridgeRevision = UINT16_C(2);
+    ecam->HostBridgeProgrammingInterface = 0;
+    ecam->HostBridgeSubclass = 0;
+    ecam->HostBridgeClass = UINT16_C(6);
+    ecam->HostBridgeHeaderType = 0;
+    ecam->HostBridgeReadOnlyBme = 1;
 }
 
 static HV_EFI_IOMMU_RUNTIME_STATUS RunCapabilityDiagnosticInstallInternal(
@@ -1800,6 +1922,393 @@ static int TestMcfgPciQuiesce(void)
     return 0;
 }
 
+static uint32_t InstallDiagnosticIsArgumentFailure(
+    const HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic,
+    HV_EFI_IOMMU_RUNTIME_STATUS status)
+{
+    return diagnostic->Stage == HV_EFI_IOMMU_INSTALL_STAGE_ARGUMENT &&
+        diagnostic->PrimaryStatus == (uint32_t)status &&
+        diagnostic->FinalStatus == (uint32_t)status &&
+        diagnostic->CapabilityFailure ==
+            HV_EFI_IOMMU_CAPABILITY_FAILURE_NONE &&
+        diagnostic->UnitIndex == UINT32_MAX &&
+        diagnostic->RequestedAddressBits == 0 && diagnostic->Version == 0 &&
+        diagnostic->Capability == 0 &&
+        diagnostic->PciFailure == HV_EFI_IOMMU_PCI_FAILURE_NONE &&
+        diagnostic->PciSegment == 0 && diagnostic->PciBus == 0 &&
+        diagnostic->PciDevice == 0 && diagnostic->PciFunction == 0 &&
+        diagnostic->PciOriginalCommand == 0 &&
+        diagnostic->PciExpectedCommand == 0 &&
+        diagnostic->PciObservedCommand == 0 &&
+        diagnostic->PciRequiredCount == 0 &&
+        diagnostic->PciObservedCount == 0;
+}
+
+static int TestPciConfigAccessPolicy(void)
+{
+    static const struct {
+        uint32_t Offset;
+        uint32_t CpuConfigFunction;
+        uint32_t Write;
+        uint32_t Expected;
+    } cases[] = {
+        {0, 0, 0, 1}, {4, 0, 0, 1}, {0, 1, 0, 1}, {4, 1, 0, 1},
+        {2, 0, 0, 0}, {8, 0, 0, 0}, {10, 0, 0, 0}, {14, 0, 0, 0},
+        {2, 1, 0, 1}, {8, 1, 0, 1}, {10, 1, 0, 1}, {14, 1, 0, 1},
+        {0, 0, 1, 0}, {2, 0, 1, 0}, {2, 1, 1, 0}, {4, 0, 1, 1},
+        {4, 1, 1, 0}, {8, 1, 1, 0}, {12, 1, 0, 0}, {16, 1, 0, 0}
+    };
+    uint32_t index;
+    for (index = 0; index < (uint32_t)(sizeof(cases) / sizeof(cases[0]));
+         ++index) {
+        TEST_ASSERT(HvEfiIommuPciConfigAccessAllowed(
+                        cases[index].Offset,
+                        cases[index].CpuConfigFunction,
+                        cases[index].Write) == cases[index].Expected,
+                    "PCI config access boundary matches the CPU metadata and write matrix");
+    }
+    TEST_ASSERT(HvEfiIommuPciConfigAccessAllowed(0, 2, 0) == 0 &&
+                HvEfiIommuPciConfigAccessAllowed(0, 0, 2) == 0 &&
+                HvEfiIommuPciConfigAccessAllowed(UINT32_MAX, 0, 0) == 0,
+                "PCI config access boundary rejects invalid booleans and offsets");
+    return 0;
+}
+
+static int TestPciHostBridgeQuiescePolicy(void)
+{
+    uint8_t image[0x4000];
+    HV_EFI_IOMMU_DMAR_UNIT units[2];
+    HV_EFI_IOMMU_DMAR_RMRR rmrrs[2];
+    HV_EFI_IOMMU_DMAR_SCOPE scopes[4];
+    HV_EFI_IOMMU_DEVICE_PATH_ELEMENT paths[4];
+    HV_EFI_IOMMU_DMAR_INFO info;
+    HV_EFI_IOMMU_UNIT_CONFIGURATION configuration;
+    HV_EFI_IOMMU_OWNERSHIP_POLICY ownership;
+    HV_EFI_IOMMU_RUNTIME_CALLBACKS runtimeCallbacks;
+    HV_EFI_IOMMU_PCI_CALLBACKS pciCallbacks;
+    HV_EFI_IOMMU_UNIT_PROGRAM programs[1];
+    HV_EFI_IOMMU_MMIO_OPERATION operations[24];
+    HV_EFI_IOMMU_PROGRAM_STORAGE storage;
+    HV_EFI_IOMMU_PROGRAM_PLAN plan;
+    HV_EFI_IOMMU_RUNTIME expectedRuntime;
+    HV_EFI_IOMMU_PROGRAM_PLAN expectedPlan;
+    HV_EFI_IOMMU_UNIT_RUNTIME_STATE unitStates[1];
+    HV_EFI_IOMMU_UNIT_RUNTIME_STATE expectedUnitStates[1];
+    HV_EFI_IOMMU_RUNTIME runtime;
+    HV_EFI_IOMMU_INSTALL_DIAGNOSTIC diagnostic;
+    HV_EFI_IOMMU_MCFG_SEGMENT segment;
+    HV_EFI_IOMMU_MCFG_SEGMENT invalidSegments[2];
+    HV_EFI_IOMMU_PCI_COMMAND_STATE pciStates[2];
+    HV_EFI_IOMMU_PCI_COMMAND_STATE expectedPciStates[2];
+    HV_EFI_IOMMU_PCI_QUIESCE_POLICY policy;
+    HV_EFI_IOMMU_PCI_QUIESCE_POLICY invalidPolicy;
+    TEST_MMIO mmio;
+    TEST_PCI_ECAM ecam;
+    uint32_t pciStateCount = 0;
+    uint32_t expectedPciStateCount;
+    volatile uint32_t expectedDmaQuiescedState;
+    HV_EFI_IOMMU_RUNTIME_STATUS status;
+    HV_EFI_IOMMU_RUNTIME_STATUS expectedMcfgStatus;
+    uint32_t invalidSegmentCount;
+    uint32_t invalidIndex;
+
+    TEST_ASSERT(ParseFixture(image, &info, units, rmrrs, scopes, paths),
+                "host bridge policy fixture DMAR parses");
+    InitializeCallbacks(&mmio, &runtimeCallbacks);
+    pciCallbacks.Context = &ecam;
+    pciCallbacks.Read16 = TestPciRead16;
+    pciCallbacks.Write16 = TestPciWrite16;
+    segment.EcamBase = UINT64_C(0xe0000000);
+    segment.Segment = 0;
+    segment.StartBus = 0;
+    segment.EndBus = 0;
+    TestZero(&configuration, sizeof(configuration));
+    configuration.RootTablePhysical = UINT64_C(0x400000);
+    configuration.AddressBits = 39;
+    TestZero(&ownership, sizeof(ownership));
+    ownership.Mode = HV_EFI_IOMMU_OWNERSHIP_EPT_TRAPPED;
+    ownership.DmarMmioGuestDenied = 1;
+    ownership.RemappingTablesGuestDenied = 1;
+    ownership.RemappingTablesDmaDenied = 1;
+    ownership.ContinuousAuditEnabled = 1;
+    ownership.RequireDmaQuiesce = 1;
+    ownership.OwnerToken = UINT64_C(0x12345678);
+    storage.Units = programs;
+    storage.UnitCapacity = 1;
+    storage.Operations = operations;
+    storage.OperationCapacity = 24;
+    ConfigureAlderLakeSPciPolicy(&policy);
+    TEST_ASSERT(HvEfiIommuValidatePciQuiescePolicy(NULL) ==
+                    HV_EFI_IOMMU_RUNTIME_OK &&
+                HvEfiIommuValidatePciQuiescePolicy(&policy) ==
+                    HV_EFI_IOMMU_RUNTIME_OK,
+                "null policy selects generic behavior and exact Alder Lake-S host profile is accepted");
+
+#define INSTALL_WITH_POLICY(segmentsValue, segmentCountValue, policyValue) \
+    HvEfiIommuInstallRuntimeIsolationWithAdjustedWidthAndPciPolicy( \
+        &info, &configuration, 1, &ownership, &runtimeCallbacks, &storage, 8, \
+        &plan, &runtime, unitStates, 1, (segmentsValue), (segmentCountValue), \
+        &pciCallbacks, pciStates, 2, &pciStateCount, &mmio.DmaQuiesced, 39, \
+        &diagnostic, (policyValue))
+
+    for (invalidIndex = 0; invalidIndex < 8; ++invalidIndex) {
+        ConfigureAlderLakeSPciPolicy(&invalidPolicy);
+        switch (invalidIndex) {
+        case 0:
+            invalidPolicy.CpuVendorEbx ^= UINT32_C(1);
+            break;
+        case 1:
+            invalidPolicy.CpuVendorEdx ^= UINT32_C(1);
+            break;
+        case 2:
+            invalidPolicy.CpuVendorEcx ^= UINT32_C(1);
+            break;
+        case 3:
+            invalidPolicy.CpuSignature ^= UINT32_C(1);
+            break;
+        case 4:
+            invalidPolicy.EnabledProcessorCount = 19;
+            break;
+        case 5:
+            invalidPolicy.CpuFeatureEcx |= UINT32_C(0x80000000);
+            break;
+        case 6:
+            invalidPolicy.Kind = HV_EFI_IOMMU_PCI_QUIESCE_POLICY_NONE;
+            break;
+        default:
+            invalidPolicy.Kind = UINT32_MAX;
+            break;
+        }
+        TestZero(&ecam, sizeof(ecam));
+        TestZero(&mmio, sizeof(mmio));
+        memset(&plan, 0x5a, sizeof(plan));
+        expectedPlan = plan;
+        memset(&runtime, 0x5a, sizeof(runtime));
+        expectedRuntime = runtime;
+        memset(unitStates, 0x5a, sizeof(unitStates));
+        memcpy(expectedUnitStates, unitStates, sizeof(unitStates));
+        memset(pciStates, 0x5a, sizeof(pciStates));
+        memcpy(expectedPciStates, pciStates, sizeof(pciStates));
+        memset(&diagnostic, 0x5a, sizeof(diagnostic));
+        pciStateCount = UINT32_C(0x5a5a5a5a);
+        expectedPciStateCount = pciStateCount;
+        mmio.DmaQuiesced = UINT32_C(0x5a5a5a5a);
+        expectedDmaQuiescedState = mmio.DmaQuiesced;
+        TEST_ASSERT(INSTALL_WITH_POLICY(&segment, 1, &invalidPolicy) ==
+                        HV_EFI_IOMMU_RUNTIME_PROFILE_MISMATCH &&
+                    ecam.ReadCalls == 0 && ecam.Writes == 0 &&
+                    mmio.Reads == 0 && mmio.Writes == 0 &&
+                    memcmp(&plan, &expectedPlan, sizeof(plan)) == 0 &&
+                    memcmp(&runtime, &expectedRuntime, sizeof(runtime)) == 0 &&
+                    memcmp(unitStates, expectedUnitStates,
+                           sizeof(unitStates)) == 0 &&
+                    memcmp(pciStates, expectedPciStates,
+                           sizeof(pciStates)) == 0 &&
+                    InstallDiagnosticIsArgumentFailure(
+                        &diagnostic, HV_EFI_IOMMU_RUNTIME_PROFILE_MISMATCH) &&
+                    pciStateCount == expectedPciStateCount &&
+                    mmio.DmaQuiesced == expectedDmaQuiescedState,
+                    "invalid CPU/vendor/signature/count/hypervisor/kind policy fails before callbacks or non-diagnostic output mutation");
+    }
+
+    for (invalidIndex = 0; invalidIndex < 4; ++invalidIndex) {
+        invalidSegments[0] = segment;
+        invalidSegments[1] = segment;
+        invalidSegmentCount = 1;
+        expectedMcfgStatus = HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+        switch (invalidIndex) {
+        case 0:
+            invalidSegments[0].StartBus = 1;
+            break;
+        case 1:
+            invalidSegments[0].Segment = 1;
+            break;
+        case 2:
+            invalidSegmentCount = 2;
+            break;
+        default:
+            invalidSegments[0].EcamBase =
+                UINT64_MAX & ~UINT64_C(0xfffff);
+            expectedMcfgStatus = HV_EFI_IOMMU_RUNTIME_RANGE_OVERFLOW;
+            break;
+        }
+        TestZero(&ecam, sizeof(ecam));
+        TestZero(&mmio, sizeof(mmio));
+        memset(&plan, 0x5a, sizeof(plan));
+        expectedPlan = plan;
+        memset(&runtime, 0x5a, sizeof(runtime));
+        expectedRuntime = runtime;
+        memset(unitStates, 0x5a, sizeof(unitStates));
+        memcpy(expectedUnitStates, unitStates, sizeof(unitStates));
+        memset(pciStates, 0x5a, sizeof(pciStates));
+        memcpy(expectedPciStates, pciStates, sizeof(pciStates));
+        memset(&diagnostic, 0x5a, sizeof(diagnostic));
+        pciStateCount = UINT32_C(0x5a5a5a5a);
+        expectedPciStateCount = pciStateCount;
+        mmio.DmaQuiesced = UINT32_C(0x5a5a5a5a);
+        expectedDmaQuiescedState = mmio.DmaQuiesced;
+        status = INSTALL_WITH_POLICY(
+            invalidSegments, invalidSegmentCount, &policy);
+        TEST_ASSERT(status == expectedMcfgStatus &&
+                    ecam.ReadCalls == 0 && ecam.Writes == 0 &&
+                    mmio.Reads == 0 && mmio.Writes == 0 &&
+                    memcmp(&plan, &expectedPlan, sizeof(plan)) == 0 &&
+                    memcmp(&runtime, &expectedRuntime, sizeof(runtime)) == 0 &&
+                    memcmp(unitStates, expectedUnitStates,
+                           sizeof(unitStates)) == 0 &&
+                    memcmp(pciStates, expectedPciStates,
+                           sizeof(pciStates)) == 0 &&
+                    InstallDiagnosticIsArgumentFailure(
+                        &diagnostic, expectedMcfgStatus) &&
+                    pciStateCount == expectedPciStateCount &&
+                    mmio.DmaQuiesced == expectedDmaQuiescedState,
+                    "policy-bound MCFG shape and overflow reject before callbacks or non-diagnostic output mutation");
+    }
+
+    TestZero(&ecam, sizeof(ecam));
+    ConfigureAlderLakeSPciHostBridge(&ecam);
+    TEST_ASSERT(HvEfiIommuQuiescePciBusMasters(
+                    &segment, 1, &pciCallbacks, pciStates, 2,
+                    &pciStateCount) == HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED &&
+                pciStateCount == 0 && ecam.HostBridgeCommand == 7 &&
+                ecam.HostBridgeWrites == 2,
+                "legacy generic quiesce still rejects and restores read-only host bridge BME");
+
+    TestZero(&ecam, sizeof(ecam));
+    ConfigureAlderLakeSPciHostBridge(&ecam);
+    ecam.Commands[0] = 7;
+    ecam.Commands[1] = 5;
+    InitializeCallbacks(&mmio, &runtimeCallbacks);
+    mmio.DmaQuiesced = 0;
+    TEST_ASSERT(INSTALL_WITH_POLICY(&segment, 1, &policy) ==
+                    HV_EFI_IOMMU_RUNTIME_OK &&
+                runtime.State == HV_EFI_IOMMU_RUNTIME_ENABLED &&
+                pciStateCount == 2 && ecam.HostBridgeCommand == 7 &&
+                ecam.HostBridgeWrites == 0 && ecam.Writes == 4 &&
+                ecam.Commands[0] == 7 && ecam.Commands[1] == 5 &&
+                pciStates[0].Device == 1 && pciStates[1].Device == 2,
+                "explicit profile accepts only the verified CPU host bridge while endpoint bus masters clear and restore");
+
+    for (invalidIndex = 0; invalidIndex < 9; ++invalidIndex) {
+        TestZero(&ecam, sizeof(ecam));
+        ConfigureAlderLakeSPciHostBridge(&ecam);
+        switch (invalidIndex) {
+        case 0:
+            ecam.HostBridgePresent = 0;
+            break;
+        case 1:
+            ecam.HostBridgeVendor = UINT16_C(0x1234);
+            break;
+        case 2:
+            ecam.HostBridgeDevice = 0;
+            break;
+        case 3:
+            ecam.HostBridgeClass = UINT16_C(3);
+            break;
+        case 4:
+            ecam.HostBridgeProgrammingInterface = 1;
+            break;
+        case 5:
+            ecam.HostBridgeHeaderType = 1;
+            break;
+        case 6:
+            ecam.HostBridgeHeaderType = UINT16_C(0x80);
+            break;
+        case 7:
+            ecam.HostBridgeCommand &= (uint16_t)~UINT16_C(4);
+            break;
+        default:
+            ecam.HostBridgeSubclass = UINT16_C(1);
+            break;
+        }
+        InitializeCallbacks(&mmio, &runtimeCallbacks);
+        mmio.DmaQuiesced = 0;
+        status = INSTALL_WITH_POLICY(&segment, 1, &policy);
+        TEST_ASSERT(status == HV_EFI_IOMMU_RUNTIME_PROFILE_MISMATCH &&
+                    pciStateCount == 0 && ecam.Writes == 0 &&
+                    ecam.HostBridgeWrites == 0 && mmio.Writes == 0,
+                    "missing or nonmatching CPU PCI identity fails closed before PCI or VT-d writes");
+    }
+
+    TestZero(&ecam, sizeof(ecam));
+    ConfigureAlderLakeSPciHostBridge(&ecam);
+    ecam.FailHostBridgeReadOrdinal = 3;
+    InitializeCallbacks(&mmio, &runtimeCallbacks);
+    mmio.DmaQuiesced = 0;
+    TEST_ASSERT(INSTALL_WITH_POLICY(&segment, 1, &policy) ==
+                    HV_EFI_IOMMU_RUNTIME_CALLBACK_FAILED &&
+                pciStateCount == 0 && ecam.Writes == 0 && mmio.Writes == 0,
+                "host bridge configuration read failure aborts before quiescing other functions");
+
+    TestZero(&ecam, sizeof(ecam));
+    ConfigureAlderLakeSPciHostBridge(&ecam);
+    ecam.DriftHostBridgeOnSecondPass = 1;
+    InitializeCallbacks(&mmio, &runtimeCallbacks);
+    mmio.DmaQuiesced = 0;
+    TEST_ASSERT(INSTALL_WITH_POLICY(&segment, 1, &policy) ==
+                    HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED &&
+                pciStateCount == 0 && ecam.Writes == 0 && mmio.Writes == 0,
+                "CPU bridge identity drift between scans fails before endpoint changes");
+
+    TestZero(&ecam, sizeof(ecam));
+    ConfigureAlderLakeSPciHostBridge(&ecam);
+    ecam.DriftHostBridgeCommandOnSecondPass = 1;
+    InitializeCallbacks(&mmio, &runtimeCallbacks);
+    mmio.DmaQuiesced = 0;
+    TEST_ASSERT(INSTALL_WITH_POLICY(&segment, 1, &policy) ==
+                    HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED &&
+                pciStateCount == 0 && ecam.Writes == 0 &&
+                ecam.HostBridgeWrites == 0 &&
+                ecam.HostBridgeCommand == 7 && mmio.Writes == 0,
+                "CPU bridge BME drift between scans fails before endpoint changes");
+
+    TestZero(&ecam, sizeof(ecam));
+    ConfigureAlderLakeSPciHostBridge(&ecam);
+    ecam.DisappearHostBridgeOnSecondPass = 1;
+    InitializeCallbacks(&mmio, &runtimeCallbacks);
+    mmio.DmaQuiesced = 0;
+    TEST_ASSERT(INSTALL_WITH_POLICY(&segment, 1, &policy) ==
+                    HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED &&
+                pciStateCount == 0 && ecam.Writes == 0 && mmio.Writes == 0,
+                "CPU bridge disappearing between scans fails closed");
+
+    TestZero(&ecam, sizeof(ecam));
+    ConfigureAlderLakeSPciHostBridge(&ecam);
+    ecam.Commands[0] = 7;
+    ecam.IgnoreWriteOrdinal = 1;
+    InitializeCallbacks(&mmio, &runtimeCallbacks);
+    mmio.DmaQuiesced = 0;
+    TEST_ASSERT(INSTALL_WITH_POLICY(&segment, 1, &policy) ==
+                    HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED &&
+                pciStateCount == 0 && ecam.HostBridgeWrites == 0 &&
+                ecam.HostBridgeCommand == 7 && ecam.Commands[0] == 7 &&
+                ecam.Writes == 2 && mmio.Writes == 0 &&
+                diagnostic.PciFailure ==
+                    HV_EFI_IOMMU_PCI_FAILURE_COMMAND_READBACK &&
+                diagnostic.PciDevice == 1,
+                "policy never relaxes strict command readback at another PCI function");
+
+    TestZero(&ecam, sizeof(ecam));
+    ConfigureAlderLakeSPciHostBridge(&ecam);
+    ecam.Commands[0] = 7;
+    ecam.IgnoreWriteOrdinal = 1;
+    ecam.FailWrite = 2;
+    InitializeCallbacks(&mmio, &runtimeCallbacks);
+    mmio.DmaQuiesced = 0;
+    TEST_ASSERT(INSTALL_WITH_POLICY(&segment, 1, &policy) ==
+                    HV_EFI_IOMMU_RUNTIME_ROLLBACK_FAILED &&
+                pciStateCount == 1 && pciStates[0].Restored == 0 &&
+                ecam.HostBridgeWrites == 0 && ecam.Writes == 2 &&
+                mmio.Writes == 0 &&
+                diagnostic.PciFailure ==
+                    HV_EFI_IOMMU_PCI_FAILURE_COMMAND_READBACK &&
+                diagnostic.PciDevice == 1,
+                "policy retains failed cleanup state for another PCI function without touching host bridge or VT-d");
+
+#undef INSTALL_WITH_POLICY
+    return 0;
+}
+
 static int TestInjectedIsolationOrchestration(void)
 {
     uint8_t image[0x4000];
@@ -2156,6 +2665,8 @@ int main(void)
         TestLegacyIdentityDomain() != 0 ||
         TestRootDeviceDomain() != 0 ||
         TestMcfgPciQuiesce() != 0 ||
+        TestPciConfigAccessPolicy() != 0 ||
+        TestPciHostBridgeQuiescePolicy() != 0 ||
         TestCapabilityFailureDiagnostics() != 0 ||
         TestInjectedIsolationOrchestration() != 0) {
         return 1;

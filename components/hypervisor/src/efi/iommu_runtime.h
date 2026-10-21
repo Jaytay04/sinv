@@ -291,6 +291,24 @@ typedef struct HV_EFI_IOMMU_PCI_CALLBACKS {
     HV_EFI_IOMMU_PCI_WRITE16 Write16;
 } HV_EFI_IOMMU_PCI_CALLBACKS;
 
+#define HV_EFI_IOMMU_PCI_QUIESCE_POLICY_NONE UINT32_C(0)
+#define HV_EFI_IOMMU_PCI_POLICY_ALDER_LAKE_S_HOST_BRIDGE UINT32_C(1)
+
+/* Explicit host-specific exception for the CPU's integrated PCI host bridge.
+ * A null policy keeps the strict generic quiesce behavior. Policy kind NONE
+ * is not a valid explicit policy; omit the policy to request generic behavior.
+ * The profile is intentionally pinned to the observed Alder Lake-S host and
+ * must be revalidated before use on another CPU or processor count. */
+typedef struct HV_EFI_IOMMU_PCI_QUIESCE_POLICY {
+    uint32_t Kind;
+    uint32_t CpuVendorEbx;
+    uint32_t CpuVendorEdx;
+    uint32_t CpuVendorEcx;
+    uint32_t CpuSignature;
+    uint32_t CpuFeatureEcx;
+    uint32_t EnabledProcessorCount;
+} HV_EFI_IOMMU_PCI_QUIESCE_POLICY;
+
 #define HV_EFI_IOMMU_PROTECTED_PRIVATE UINT32_C(1)
 #define HV_EFI_IOMMU_PROTECTED_MMIO UINT32_C(2)
 #define HV_EFI_IOMMU_PROTECTED_REMAP_TABLE UINT32_C(3)
@@ -661,6 +679,18 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuQuiescePciBusMasters(
     uint32_t stateCapacity,
     uint32_t *stateCount);
 
+/* Returns whether a callback may access a PCI configuration word. Offset is
+ * the 16-bit aligned byte offset within the function. */
+uint32_t HvEfiIommuPciConfigAccessAllowed(
+    uint32_t offset,
+    uint32_t cpuConfigFunction,
+    uint32_t write);
+
+/* A null policy is valid and selects strict generic behavior. A non-null
+ * policy must exactly match the explicitly supported host profile. */
+HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuValidatePciQuiescePolicy(
+    const HV_EFI_IOMMU_PCI_QUIESCE_POLICY *policy);
+
 HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuRestorePciBusMasters(
     const HV_EFI_IOMMU_PCI_CALLBACKS *callbacks,
     HV_EFI_IOMMU_PCI_COMMAND_STATE *states,
@@ -736,6 +766,34 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationWithAdjustedWidth(
     volatile uint32_t *dmaQuiescedState,
     uint32_t adjustedAddressBits,
     HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic);
+
+/* Policy variant of the same transaction. Invalid policies and policy-bound
+ * MCFG shapes fail before callbacks. Runtime, plan, unit/PCI state, PCI state
+ * count, and DMA-quiesced state remain unchanged; the optional diagnostic
+ * records the argument failure. */
+HV_EFI_IOMMU_RUNTIME_STATUS
+HvEfiIommuInstallRuntimeIsolationWithAdjustedWidthAndPciPolicy(
+    const HV_EFI_IOMMU_DMAR_INFO *dmar,
+    const HV_EFI_IOMMU_UNIT_CONFIGURATION *configurations,
+    uint32_t configurationCount,
+    const HV_EFI_IOMMU_OWNERSHIP_POLICY *ownership,
+    const HV_EFI_IOMMU_RUNTIME_CALLBACKS *runtimeCallbacks,
+    const HV_EFI_IOMMU_PROGRAM_STORAGE *programStorage,
+    uint32_t pollLimit,
+    HV_EFI_IOMMU_PROGRAM_PLAN *plan,
+    HV_EFI_IOMMU_RUNTIME *runtime,
+    HV_EFI_IOMMU_UNIT_RUNTIME_STATE *unitStates,
+    uint32_t unitStateCount,
+    const HV_EFI_IOMMU_MCFG_SEGMENT *segments,
+    uint32_t segmentCount,
+    const HV_EFI_IOMMU_PCI_CALLBACKS *pciCallbacks,
+    HV_EFI_IOMMU_PCI_COMMAND_STATE *pciStates,
+    uint32_t pciStateCapacity,
+    uint32_t *pciStateCount,
+    volatile uint32_t *dmaQuiescedState,
+    uint32_t adjustedAddressBits,
+    HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic,
+    const HV_EFI_IOMMU_PCI_QUIESCE_POLICY *pciQuiescePolicy);
 
 #ifdef __cplusplus
 }

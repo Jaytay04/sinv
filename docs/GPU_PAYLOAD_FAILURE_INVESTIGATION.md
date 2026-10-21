@@ -1,5 +1,78 @@
 # GPU diagnostic payload failure investigation
 
+## Run 213919: host-bridge readback stops before activation
+
+Run `gpu-20261021T213919Z-61d3e8eb278f4c819457cd6aa8fb80b1` used source
+`d8df155fe179afe073a0982c6fc26f1664959f3f`. The collected payload diagnostic
+is 577 bytes, SHA-256
+`91EE4BAE60BD2487980A8562399514DFE7D215C5C1BEAD1E56C92A32ED512908`. Its
+`startup_detail=3221225472` (`0xC0000000`) decodes as PCI quiesce substep 64:
+command readback still has bus mastering enabled at segment:bus:device.function
+`0000:00:00.0`. Verified restoration completed. All 20 processors were prepared
+and VMX-ready, but activation had not started. The `ap_prepare` stage label does
+not mean an AP failed; the recorded error is the physical PCI quiesce audit.
+
+This is consistent with the Intel CPU host bridge at `0000:00:00.0`; the saved
+record identifies the rejected address and readback behavior. It does not supply
+a persisted vendor/device ID, class code or header type. The new policy therefore
+validates those properties at runtime before applying any exception. Intel's
+[PCI Command register documentation](https://edc.intel.com/content/www/xl/es/design/publications/12th-generation-core-processors-datasheet-volume-2-of-2/pci-command-pcicmd-0-0-0-pci-offset-4/)
+defines host-bridge Bus Master Enable as read-only 1; attempting to clear it
+cannot quiesce that bridge.
+
+The implemented policy requires `GenuineIntel`, raw CPUID leaf-1 EAX
+`0x00090672` (family 6, model 151, stepping 2), a clear hypervisor-present bit
+and 20 enabled processors. It accepts only one MCFG range on segment 0 starting
+at bus 0, with an aligned, nonzero base and no address overflow. At exactly
+`0000:00:00.0`, both scan passes must read an Intel vendor ID, a nonzero,
+non-`FFFF` device ID, class/subclass `0600`, programming interface 0, header
+type 0 and BME set. The complete identity and command snapshots must agree
+between passes. The collected evidence does not establish an exact device ID,
+so the policy does not invent one.
+
+Only that validated CPU configuration function is excluded from command writes
+and restorable command state. The physical ECAM callback also blocks writes to
+it. All other PCI functions and bridges retain exact command readback and
+verified restoration. Missing identity, failed reads or changed snapshots reject
+the operation. Existing callers without an explicit policy keep strict generic
+behavior. DMA domain/context construction and the 80-byte startup handoff are
+unchanged. This implementation still requires physical validation; it is not
+evidence of successful activation or GPU isolation.
+
+Static validation passed: the native Release build, all 62 Hypervisor CTests
+and the image self-containment audit (`.hvscan`: 55,478 bytes). Injected PCI
+tests cover the accepted host bridge without command writes, strict generic
+behavior, invalid CPU/MCFG/PCI identities, identity and command drift between
+scans, endpoint readback refusal and failed restoration. No VM, signing,
+staging, live probe or EFI execution was performed for this validation.
+
+The decoder reports 66 frames in `IMG_6822.MOV`, SHA-256
+`70449BA580F89DF1AF7C37E0C2FE18D8FD792429ACCAA8E8B4721746F8A0941B`
+(4,089,875 bytes); it decodes 62 frames through 2.033 seconds. They show the
+diagnostic write/readback, boot-manager read, device-path construction
+and LoadImage succeeding, followed by the start-begin marker. The available
+clip shows no StartImage return error or later Windows UI. The saved
+`esp-handoff-status.txt` records `payload=FAILED`. Collection was obtained in
+Windows, but the short capture does not establish the later handoff result
+beyond the visible frames.
+
+FinalVerify action `20261021T220012848Z` returned
+`FINAL_RESET_VERIFIED_GPU_UNATTESTED`: Secure Boot, reset boundary, 20 expected
+`ABSENT` health results and the original boot-manager hash passed. The version-1
+firmware comparison reported baseline and current SHA-256
+`66786928B0A56B57EE9E2137A0645783C9E6C090B6E9B65F88FBF5B91DAA5007`, with
+`TextEqual: true`; no reviewed-difference override was needed. Archive completed
+successfully and the active selector is absent. The completed journal SHA-256
+is `0811B1AECFDA426C49A566F72DE2D0D93653D3CF267006544AE34160F92F0C47`; the
+archive SHA-256 is
+`753AB939E5EFC65F81B1B4EEAA49A2FDB1245472DBF57E76FF1161232A243E69`.
+Seven stage files remain for run-specific ownership-reviewed retirement.
+
+This failure occurs before IOMMU programming and VMX activation. The separate
+OpenVolume failure observed after successful activation in run 160027 remains
+unvalidated; this run provides no evidence that it is fixed. The PCR replay
+warning seen in earlier runs is also separate from this PCI readback refusal.
+
 ## Run 193833: PCI quiesce audit stops activation; Windows handoff proceeds
 
 Run `gpu-20261021T193833Z-c48461667089493988074edfaf008d56` used source
@@ -134,7 +207,7 @@ no VM, ESP mount, firmware capture/write, payload launch or live recovery action
 was executed. The new tests are registered in the component's Windows CTest
 suite so the next Build runs them.
 
-## Next candidate: PCI quiesce audit diagnostics
+## PCI quiesce audit diagnostic encoding
 
 The runtime installer now captures the first command readback mismatch or
 two-pass eligible-device count mismatch into its caller-owned transient
@@ -164,10 +237,9 @@ unchanged. Full original/requested/readback command values are held only in the
 transient install diagnostic and tested there; they are not present in the
 persisted 80-byte transport. A fail-stop cannot return a new diagnostic file.
 
-This candidate adds evidence for the next returned failure. It does not prove
-the failing branch or PCI address in `193833`, resolve the payload failure, or
-validate physical isolation. No VM or bare-metal execution was performed for
-this change.
+The diagnostic was subsequently exercised by run 213919 and identified substep
+64 at `0000:00:00.0`; see that run's evidence above. It narrows this returned
+failure but does not resolve the payload issue or validate physical isolation.
 
 Validation passed: the native-enabled Release EFI payload built, all 62
 component CTests passed, and the unsigned image's 55,478-byte `.hvscan` section

@@ -2225,7 +2225,8 @@ static uint32_t HvEfiPhysicalIommuDmaQuiesced(void *callbackContext)
 
 static int HvEfiPhysicalEcamAddressValid(
     const HV_EFI_PHYSICAL_IOMMU_STATE *state,
-    uint64_t address)
+    uint64_t address,
+    uint32_t write)
 {
     uint32_t index;
     if (state == NULL || state->Signature != HV_EFI_PHYSICAL_IOMMU_SIGNATURE ||
@@ -2237,10 +2238,13 @@ static int HvEfiPhysicalEcamAddressValid(
         const uint64_t size =
             (uint64_t)(segment->EndBus - segment->StartBus + 1) << 20;
         if (address >= segment->EcamBase &&
-            address + sizeof(uint16_t) <= segment->EcamBase + size &&
-            (((address - segment->EcamBase) & UINT64_C(0xfff)) == 0 ||
-             ((address - segment->EcamBase) & UINT64_C(0xfff)) == 4)) {
-            return 1;
+            address - segment->EcamBase <= size - sizeof(uint16_t)) {
+            const uint64_t relative = address - segment->EcamBase;
+            const uint32_t cpuConfigFunction = segment->Segment == 0 &&
+                segment->StartBus == 0 && (relative >> 12) == 0;
+            return (int)HvEfiIommuPciConfigAccessAllowed(
+                (uint32_t)(relative & UINT64_C(0xfff)),
+                cpuConfigFunction, write);
         }
     }
     return 0;
@@ -2251,7 +2255,7 @@ static uint32_t HvEfiPhysicalPciRead16(
 {
     HV_EFI_PHYSICAL_IOMMU_STATE *state =
         (HV_EFI_PHYSICAL_IOMMU_STATE *)callbackContext;
-    if (value == NULL || !HvEfiPhysicalEcamAddressValid(state, address)) {
+    if (value == NULL || !HvEfiPhysicalEcamAddressValid(state, address, 0)) {
         return 0;
     }
     *value = *(volatile uint16_t *)(uintptr_t)address;
@@ -2263,7 +2267,7 @@ static uint32_t HvEfiPhysicalPciWrite16(
 {
     HV_EFI_PHYSICAL_IOMMU_STATE *state =
         (HV_EFI_PHYSICAL_IOMMU_STATE *)callbackContext;
-    if (!HvEfiPhysicalEcamAddressValid(state, address) ||
+    if (!HvEfiPhysicalEcamAddressValid(state, address, 1) ||
         (address & UINT64_C(0xfff)) != 4) {
         return 0;
     }
@@ -2616,11 +2620,13 @@ static EFI_STATUS HvEfiPreparePhysicalIommu(
     HV_EFI_IOMMU_PROTECTED_RANGE *denied = NULL;
     HV_EFI_IOMMU_RUNTIME_CALLBACKS callbacks;
     HV_EFI_IOMMU_PCI_CALLBACKS pciCallbacks;
+    HV_EFI_IOMMU_PCI_QUIESCE_POLICY pciPolicy;
     HV_EFI_IOMMU_PROGRAM_STORAGE programStorage;
     HV_EFI_IOMMU_OWNERSHIP_POLICY ownership;
     HV_EFI_IOMMU_INSTALL_DIAGNOSTIC installDiagnostic;
     uint64_t capabilities[HV_EFI_PHYSICAL_IOMMU_MAX_UNITS];
     uint32_t adjustedAddressBits = 0;
+    uint32_t cpuid[4];
     uint32_t mappedCapacity;
     uint32_t mappedCount = 0;
     uint32_t index;
@@ -2637,6 +2643,27 @@ static EFI_STATUS HvEfiPreparePhysicalIommu(
     }
     if (context->DmaIsolationMode != HV_EFI_DMA_ISOLATION_VTD_MEDIATED) {
         return EFI_SUCCESS;
+    }
+    HvEfiZero(&pciPolicy, sizeof(pciPolicy));
+    pciPolicy.Kind = HV_EFI_IOMMU_PCI_POLICY_ALDER_LAKE_S_HOST_BRIDGE;
+    HvEfiCpuid(0, 0, cpuid);
+    if (cpuid[0] < 1) {
+        return EFI_UNSUPPORTED;
+    }
+    pciPolicy.CpuVendorEbx = cpuid[1];
+    pciPolicy.CpuVendorEdx = cpuid[3];
+    pciPolicy.CpuVendorEcx = cpuid[2];
+    HvEfiCpuid(1, 0, cpuid);
+    pciPolicy.CpuSignature = cpuid[0];
+    pciPolicy.CpuFeatureEcx = cpuid[2];
+    pciPolicy.EnabledProcessorCount = context->EnabledProcessorCount;
+    iommuStatus = HvEfiIommuValidatePciQuiescePolicy(&pciPolicy);
+    if (iommuStatus != HV_EFI_IOMMU_RUNTIME_OK) {
+        HvEfiBootDiagnosticSetIommu(
+            HV_EFI_BOOT_DIAGNOSTIC_IOMMU_ARGUMENT,
+            HV_EFI_IOMMU_INSTALL_STAGE_ARGUMENT,
+            (uint32_t)iommuStatus, (uint32_t)iommuStatus);
+        return EFI_UNSUPPORTED;
     }
     state = (HV_EFI_PHYSICAL_IOMMU_STATE *)(uintptr_t)
         context->PhysicalIommuStatePhysical;
@@ -2816,14 +2843,14 @@ static EFI_STATUS HvEfiPreparePhysicalIommu(
         HV_EFI_BOOT_DIAGNOSTIC_IOMMU_RUNTIME_INSTALL, 0,
         HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE,
         HV_EFI_BOOT_DIAGNOSTIC_IOMMU_NOT_APPLICABLE);
-    iommuStatus = HvEfiIommuInstallRuntimeIsolationWithAdjustedWidth(
+    iommuStatus = HvEfiIommuInstallRuntimeIsolationWithAdjustedWidthAndPciPolicy(
         &state->Dmar, state->Configurations, state->Dmar.UnitCount,
         &ownership, &callbacks, &programStorage,
         HV_EFI_PHYSICAL_IOMMU_POLL_LIMIT, &state->Plan, &state->Runtime,
         state->UnitStates, HV_EFI_PHYSICAL_IOMMU_MAX_UNITS,
         state->Mcfg, state->McfgCount, &pciCallbacks, state->PciStates,
         HV_EFI_PHYSICAL_IOMMU_MAX_PCI_STATES, &state->PciStateCount,
-        &state->DmaQuiesced, adjustedAddressBits, &installDiagnostic);
+        &state->DmaQuiesced, adjustedAddressBits, &installDiagnostic, &pciPolicy);
     HvEfiBootDiagnosticSetIommu(
         HV_EFI_BOOT_DIAGNOSTIC_IOMMU_RUNTIME_INSTALL, installDiagnostic.Stage,
         installDiagnostic.PrimaryStatus, installDiagnostic.FinalStatus);

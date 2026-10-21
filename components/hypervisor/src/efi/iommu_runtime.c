@@ -3460,6 +3460,24 @@ static void HvResetInstallPciDiagnostic(
     diagnostic->PciObservedCount = 0;
 }
 
+static void HvSetInstallArgumentDiagnostic(
+    HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic,
+    HV_EFI_IOMMU_RUNTIME_STATUS status)
+{
+    if (diagnostic == NULL) {
+        return;
+    }
+    diagnostic->Stage = HV_EFI_IOMMU_INSTALL_STAGE_ARGUMENT;
+    diagnostic->PrimaryStatus = (uint32_t)status;
+    diagnostic->FinalStatus = (uint32_t)status;
+    diagnostic->CapabilityFailure = HV_EFI_IOMMU_CAPABILITY_FAILURE_NONE;
+    diagnostic->UnitIndex = UINT32_MAX;
+    diagnostic->RequestedAddressBits = 0;
+    diagnostic->Version = 0;
+    diagnostic->Capability = 0;
+    HvResetInstallPciDiagnostic(diagnostic);
+}
+
 static void HvRecordPciCommandReadbackFailure(
     HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic,
     const HV_EFI_IOMMU_MCFG_SEGMENT *segment,
@@ -3502,6 +3520,129 @@ static void HvRecordPciScanCountFailure(
     diagnostic->PciObservedCount = observedCount;
 }
 
+uint32_t HvEfiIommuPciConfigAccessAllowed(
+    uint32_t offset,
+    uint32_t cpuConfigFunction,
+    uint32_t write)
+{
+    if (cpuConfigFunction > 1 || write > 1) {
+        return 0;
+    }
+    if (write != 0) {
+        return offset == 4 && cpuConfigFunction == 0;
+    }
+    if (offset == 0 || offset == 4) {
+        return 1;
+    }
+    return cpuConfigFunction != 0 &&
+        (offset == 2 || offset == 8 || offset == 10 || offset == 14);
+}
+
+HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuValidatePciQuiescePolicy(
+    const HV_EFI_IOMMU_PCI_QUIESCE_POLICY *policy)
+{
+    const uint32_t expectedSignature = UINT32_C(0x00090672);
+    const uint32_t expectedVendorEbx = UINT32_C(0x756e6547); /* Genu */
+    const uint32_t expectedVendorEdx = UINT32_C(0x49656e69); /* ineI */
+    const uint32_t expectedVendorEcx = UINT32_C(0x6c65746e); /* ntel */
+    if (policy == NULL) {
+        return HV_EFI_IOMMU_RUNTIME_OK;
+    }
+    if (policy->Kind !=
+            HV_EFI_IOMMU_PCI_POLICY_ALDER_LAKE_S_HOST_BRIDGE ||
+        policy->CpuVendorEbx != expectedVendorEbx ||
+        policy->CpuVendorEdx != expectedVendorEdx ||
+        policy->CpuVendorEcx != expectedVendorEcx ||
+        policy->CpuSignature != expectedSignature ||
+        (policy->CpuFeatureEcx & UINT32_C(0x80000000)) != 0 ||
+        policy->EnabledProcessorCount != 20) {
+        return HV_EFI_IOMMU_RUNTIME_PROFILE_MISMATCH;
+    }
+    return HV_EFI_IOMMU_RUNTIME_OK;
+}
+
+typedef struct HV_EFI_IOMMU_CPU_HOST_BRIDGE_SNAPSHOT {
+    uint32_t VendorDevice;
+    uint16_t Command;
+    uint16_t RevisionProgrammingInterface;
+    uint16_t SubclassClass;
+    uint16_t HeaderType;
+} HV_EFI_IOMMU_CPU_HOST_BRIDGE_SNAPSHOT;
+
+static uint32_t HvEfiIommuReadCpuHostBridgeSnapshot(
+    const HV_EFI_IOMMU_PCI_CALLBACKS *callbacks,
+    uint64_t base,
+    HV_EFI_IOMMU_CPU_HOST_BRIDGE_SNAPSHOT *snapshot)
+{
+    uint16_t vendor = 0;
+    uint16_t device = 0;
+    if (callbacks->Read16(callbacks->Context, base, &vendor) == 0 ||
+        callbacks->Read16(callbacks->Context, base + 2, &device) == 0 ||
+        callbacks->Read16(callbacks->Context, base + 4,
+                          &snapshot->Command) == 0 ||
+        callbacks->Read16(callbacks->Context, base + 8,
+                          &snapshot->RevisionProgrammingInterface) == 0 ||
+        callbacks->Read16(callbacks->Context, base + 10,
+                          &snapshot->SubclassClass) == 0 ||
+        callbacks->Read16(callbacks->Context, base + 14,
+                          &snapshot->HeaderType) == 0) {
+        return 0;
+    }
+    snapshot->VendorDevice = (uint32_t)vendor | ((uint32_t)device << 16);
+    return 1;
+}
+
+static uint32_t HvEfiIommuCpuHostBridgeProfileMatches(
+    const HV_EFI_IOMMU_CPU_HOST_BRIDGE_SNAPSHOT *snapshot)
+{
+    const uint16_t vendor = (uint16_t)(snapshot->VendorDevice & UINT32_C(0xffff));
+    const uint16_t device = (uint16_t)(snapshot->VendorDevice >> 16);
+    const uint8_t programmingInterface =
+        (uint8_t)(snapshot->RevisionProgrammingInterface >> 8);
+    const uint8_t subclass = (uint8_t)(snapshot->SubclassClass & UINT16_C(0xff));
+    const uint8_t classCode = (uint8_t)(snapshot->SubclassClass >> 8);
+    const uint8_t headerType = (uint8_t)(snapshot->HeaderType & UINT16_C(0xff));
+    return vendor == UINT16_C(0x8086) && device != 0 &&
+        device != UINT16_C(0xffff) && programmingInterface == 0 &&
+        subclass == UINT8_C(0x00) && classCode == UINT8_C(0x06) &&
+        headerType == 0 &&
+        (snapshot->Command & UINT16_C(0x0004)) != 0;
+}
+
+static uint32_t HvEfiIommuCpuHostBridgeSnapshotEqual(
+    const HV_EFI_IOMMU_CPU_HOST_BRIDGE_SNAPSHOT *left,
+    const HV_EFI_IOMMU_CPU_HOST_BRIDGE_SNAPSHOT *right)
+{
+    return left->VendorDevice == right->VendorDevice &&
+        left->Command == right->Command &&
+        left->RevisionProgrammingInterface ==
+            right->RevisionProgrammingInterface &&
+        left->SubclassClass == right->SubclassClass &&
+        left->HeaderType == right->HeaderType;
+}
+
+static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuValidatePolicyMcfg(
+    const HV_EFI_IOMMU_MCFG_SEGMENT *segments,
+    uint32_t segmentCount)
+{
+    uint64_t rangeBytes;
+    const HV_EFI_IOMMU_MCFG_SEGMENT *segment;
+    if (segments == NULL || segmentCount != 1) {
+        return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+    }
+    segment = &segments[0];
+    if (segment->Segment != 0 || segment->StartBus != 0 ||
+        segment->StartBus > segment->EndBus || segment->EcamBase == 0 ||
+        (segment->EcamBase & UINT64_C(0xfffff)) != 0) {
+        return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+    }
+    rangeBytes = ((uint64_t)segment->EndBus + 1) << 20;
+    if (segment->EcamBase > UINT64_MAX - rangeBytes) {
+        return HV_EFI_IOMMU_RUNTIME_RANGE_OVERFLOW;
+    }
+    return HV_EFI_IOMMU_RUNTIME_OK;
+}
+
 static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuQuiescePciBusMastersInternal(
     const HV_EFI_IOMMU_MCFG_SEGMENT *segments,
     uint32_t segmentCount,
@@ -3509,10 +3650,13 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuQuiescePciBusMastersInternal(
     HV_EFI_IOMMU_PCI_COMMAND_STATE *states,
     uint32_t stateCapacity,
     uint32_t *stateCount,
+    const HV_EFI_IOMMU_PCI_QUIESCE_POLICY *policy,
     HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic)
 {
     uint32_t pass;
     uint32_t required = 0;
+    HV_EFI_IOMMU_CPU_HOST_BRIDGE_SNAPSHOT firstHostBridgeSnapshot;
+    uint32_t firstHostBridgeSeen = 0;
     if (stateCount != NULL) {
         *stateCount = 0;
     }
@@ -3521,9 +3665,11 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuQuiescePciBusMastersInternal(
         states == NULL || stateCount == NULL || stateCapacity == 0) {
         return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
     }
+    HvZero(&firstHostBridgeSnapshot, sizeof(firstHostBridgeSnapshot));
     for (pass = 0; pass < 2; ++pass) {
         uint32_t segmentIndex;
         uint32_t observed = 0;
+        uint32_t passHostBridgeSeen = 0;
         for (segmentIndex = 0; segmentIndex < segmentCount; ++segmentIndex) {
             uint32_t bus;
             for (bus = segments[segmentIndex].StartBus;
@@ -3534,8 +3680,52 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuQuiescePciBusMastersInternal(
                     for (function = 0; function < 8; ++function) {
                         const uint64_t base = HvPciFunctionAddress(
                             &segments[segmentIndex], bus, device, function);
+                        const uint32_t isCpuHostBridge = policy != NULL &&
+                            segmentIndex == 0 &&
+                            segments[segmentIndex].Segment == 0 && bus == 0 &&
+                            device == 0 && function == 0;
                         uint16_t vendor;
                         uint16_t command = 0;
+                        if (isCpuHostBridge != 0) {
+                            HV_EFI_IOMMU_CPU_HOST_BRIDGE_SNAPSHOT snapshot;
+                            if (HvEfiIommuReadCpuHostBridgeSnapshot(
+                                    callbacks, base, &snapshot) == 0) {
+                                if (pass != 0) {
+                                    return HvEfiIommuAbortPciQuiesce(
+                                        callbacks, states, observed,
+                                        HV_EFI_IOMMU_RUNTIME_CALLBACK_FAILED,
+                                        stateCount);
+                                }
+                                return HV_EFI_IOMMU_RUNTIME_CALLBACK_FAILED;
+                            }
+                            if (HvEfiIommuCpuHostBridgeProfileMatches(
+                                    &snapshot) == 0) {
+                                if (pass != 0) {
+                                    return HvEfiIommuAbortPciQuiesce(
+                                        callbacks, states, observed,
+                                        HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED,
+                                        stateCount);
+                                }
+                                return HV_EFI_IOMMU_RUNTIME_PROFILE_MISMATCH;
+                            }
+                            if (pass == 0) {
+                                firstHostBridgeSnapshot = snapshot;
+                                firstHostBridgeSeen = 1;
+                            } else if (firstHostBridgeSeen == 0 ||
+                                       HvEfiIommuCpuHostBridgeSnapshotEqual(
+                                           &firstHostBridgeSnapshot,
+                                           &snapshot) == 0) {
+                                return HvEfiIommuAbortPciQuiesce(
+                                    callbacks, states, observed,
+                                    HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED,
+                                    stateCount);
+                            }
+                            passHostBridgeSeen = 1;
+                            /* This CPU function has a read-only BME bit and
+                             * is validated in both passes, but never written
+                             * or included in restorable command state. */
+                            continue;
+                        }
                         if (callbacks->Read16(callbacks->Context, base,
                                               &vendor) == 0 ||
                             (vendor != UINT16_C(0xffff) &&
@@ -3608,6 +3798,14 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuQuiescePciBusMastersInternal(
                 }
             }
         }
+        if (policy != NULL && passHostBridgeSeen == 0) {
+            if (pass != 0) {
+                return HvEfiIommuAbortPciQuiesce(
+                    callbacks, states, observed,
+                    HV_EFI_IOMMU_RUNTIME_AUDIT_FAILED, stateCount);
+            }
+            return HV_EFI_IOMMU_RUNTIME_PROFILE_MISMATCH;
+        }
         if (pass == 0 && required > stateCapacity) {
             return HV_EFI_IOMMU_RUNTIME_CAPACITY;
         }
@@ -3635,7 +3833,7 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuQuiescePciBusMasters(
 {
     return HvEfiIommuQuiescePciBusMastersInternal(
         segments, segmentCount, callbacks, states, stateCapacity, stateCount,
-        NULL);
+        NULL, NULL);
 }
 
 static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationInternal(
@@ -3658,6 +3856,7 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationInternal(
     uint32_t *pciStateCount,
     volatile uint32_t *dmaQuiescedState,
     uint32_t adjustedAddressBits,
+    const HV_EFI_IOMMU_PCI_QUIESCE_POLICY *pciQuiescePolicy,
     HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic)
 {
     HV_EFI_IOMMU_RUNTIME_STATUS status;
@@ -3689,7 +3888,7 @@ static HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationInternal(
     *pciStateCount = 0;
     status = HvEfiIommuQuiescePciBusMastersInternal(
         segments, segmentCount, pciCallbacks, pciStates, pciStateCapacity,
-        pciStateCount, diagnostic);
+        pciStateCount, pciQuiescePolicy, diagnostic);
     if (status != HV_EFI_IOMMU_RUNTIME_OK) {
         HvRecordInstallFailure(
             diagnostic, HV_EFI_IOMMU_INSTALL_STAGE_PCI_QUIESCE, status);
@@ -3790,7 +3989,7 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolation(
         runtimeCallbacks, programStorage, pollLimit, plan, runtime,
         unitStates, unitStateCount, segments, segmentCount, pciCallbacks,
         pciStates, pciStateCapacity, pciStateCount, dmaQuiescedState, 0,
-        NULL);
+        NULL, NULL);
 }
 
 HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationWithDiagnostic(
@@ -3819,7 +4018,7 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationWithDiagnostic(
         runtimeCallbacks, programStorage, pollLimit, plan, runtime,
         unitStates, unitStateCount, segments, segmentCount, pciCallbacks,
         pciStates, pciStateCapacity, pciStateCount, dmaQuiescedState,
-        0, diagnostic);
+        0, NULL, diagnostic);
 }
 
 HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationWithAdjustedWidth(
@@ -3845,20 +4044,8 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationWithAdjustedWidth(
     HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic)
 {
     if (adjustedAddressBits != 39 && adjustedAddressBits != 48) {
-        if (diagnostic != NULL) {
-            diagnostic->Stage = HV_EFI_IOMMU_INSTALL_STAGE_ARGUMENT;
-            diagnostic->PrimaryStatus =
-                HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
-            diagnostic->FinalStatus =
-                HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
-            diagnostic->CapabilityFailure =
-                HV_EFI_IOMMU_CAPABILITY_FAILURE_NONE;
-            diagnostic->UnitIndex = UINT32_MAX;
-            diagnostic->RequestedAddressBits = 0;
-            diagnostic->Version = 0;
-            diagnostic->Capability = 0;
-            HvResetInstallPciDiagnostic(diagnostic);
-        }
+        HvSetInstallArgumentDiagnostic(
+            diagnostic, HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT);
         return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
     }
     return HvEfiIommuInstallRuntimeIsolationInternal(
@@ -3866,5 +4053,55 @@ HV_EFI_IOMMU_RUNTIME_STATUS HvEfiIommuInstallRuntimeIsolationWithAdjustedWidth(
         runtimeCallbacks, programStorage, pollLimit, plan, runtime,
         unitStates, unitStateCount, segments, segmentCount, pciCallbacks,
         pciStates, pciStateCapacity, pciStateCount, dmaQuiescedState,
-        adjustedAddressBits, diagnostic);
+        adjustedAddressBits, NULL, diagnostic);
+}
+
+HV_EFI_IOMMU_RUNTIME_STATUS
+HvEfiIommuInstallRuntimeIsolationWithAdjustedWidthAndPciPolicy(
+    const HV_EFI_IOMMU_DMAR_INFO *dmar,
+    const HV_EFI_IOMMU_UNIT_CONFIGURATION *configurations,
+    uint32_t configurationCount,
+    const HV_EFI_IOMMU_OWNERSHIP_POLICY *ownership,
+    const HV_EFI_IOMMU_RUNTIME_CALLBACKS *runtimeCallbacks,
+    const HV_EFI_IOMMU_PROGRAM_STORAGE *programStorage,
+    uint32_t pollLimit,
+    HV_EFI_IOMMU_PROGRAM_PLAN *plan,
+    HV_EFI_IOMMU_RUNTIME *runtime,
+    HV_EFI_IOMMU_UNIT_RUNTIME_STATE *unitStates,
+    uint32_t unitStateCount,
+    const HV_EFI_IOMMU_MCFG_SEGMENT *segments,
+    uint32_t segmentCount,
+    const HV_EFI_IOMMU_PCI_CALLBACKS *pciCallbacks,
+    HV_EFI_IOMMU_PCI_COMMAND_STATE *pciStates,
+    uint32_t pciStateCapacity,
+    uint32_t *pciStateCount,
+    volatile uint32_t *dmaQuiescedState,
+    uint32_t adjustedAddressBits,
+    HV_EFI_IOMMU_INSTALL_DIAGNOSTIC *diagnostic,
+    const HV_EFI_IOMMU_PCI_QUIESCE_POLICY *pciQuiescePolicy)
+{
+    HV_EFI_IOMMU_RUNTIME_STATUS status =
+        HvEfiIommuValidatePciQuiescePolicy(pciQuiescePolicy);
+    if (status != HV_EFI_IOMMU_RUNTIME_OK) {
+        HvSetInstallArgumentDiagnostic(diagnostic, status);
+        return status;
+    }
+    if (pciQuiescePolicy != NULL) {
+        status = HvEfiIommuValidatePolicyMcfg(segments, segmentCount);
+        if (status != HV_EFI_IOMMU_RUNTIME_OK) {
+            HvSetInstallArgumentDiagnostic(diagnostic, status);
+            return status;
+        }
+    }
+    if (adjustedAddressBits != 39 && adjustedAddressBits != 48) {
+        HvSetInstallArgumentDiagnostic(
+            diagnostic, HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT);
+        return HV_EFI_IOMMU_RUNTIME_INVALID_ARGUMENT;
+    }
+    return HvEfiIommuInstallRuntimeIsolationInternal(
+        dmar, configurations, configurationCount, ownership,
+        runtimeCallbacks, programStorage, pollLimit, plan, runtime,
+        unitStates, unitStateCount, segments, segmentCount, pciCallbacks,
+        pciStates, pciStateCapacity, pciStateCount, dmaQuiescedState,
+        adjustedAddressBits, pciQuiescePolicy, diagnostic);
 }

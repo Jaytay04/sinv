@@ -56,7 +56,7 @@ $iommuSubsteps = @(
     @('RMRR_OWNER', 'for (index = 0;'),
     @('IDENTITY_DOMAIN', 'iommuStatus = HvEfiIommuBuildLegacyIdentityDomainWithAdjustedWidth('),
     @('GPU_DOMAIN', 'status = HvEfiGpuBuildDmaDomain('),
-    @('RUNTIME_INSTALL', 'iommuStatus = HvEfiIommuInstallRuntimeIsolationWithAdjustedWidth(')
+    @('RUNTIME_INSTALL', 'iommuStatus = HvEfiIommuInstallRuntimeIsolationWithAdjustedWidthAndPciPolicy(')
 )
 $previousOperation = -1
 foreach ($substep in $iommuSubsteps) {
@@ -89,6 +89,26 @@ Assert-True ($capabilityResult -gt $installResult -and $capabilityResult -lt $fa
 Assert-True ($physicalIommu -match 'return EFI_ERROR\(status\) \? status :' -and
     [regex]::Matches($bspPrepare, 'return EFI_ERROR\(status\) \? status : EFI_ABORTED;').Count -eq 2) `
     'GPU/IOMMU EFI errors must survive AP preparation and its pool cleanup.'
+$pciPolicyCheck = $physicalIommu.IndexOf('HvEfiIommuValidatePciQuiescePolicy(&pciPolicy)', [StringComparison]::Ordinal)
+$firstAllocation = $physicalIommu.IndexOf('status = gBS->AllocatePool(', [StringComparison]::Ordinal)
+Assert-True ($pciPolicyCheck -gt 0 -and $pciPolicyCheck -lt $firstAllocation -and
+    $physicalIommu -match 'pciPolicy.Kind = HV_EFI_IOMMU_PCI_POLICY_ALDER_LAKE_S_HOST_BRIDGE;' -and
+    $physicalIommu -match 'HvEfiCpuid\(0, 0, cpuid\)' -and
+    $physicalIommu -match 'CpuVendorEbx = cpuid\[1\]' -and
+    $physicalIommu -match 'CpuVendorEdx = cpuid\[3\]' -and
+    $physicalIommu -match 'CpuVendorEcx = cpuid\[2\]' -and
+    $physicalIommu -match 'CpuSignature = cpuid\[0\]' -and
+    $physicalIommu -match 'CpuFeatureEcx = cpuid\[2\]' -and
+    $physicalIommu -match 'EnabledProcessorCount = context->EnabledProcessorCount' -and
+    $physicalIommu -match 'adjustedAddressBits, &installDiagnostic, &pciPolicy\)') `
+    'The physical-only quiesce policy must validate raw CPU identity before allocation and reach the installer explicitly.'
+$pciAccess = Get-SourceRegion $source 'static int HvEfiPhysicalEcamAddressValid(' 'static int HvEfiInstallPhysicalAcpiShadow('
+Assert-True ($pciAccess -match 'segment->Segment == 0' -and
+    $pciAccess -match 'segment->StartBus == 0' -and $pciAccess -match '\(relative >> 12\) == 0' -and
+    $pciAccess -match 'HvEfiIommuPciConfigAccessAllowed\(' -and
+    $pciAccess -match 'HvEfiPhysicalEcamAddressValid\(state, address, 0\)' -and
+    $pciAccess -match 'HvEfiPhysicalEcamAddressValid\(state, address, 1\)') `
+    'Physical ECAM callbacks must use the tested access boundary and distinguish exact CPU-function metadata reads from writes.'
 $gpuDomain = Get-SourceRegion $source 'static EFI_STATUS HvEfiGpuBuildDmaDomain(' 'static EFI_STATUS HvEfiPreparePhysicalIommu('
 $gpuPool = Get-SourceRegion $gpuDomain '#define GPU_POOL' 'HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_PROFILE'
 Assert-True ($gpuPool -match 'HV_EFI_BOOT_DIAGNOSTIC_IOMMU_GPU_ALLOCATE' -and

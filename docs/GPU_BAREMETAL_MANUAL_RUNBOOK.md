@@ -1,18 +1,40 @@
 # Intel UHD 770 bare-metal diagnostic runbook
 
-## Current checkpoint: run 193833 closed and stage retired
+## Current checkpoint: run 213919 archived; stage retirement pending
 
-Retirement receipt `88f79a180fdb4c76a5aa3e6175a5fa44` reports `STAGE_RETIRED`,
-all seven reviewed files removed, no cleanup errors, ESP unmounted and no host
-boot-state change. Readiness `338f73c7e43b4948b9e59a24dd91bbbb` then reports
-`READY_FOR_FRESH_PREPARE`, no selector, no retained stage and no blockers.
+Run `gpu-20261021T213919Z-61d3e8eb278f4c819457cd6aa8fb80b1` is archived. Its
+journal is `Complete`, with no action in progress or final failure, and the
+active selector is absent. FinalVerify returned
+`FINAL_RESET_VERIFIED_GPU_UNATTESTED` with Secure Boot, reset, all 20 expected
+`ABSENT` health observations and the original boot-manager hash passing. The
+version-1 firmware comparison accepted the current text as equal to its saved
+baseline; no reviewed-difference override was needed. GPU isolation remains
+unattested.
 
-The next candidate adds PCI quiesce diagnostics; it does not fix the refusal
-observed in `193833`. It distinguishes bus mastering still enabled, another
-command bit changing, and different eligible-device counts between scans.
-Readback details include a bounded segment/BDF; count details retain both counts.
-The original audit and verified-restoration requirements remain enforced. The
-80-byte handoff stays unchanged; full command values are not transported.
+Seven stage files remain on the ESP and require ownership-reviewed retirement
+before a fresh Prepare. Do not use the `CompletedRun193833` retirement profile
+for this run. Use a helper specifically pinned to run 213919 once available,
+then require fresh readiness with no blockers. Preserve the journal and stage
+evidence until that review is complete.
+
+The payload did not reach runtime activation: startup detail `0xC0000000`
+identifies a PCI command readback mismatch at `0000:00:00.0`, where bus mastering
+remained set after the attempted clear. Intel documents the host-bridge BME bit
+as read-only 1, so this function must not be treated as a normal quiesceable
+endpoint. The implemented policy validates the exact CPU profile and the
+function's PCI identity in both scans before excluding only that function from
+command writes. Other PCI audits and verified-restoration requirements remain
+enforced. Physical activation remains unvalidated. See the
+[run 213919 investigation](GPU_PAYLOAD_FAILURE_INVESTIGATION.md#run-213919-host-bridge-readback-stops-before-activation).
+The native Release build, all 62 Hypervisor CTests and the static image audit
+pass. These checks did not execute the EFI payload or start a VM.
+
+This run's saved handoff trace shows diagnostic write/readback, Windows
+boot-manager read, device-path construction and LoadImage succeeding, followed
+by the start-begin marker. The short video does not show a StartImage return
+error or the later Windows UI. The observed PCI refusal is separate from the
+older post-activation storage failure; this run never reached activation and
+does not validate a fix for that failure.
 
 Use elevated 64-bit PowerShell from the main workspace. Execute one command at
 a time and require `Succeeded: true` before advancing through Arm. No VM is
