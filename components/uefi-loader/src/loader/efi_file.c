@@ -21,6 +21,67 @@ static void copy_bytes(UINT8 *Destination, const UINT8 *Source, UINTN Size)
     }
 }
 
+void efi_file_io_trace_initialize(efi_file_io_trace_t *Trace)
+{
+    if (Trace == NULL) {
+        return;
+    }
+    Trace->Operation = EFI_FILE_IO_NONE;
+    Trace->RawStatus = EFI_NOT_STARTED;
+    Trace->EffectiveStatus = EFI_NOT_STARTED;
+    Trace->RequestedSize = 0u;
+    Trace->ObservedSize = 0u;
+}
+
+static void efi_file_io_trace_failure(efi_file_io_trace_t *Trace,
+                                      efi_file_io_operation_t Operation,
+                                      EFI_STATUS RawStatus,
+                                      EFI_STATUS EffectiveStatus,
+                                      UINTN RequestedSize,
+                                      UINTN ObservedSize)
+{
+    if (Trace == NULL || Trace->Operation != EFI_FILE_IO_NONE) {
+        return;
+    }
+    Trace->Operation = Operation;
+    Trace->RawStatus = RawStatus;
+    Trace->EffectiveStatus = EffectiveStatus;
+    Trace->RequestedSize = RequestedSize;
+    Trace->ObservedSize = ObservedSize;
+}
+
+const CHAR16 *efi_file_io_operation_name(efi_file_io_operation_t Operation)
+{
+    switch (Operation) {
+    case EFI_FILE_IO_INVALID_ARGUMENT: return L"invalid_argument";
+    case EFI_FILE_IO_HANDLE_LOADED_IMAGE: return L"handle_loaded_image";
+    case EFI_FILE_IO_HANDLE_FILESYSTEM: return L"handle_filesystem";
+    case EFI_FILE_IO_OPEN_VOLUME: return L"open_volume";
+    case EFI_FILE_IO_OPEN_VOLUME_HANDLE: return L"open_volume_handle";
+    case EFI_FILE_IO_OPEN_READ: return L"open_read";
+    case EFI_FILE_IO_GET_INFO_SIZE: return L"get_info_size";
+    case EFI_FILE_IO_GET_INFO_SIZE_VALIDATION: return L"get_info_size_validation";
+    case EFI_FILE_IO_ALLOCATE_INFO: return L"allocate_info";
+    case EFI_FILE_IO_GET_INFO_METADATA: return L"get_info_metadata";
+    case EFI_FILE_IO_VALIDATE_FILE_SIZE: return L"validate_file_size";
+    case EFI_FILE_IO_ALLOCATE_READ_BUFFER: return L"allocate_read_buffer";
+    case EFI_FILE_IO_READ: return L"read";
+    case EFI_FILE_IO_READ_SIZE_MISMATCH: return L"read_size_mismatch";
+    case EFI_FILE_IO_OPEN_EXISTING: return L"open_existing";
+    case EFI_FILE_IO_DELETE_EXISTING: return L"delete_existing";
+    case EFI_FILE_IO_CREATE_OPEN: return L"create_open";
+    case EFI_FILE_IO_WRITE: return L"write";
+    case EFI_FILE_IO_WRITE_SIZE_MISMATCH: return L"write_size_mismatch";
+    case EFI_FILE_IO_FLUSH: return L"flush";
+    case EFI_FILE_IO_CLOSE_FILE: return L"close_file";
+    case EFI_FILE_IO_CLOSE_ROOT: return L"close_root";
+    case EFI_FILE_IO_VERIFY_CONTENT: return L"verify_content";
+    case EFI_FILE_IO_VERIFY_DIGEST: return L"verify_digest";
+    case EFI_FILE_IO_NONE:
+    default: return L"none";
+    }
+}
+
 static UINTN path_length(const CHAR16 *Path)
 {
     UINTN length = 0;
@@ -132,7 +193,8 @@ static EFI_STATUS open_root(EFI_HANDLE ImageHandle,
 
 static EFI_STATUS efi_file_read_internal(
     EFI_HANDLE ImageHandle, const CHAR16 *Path, efi_file_buffer_t *Out,
-    UINTN *ObservedSize, EFI_STATUS *RawReadStatus)
+    UINTN *ObservedSize, EFI_STATUS *RawReadStatus,
+    efi_file_io_trace_t *Trace)
 {
     EFI_GUID loaded_guid = EFI_LOADED_IMAGE_PROTOCOL_GUID;
     EFI_GUID fs_guid = EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID;
@@ -144,6 +206,7 @@ static EFI_STATUS efi_file_read_internal(
     EFI_FILE_INFO *info = NULL;
     UINT8 *bytes = NULL;
     UINTN info_size = 0;
+    UINTN info_request_size;
     UINTN read_size;
     UINTN expected_size;
     EFI_STATUS st;
@@ -154,61 +217,107 @@ static EFI_STATUS efi_file_read_internal(
     if (RawReadStatus != NULL) {
         *RawReadStatus = EFI_NOT_STARTED;
     }
+    efi_file_io_trace_initialize(Trace);
     if (Out != NULL) {
         Out->bytes = NULL;
         Out->size = 0;
     }
     if (ImageHandle == NULL || Path == NULL || Out == NULL || gBS == NULL) {
+        efi_file_io_trace_failure(Trace, EFI_FILE_IO_INVALID_ARGUMENT,
+                                  EFI_INVALID_PARAMETER,
+                                  EFI_INVALID_PARAMETER, 0u, 0u);
         return EFI_INVALID_PARAMETER;
     }
 
     st = gBS->HandleProtocol(ImageHandle, &loaded_guid, (VOID **)&loaded);
     if (EFI_ERROR(st) || loaded == NULL || loaded->DeviceHandle == NULL) {
+        efi_file_io_trace_failure(
+            Trace, EFI_FILE_IO_HANDLE_LOADED_IMAGE,
+            st, EFI_NOT_FOUND, 0u, 0u);
         return EFI_NOT_FOUND;
     }
     st = gBS->HandleProtocol(loaded->DeviceHandle, &fs_guid, (VOID **)&fs);
     if (EFI_ERROR(st) || fs == NULL) {
+        efi_file_io_trace_failure(
+            Trace, EFI_FILE_IO_HANDLE_FILESYSTEM,
+            st, EFI_NOT_FOUND, 0u, 0u);
         return EFI_NOT_FOUND;
     }
     st = fs->OpenVolume(fs, &root);
     if (EFI_ERROR(st)) {
+        efi_file_io_trace_failure(Trace, EFI_FILE_IO_OPEN_VOLUME, st, st,
+                                  0u, 0u);
         if (root != NULL) {
-            root->Close(root);
+            (void)root->Close(root);
         }
         return st;
     }
     if (root == NULL) {
+        efi_file_io_trace_failure(Trace, EFI_FILE_IO_OPEN_VOLUME_HANDLE,
+                                  st, EFI_DEVICE_ERROR, 0u, 0u);
         return EFI_DEVICE_ERROR;
     }
     st = root->Open(root, &file, (CHAR16 *)Path, EFI_FILE_MODE_READ, 0);
     if (EFI_ERROR(st)) {
+        efi_file_io_trace_failure(Trace, EFI_FILE_IO_OPEN_READ, st, st,
+                                  0u, 0u);
         if (file != NULL) {
-            file->Close(file);
+            (void)file->Close(file);
         }
-        root->Close(root);
+        (void)root->Close(root);
         return st;
     }
     if (file == NULL) {
-        root->Close(root);
+        efi_file_io_trace_failure(Trace, EFI_FILE_IO_OPEN_READ,
+                                  st, EFI_DEVICE_ERROR, 0u, 0u);
+        (void)root->Close(root);
         return EFI_DEVICE_ERROR;
     }
     st = file->GetInfo(file, &info_guid, &info_size, NULL);
-    if (st != EFI_BUFFER_TOO_SMALL || info_size < sizeof(EFI_FILE_INFO) ||
+    if (st != EFI_BUFFER_TOO_SMALL) {
+        efi_file_io_trace_failure(Trace, EFI_FILE_IO_GET_INFO_SIZE, st,
+                                  EFI_DEVICE_ERROR, 0u, info_size);
+        file->Close(file);
+        root->Close(root);
+        return EFI_DEVICE_ERROR;
+    }
+    if (info_size < sizeof(EFI_FILE_INFO) ||
         info_size > EFI_FILE_MAX_INFO_SIZE) {
+        efi_file_io_trace_failure(Trace,
+                                  EFI_FILE_IO_GET_INFO_SIZE_VALIDATION,
+                                  st, EFI_DEVICE_ERROR, sizeof(EFI_FILE_INFO),
+                                  info_size);
         file->Close(file);
         root->Close(root);
         return EFI_DEVICE_ERROR;
     }
     st = gBS->AllocatePool(EfiLoaderData, info_size, (VOID **)&info);
     if (EFI_ERROR(st)) {
+        efi_file_io_trace_failure(Trace, EFI_FILE_IO_ALLOCATE_INFO, st, st,
+                                  info_size, 0u);
         file->Close(file);
         root->Close(root);
         return st;
     }
+    info_request_size = info_size;
     st = file->GetInfo(file, &info_guid, &info_size, info);
-    if (EFI_ERROR(st) || info->FileSize == 0u ||
+    if (EFI_ERROR(st)) {
+        efi_file_io_trace_failure(Trace, EFI_FILE_IO_GET_INFO_METADATA, st,
+                                  EFI_DEVICE_ERROR, info_request_size,
+                                  info_size);
+        gBS->FreePool(info);
+        file->Close(file);
+        root->Close(root);
+        return EFI_DEVICE_ERROR;
+    }
+    if (info->FileSize == 0u ||
         info->FileSize > (UINT64)EFI_FILE_MAX_READ_SIZE ||
         info->FileSize > (UINT64)(~(UINTN)0)) {
+        efi_file_io_trace_failure(
+            Trace, EFI_FILE_IO_VALIDATE_FILE_SIZE, EFI_SUCCESS,
+            EFI_DEVICE_ERROR, EFI_FILE_MAX_READ_SIZE,
+            (UINTN)(info->FileSize > (UINT64)(~(UINTN)0) ?
+                    0u : info->FileSize));
         gBS->FreePool(info);
         file->Close(file);
         root->Close(root);
@@ -221,6 +330,8 @@ static EFI_STATUS efi_file_read_internal(
     info = NULL;
     st = gBS->AllocatePool(EfiLoaderData, read_size, (VOID **)&bytes);
     if (EFI_ERROR(st)) {
+        efi_file_io_trace_failure(Trace, EFI_FILE_IO_ALLOCATE_READ_BUFFER,
+                                  st, st, read_size, 0u);
         file->Close(file);
         root->Close(root);
         return st;
@@ -233,12 +344,21 @@ static EFI_STATUS efi_file_read_internal(
         if (ObservedSize != NULL) {
             *ObservedSize = EFI_ERROR(st) ? 0u : read_size;
         }
-        if (!EFI_ERROR(st) && read_size != expected_size) {
+        if (EFI_ERROR(st)) {
+            efi_file_io_trace_failure(Trace, EFI_FILE_IO_READ, st,
+                                      EFI_DEVICE_ERROR, expected_size,
+                                      read_size);
+        } else if (read_size != expected_size) {
+            efi_file_io_trace_failure(Trace,
+                                      EFI_FILE_IO_READ_SIZE_MISMATCH,
+                                      st, EFI_DEVICE_ERROR,
+                                      expected_size, read_size);
             st = EFI_DEVICE_ERROR;
         }
     }
-    file->Close(file);
-    root->Close(root);
+    /* Reader close failures are intentionally ignored by the legacy API. */
+    (void)file->Close(file);
+    (void)root->Close(root);
     if (EFI_ERROR(st) || read_size != (UINTN)expected_size) {
         /* The diagnostic writer can hash a bounded short-read result. The
          * public reader keeps its original all-or-nothing contract. */
@@ -260,7 +380,14 @@ static EFI_STATUS efi_file_read_internal(
 EFI_STATUS efi_file_read(EFI_HANDLE ImageHandle, const CHAR16 *Path,
                          efi_file_buffer_t *Out)
 {
-    return efi_file_read_internal(ImageHandle, Path, Out, NULL, NULL);
+    return efi_file_read_internal(ImageHandle, Path, Out, NULL, NULL, NULL);
+}
+
+EFI_STATUS efi_file_read_traced(EFI_HANDLE ImageHandle, const CHAR16 *Path,
+                                efi_file_buffer_t *Out,
+                                efi_file_io_trace_t *Trace)
+{
+    return efi_file_read_internal(ImageHandle, Path, Out, NULL, NULL, Trace);
 }
 
 void efi_file_release(efi_file_buffer_t *Buffer)
@@ -281,7 +408,8 @@ typedef struct {
 
 static EFI_STATUS efi_file_write_internal(
     EFI_HANDLE ImageHandle, const CHAR16 *Path, const UINT8 *Bytes,
-    UINTN Size, efi_file_write_trace_t *Trace)
+    UINTN Size, efi_file_write_trace_t *Trace,
+    efi_file_io_trace_t *OperationTrace)
 {
     EFI_GUID loaded_guid = EFI_LOADED_IMAGE_PROTOCOL_GUID;
     EFI_GUID fs_guid = EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID;
@@ -298,9 +426,13 @@ static EFI_STATUS efi_file_write_internal(
         Trace->root_close_status = EFI_NOT_STARTED;
         Trace->flush_status = EFI_NOT_STARTED;
     }
+    efi_file_io_trace_initialize(OperationTrace);
 
     if (ImageHandle == NULL || Path == NULL || Bytes == NULL || Size == 0u ||
         gBS == NULL) {
+        efi_file_io_trace_failure(
+            OperationTrace, EFI_FILE_IO_INVALID_ARGUMENT,
+            EFI_INVALID_PARAMETER, EFI_INVALID_PARAMETER, Size, 0u);
         if (Trace != NULL) {
             Trace->write_status = EFI_INVALID_PARAMETER;
         }
@@ -308,6 +440,9 @@ static EFI_STATUS efi_file_write_internal(
     }
     st = gBS->HandleProtocol(ImageHandle, &loaded_guid, (VOID **)&loaded);
     if (EFI_ERROR(st) || loaded == NULL || loaded->DeviceHandle == NULL) {
+        efi_file_io_trace_failure(
+            OperationTrace, EFI_FILE_IO_HANDLE_LOADED_IMAGE,
+            st, EFI_NOT_FOUND, 0u, 0u);
         if (Trace != NULL) {
             Trace->write_status = EFI_NOT_FOUND;
         }
@@ -315,6 +450,9 @@ static EFI_STATUS efi_file_write_internal(
     }
     st = gBS->HandleProtocol(loaded->DeviceHandle, &fs_guid, (VOID **)&fs);
     if (EFI_ERROR(st) || fs == NULL) {
+        efi_file_io_trace_failure(
+            OperationTrace, EFI_FILE_IO_HANDLE_FILESYSTEM,
+            st, EFI_NOT_FOUND, 0u, 0u);
         if (Trace != NULL) {
             Trace->write_status = EFI_NOT_FOUND;
         }
@@ -322,8 +460,15 @@ static EFI_STATUS efi_file_write_internal(
     }
     st = fs->OpenVolume(fs, &root);
     if (EFI_ERROR(st)) {
+        efi_file_io_trace_failure(OperationTrace, EFI_FILE_IO_OPEN_VOLUME,
+                                  st, st, 0u, 0u);
         if (root != NULL) {
             EFI_STATUS close_status = root->Close(root);
+            if (close_status != EFI_SUCCESS) {
+                efi_file_io_trace_failure(
+                    OperationTrace, EFI_FILE_IO_CLOSE_ROOT, close_status,
+                    close_status, 0u, 0u);
+            }
             if (Trace != NULL) {
                 Trace->root_close_status = close_status;
             }
@@ -334,6 +479,9 @@ static EFI_STATUS efi_file_write_internal(
         return st;
     }
     if (root == NULL) {
+        efi_file_io_trace_failure(
+            OperationTrace, EFI_FILE_IO_OPEN_VOLUME_HANDLE, st,
+            EFI_DEVICE_ERROR, 0u, 0u);
         if (Trace != NULL) {
             Trace->write_status = EFI_DEVICE_ERROR;
         }
@@ -345,14 +493,26 @@ static EFI_STATUS efi_file_write_internal(
                     EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE, 0);
     if (EFI_ERROR(st)) {
         if (st != EFI_NOT_FOUND) {
+            efi_file_io_trace_failure(
+                OperationTrace, EFI_FILE_IO_OPEN_EXISTING, st, st, 0u, 0u);
             if (file != NULL) {
                 EFI_STATUS close_status = file->Close(file);
+                if (close_status != EFI_SUCCESS) {
+                    efi_file_io_trace_failure(
+                        OperationTrace, EFI_FILE_IO_CLOSE_FILE,
+                        close_status, close_status, 0u, 0u);
+                }
                 if (Trace != NULL) {
                     Trace->file_close_status = close_status;
                 }
             }
             {
                 EFI_STATUS close_status = root->Close(root);
+                if (close_status != EFI_SUCCESS) {
+                    efi_file_io_trace_failure(
+                        OperationTrace, EFI_FILE_IO_CLOSE_ROOT,
+                        close_status, close_status, 0u, 0u);
+                }
                 if (Trace != NULL) {
                     Trace->root_close_status = close_status;
                 }
@@ -365,6 +525,14 @@ static EFI_STATUS efi_file_write_internal(
     } else {
         if (file == NULL) {
             EFI_STATUS close_status = root->Close(root);
+            efi_file_io_trace_failure(
+                OperationTrace, EFI_FILE_IO_OPEN_EXISTING, st,
+                EFI_DEVICE_ERROR, 0u, 0u);
+            if (close_status != EFI_SUCCESS) {
+                efi_file_io_trace_failure(
+                    OperationTrace, EFI_FILE_IO_CLOSE_ROOT, close_status,
+                    close_status, 0u, 0u);
+            }
             if (Trace != NULL) {
                 Trace->root_close_status = close_status;
                 Trace->write_status = EFI_DEVICE_ERROR;
@@ -374,7 +542,15 @@ static EFI_STATUS efi_file_write_internal(
         st = file->Delete(file);
         file = NULL;
         if (st != EFI_SUCCESS) {
+            efi_file_io_trace_failure(
+                OperationTrace, EFI_FILE_IO_DELETE_EXISTING, st, st,
+                0u, 0u);
             EFI_STATUS close_status = root->Close(root);
+            if (close_status != EFI_SUCCESS) {
+                efi_file_io_trace_failure(
+                    OperationTrace, EFI_FILE_IO_CLOSE_ROOT, close_status,
+                    close_status, 0u, 0u);
+            }
             if (Trace != NULL) {
                 Trace->root_close_status = close_status;
                 Trace->write_status = st;
@@ -387,14 +563,26 @@ static EFI_STATUS efi_file_write_internal(
                     EFI_FILE_MODE_READ | EFI_FILE_MODE_WRITE |
                     EFI_FILE_MODE_CREATE, 0);
     if (EFI_ERROR(st)) {
+        efi_file_io_trace_failure(OperationTrace, EFI_FILE_IO_CREATE_OPEN,
+                                  st, st, 0u, 0u);
         if (file != NULL) {
             EFI_STATUS close_status = file->Close(file);
+            if (close_status != EFI_SUCCESS) {
+                efi_file_io_trace_failure(
+                    OperationTrace, EFI_FILE_IO_CLOSE_FILE, close_status,
+                    close_status, 0u, 0u);
+            }
             if (Trace != NULL) {
                 Trace->file_close_status = close_status;
             }
         }
         {
             EFI_STATUS close_status = root->Close(root);
+            if (close_status != EFI_SUCCESS) {
+                efi_file_io_trace_failure(
+                    OperationTrace, EFI_FILE_IO_CLOSE_ROOT, close_status,
+                    close_status, 0u, 0u);
+            }
             if (Trace != NULL) {
                 Trace->root_close_status = close_status;
                 Trace->write_status = st;
@@ -404,6 +592,13 @@ static EFI_STATUS efi_file_write_internal(
     }
     if (file == NULL) {
         EFI_STATUS close_status = root->Close(root);
+        efi_file_io_trace_failure(OperationTrace, EFI_FILE_IO_CREATE_OPEN,
+                                  st, EFI_DEVICE_ERROR, 0u, 0u);
+        if (close_status != EFI_SUCCESS) {
+            efi_file_io_trace_failure(
+                OperationTrace, EFI_FILE_IO_CLOSE_ROOT, close_status,
+                close_status, 0u, 0u);
+        }
         if (Trace != NULL) {
             Trace->root_close_status = close_status;
             Trace->write_status = EFI_DEVICE_ERROR;
@@ -411,11 +606,23 @@ static EFI_STATUS efi_file_write_internal(
         return EFI_DEVICE_ERROR;
     }
     st = file->Write(file, &written, (VOID *)Bytes);
+    if (EFI_ERROR(st)) {
+        efi_file_io_trace_failure(OperationTrace, EFI_FILE_IO_WRITE, st, st,
+                                  Size, written);
+    } else if (written != Size) {
+        efi_file_io_trace_failure(
+            OperationTrace, EFI_FILE_IO_WRITE_SIZE_MISMATCH, st,
+            EFI_DEVICE_ERROR, Size, written);
+    }
     if (Trace != NULL) {
         Trace->write_status = st;
     }
     if (!EFI_ERROR(st) && written == Size) {
         st = file->Flush(file);
+        if (EFI_ERROR(st)) {
+            efi_file_io_trace_failure(OperationTrace, EFI_FILE_IO_FLUSH, st,
+                                      st, 0u, 0u);
+        }
         if (Trace != NULL) {
             Trace->flush_status = st;
             if (EFI_ERROR(st)) {
@@ -430,12 +637,22 @@ static EFI_STATUS efi_file_write_internal(
     }
     {
         EFI_STATUS close_status = file->Close(file);
+        if (close_status != EFI_SUCCESS) {
+            efi_file_io_trace_failure(
+                OperationTrace, EFI_FILE_IO_CLOSE_FILE, close_status,
+                close_status, 0u, 0u);
+        }
         if (Trace != NULL) {
             Trace->file_close_status = close_status;
         }
     }
     {
         EFI_STATUS close_status = root->Close(root);
+        if (close_status != EFI_SUCCESS) {
+            efi_file_io_trace_failure(
+                OperationTrace, EFI_FILE_IO_CLOSE_ROOT, close_status,
+                close_status, 0u, 0u);
+        }
         if (Trace != NULL) {
             Trace->root_close_status = close_status;
         }
@@ -453,7 +670,7 @@ static EFI_STATUS efi_file_write_internal(
 EFI_STATUS efi_file_write(EFI_HANDLE ImageHandle, const CHAR16 *Path,
                           const UINT8 *Bytes, UINTN Size)
 {
-    return efi_file_write_internal(ImageHandle, Path, Bytes, Size, NULL);
+    return efi_file_write_internal(ImageHandle, Path, Bytes, Size, NULL, NULL);
 }
 
 static void initialize_write_verification(
@@ -479,36 +696,62 @@ EFI_STATUS efi_file_write_verified(
     EFI_HANDLE ImageHandle, const CHAR16 *Path, const UINT8 *Bytes,
     UINTN Size, efi_file_write_verification_t *Out)
 {
+    return efi_file_write_verified_traced(
+        ImageHandle, Path, Bytes, Size, Out, NULL);
+}
+
+static EFI_STATUS efi_file_write_verified_internal(
+    EFI_HANDLE ImageHandle, const CHAR16 *Path, const UINT8 *Bytes,
+    UINTN Size, efi_file_write_verification_t *Out,
+    efi_file_io_trace_t *OperationTrace)
+{
     efi_file_write_trace_t trace;
     efi_file_buffer_t readback;
     EFI_STATUS st;
     UINTN i;
 
+    efi_file_io_trace_initialize(OperationTrace);
     if (Out == NULL) {
+        efi_file_io_trace_failure(
+            OperationTrace, EFI_FILE_IO_INVALID_ARGUMENT,
+            EFI_INVALID_PARAMETER, EFI_INVALID_PARAMETER, Size, 0u);
         return EFI_INVALID_PARAMETER;
     }
     initialize_write_verification(Out, Size);
     if (ImageHandle == NULL || Path == NULL || Bytes == NULL || Size == 0u ||
         gBS == NULL) {
+        efi_file_io_trace_failure(
+            OperationTrace, EFI_FILE_IO_INVALID_ARGUMENT,
+            EFI_INVALID_PARAMETER, EFI_INVALID_PARAMETER, Size, 0u);
         Out->WriteStatus = EFI_INVALID_PARAMETER;
         return EFI_INVALID_PARAMETER;
     }
     if (Size > EFI_FILE_MAX_READ_SIZE) {
+        efi_file_io_trace_failure(
+            OperationTrace, EFI_FILE_IO_INVALID_ARGUMENT,
+            EFI_BAD_BUFFER_SIZE, EFI_BAD_BUFFER_SIZE, Size, 0u);
         Out->WriteStatus = EFI_BAD_BUFFER_SIZE;
         return EFI_BAD_BUFFER_SIZE;
     }
 #if SIZE_MAX < UINT64_MAX
     if (Size > (UINTN)SIZE_MAX) {
+        efi_file_io_trace_failure(
+            OperationTrace, EFI_FILE_IO_INVALID_ARGUMENT,
+            EFI_INVALID_PARAMETER, EFI_INVALID_PARAMETER, Size, 0u);
         Out->WriteStatus = EFI_INVALID_PARAMETER;
         return EFI_INVALID_PARAMETER;
     }
 #endif
     if (sha256_hash(Bytes, (size_t)Size, Out->ExpectedSha256) != SHA256_OK) {
+        efi_file_io_trace_failure(
+            OperationTrace, EFI_FILE_IO_VERIFY_DIGEST,
+            EFI_INVALID_PARAMETER, EFI_INVALID_PARAMETER, Size, 0u);
         Out->WriteStatus = EFI_INVALID_PARAMETER;
         return EFI_INVALID_PARAMETER;
     }
 
-    st = efi_file_write_internal(ImageHandle, Path, Bytes, Size, &trace);
+    st = efi_file_write_internal(ImageHandle, Path, Bytes, Size, &trace,
+                                 OperationTrace);
     Out->WriteStatus = trace.write_status;
     Out->FileCloseStatus = trace.file_close_status;
     Out->RootCloseStatus = trace.root_close_status;
@@ -526,10 +769,15 @@ EFI_STATUS efi_file_write_verified(
     readback.size = 0;
     Out->ReadAttempted = TRUE;
     st = efi_file_read_internal(ImageHandle, Path, &readback,
-                                &Out->ObservedSize, &Out->ReadStatus);
+                                &Out->ObservedSize, &Out->ReadStatus,
+                                OperationTrace);
     if (readback.bytes != NULL) {
         if (sha256_hash(readback.bytes, (size_t)readback.size,
                         Out->ObservedSha256) != SHA256_OK) {
+            efi_file_io_trace_failure(
+                OperationTrace, EFI_FILE_IO_VERIFY_DIGEST,
+                EFI_INVALID_PARAMETER, EFI_DEVICE_ERROR, Size,
+                readback.size);
             efi_file_release(&readback);
             return EFI_DEVICE_ERROR;
         }
@@ -550,7 +798,28 @@ EFI_STATUS efi_file_write_verified(
         }
     }
     efi_file_release(&readback);
+    if (!Out->Match) {
+        efi_file_io_trace_failure(
+            OperationTrace, EFI_FILE_IO_VERIFY_CONTENT, EFI_SUCCESS,
+            EFI_DEVICE_ERROR, Size, Out->ObservedSize);
+    }
     return Out->Match ? EFI_SUCCESS : EFI_DEVICE_ERROR;
+}
+
+EFI_STATUS efi_file_write_verified_traced(
+    EFI_HANDLE ImageHandle, const CHAR16 *Path, const UINT8 *Bytes,
+    UINTN Size, efi_file_write_verification_t *Out,
+    efi_file_io_trace_t *OperationTrace)
+{
+    EFI_STATUS st = efi_file_write_verified_internal(
+        ImageHandle, Path, Bytes, Size, Out, OperationTrace);
+    if (OperationTrace != NULL &&
+        OperationTrace->Operation != EFI_FILE_IO_NONE) {
+        /* Preserve the first operation/raw status, but report the final
+         * public API result after any legacy warning normalization. */
+        OperationTrace->EffectiveStatus = st;
+    }
+    return st;
 }
 
 EFI_STATUS efi_file_exists(EFI_HANDLE ImageHandle, const CHAR16 *Path)

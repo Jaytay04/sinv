@@ -267,12 +267,37 @@ static void con_print_digest(const UINT8 digest[32])
     for (index = 0u; index < 32u; index++) { con_print_hex(digest[index], 2u); }
 }
 
+static void con_print_file_io_failure(const CHAR16 *label,
+                                      const efi_file_io_trace_t *trace)
+{
+    if (trace == NULL || trace->Operation == EFI_FILE_IO_NONE) {
+        return;
+    }
+    con_print(L"filesystem failure[");
+    con_print(label);
+    con_print(L"] op=");
+    con_print(efi_file_io_operation_name(trace->Operation));
+    con_print(L"\r\nraw=0x");
+    con_print_hex((UINT64)trace->RawStatus, 16u);
+    con_print(L" effective=0x");
+    con_print_hex((UINT64)trace->EffectiveStatus, 16u);
+    con_print(L"\r\nsize_in=0x");
+    con_print_hex((UINT64)trace->RequestedSize, 16u);
+    con_print(L" size_out=0x");
+    con_print_hex((UINT64)trace->ObservedSize, 16u);
+    con_print(L"\r\n");
+}
+
 static void write_diagnostic_verified(EFI_HANDLE image_handle,
     const CHAR16 *path, const CHAR16 *label, const UINT8 *bytes, UINTN size)
 {
     efi_file_write_verification_t verification;
-    EFI_STATUS result = efi_file_write_verified(image_handle, path, bytes, size,
-                                                &verification);
+    efi_file_io_trace_t io_trace;
+    EFI_STATUS result = efi_file_write_verified_traced(
+        image_handle, path, bytes, size, &verification, &io_trace);
+    if (EFI_ERROR(result) || !verification.Match) {
+        con_print_file_io_failure(label, &io_trace);
+    }
     con_print(label);
     con_print(EFI_ERROR(verification.WriteStatus) ? L" write: FAIL\r\n" : L" write: PASS\r\n");
     con_print(label);
@@ -312,6 +337,8 @@ static void write_status(EFI_HANDLE image_handle, const UINT8 *text, UINTN size)
 typedef struct {
     EFI_HANDLE ImageHandle;
     const char *Target;
+    const CHAR16 *ReadLabel;
+    efi_file_io_trace_t *ReadTrace;
 } handoff_observer_context_t;
 
 static void observe_handoff(void *context, const char *phase,
@@ -321,6 +348,14 @@ static void observe_handoff(void *context, const char *phase,
     UINTN prior = g_handoff_diagnostic_size;
     const char *shim_phase = NULL;
     EFI_STATUS shim_status = EFI_NOT_STARTED;
+    if (completed && observer->ReadLabel != NULL &&
+        phase[0] == 'r' && phase[1] == 'e' &&
+        phase[2] == 'a' && phase[3] == 'd' && phase[4] == 0 &&
+        EFI_ERROR(status)) {
+        /* This must precede the observer's next status-file write, which
+         * could otherwise obscure where the source read actually failed. */
+        con_print_file_io_failure(observer->ReadLabel, observer->ReadTrace);
+    }
     if (completed && phase[0] == 'l') {
         shim_chain_get_last_load_trace(&shim_phase, &shim_status);
     }
@@ -431,10 +466,14 @@ static EFI_STATUS restore_and_handoff(EFI_HANDLE image_handle,
     int payload_present = 0;
     int payload_succeeded = 0;
     handoff_observer_context_t boot_observer;
+    efi_file_io_trace_t boot_manager_read_trace;
 
     g_handoff_diagnostic_size = 0u;
     boot_observer.ImageHandle = image_handle;
     boot_observer.Target = "boot_manager";
+    boot_observer.ReadLabel = L"boot manager read";
+    boot_observer.ReadTrace = &boot_manager_read_trace;
+    efi_file_io_trace_initialize(&boot_manager_read_trace);
 
     payload_diagnostic.payload_launch = PAYLOAD_DIAG_SKIPPED;
     payload_diagnostic.payload_status = EFI_NOT_STARTED;
@@ -540,6 +579,8 @@ static EFI_STATUS restore_and_handoff(EFI_HANDLE image_handle,
     if (inventory_status == EFI_SUCCESS) {
         inventory_observer.ImageHandle = image_handle;
         inventory_observer.Target = "inventory";
+        inventory_observer.ReadLabel = NULL;
+        inventory_observer.ReadTrace = NULL;
         inventory_launch = image_launch_start_observed(
             image_handle, g_inventory_path, &inventory_child_status,
             observe_handoff, &inventory_observer);
@@ -553,8 +594,9 @@ static EFI_STATUS restore_and_handoff(EFI_HANDLE image_handle,
     }
 }
 
-    launch = image_launch_start_observed(image_handle, g_boot_manager_path,
-        &child_status, observe_handoff, &boot_observer);
+    launch = image_launch_start_observed_traced(
+        image_handle, g_boot_manager_path, &child_status, observe_handoff,
+        &boot_observer, &boot_manager_read_trace);
     observe_handoff(&boot_observer, "return", TRUE, child_status);
     if (launch != IMAGE_LAUNCH_OK) {
         con_print(L"loader production handoff: FAIL (boot manager launch)\r\n");

@@ -9,6 +9,54 @@ typedef struct {
     UINTN size;
 } efi_file_buffer_t;
 
+/* Caller-owned, single-operation failure trace. The operation is latched at
+ * its first failure so later cleanup calls cannot replace the original cause.
+ * RawStatus is the status returned by the named operation; EffectiveStatus
+ * preserves the enclosing API's existing return normalization. RequestedSize
+ * and ObservedSize carry protocol size input/output fields where applicable;
+ * allocation and validation operations may report their checked bound and
+ * observed value. Operations without a size field report zero. Firmware may
+ * leave ObservedSize unchanged on an error, so it is the raw returned field
+ * and never proof of bytes transferred. */
+typedef enum {
+    EFI_FILE_IO_NONE = 0,
+    EFI_FILE_IO_INVALID_ARGUMENT,
+    EFI_FILE_IO_HANDLE_LOADED_IMAGE,
+    EFI_FILE_IO_HANDLE_FILESYSTEM,
+    EFI_FILE_IO_OPEN_VOLUME,
+    EFI_FILE_IO_OPEN_VOLUME_HANDLE,
+    EFI_FILE_IO_OPEN_READ,
+    EFI_FILE_IO_GET_INFO_SIZE,
+    EFI_FILE_IO_GET_INFO_SIZE_VALIDATION,
+    EFI_FILE_IO_ALLOCATE_INFO,
+    EFI_FILE_IO_GET_INFO_METADATA,
+    EFI_FILE_IO_VALIDATE_FILE_SIZE,
+    EFI_FILE_IO_ALLOCATE_READ_BUFFER,
+    EFI_FILE_IO_READ,
+    EFI_FILE_IO_READ_SIZE_MISMATCH,
+    EFI_FILE_IO_OPEN_EXISTING,
+    EFI_FILE_IO_DELETE_EXISTING,
+    EFI_FILE_IO_CREATE_OPEN,
+    EFI_FILE_IO_WRITE,
+    EFI_FILE_IO_WRITE_SIZE_MISMATCH,
+    EFI_FILE_IO_FLUSH,
+    EFI_FILE_IO_CLOSE_FILE,
+    EFI_FILE_IO_CLOSE_ROOT,
+    EFI_FILE_IO_VERIFY_CONTENT,
+    EFI_FILE_IO_VERIFY_DIGEST
+} efi_file_io_operation_t;
+
+typedef struct {
+    efi_file_io_operation_t Operation;
+    EFI_STATUS RawStatus;
+    EFI_STATUS EffectiveStatus;
+    UINTN RequestedSize; /* Input size passed to the operation. */
+    UINTN ObservedSize;  /* Raw returned in/out size field, if applicable. */
+} efi_file_io_trace_t;
+
+void efi_file_io_trace_initialize(efi_file_io_trace_t *Trace);
+const CHAR16 *efi_file_io_operation_name(efi_file_io_operation_t Operation);
+
 /* Raw stage results for the diagnostic-only write/readback path. Statuses
  * for operations that did not run remain EFI_NOT_STARTED. Close statuses
  * describe the write handles; readback uses its own bounded handles. */
@@ -38,6 +86,9 @@ typedef struct {
  */
 EFI_STATUS efi_file_read(EFI_HANDLE ImageHandle, const CHAR16 *Path,
                          efi_file_buffer_t *Out);
+EFI_STATUS efi_file_read_traced(EFI_HANDLE ImageHandle, const CHAR16 *Path,
+                                efi_file_buffer_t *Out,
+                                efi_file_io_trace_t *Trace);
 void efi_file_release(efi_file_buffer_t *Buffer);
 
 /* Replace Path with exactly Size bytes. Parent directories must exist. */
@@ -49,6 +100,10 @@ EFI_STATUS efi_file_write(EFI_HANDLE ImageHandle, const CHAR16 *Path,
 EFI_STATUS efi_file_write_verified(
     EFI_HANDLE ImageHandle, const CHAR16 *Path, const UINT8 *Bytes,
     UINTN Size, efi_file_write_verification_t *Out);
+EFI_STATUS efi_file_write_verified_traced(
+    EFI_HANDLE ImageHandle, const CHAR16 *Path, const UINT8 *Bytes,
+    UINTN Size, efi_file_write_verification_t *Out,
+    efi_file_io_trace_t *Trace);
 
 /* File metadata primitives.  Rename is deliberately same-directory only and
  * never replaces an existing destination. */

@@ -6,12 +6,34 @@ payload-to-Windows handoff fails. It is not a VM test. Run
 `FinalVerify` with
 `FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED`. Its phase is
 complete and there is no action in progress. The payload returned status zero
-after preparing 20 of 20 processors. The console also recorded a transient
-diagnostic-file write path returning `EFI_TIMEOUT` (`0x12`) with readback not
-run, followed by the `bootmgfw` file-read path returning `EFI_DEVICE_ERROR`
-(`0x7`) before `LoadImage` or `StartImage`. The exact failing filesystem
-operation and any storage or DMA cause remain unproven. No payload fix has
-been made. The physical activation has no GPU isolation attestation.
+after preparing and reporting 20 of 20 processors ready. A successful return
+restores the firmware caller's guest continuation; it does not turn VMX off.
+The BSP and APs continue in VMX non-root with EPT and IOMMU active while the
+loader attempts the Windows handoff. Source review found no demonstrated CPU,
+AP, interrupt, or device-mapping defect that explains this failure.
+
+The video recorded a diagnostic-file write timing out with `EFI_TIMEOUT`
+(`0x12`); Flush and readback were not reached. The later `bootmgfw` file-read
+path returned `EFI_DEVICE_ERROR` (`0x7`) before `LoadImage` or `StartImage`.
+The existing high-level trace separates file read, device-path construction,
+`LoadImage`, `StartImage`, and return, but the file helper combines several EFI
+filesystem calls and normalizes some read errors. The exact failing filesystem
+operation and any storage or DMA cause therefore remain unproven. The Windows
+health probe found the expected custom signature absent on all 20 processors;
+that result does not establish that all VMX activity was absent or which path
+started Windows.
+
+The PCR replay gate is independent of the observed handoff failure. This build
+enabled `IB_PAYLOAD_REPLAY_INDEPENDENT=ON`, and the video shows payload launch
+passing after replay was aborted. The physical activation remains
+`GPU_UNATTESTED`.
+
+VT-d remains a hypothesis, not an identified cause. The source identity-maps
+ordinary EFI RAM and applicable RMRRs, but the run did not capture post-failure
+VT-d fault records or PCI Command readback after restoring bus mastering.
+The Windows System-log query for 06:00-07:20 UTC on October 21 found no
+storage, WHEA, audio, or device warnings/errors among its matching providers.
+Windows logs do not establish pre-OS device health or explain the EFI failure.
 
 ## Current cleanup: archive and retire run 062106
 
@@ -21,6 +43,10 @@ if it reports only the retained stage as a blocker, review and retire that
 stage with its run-specific profile. Stop on any other blocker, failed status,
 or error. Preserve all evidence; do not manually delete EFI files or retry a
 failed `-Apply` action.
+
+Archive has been confirmed for run 062106. If you already received
+`SELECTOR_ARCHIVED` for this run, skip the Archive command below and start
+with fresh readiness.
 
 ```powershell
 Set-Location 'C:\Users\jayli\OneDrive\Documents\Projects\hsinv'
@@ -216,12 +242,27 @@ The expected health-only success status is
 important evidence. Preserve the complete output and the action directory's
 `esp-payload-diagnostic.txt`, `esp-handoff-status.txt` when present, health captures,
 and console photographs. Keep the raw EFI statuses and shim phase fields.
-The new diagnostic distinguishes file read, device-path construction,
-`LoadImage`, and `StartImage`, records returned statuses, and checks the two
-diagnostic files after writing. A `_begin_status` record without a matching `_end_status`
-record means the call's return was not observed; it does not identify why the
-operation did not return. A readback proves only that the file could be read at
-that check, not that it persisted through a later power loss.
+The existing diagnostic distinguishes file read, device-path construction,
+`LoadImage`, and `StartImage`, and records each high-level returned status.
+Those phases alone do not identify which filesystem protocol call failed
+inside the file read or write helper. The updated loader adds an operation-tagged EFI
+file trace with raw and effective status plus the input/output size fields.
+`size_out` records the field returned by firmware; it can be unchanged on an
+error and does not independently prove how many bytes were transferred.
+Retaining the field also preserves partial-write evidence permitted by the
+[UEFI File Protocol](https://uefi.org/specs/UEFI/2.10/13_Protocols_Media_Access.html#efi-file-protocol-write).
+For reads it keeps the raw `GetInfo` or `Read` error even when the
+existing helper returns normalized `EFI_DEVICE_ERROR`; verified writes report
+the first failing replacement or readback operation. Failure summaries go to
+the console, including the boot-manager read summary before the next
+handoff-status write. This change adds no VT-d fault or VM-exit capture and
+does not change payload activation or fix the observed failure. Static build
+and host-test results for this update are recorded below; the physical
+failure has not been retested.
+A `_begin_status` record without a matching `_end_status` record means the
+call's return was not observed; it does not identify why the operation did not
+return. A readback proves only that the file could be read at that check, not
+that it persisted through a later power loss.
 
 Do not repeat Arm or reboot to seek a pass. If collection fails, preserve its
 evidence and continue to recovery.
@@ -274,14 +315,28 @@ Follow its saved recovery state; do not edit evidence or firmware baselines to
 make checks pass. If Windows cannot boot, use the prepared recovery media and
 full-system backup.
 
+## Validation of the file-operation diagnostics
+
+The updated loader and EFI fixtures compiled successfully, and all 31 loader
+host tests passed. Both hypervisor static and boot-diagnostic contract checks
+also passed. The tests cover raw-versus-normalized EFI errors, short reads and
+writes, partial-error size fields, expected sizing/probe results, cleanup
+precedence, warning normalization, and image-launch trace propagation.
+
+The change adds no disk calls, retries, payload activation changes, or
+hypervisor ABI changes. Its additional failure output uses the existing
+console path. No VM, EFI payload, driver, or live boot test was run.
+
 ## Validation of the 062106 cleanup
 
 The focused retirement fixtures passed 10 cases and 56 assertions. A
 process-local prearchive test checked all 45 saved proof pins using the live
 selector's identical expected archive bytes. It did not create an archive or
 change the selector, journal, or result. The unchanged production proof
-rejected the missing archive. The complete production proof still requires
-the operator's successful Archive command and fresh readiness evidence.
+rejected the missing archive. After the operator archived the run, the
+unmodified proof also matched all 45 pins against the actual archive, with
+the selector absent and journal, archive, and result unchanged. Retirement
+still requires fresh readiness evidence and its live review gates.
 
 The static build and all 52 hypervisor host tests passed. All 27 PowerShell
 blocks in this guide parsed successfully. Validation did not start a VM,

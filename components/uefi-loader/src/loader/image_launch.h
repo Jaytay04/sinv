@@ -3,6 +3,7 @@
 #define IMAGE_LAUNCH_H
 
 #include "Uefi.h"
+#include "efi_file.h"
 #include "hv_boot_diagnostic.h"
 
 typedef enum {
@@ -42,6 +43,14 @@ image_launch_status_t image_launch_start_observed(
     EFI_HANDLE ParentImageHandle, const CHAR16 *Path,
     EFI_STATUS *ChildStatus, image_launch_observer_fn Observer,
     void *Context);
+
+/* Ordinary launch variant that also returns the exact file-operation failure
+ * from its source read. Observer phases and launch behavior match the legacy
+ * observed API. */
+image_launch_status_t image_launch_start_observed_traced(
+    EFI_HANDLE ParentImageHandle, const CHAR16 *Path,
+    EFI_STATUS *ChildStatus, image_launch_observer_fn Observer,
+    void *Context, efi_file_io_trace_t *ReadTrace);
 
 /* Load and relocate a resident EFI payload, then invoke its PE entry point
  * directly. This deliberately bypasses firmware StartImage return cleanup;

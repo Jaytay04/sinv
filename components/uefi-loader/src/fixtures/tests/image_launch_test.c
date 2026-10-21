@@ -14,6 +14,8 @@ static EFI_STATUS g_start_status;
 static EFI_STATUS g_entry_status;
 static EFI_STATUS g_load_status;
 static EFI_STATUS g_file_read_status;
+static EFI_STATUS g_file_read_raw_status;
+static EFI_STATUS g_file_read_effective_status;
 static EFI_STATUS g_device_path_status;
 static EFI_STATUS g_handle_protocol_status;
 static int g_load_error_with_child;
@@ -22,6 +24,7 @@ static int g_handle_protocol_without_interface;
 static UINTN g_load_calls;
 static UINTN g_start_calls;
 static UINTN g_file_read_calls;
+static UINTN g_traced_file_read_calls;
 static UINTN g_device_path_calls;
 static UINTN g_unload_calls;
 static UINTN g_handle_calls;
@@ -134,6 +137,8 @@ static int test_observed_launch(const CHAR16 *Path)
         !expect(trace.event_count == 12u && trace.observer_count == 8u &&
                     trace.callback_context_matches == 8u,
                 "observer receives its context for all four phase pairs") ||
+        !expect(g_traced_file_read_calls == 0u,
+                "legacy observed launch keeps using the original fake reader") ||
         !expect_trace_event(&trace, 0u, 1, "read", FALSE, EFI_NOT_STARTED,
                             "read observer runs before file read") ||
         !expect_trace_event(&trace, 1u, 0, "read", FALSE, EFI_NOT_STARTED,
@@ -305,6 +310,41 @@ static int test_observed_launch(const CHAR16 *Path)
                 "NULL observer adds no callbacks or policy changes")) {
         return 1;
     }
+
+    reset_fixture();
+    memset(&trace, 0, sizeof(trace));
+    trace.marker = 0x4c41554eu;
+    g_file_read_status = EFI_DEVICE_ERROR;
+    g_file_read_raw_status = EFI_TIMEOUT;
+    g_active_trace = &trace;
+    g_expected_observer_context = &trace;
+    {
+        efi_file_io_trace_t file_trace;
+        launch_status = image_launch_start_observed_traced(
+            (EFI_HANDLE)1, Path, &child_status, launch_observer, &trace,
+            &file_trace);
+        g_active_trace = NULL;
+        g_expected_observer_context = NULL;
+        if (!expect(launch_status == IMAGE_LAUNCH_ERR_READ &&
+                        child_status == EFI_DEVICE_ERROR,
+                    "traced source failure keeps the ordinary launch result") ||
+            !expect(file_trace.Operation == EFI_FILE_IO_READ &&
+                        file_trace.RawStatus == EFI_TIMEOUT &&
+                        file_trace.EffectiveStatus == EFI_DEVICE_ERROR,
+                    "traced launch propagates raw cause and normalized status") ||
+            !expect(file_trace.RequestedSize == 4096u &&
+                        file_trace.ObservedSize == 4096u,
+                    "traced launch preserves raw in/out size fields") ||
+            !expect(trace.event_count == 2u && trace.observer_count == 2u &&
+                        g_traced_file_read_calls == 1u &&
+                        g_file_read_calls == 0u,
+                    "traced read uses the additive reader and unchanged phases") ||
+            !expect_trace_event(&trace, 1u, 1, "read", TRUE,
+                                EFI_DEVICE_ERROR,
+                                "observer still sees effective read status")) {
+            return 1;
+        }
+    }
     return 0;
 }
 
@@ -317,6 +357,43 @@ EFI_STATUS efi_file_read(EFI_HANDLE ImageHandle, const CHAR16 *Path,
     ++g_file_read_calls;
     trace_mock("read");
     if (EFI_ERROR(g_file_read_status)) return g_file_read_status;
+    Out->bytes = g_direct_source ? g_direct_bytes : bytes;
+    Out->size = g_direct_source ? sizeof(g_direct_bytes) : sizeof(bytes);
+    return EFI_SUCCESS;
+}
+
+void efi_file_io_trace_initialize(efi_file_io_trace_t *Trace)
+{
+    if (Trace == NULL) {
+        return;
+    }
+    Trace->Operation = EFI_FILE_IO_NONE;
+    Trace->RawStatus = EFI_NOT_STARTED;
+    Trace->EffectiveStatus = EFI_NOT_STARTED;
+    Trace->RequestedSize = 0u;
+    Trace->ObservedSize = 0u;
+}
+
+EFI_STATUS efi_file_read_traced(EFI_HANDLE ImageHandle, const CHAR16 *Path,
+                                efi_file_buffer_t *Out,
+                                efi_file_io_trace_t *Trace)
+{
+    static UINT8 bytes[4] = { 'P', 'E', 0, 0 };
+    (void)ImageHandle;
+    (void)Path;
+    ++g_traced_file_read_calls;
+    efi_file_io_trace_initialize(Trace);
+    if (EFI_ERROR(g_file_read_status)) {
+        if (Trace != NULL) {
+            Trace->Operation = EFI_FILE_IO_READ;
+            Trace->RawStatus = g_file_read_raw_status;
+            Trace->EffectiveStatus = g_file_read_effective_status;
+            Trace->RequestedSize = 4096u;
+            /* This mock leaves the in/out field untouched on failure. */
+            Trace->ObservedSize = 4096u;
+        }
+        return g_file_read_status;
+    }
     Out->bytes = g_direct_source ? g_direct_bytes : bytes;
     Out->size = g_direct_source ? sizeof(g_direct_bytes) : sizeof(bytes);
     return EFI_SUCCESS;
@@ -468,6 +545,8 @@ static void reset_fixture(void)
     g_entry_status = EFI_SUCCESS;
     g_load_status = EFI_SUCCESS;
     g_file_read_status = EFI_SUCCESS;
+    g_file_read_raw_status = EFI_TIMEOUT;
+    g_file_read_effective_status = EFI_DEVICE_ERROR;
     g_device_path_status = EFI_SUCCESS;
     g_handle_protocol_status = EFI_SUCCESS;
     g_load_error_with_child = 0;
@@ -478,6 +557,7 @@ static void reset_fixture(void)
     g_load_calls = 0;
     g_start_calls = 0;
     g_file_read_calls = 0;
+    g_traced_file_read_calls = 0;
     g_device_path_calls = 0;
     g_unload_calls = 0;
     g_handle_calls = 0;

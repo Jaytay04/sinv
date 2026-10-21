@@ -92,10 +92,10 @@ static void image_launch_notify(image_launch_observer_fn Observer,
     }
 }
 
-image_launch_status_t image_launch_start_observed(
+image_launch_status_t image_launch_start_observed_traced(
     EFI_HANDLE ParentImageHandle, const CHAR16 *Path,
     EFI_STATUS *ChildStatus, image_launch_observer_fn Observer,
-    void *Context)
+    void *Context, efi_file_io_trace_t *ReadTrace)
 {
     efi_file_buffer_t source;
     EFI_DEVICE_PATH_PROTOCOL *device_path = NULL;
@@ -104,6 +104,7 @@ image_launch_status_t image_launch_start_observed(
     UINTN exit_data_size = 0;
     EFI_STATUS st;
 
+    efi_file_io_trace_initialize(ReadTrace);
     if (ChildStatus == NULL) {
         return IMAGE_LAUNCH_ERR_ARGUMENT;
     }
@@ -116,7 +117,12 @@ image_launch_status_t image_launch_start_observed(
     source.size = 0;
 
     image_launch_notify(Observer, Context, "read", FALSE, EFI_NOT_STARTED);
-    st = efi_file_read(ParentImageHandle, Path, &source);
+    if (ReadTrace != NULL) {
+        st = efi_file_read_traced(ParentImageHandle, Path, &source,
+                                  ReadTrace);
+    } else {
+        st = efi_file_read(ParentImageHandle, Path, &source);
+    }
     image_launch_notify(Observer, Context, "read", TRUE, st);
     *ChildStatus = st;
     if (st == EFI_NOT_FOUND) {
@@ -168,6 +174,15 @@ image_launch_status_t image_launch_start_observed(
     (void)gBS->UnloadImage(child);
     image_launch_debug_marker('S', 'U');
     return IMAGE_LAUNCH_OK;
+}
+
+image_launch_status_t image_launch_start_observed(
+    EFI_HANDLE ParentImageHandle, const CHAR16 *Path,
+    EFI_STATUS *ChildStatus, image_launch_observer_fn Observer,
+    void *Context)
+{
+    return image_launch_start_observed_traced(
+        ParentImageHandle, Path, ChildStatus, Observer, Context, NULL);
 }
 
 image_launch_status_t image_launch_start(
