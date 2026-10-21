@@ -43,6 +43,32 @@ passed. A separate file-only validation matched the actual selector, failed
 journal, firmware captures, result, tools and source-module pins. The selector
 and journal stayed unchanged; no live inspection or ESP mount was run.
 
+The operator then captured the read-only review under
+`.analysis/gpu-final-firmware-review/2933898a57284570b022635a3398a3a4/`.
+The successful 17,633-byte receipt is SHA-256
+`EAA79DCFA55C09CEAD703A07E8A4C02CAF2A8C6992EEF006B4891BB8ADF2CBF6`.
+Both raw captures report BootNext absent, BootOrder `[0,1,2,3,4,5]`, the saved
+boot-manager/reference-log hashes, and zero integrity findings. Firmware text
+and raw selection are stable, health is 20 `ABSENT` CPUs, cleanup succeeded,
+and the selector and journal are unchanged. No ESP or firmware writes occurred.
+These observations do not prove historical raw BootOrder equality.
+
+The completion helper now binds this exact receipt, failed result, original
+journal checkpoint, observations, tool hashes and source versions. It preserves
+the original failed journal before writing a new verification intent and
+rechecks mounted text, raw boot selection, reset, Secure Boot, health and
+boot-manager integrity. The historical platform source captured by inspection
+and the current integration are pinned separately. Recovery remains pending
+until the operator's reviewed FinalVerify succeeds; no live completion action
+was run during implementation.
+
+All 14 related host checks passed, including the dispatcher, platform, older
+review profiles, and module-scope regression. The new run-specific review
+fixture passed 5 cases with 44 assertions; its entry-journal fixture passed
+21 assertions. File-only checks also validated the actual failed result,
+original journal copy, current platform pin, two saved raw observations, and
+five saved command receipts. The active selector and journal stayed unchanged.
+
 ### Concrete verification defect and its causal limit
 
 The IOMMU installer disables bus mastering on discovered PCI functions and

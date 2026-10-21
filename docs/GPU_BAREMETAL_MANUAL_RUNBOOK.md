@@ -13,16 +13,19 @@ network application GUIDs and their display-order references changed. Windows
 and both USB entry blocks are unchanged. This does not prove historical raw
 firmware-variable equality.
 
-The next step is a read-only capture bound to the exact failed run:
+The operator completed the run-specific read-only capture with
+`READONLY_FIRMWARE_REVIEW_CAPTURED`. Its receipt and saved observations passed
+file-only review. The completion helper is now bound to that exact receipt,
+the original failed journal, and fresh reset/health/integrity checks. Run:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Inspect-GpuFinalFirmware.ps1 -Run160027
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 FinalVerify -ReviewedFirmwareDifference
 ```
 
-Require `READONLY_FIRMWARE_REVIEW_CAPTURED` and preserve the output. This capture
-does not mark recovery complete. Its fresh receipt must be reviewed before
-the reviewed-difference completion step. Older fixed review and retirement
-profiles below do not apply to this run.
+Require `FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED`
+before Archive. The original baseline remains preserved and `TextEqual`
+remains false; completion records the specific reviewed difference separately.
+Older fixed review and retirement profiles below do not apply to this run.
 
 The investigation found an unchecked PCI bus-master restoration path and
 reproduced its false-success behavior with a host fixture. The update verifies
