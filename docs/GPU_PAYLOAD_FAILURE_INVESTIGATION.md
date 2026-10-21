@@ -57,26 +57,23 @@ stable; health reports all 20 CPUs `ABSENT`. This establishes the reviewed
 current observations, without proving historical raw BootOrder equality or
 the cause of the image-start failure. GPU isolation remains unverified.
 
-The journal remains `Disarmed` with the failed FinalVerify intent retained.
-The completion helper accepts only this exact receipt and run, rechecks its
-saved files and source pins, and requires fresh matching mounted-ESP text,
-raw BootNext/BootOrder, boot-manager integrity, reset, Secure Boot, and health
-checks. Run the updated helper in the same boot session:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 FinalVerify -ReviewedFirmwareDifference
-```
-
-Require `FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED`
-and `Succeeded: true`. Only after that result, archive the selector:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Archive
-```
-
+The operator then ran `FinalVerify -ReviewedFirmwareDifference`, which passed
+with `FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED`.
+The completion helper checked the exact receipt, original journal checkpoint,
+saved result and source pins, plus fresh mounted-ESP text, raw boot selection,
+boot-manager integrity, reset, Secure Boot, and ABSENT health observations.
 The original firmware baseline is preserved, `TextEqual` remains false,
-and the reviewed exception is recorded separately. This completes recovery
-when the required result succeeds; it does not establish GPU isolation.
+and the reviewed exception is recorded separately.
+
+Archive subsequently returned `SELECTOR_ARCHIVED`. File-only verification
+confirmed the selector is absent, the journal is `Complete`, and its final
+errors are empty. The archived selector retains SHA-256
+`B4CF6844894A920912EFF85B80012ED3B0B5504D7BD01341A531316C8FC8424C`;
+the preserved final journal is
+`A4B6D6C8DB917F5A0578A9D4A6775D422CED476BD164B579C4506F73B0F9BF9F`.
+This run requires no further recovery commands. Its staged files remain
+retained for a separate ownership-reviewed retirement before another stage.
+Recovery is verified; GPU isolation remains unverified.
 
 Offline validation passed all seven related firmware-inspection, review,
 entry-journal, module-scope, and host-platform tests. The new review fixtures
@@ -86,6 +83,38 @@ findings. A separate file-only validation checked the actual receipt and its
 saved files, the original failed journal context, and the current reviewed
 platform source. The selector and journal stayed unchanged. No VM or live
 inspection was run during this validation.
+
+### Diagnostics added for the next handoff test
+
+The available evidence still does not identify the later Device Error. The
+ordinary image launcher now supports an optional synchronous observer while
+retaining its existing API and error/cleanup behavior. The production loader
+records before/after boundaries for file read, device-path construction,
+shim-aware LoadImage, and StartImage separately for the optional inventory
+image and Windows Boot Manager. Load completion also records the shim
+subphase/status. A return record preserves the final child status, including
+the existing Device Error normalization for a successful load with no child
+handle. Firmware validation inside LoadImage is not presented as a separate
+observable operation.
+
+The console prints the records before each operation. The existing schema-1
+`handoff-status.txt` retains its original fields and appends the bounded
+progress records; no additional ESP filename is introduced. Both this file
+and `payload-diagnostic.txt` now use diagnostic-only write verification:
+write, flush, and close statuses are recorded; the file is reopened and its
+length, bytes, and SHA-256 are checked immediately. Skipped readback is labeled
+`NOT_RUN`, with a separate attempt flag distinguishing it from an attempted
+read returning EFI_NOT_STARTED. Failures remain nonfatal to Windows handoff.
+Immediate readback does not prove persistence across firmware fallback or a
+subsequent boot; if I/O fails, console evidence may be the only output.
+
+The unsigned Release loader built successfully at 71,168 bytes, SHA-256
+`99B5020CD29B333A74ABA20D191F765C7068319796E5711BD9C07930E7E950B8`.
+All eight focused host tests passed, covering file-I/O failures and bounds,
+launch phase ordering/statuses, formatter bounds, existing restore behavior,
+shim behavior, and ABI checks. No EFI image was executed, signed, staged, or
+armed during this validation, and no VM was started. These changes improve
+the next observation; they do not establish a fix for the physical failure.
 
 ## Sixth physical run: VT-d supports only the 48-bit table format
 

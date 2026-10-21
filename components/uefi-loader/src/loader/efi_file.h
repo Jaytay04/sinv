@@ -9,6 +9,23 @@ typedef struct {
     UINTN size;
 } efi_file_buffer_t;
 
+/* Raw stage results for the diagnostic-only write/readback path. Statuses
+ * for operations that did not run remain EFI_NOT_STARTED. Close statuses
+ * describe the write handles; readback uses its own bounded handles. */
+typedef struct {
+    EFI_STATUS WriteStatus;
+    EFI_STATUS ReadStatus;
+    EFI_STATUS FileCloseStatus;
+    EFI_STATUS RootCloseStatus;
+    EFI_STATUS FlushStatus;
+    UINTN ExpectedSize;
+    UINTN ObservedSize;
+    BOOLEAN ReadAttempted;
+    BOOLEAN Match;
+    UINT8 ExpectedSha256[32];
+    UINT8 ObservedSha256[32];
+} efi_file_write_verification_t;
+
 /* Refuse unbounded firmware-controlled allocations.  A Windows boot
  * manager is normally a few MiB; 64 MiB leaves room for debug fixtures while
  * keeping a corrupt EFI_FILE_INFO from consuming all loader memory. */
@@ -26,6 +43,12 @@ void efi_file_release(efi_file_buffer_t *Buffer);
 /* Replace Path with exactly Size bytes. Parent directories must exist. */
 EFI_STATUS efi_file_write(EFI_HANDLE ImageHandle, const CHAR16 *Path,
                           const UINT8 *Bytes, UINTN Size);
+
+/* Diagnostic variant of efi_file_write. It performs the same replacement,
+ * then reopens the file and verifies exact length, bytes, and SHA-256. */
+EFI_STATUS efi_file_write_verified(
+    EFI_HANDLE ImageHandle, const CHAR16 *Path, const UINT8 *Bytes,
+    UINTN Size, efi_file_write_verification_t *Out);
 
 /* File metadata primitives.  Rename is deliberately same-directory only and
  * never replaces an existing destination. */

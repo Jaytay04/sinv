@@ -1,5 +1,6 @@
 /* efi_file.c - Bounded UEFI filesystem primitives for loader.efi. */
 #include "efi_file.h"
+#include "sha256.h"
 
 #include <stddef.h>
 
@@ -129,8 +130,9 @@ static EFI_STATUS open_root(EFI_HANDLE ImageHandle,
     return EFI_SUCCESS;
 }
 
-EFI_STATUS efi_file_read(EFI_HANDLE ImageHandle, const CHAR16 *Path,
-                         efi_file_buffer_t *Out)
+static EFI_STATUS efi_file_read_internal(
+    EFI_HANDLE ImageHandle, const CHAR16 *Path, efi_file_buffer_t *Out,
+    UINTN *ObservedSize, EFI_STATUS *RawReadStatus)
 {
     EFI_GUID loaded_guid = EFI_LOADED_IMAGE_PROTOCOL_GUID;
     EFI_GUID fs_guid = EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID;
@@ -146,11 +148,19 @@ EFI_STATUS efi_file_read(EFI_HANDLE ImageHandle, const CHAR16 *Path,
     UINTN expected_size;
     EFI_STATUS st;
 
+    if (ObservedSize != NULL) {
+        *ObservedSize = 0;
+    }
+    if (RawReadStatus != NULL) {
+        *RawReadStatus = EFI_NOT_STARTED;
+    }
+    if (Out != NULL) {
+        Out->bytes = NULL;
+        Out->size = 0;
+    }
     if (ImageHandle == NULL || Path == NULL || Out == NULL || gBS == NULL) {
         return EFI_INVALID_PARAMETER;
     }
-    Out->bytes = NULL;
-    Out->size = 0;
 
     st = gBS->HandleProtocol(ImageHandle, &loaded_guid, (VOID **)&loaded);
     if (EFI_ERROR(st) || loaded == NULL || loaded->DeviceHandle == NULL) {
@@ -217,6 +227,12 @@ EFI_STATUS efi_file_read(EFI_HANDLE ImageHandle, const CHAR16 *Path,
     }
     {
         st = file->Read(file, &read_size, bytes);
+        if (RawReadStatus != NULL) {
+            *RawReadStatus = st;
+        }
+        if (ObservedSize != NULL) {
+            *ObservedSize = EFI_ERROR(st) ? 0u : read_size;
+        }
         if (!EFI_ERROR(st) && read_size != expected_size) {
             st = EFI_DEVICE_ERROR;
         }
@@ -224,6 +240,14 @@ EFI_STATUS efi_file_read(EFI_HANDLE ImageHandle, const CHAR16 *Path,
     file->Close(file);
     root->Close(root);
     if (EFI_ERROR(st) || read_size != (UINTN)expected_size) {
+        /* The diagnostic writer can hash a bounded short-read result. The
+         * public reader keeps its original all-or-nothing contract. */
+        if (RawReadStatus != NULL && !EFI_ERROR(*RawReadStatus) &&
+            read_size < (UINTN)expected_size) {
+            Out->bytes = bytes;
+            Out->size = read_size;
+            return EFI_DEVICE_ERROR;
+        }
         gBS->FreePool(bytes);
         return EFI_DEVICE_ERROR;
     }
@@ -231,6 +255,12 @@ EFI_STATUS efi_file_read(EFI_HANDLE ImageHandle, const CHAR16 *Path,
     Out->bytes = bytes;
     Out->size = read_size;
     return EFI_SUCCESS;
+}
+
+EFI_STATUS efi_file_read(EFI_HANDLE ImageHandle, const CHAR16 *Path,
+                         efi_file_buffer_t *Out)
+{
+    return efi_file_read_internal(ImageHandle, Path, Out, NULL, NULL);
 }
 
 void efi_file_release(efi_file_buffer_t *Buffer)
@@ -242,8 +272,16 @@ void efi_file_release(efi_file_buffer_t *Buffer)
     }
 }
 
-EFI_STATUS efi_file_write(EFI_HANDLE ImageHandle, const CHAR16 *Path,
-                          const UINT8 *Bytes, UINTN Size)
+typedef struct {
+    EFI_STATUS write_status;
+    EFI_STATUS file_close_status;
+    EFI_STATUS root_close_status;
+    EFI_STATUS flush_status;
+} efi_file_write_trace_t;
+
+static EFI_STATUS efi_file_write_internal(
+    EFI_HANDLE ImageHandle, const CHAR16 *Path, const UINT8 *Bytes,
+    UINTN Size, efi_file_write_trace_t *Trace)
 {
     EFI_GUID loaded_guid = EFI_LOADED_IMAGE_PROTOCOL_GUID;
     EFI_GUID fs_guid = EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID;
@@ -254,26 +292,51 @@ EFI_STATUS efi_file_write(EFI_HANDLE ImageHandle, const CHAR16 *Path,
     UINTN written = Size;
     EFI_STATUS st;
 
+    if (Trace != NULL) {
+        Trace->write_status = EFI_NOT_STARTED;
+        Trace->file_close_status = EFI_NOT_STARTED;
+        Trace->root_close_status = EFI_NOT_STARTED;
+        Trace->flush_status = EFI_NOT_STARTED;
+    }
+
     if (ImageHandle == NULL || Path == NULL || Bytes == NULL || Size == 0u ||
         gBS == NULL) {
+        if (Trace != NULL) {
+            Trace->write_status = EFI_INVALID_PARAMETER;
+        }
         return EFI_INVALID_PARAMETER;
     }
     st = gBS->HandleProtocol(ImageHandle, &loaded_guid, (VOID **)&loaded);
     if (EFI_ERROR(st) || loaded == NULL || loaded->DeviceHandle == NULL) {
+        if (Trace != NULL) {
+            Trace->write_status = EFI_NOT_FOUND;
+        }
         return EFI_NOT_FOUND;
     }
     st = gBS->HandleProtocol(loaded->DeviceHandle, &fs_guid, (VOID **)&fs);
     if (EFI_ERROR(st) || fs == NULL) {
+        if (Trace != NULL) {
+            Trace->write_status = EFI_NOT_FOUND;
+        }
         return EFI_NOT_FOUND;
     }
     st = fs->OpenVolume(fs, &root);
     if (EFI_ERROR(st)) {
         if (root != NULL) {
-            root->Close(root);
+            EFI_STATUS close_status = root->Close(root);
+            if (Trace != NULL) {
+                Trace->root_close_status = close_status;
+            }
+        }
+        if (Trace != NULL) {
+            Trace->write_status = st;
         }
         return st;
     }
     if (root == NULL) {
+        if (Trace != NULL) {
+            Trace->write_status = EFI_DEVICE_ERROR;
+        }
         return EFI_DEVICE_ERROR;
     }
     /* Delete an older manifest first so a shorter replacement cannot retain
@@ -283,20 +346,39 @@ EFI_STATUS efi_file_write(EFI_HANDLE ImageHandle, const CHAR16 *Path,
     if (EFI_ERROR(st)) {
         if (st != EFI_NOT_FOUND) {
             if (file != NULL) {
-                file->Close(file);
+                EFI_STATUS close_status = file->Close(file);
+                if (Trace != NULL) {
+                    Trace->file_close_status = close_status;
+                }
             }
-            root->Close(root);
+            {
+                EFI_STATUS close_status = root->Close(root);
+                if (Trace != NULL) {
+                    Trace->root_close_status = close_status;
+                }
+            }
+            if (Trace != NULL) {
+                Trace->write_status = st;
+            }
             return st;
         }
     } else {
         if (file == NULL) {
-            root->Close(root);
+            EFI_STATUS close_status = root->Close(root);
+            if (Trace != NULL) {
+                Trace->root_close_status = close_status;
+                Trace->write_status = EFI_DEVICE_ERROR;
+            }
             return EFI_DEVICE_ERROR;
         }
         st = file->Delete(file);
         file = NULL;
         if (st != EFI_SUCCESS) {
-            root->Close(root);
+            EFI_STATUS close_status = root->Close(root);
+            if (Trace != NULL) {
+                Trace->root_close_status = close_status;
+                Trace->write_status = st;
+            }
             return st;
         }
     }
@@ -306,25 +388,169 @@ EFI_STATUS efi_file_write(EFI_HANDLE ImageHandle, const CHAR16 *Path,
                     EFI_FILE_MODE_CREATE, 0);
     if (EFI_ERROR(st)) {
         if (file != NULL) {
-            file->Close(file);
+            EFI_STATUS close_status = file->Close(file);
+            if (Trace != NULL) {
+                Trace->file_close_status = close_status;
+            }
         }
-        root->Close(root);
+        {
+            EFI_STATUS close_status = root->Close(root);
+            if (Trace != NULL) {
+                Trace->root_close_status = close_status;
+                Trace->write_status = st;
+            }
+        }
         return st;
     }
     if (file == NULL) {
-        root->Close(root);
+        EFI_STATUS close_status = root->Close(root);
+        if (Trace != NULL) {
+            Trace->root_close_status = close_status;
+            Trace->write_status = EFI_DEVICE_ERROR;
+        }
         return EFI_DEVICE_ERROR;
     }
     st = file->Write(file, &written, (VOID *)Bytes);
+    if (Trace != NULL) {
+        Trace->write_status = st;
+    }
     if (!EFI_ERROR(st) && written == Size) {
         st = file->Flush(file);
+        if (Trace != NULL) {
+            Trace->flush_status = st;
+            if (EFI_ERROR(st)) {
+                Trace->write_status = st;
+            }
+        }
+    } else if (!EFI_ERROR(st)) {
+        st = EFI_DEVICE_ERROR;
+        if (Trace != NULL) {
+            Trace->write_status = st;
+        }
     }
-    file->Close(file);
-    root->Close(root);
+    {
+        EFI_STATUS close_status = file->Close(file);
+        if (Trace != NULL) {
+            Trace->file_close_status = close_status;
+        }
+    }
+    {
+        EFI_STATUS close_status = root->Close(root);
+        if (Trace != NULL) {
+            Trace->root_close_status = close_status;
+        }
+    }
     if (EFI_ERROR(st)) {
         return st;
     }
-    return written == Size ? EFI_SUCCESS : EFI_DEVICE_ERROR;
+    st = written == Size ? EFI_SUCCESS : EFI_DEVICE_ERROR;
+    if (Trace != NULL) {
+        Trace->write_status = st;
+    }
+    return st;
+}
+
+EFI_STATUS efi_file_write(EFI_HANDLE ImageHandle, const CHAR16 *Path,
+                          const UINT8 *Bytes, UINTN Size)
+{
+    return efi_file_write_internal(ImageHandle, Path, Bytes, Size, NULL);
+}
+
+static void initialize_write_verification(
+    efi_file_write_verification_t *Out, UINTN ExpectedSize)
+{
+    UINTN i;
+    Out->WriteStatus = EFI_NOT_STARTED;
+    Out->ReadStatus = EFI_NOT_STARTED;
+    Out->FileCloseStatus = EFI_NOT_STARTED;
+    Out->RootCloseStatus = EFI_NOT_STARTED;
+    Out->FlushStatus = EFI_NOT_STARTED;
+    Out->ExpectedSize = ExpectedSize;
+    Out->ObservedSize = 0;
+    Out->ReadAttempted = FALSE;
+    Out->Match = FALSE;
+    for (i = 0; i < sizeof(Out->ExpectedSha256); i++) {
+        Out->ExpectedSha256[i] = 0;
+        Out->ObservedSha256[i] = 0;
+    }
+}
+
+EFI_STATUS efi_file_write_verified(
+    EFI_HANDLE ImageHandle, const CHAR16 *Path, const UINT8 *Bytes,
+    UINTN Size, efi_file_write_verification_t *Out)
+{
+    efi_file_write_trace_t trace;
+    efi_file_buffer_t readback;
+    EFI_STATUS st;
+    UINTN i;
+
+    if (Out == NULL) {
+        return EFI_INVALID_PARAMETER;
+    }
+    initialize_write_verification(Out, Size);
+    if (ImageHandle == NULL || Path == NULL || Bytes == NULL || Size == 0u ||
+        gBS == NULL) {
+        Out->WriteStatus = EFI_INVALID_PARAMETER;
+        return EFI_INVALID_PARAMETER;
+    }
+    if (Size > EFI_FILE_MAX_READ_SIZE) {
+        Out->WriteStatus = EFI_BAD_BUFFER_SIZE;
+        return EFI_BAD_BUFFER_SIZE;
+    }
+#if SIZE_MAX < UINT64_MAX
+    if (Size > (UINTN)SIZE_MAX) {
+        Out->WriteStatus = EFI_INVALID_PARAMETER;
+        return EFI_INVALID_PARAMETER;
+    }
+#endif
+    if (sha256_hash(Bytes, (size_t)Size, Out->ExpectedSha256) != SHA256_OK) {
+        Out->WriteStatus = EFI_INVALID_PARAMETER;
+        return EFI_INVALID_PARAMETER;
+    }
+
+    st = efi_file_write_internal(ImageHandle, Path, Bytes, Size, &trace);
+    Out->WriteStatus = trace.write_status;
+    Out->FileCloseStatus = trace.file_close_status;
+    Out->RootCloseStatus = trace.root_close_status;
+    Out->FlushStatus = trace.flush_status;
+    if (EFI_ERROR(st)) {
+        return st;
+    }
+    if (trace.file_close_status != EFI_SUCCESS ||
+        trace.root_close_status != EFI_SUCCESS) {
+        return trace.file_close_status != EFI_SUCCESS ?
+               trace.file_close_status : trace.root_close_status;
+    }
+
+    readback.bytes = NULL;
+    readback.size = 0;
+    Out->ReadAttempted = TRUE;
+    st = efi_file_read_internal(ImageHandle, Path, &readback,
+                                &Out->ObservedSize, &Out->ReadStatus);
+    if (readback.bytes != NULL) {
+        if (sha256_hash(readback.bytes, (size_t)readback.size,
+                        Out->ObservedSha256) != SHA256_OK) {
+            efi_file_release(&readback);
+            return EFI_DEVICE_ERROR;
+        }
+    }
+    if (EFI_ERROR(st)) {
+        Out->ReadStatus = Out->ReadStatus == EFI_NOT_STARTED ? st :
+                          Out->ReadStatus;
+        efi_file_release(&readback);
+        return st;
+    }
+    Out->Match = readback.size == Size ? TRUE : FALSE;
+    if (Out->Match) {
+        for (i = 0; i < Size; i++) {
+            if (readback.bytes[i] != Bytes[i]) {
+                Out->Match = FALSE;
+                break;
+            }
+        }
+    }
+    efi_file_release(&readback);
+    return Out->Match ? EFI_SUCCESS : EFI_DEVICE_ERROR;
 }
 
 EFI_STATUS efi_file_exists(EFI_HANDLE ImageHandle, const CHAR16 *Path)

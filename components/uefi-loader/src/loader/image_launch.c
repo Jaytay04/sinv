@@ -83,9 +83,19 @@ static int image_launch_pe_entry_rva(const efi_file_buffer_t *source,
     return *entry_rva != 0u && *entry_rva < *size_of_image;
 }
 
-image_launch_status_t image_launch_start(
+static void image_launch_notify(image_launch_observer_fn Observer,
+                                void *Context, const char *Phase,
+                                BOOLEAN Completed, EFI_STATUS Status)
+{
+    if (Observer != NULL) {
+        Observer(Context, Phase, Completed, Status);
+    }
+}
+
+image_launch_status_t image_launch_start_observed(
     EFI_HANDLE ParentImageHandle, const CHAR16 *Path,
-    EFI_STATUS *ChildStatus)
+    EFI_STATUS *ChildStatus, image_launch_observer_fn Observer,
+    void *Context)
 {
     efi_file_buffer_t source;
     EFI_DEVICE_PATH_PROTOCOL *device_path = NULL;
@@ -105,7 +115,9 @@ image_launch_status_t image_launch_start(
     source.bytes = NULL;
     source.size = 0;
 
+    image_launch_notify(Observer, Context, "read", FALSE, EFI_NOT_STARTED);
     st = efi_file_read(ParentImageHandle, Path, &source);
+    image_launch_notify(Observer, Context, "read", TRUE, st);
     *ChildStatus = st;
     if (st == EFI_NOT_FOUND) {
         return IMAGE_LAUNCH_ERR_NOT_FOUND;
@@ -113,17 +125,22 @@ image_launch_status_t image_launch_start(
     if (EFI_ERROR(st)) {
         return IMAGE_LAUNCH_ERR_READ;
     }
+    image_launch_notify(Observer, Context, "device_path", FALSE,
+                        EFI_NOT_STARTED);
     st = efi_file_build_device_path(
         ParentImageHandle, Path, &device_path);
+    image_launch_notify(Observer, Context, "device_path", TRUE, st);
     if (EFI_ERROR(st)) {
         *ChildStatus = st;
         efi_file_release(&source);
         return IMAGE_LAUNCH_ERR_DEVICE_PATH;
     }
 
+    image_launch_notify(Observer, Context, "load", FALSE, EFI_NOT_STARTED);
     st = shim_chain_load_image(
         FALSE, ParentImageHandle, device_path,
         source.bytes, source.size, &child);
+    image_launch_notify(Observer, Context, "load", TRUE, st);
     efi_file_device_path_release(&device_path);
     efi_file_release(&source);
     if (EFI_ERROR(st) || child == NULL) {
@@ -135,7 +152,9 @@ image_launch_status_t image_launch_start(
         return IMAGE_LAUNCH_ERR_LOAD;
     }
 
+    image_launch_notify(Observer, Context, "start", FALSE, EFI_NOT_STARTED);
     st = gBS->StartImage(child, &exit_data_size, &exit_data);
+    image_launch_notify(Observer, Context, "start", TRUE, st);
     image_launch_debug_marker('S', 'R');
     *ChildStatus = st;
     if (exit_data != NULL) {
@@ -149,6 +168,14 @@ image_launch_status_t image_launch_start(
     (void)gBS->UnloadImage(child);
     image_launch_debug_marker('S', 'U');
     return IMAGE_LAUNCH_OK;
+}
+
+image_launch_status_t image_launch_start(
+    EFI_HANDLE ParentImageHandle, const CHAR16 *Path,
+    EFI_STATUS *ChildStatus)
+{
+    return image_launch_start_observed(
+        ParentImageHandle, Path, ChildStatus, NULL, NULL);
 }
 
 static image_launch_status_t image_launch_start_resident_internal(

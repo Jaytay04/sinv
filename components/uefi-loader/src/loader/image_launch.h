@@ -30,6 +30,19 @@ image_launch_status_t image_launch_start(
     EFI_HANDLE ParentImageHandle, const CHAR16 *Path,
     EFI_STATUS *ChildStatus);
 
+/* Observe the ordinary read, device-path, LoadImage, and StartImage calls.
+ * Each phase is reported immediately before the call with Completed FALSE
+ * and EFI_NOT_STARTED, then immediately after it returns with its raw status.
+ * The observer runs synchronously and is optional; a phase that never returns
+ * has only its before-call notification. */
+typedef void (*image_launch_observer_fn)(
+    void *Context, const char *Phase, BOOLEAN Completed, EFI_STATUS Status);
+
+image_launch_status_t image_launch_start_observed(
+    EFI_HANDLE ParentImageHandle, const CHAR16 *Path,
+    EFI_STATUS *ChildStatus, image_launch_observer_fn Observer,
+    void *Context);
+
 /* Load and relocate a resident EFI payload, then invoke its PE entry point
  * directly. This deliberately bypasses firmware StartImage return cleanup;
  * use it only for a payload that remains active after returning. */

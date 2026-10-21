@@ -41,6 +41,273 @@ static EFI_HANDLE g_child = (EFI_HANDLE)(UINTN)0x1234u;
 static EFI_DEVICE_PATH_PROTOCOL *g_path =
     (EFI_DEVICE_PATH_PROTOCOL *)(UINTN)0x5678u;
 
+typedef struct {
+    const char *phase;
+    BOOLEAN completed;
+    EFI_STATUS status;
+    int observer;
+} launch_trace_event_t;
+
+typedef struct {
+    launch_trace_event_t events[32];
+    UINTN event_count;
+    UINTN observer_count;
+    UINTN callback_context_matches;
+    UINT32 marker;
+} launch_trace_t;
+
+static launch_trace_t *g_active_trace;
+static launch_trace_t *g_expected_observer_context;
+
+static int expect(int condition, const char *message);
+static void reset_fixture(void);
+
+static void trace_add(launch_trace_t *Trace, const char *Phase,
+                      BOOLEAN Completed, EFI_STATUS Status, int Observer)
+{
+    launch_trace_event_t *event;
+    if (Trace == NULL || Trace->event_count >=
+            (UINTN)(sizeof(Trace->events) / sizeof(Trace->events[0]))) {
+        return;
+    }
+    event = &Trace->events[Trace->event_count++];
+    event->phase = Phase;
+    event->completed = Completed;
+    event->status = Status;
+    event->observer = Observer;
+}
+
+static void trace_mock(const char *Phase)
+{
+    trace_add(g_active_trace, Phase, FALSE, EFI_NOT_STARTED, 0);
+}
+
+static void launch_observer(void *Context, const char *Phase,
+                            BOOLEAN Completed, EFI_STATUS Status)
+{
+    launch_trace_t *trace = (launch_trace_t *)Context;
+    if (trace == NULL || trace->marker != 0x4c41554eu) {
+        return;
+    }
+    ++trace->observer_count;
+    if (Context == g_expected_observer_context) {
+        ++trace->callback_context_matches;
+    }
+    trace_add(trace, Phase, Completed, Status, 1);
+}
+
+static int expect_trace_event(const launch_trace_t *Trace, UINTN Index,
+                              int Observer, const char *Phase,
+                              BOOLEAN Completed, EFI_STATUS Status,
+                              const char *Message)
+{
+    const launch_trace_event_t *event;
+    if (Trace == NULL || Index >= Trace->event_count) {
+        return expect(0, Message);
+    }
+    event = &Trace->events[Index];
+    if (event->observer != Observer || strcmp(event->phase, Phase) != 0 ||
+        event->completed != Completed || event->status != Status) {
+        return expect(0, Message);
+    }
+    return 1;
+}
+
+static int test_observed_launch(const CHAR16 *Path)
+{
+    EFI_STATUS child_status;
+    image_launch_status_t launch_status;
+    launch_trace_t trace;
+
+    reset_fixture();
+    memset(&trace, 0, sizeof(trace));
+    trace.marker = 0x4c41554eu;
+    g_active_trace = &trace;
+    g_expected_observer_context = &trace;
+    launch_status = image_launch_start_observed(
+        (EFI_HANDLE)1, Path, &child_status, launch_observer, &trace);
+    g_active_trace = NULL;
+    g_expected_observer_context = NULL;
+    if (!expect(launch_status == IMAGE_LAUNCH_OK &&
+                    child_status == EFI_SUCCESS,
+                "observed ordinary child preserves successful return") ||
+        !expect(trace.event_count == 12u && trace.observer_count == 8u &&
+                    trace.callback_context_matches == 8u,
+                "observer receives its context for all four phase pairs") ||
+        !expect_trace_event(&trace, 0u, 1, "read", FALSE, EFI_NOT_STARTED,
+                            "read observer runs before file read") ||
+        !expect_trace_event(&trace, 1u, 0, "read", FALSE, EFI_NOT_STARTED,
+                            "file read follows its before notification") ||
+        !expect_trace_event(&trace, 2u, 1, "read", TRUE, EFI_SUCCESS,
+                            "read observer receives raw successful status") ||
+        !expect_trace_event(&trace, 3u, 1, "device_path", FALSE,
+                            EFI_NOT_STARTED,
+                            "device-path observer runs before construction") ||
+        !expect_trace_event(&trace, 4u, 0, "device_path", FALSE,
+                            EFI_NOT_STARTED,
+                            "device-path construction follows notification") ||
+        !expect_trace_event(&trace, 5u, 1, "device_path", TRUE, EFI_SUCCESS,
+                            "device-path observer receives raw status") ||
+        !expect_trace_event(&trace, 6u, 1, "load", FALSE, EFI_NOT_STARTED,
+                            "load observer runs before LoadImage") ||
+        !expect_trace_event(&trace, 7u, 0, "load", FALSE, EFI_NOT_STARTED,
+                            "LoadImage follows its before notification") ||
+        !expect_trace_event(&trace, 8u, 1, "load", TRUE, EFI_SUCCESS,
+                            "load observer receives raw successful status") ||
+        !expect_trace_event(&trace, 9u, 1, "start", FALSE,
+                            EFI_NOT_STARTED,
+                            "start observer runs before StartImage") ||
+        !expect_trace_event(&trace, 10u, 0, "start", FALSE, EFI_NOT_STARTED,
+                            "StartImage follows its before notification") ||
+        !expect_trace_event(&trace, 11u, 1, "start", TRUE, EFI_SUCCESS,
+                            "start observer receives raw successful status") ||
+        !expect(g_unload_calls == 1u,
+                "observed successful child keeps ordinary unload cleanup")) {
+        return 1;
+    }
+
+    reset_fixture();
+    memset(&trace, 0, sizeof(trace));
+    trace.marker = 0x4c41554eu;
+    g_file_read_status = EFI_DEVICE_ERROR;
+    g_active_trace = &trace;
+    g_expected_observer_context = &trace;
+    launch_status = image_launch_start_observed(
+        (EFI_HANDLE)1, Path, &child_status, launch_observer, &trace);
+    g_active_trace = NULL;
+    g_expected_observer_context = NULL;
+    if (!expect(launch_status == IMAGE_LAUNCH_ERR_READ &&
+                    child_status == EFI_DEVICE_ERROR,
+                "observed read failure preserves raw status") ||
+        !expect(trace.event_count == 3u && trace.observer_count == 2u &&
+                    trace.callback_context_matches == 2u,
+                "read failure reports only its before and after callbacks") ||
+        !expect_trace_event(&trace, 0u, 1, "read", FALSE, EFI_NOT_STARTED,
+                            "read failure has before notification") ||
+        !expect_trace_event(&trace, 1u, 0, "read", FALSE, EFI_NOT_STARTED,
+                            "read failure follows the notification") ||
+        !expect_trace_event(&trace, 2u, 1, "read", TRUE,
+                            EFI_DEVICE_ERROR,
+                            "read failure reports exact EFI_STATUS") ||
+        !expect(g_device_path_calls == 0u && g_load_calls == 0u,
+                "read failure stops later launch phases")) {
+        return 1;
+    }
+
+    reset_fixture();
+    memset(&trace, 0, sizeof(trace));
+    trace.marker = 0x4c41554eu;
+    g_device_path_status = EFI_ACCESS_DENIED;
+    g_active_trace = &trace;
+    g_expected_observer_context = &trace;
+    launch_status = image_launch_start_observed(
+        (EFI_HANDLE)1, Path, &child_status, launch_observer, &trace);
+    g_active_trace = NULL;
+    g_expected_observer_context = NULL;
+    if (!expect(launch_status == IMAGE_LAUNCH_ERR_DEVICE_PATH &&
+                    child_status == EFI_ACCESS_DENIED,
+                "observed device-path failure preserves raw status") ||
+        !expect(trace.event_count == 6u && trace.observer_count == 4u,
+                "device-path failure completes only read and path phases") ||
+        !expect_trace_event(&trace, 5u, 1, "device_path", TRUE,
+                            EFI_ACCESS_DENIED,
+                            "device-path failure reports exact EFI_STATUS") ||
+        !expect(g_load_calls == 0u && g_release_calls == 1u,
+                "device-path failure preserves source cleanup")) {
+        return 1;
+    }
+
+    reset_fixture();
+    memset(&trace, 0, sizeof(trace));
+    trace.marker = 0x4c41554eu;
+    g_load_status = EFI_ENCODE_ERROR(0x3141u);
+    g_load_error_with_child = 1;
+    g_active_trace = &trace;
+    g_expected_observer_context = &trace;
+    launch_status = image_launch_start_observed(
+        (EFI_HANDLE)1, Path, &child_status, launch_observer, &trace);
+    g_active_trace = NULL;
+    g_expected_observer_context = NULL;
+    if (!expect(launch_status == IMAGE_LAUNCH_ERR_LOAD &&
+                    child_status == g_load_status,
+                "observed LoadImage error preserves raw status") ||
+        !expect(trace.event_count == 9u && trace.observer_count == 6u,
+                "load failure stops before StartImage") ||
+        !expect_trace_event(&trace, 8u, 1, "load", TRUE, g_load_status,
+                            "load failure reports exact EFI_STATUS") ||
+        !expect(g_unload_calls == 1u && g_start_calls == 0u,
+                "observed failed LoadImage retains child cleanup")) {
+        return 1;
+    }
+
+    reset_fixture();
+    memset(&trace, 0, sizeof(trace));
+    trace.marker = 0x4c41554eu;
+    g_load_success_without_child = 1;
+    g_active_trace = &trace;
+    g_expected_observer_context = &trace;
+    launch_status = image_launch_start_observed(
+        (EFI_HANDLE)1, Path, &child_status, launch_observer, &trace);
+    g_active_trace = NULL;
+    g_expected_observer_context = NULL;
+    if (!expect(launch_status == IMAGE_LAUNCH_ERR_LOAD &&
+                    child_status == EFI_DEVICE_ERROR,
+                "successful LoadImage without child keeps normalized error") ||
+        !expect(trace.event_count == 9u && trace.observer_count == 6u &&
+                    trace.callback_context_matches == 6u,
+                "missing child reports through all completed prior phases") ||
+        !expect_trace_event(&trace, 8u, 1, "load", TRUE, EFI_SUCCESS,
+                            "load observer reports raw success without a child") ||
+        !expect(g_start_calls == 0u && g_unload_calls == 0u,
+                "missing child is not started or unloaded")) {
+        return 1;
+    }
+
+    reset_fixture();
+    memset(&trace, 0, sizeof(trace));
+    trace.marker = 0x4c41554eu;
+    g_start_status = EFI_SECURITY_VIOLATION;
+    g_active_trace = &trace;
+    g_expected_observer_context = &trace;
+    launch_status = image_launch_start_observed(
+        (EFI_HANDLE)1, Path, &child_status, launch_observer, &trace);
+    g_active_trace = NULL;
+    g_expected_observer_context = NULL;
+    if (!expect(launch_status == IMAGE_LAUNCH_ERR_START &&
+                    child_status == EFI_SECURITY_VIOLATION,
+                "observed StartImage error preserves raw status") ||
+        !expect(trace.event_count == 12u && trace.observer_count == 8u,
+                "StartImage return receives a completed notification") ||
+        !expect_trace_event(&trace, 9u, 1, "start", FALSE,
+                            EFI_NOT_STARTED,
+                            "StartImage is announced before firmware call") ||
+        !expect_trace_event(&trace, 10u, 0, "start", FALSE, EFI_NOT_STARTED,
+                            "StartImage mock runs after announcement") ||
+        !expect_trace_event(&trace, 11u, 1, "start", TRUE,
+                            EFI_SECURITY_VIOLATION,
+                            "StartImage error reports exact EFI_STATUS") ||
+        !expect(g_unload_calls == 1u,
+                "observed failed StartImage preserves unload cleanup")) {
+        return 1;
+    }
+
+    reset_fixture();
+    memset(&trace, 0, sizeof(trace));
+    g_active_trace = &trace;
+    launch_status = image_launch_start_observed(
+        (EFI_HANDLE)1, Path, &child_status, NULL, NULL);
+    g_active_trace = NULL;
+    if (!expect(launch_status == IMAGE_LAUNCH_OK &&
+                    child_status == EFI_SUCCESS,
+                "NULL observer leaves ordinary launch successful") ||
+        !expect(trace.event_count == 4u && g_load_calls == 1u &&
+                    g_start_calls == 1u && g_unload_calls == 1u,
+                "NULL observer adds no callbacks or policy changes")) {
+        return 1;
+    }
+    return 0;
+}
+
 EFI_STATUS efi_file_read(EFI_HANDLE ImageHandle, const CHAR16 *Path,
                          efi_file_buffer_t *Out)
 {
@@ -48,6 +315,7 @@ EFI_STATUS efi_file_read(EFI_HANDLE ImageHandle, const CHAR16 *Path,
     (void)ImageHandle;
     (void)Path;
     ++g_file_read_calls;
+    trace_mock("read");
     if (EFI_ERROR(g_file_read_status)) return g_file_read_status;
     Out->bytes = g_direct_source ? g_direct_bytes : bytes;
     Out->size = g_direct_source ? sizeof(g_direct_bytes) : sizeof(bytes);
@@ -68,6 +336,7 @@ EFI_STATUS efi_file_build_device_path(
     (void)ImageHandle;
     (void)Path;
     ++g_device_path_calls;
+    trace_mock("device_path");
     if (EFI_ERROR(g_device_path_status)) return g_device_path_status;
     *Out = g_path;
     return EFI_SUCCESS;
@@ -90,6 +359,7 @@ static EFI_STATUS EFIAPI mock_load(
     (void)SourceBuffer;
     (void)SourceSize;
     ++g_load_calls;
+    trace_mock("load");
     if (EFI_ERROR(g_load_status)) {
         if (g_load_error_with_child) *ImageHandle = g_child;
         return g_load_status;
@@ -103,6 +373,7 @@ static EFI_STATUS EFIAPI mock_start(
 {
     (void)ImageHandle;
     ++g_start_calls;
+    trace_mock("start");
     *ExitDataSize = 0;
     *ExitData = NULL;
     return g_start_status;
@@ -202,6 +473,8 @@ static void reset_fixture(void)
     g_load_error_with_child = 0;
     g_load_success_without_child = 0;
     g_handle_protocol_without_interface = 0;
+    g_active_trace = NULL;
+    g_expected_observer_context = NULL;
     g_load_calls = 0;
     g_start_calls = 0;
     g_file_read_calls = 0;
@@ -253,6 +526,9 @@ int main(void)
 {
     static const CHAR16 path[] = L"\\payload.efi";
     EFI_STATUS child_status;
+    if (test_observed_launch(path) != 0) {
+        return 1;
+    }
     reset_fixture();
     if (!expect(image_launch_start((EFI_HANDLE)1, path, &child_status) ==
                     IMAGE_LAUNCH_OK,

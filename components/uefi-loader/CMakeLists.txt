@@ -177,9 +177,19 @@ add_executable(efi_file_test
 )
 target_include_directories(efi_file_test PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/vendor
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/common
     ${CMAKE_CURRENT_SOURCE_DIR}/src/loader
 )
+target_link_libraries(efi_file_test PRIVATE sha256)
 add_test(NAME efi_file_test COMMAND efi_file_test)
+
+add_executable(handoff_diagnostic_test
+    src/fixtures/tests/handoff_diagnostic_test.c
+    src/loader/handoff_diagnostic.c)
+target_include_directories(handoff_diagnostic_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/vendor
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/loader)
+add_test(NAME handoff_diagnostic_test COMMAND handoff_diagnostic_test)
 
 add_executable(image_launch_test
     src/fixtures/tests/image_launch_test.c
@@ -564,6 +574,7 @@ add_executable(pe_rehash_efi_smoke
     src/fixtures/pe_rehash_efi_smoke.c
     src/loader/efi_file.c
     src/loader/pe_rehash.c
+    src/common/sha256.c
     src/vendor/efi_crt.c
 )
 target_include_directories(pe_rehash_efi_smoke PRIVATE
@@ -599,6 +610,7 @@ add_executable(divergence_efi_smoke
     src/vendor/efi_alloc.c
     src/vendor/efi_crt.c
     src/common/tcglog.c
+    src/common/sha256.c
 )
 target_include_directories(divergence_efi_smoke PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/vendor
@@ -706,6 +718,7 @@ add_executable(loader
     src/loader/efi_file.c
     src/loader/image_launch.c
     src/loader/payload_diagnostic.c
+    src/loader/handoff_diagnostic.c
     src/loader/pe_rehash.c
     src/loader/reference_log.c
     src/loader/tcg2.c
@@ -755,10 +768,12 @@ add_executable(inventory_loader
     src/loader/efi_file.c
     src/loader/image_launch.c
     src/loader/inventory_entry.c
+    src/common/sha256.c
     src/vendor/efi_crt.c
 )
 target_include_directories(inventory_loader PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/vendor
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/common
     ${CMAKE_CURRENT_SOURCE_DIR}/src/loader
 )
 target_compile_options(inventory_loader PRIVATE
@@ -832,7 +847,7 @@ if(IB_STATIC_RUNTIME AND MSVC)
                                reference_log tcglog_test
                                tcglog_ib_test pcr_gate_test replay_test
                                divergence_test sha256_test reference_log_test
-                               boot_restore_test efi_file_test image_launch_test payload_diagnostic_test tcg2_test
+                               boot_restore_test efi_file_test image_launch_test payload_diagnostic_test handoff_diagnostic_test tcg2_test
                                inventory_entry_test shim_inventory_test shim_chain_test uefi_runtime_abi_test
                                replay_uefi_path_test
                                install_sign_test install_authenticode_test

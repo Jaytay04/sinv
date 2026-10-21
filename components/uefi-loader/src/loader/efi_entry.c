@@ -5,6 +5,7 @@
 #include "boot_restore.h"
 #include "divergence.h"
 #include "efi_file.h"
+#include "handoff_diagnostic.h"
 #include "image_launch.h"
 #include "pcr_gate.h"
 #include "payload_diagnostic.h"
@@ -243,10 +244,95 @@ static int sha256_replay_matches(EFI_TCG2_PROTOCOL *tcg2,
     return 1;
 }
 
-static void write_status(EFI_HANDLE image_handle, const UINT8 *text,
-                         UINTN size)
+static UINT8 g_handoff_diagnostic[HANDOFF_DIAGNOSTIC_MAX_SIZE];
+static UINTN g_handoff_diagnostic_size;
+
+static void con_print_ascii_bytes(const UINT8 *bytes, UINTN size)
 {
-    (void)efi_file_write(image_handle, g_status_path, text, size);
+    CHAR16 line[128];
+    UINTN input, used = 0u;
+    for (input = 0u; input < size; input++) {
+        if (used + 3u >= sizeof(line) / sizeof(line[0])) {
+            line[used] = 0; con_print(line); used = 0u;
+        }
+        if (bytes[input] == (UINT8)'\n') { line[used++] = (CHAR16)'\r'; }
+        line[used++] = (CHAR16)bytes[input];
+    }
+    line[used] = 0; con_print(line);
+}
+
+static void con_print_digest(const UINT8 digest[32])
+{
+    UINTN index;
+    for (index = 0u; index < 32u; index++) { con_print_hex(digest[index], 2u); }
+}
+
+static void write_diagnostic_verified(EFI_HANDLE image_handle,
+    const CHAR16 *path, const CHAR16 *label, const UINT8 *bytes, UINTN size)
+{
+    efi_file_write_verification_t verification;
+    EFI_STATUS result = efi_file_write_verified(image_handle, path, bytes, size,
+                                                &verification);
+    con_print(label);
+    con_print(EFI_ERROR(verification.WriteStatus) ? L" write: FAIL\r\n" : L" write: PASS\r\n");
+    con_print(label);
+    if (!verification.ReadAttempted) {
+        con_print(L" readback: NOT_RUN\r\n");
+    } else {
+        con_print(!EFI_ERROR(result) && verification.Match ?
+            L" readback: PASS sha256=" : L" readback: FAIL sha256=");
+        con_print_digest(verification.ObservedSha256); con_print(L"\r\n");
+    }
+    if (EFI_ERROR(result) || !verification.Match) {
+        con_print(L"diagnostic result=0x"); con_print_hex((UINT64)result, 16u);
+        con_print(L" write=0x"); con_print_hex((UINT64)verification.WriteStatus, 16u);
+        con_print(L" flush=0x"); con_print_hex((UINT64)verification.FlushStatus, 16u);
+        con_print(L" file_close=0x"); con_print_hex((UINT64)verification.FileCloseStatus, 16u);
+        con_print(L" root_close=0x"); con_print_hex((UINT64)verification.RootCloseStatus, 16u);
+        con_print(L" read=0x"); con_print_hex((UINT64)verification.ReadStatus, 16u);
+        con_print(L"\r\nexpected_size=0x"); con_print_hex((UINT64)verification.ExpectedSize, 16u);
+        con_print(L" observed_size=0x"); con_print_hex((UINT64)verification.ObservedSize, 16u);
+        con_print(L" expected_sha256="); con_print_digest(verification.ExpectedSha256);
+        con_print(L"\r\n");
+    }
+}
+
+static void write_status(EFI_HANDLE image_handle, const UINT8 *text, UINTN size)
+{
+    UINTN index;
+    g_handoff_diagnostic_size = 0u;
+    if (size > sizeof(g_handoff_diagnostic)) {
+        con_print(L"handoff status format: FAIL\r\n"); return;
+    }
+    for (index = 0u; index < size; index++) { g_handoff_diagnostic[index] = text[index]; }
+    g_handoff_diagnostic_size = size;
+    write_diagnostic_verified(image_handle, g_status_path, L"handoff status", text, size);
+}
+
+typedef struct {
+    EFI_HANDLE ImageHandle;
+    const char *Target;
+} handoff_observer_context_t;
+
+static void observe_handoff(void *context, const char *phase,
+                             BOOLEAN completed, EFI_STATUS status)
+{
+    handoff_observer_context_t *observer = (handoff_observer_context_t *)context;
+    UINTN prior = g_handoff_diagnostic_size;
+    const char *shim_phase = NULL;
+    EFI_STATUS shim_status = EFI_NOT_STARTED;
+    if (completed && phase[0] == 'l') {
+        shim_chain_get_last_load_trace(&shim_phase, &shim_status);
+    }
+    if (!handoff_diagnostic_append(g_handoff_diagnostic,
+            sizeof(g_handoff_diagnostic), &g_handoff_diagnostic_size,
+            observer->Target, phase, completed, status, shim_phase, shim_status)) {
+        con_print(L"handoff trace append: FAIL\r\n"); return;
+    }
+    /* The before-call record remains useful if firmware never returns. */
+    con_print_ascii_bytes(g_handoff_diagnostic + prior, g_handoff_diagnostic_size - prior);
+    write_diagnostic_verified(observer->ImageHandle, g_status_path, L"handoff status",
+        g_handoff_diagnostic, g_handoff_diagnostic_size);
 }
 
 static payload_diagnostic_launch_t payload_diagnostic_launch_from_result(
@@ -273,52 +359,17 @@ static void report_payload_diagnostic(EFI_HANDLE image_handle,
                                       const hv_boot_diagnostic_t *Startup)
 {
     UINT8 bytes[PAYLOAD_DIAGNOSTIC_MAX_SIZE];
-    CHAR16 console_text[128];
     UINTN size = 0;
-    UINTN input;
-    UINTN output = 0;
-    EFI_STATUS status;
 
     if (!payload_diagnostic_format_with_startup(
             Diagnostic, StartupState, Startup, bytes, sizeof(bytes), &size)) {
         con_print(L"payload diagnostic format: FAIL\r\n");
         return;
     }
-    for (input = 0; input < size; input++) {
-        if (bytes[input] == (UINT8)'\n') {
-            if (output + 2u >= sizeof(console_text) / sizeof(console_text[0])) {
-                console_text[output] = 0;
-                con_print(console_text);
-                output = 0;
-            }
-            console_text[output++] = (CHAR16)'\r';
-            console_text[output++] = (CHAR16)'\n';
-            console_text[output] = 0;
-            con_print(console_text);
-            output = 0;
-        } else {
-            console_text[output++] = (CHAR16)bytes[input];
-            if (output + 1u >= sizeof(console_text) / sizeof(console_text[0])) {
-                console_text[output] = 0;
-                con_print(console_text);
-                output = 0;
-            }
-        }
-    }
-    if (output != 0u) {
-        console_text[output] = 0;
-        con_print(console_text);
-    }
+    con_print_ascii_bytes(bytes, size);
 
-    status = efi_file_write(image_handle, g_payload_diagnostic_path,
-                            bytes, size);
-    if (EFI_ERROR(status)) {
-        con_print(L"payload diagnostic write: FAIL (EFI_STATUS=0x");
-        con_print_hex((UINT64)status, 16u);
-        con_print(L")\r\n");
-    } else {
-        con_print(L"payload diagnostic write: PASS\r\n");
-    }
+    write_diagnostic_verified(image_handle, g_payload_diagnostic_path,
+        L"payload diagnostic", bytes, size);
 }
 
 static payload_diagnostic_startup_state_t
@@ -379,6 +430,11 @@ static EFI_STATUS restore_and_handoff(EFI_HANDLE image_handle,
     EFI_STATUS shim_load_status = EFI_NOT_STARTED;
     int payload_present = 0;
     int payload_succeeded = 0;
+    handoff_observer_context_t boot_observer;
+
+    g_handoff_diagnostic_size = 0u;
+    boot_observer.ImageHandle = image_handle;
+    boot_observer.Target = "boot_manager";
 
     payload_diagnostic.payload_launch = PAYLOAD_DIAG_SKIPPED;
     payload_diagnostic.payload_status = EFI_NOT_STARTED;
@@ -476,13 +532,18 @@ static EFI_STATUS restore_and_handoff(EFI_HANDLE image_handle,
     EFI_STATUS inventory_status;
     EFI_STATUS inventory_child_status;
     image_launch_status_t inventory_launch;
+    handoff_observer_context_t inventory_observer;
 
     /* Optional, read-only hardware-inventory payload. Its presence never
      * changes the loader verdict; a failure is console-only. */
     inventory_status = efi_file_exists(image_handle, g_inventory_path);
     if (inventory_status == EFI_SUCCESS) {
-        inventory_launch = image_launch_start(
-            image_handle, g_inventory_path, &inventory_child_status);
+        inventory_observer.ImageHandle = image_handle;
+        inventory_observer.Target = "inventory";
+        inventory_launch = image_launch_start_observed(
+            image_handle, g_inventory_path, &inventory_child_status,
+            observe_handoff, &inventory_observer);
+        observe_handoff(&inventory_observer, "return", TRUE, inventory_child_status);
         if (inventory_launch == IMAGE_LAUNCH_OK) {
             con_print(L"inventory collector: PASS\r\n");
         } else {
@@ -492,8 +553,9 @@ static EFI_STATUS restore_and_handoff(EFI_HANDLE image_handle,
     }
 }
 
-    launch = image_launch_start(image_handle, g_boot_manager_path,
-                                &child_status);
+    launch = image_launch_start_observed(image_handle, g_boot_manager_path,
+        &child_status, observe_handoff, &boot_observer);
+    observe_handoff(&boot_observer, "return", TRUE, child_status);
     if (launch != IMAGE_LAUNCH_OK) {
         con_print(L"loader production handoff: FAIL (boot manager launch)\r\n");
         return child_status;
