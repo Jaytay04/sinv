@@ -194,7 +194,7 @@ function New-MockOperations {
     return $ops
 }
 function Invoke-FixtureRetirement {
-    param([hashtable]$Fixture, [hashtable]$Operations, [switch]$Apply, [hashtable]$Pins)
+    param([hashtable]$Fixture, [hashtable]$Operations, [switch]$Apply, [hashtable]$Pins, [switch]$Configure023306BaselineGuard)
     $parameters = @{
         ToolRoot=$Fixture.ToolRoot; WorkspaceRoot=$Fixture.Root; Operations=$Operations; ExpectedRunId=$Fixture.RunId
         ExpectedAuditSha256=(Get-TestPin $Fixture.AuditPath).Sha256; ExpectedAuditBytes=(Get-TestPin $Fixture.AuditPath).Bytes
@@ -211,6 +211,38 @@ function Invoke-FixtureRetirement {
     }
     if ($Apply) { $parameters.Apply = $true }
     if ($null -ne $Pins) { foreach ($key in $Pins.Keys) { $parameters[$key]=$Pins[$key] } }
+    if ($Configure023306BaselineGuard) {
+        return & $retirementModule {
+            param($p,$fixture)
+            $previousRunId = $script:GpuRetirementRunId
+            $previousSourceCommit = $script:GpuRetirementSourceCommit
+            $previousProfile = $script:GpuRetirementProfile
+            try {
+                $script:GpuRetirement201140ProfileSelected = $false
+                $script:GpuRetirement224018ProfileSelected = $false
+                $script:GpuRetirement023306ProfileSelected = $true
+                $script:GpuRetirementRunId = $p.ExpectedRunId
+                $script:GpuRetirementSourceCommit = $fixture.Journal.SourceCommit
+                $script:GpuRetirementProfile = '023306'
+                $script:GpuRetirementFixtureStagePins = @($fixture.StagePins | ForEach-Object {
+                    [pscustomobject]@{ Name=$_.Name; RelativePath=$_.RelativePath; Sha256=$_.Sha256; Bytes=$_.Bytes }
+                })
+                function Assert-GpuStageRetirement023306Proof { param($Journal,$WorkspaceRoot) return @() }
+                function Assert-GpuStageRetirementEvidence {
+                    param($Audit,$Journal,$ArchivedSelector,$ExpectedAuditSha256,$ExpectedRunId,$ExpectedRunDirectory,$ExpectedJournalPath,$ExpectedSourceRoot)
+                    return @($script:GpuRetirementFixtureStagePins)
+                }
+                return Invoke-GpuStageRetirement @p
+            }
+            finally {
+                $script:GpuRetirement023306ProfileSelected = $false
+                $script:GpuRetirementRunId = $previousRunId
+                $script:GpuRetirementSourceCommit = $previousSourceCommit
+                $script:GpuRetirementProfile = $previousProfile
+                Remove-Variable -Name GpuRetirementFixtureStagePins -Scope Script -ErrorAction SilentlyContinue
+            }
+        } $parameters $Fixture
+    }
     return & $retirementModule { param($p) Invoke-GpuStageRetirement @p } $parameters
 }
 
@@ -536,6 +568,15 @@ try {
         Assert-Throws { & $retirementModule { param($root) Invoke-GpuStageRetirement -ToolRoot (Join-Path $root 'tools\gpu_diagnostic') -WorkspaceRoot $root -ExpectedAuditSha256 ('0'*64) } $fixture.Root } 'immutable|mock operations' 'Production pin override was accepted.'
         Assert-Throws { & $retirementModule { param($root) Invoke-GpuStageRetirement -ToolRoot (Join-Path $root 'tools\gpu_diagnostic') -WorkspaceRoot $root -ExpectedAuditToolRelativePath 'build\loader\ibaudit.exe' } $fixture.Root } 'immutable|mock operations' 'Production audit tool path override was accepted.'
         Assert-Throws { & $retirementModule { param($root) Invoke-GpuStageRetirement -ToolRoot (Join-Path $root 'tools\gpu_diagnostic') -WorkspaceRoot $root -ExpectedReviewedFirmwareRelativePath 'reviewed-firmware.txt' } $fixture.Root } 'immutable|mock operations' 'Production later firmware capture override was accepted.'
+    }
+    Invoke-TestCase '023306 refuses firmware mismatch instead of reusing the default reviewed-capture fallback' {
+        $fixture=New-TestFixture
+        $behavior=@{CopyCount=0;DeleteCount=0;BootCaptureCount=0;UnmountCount=0;FirmwareCaptureCount=0;FirmwareChangesAt=0;FailCopyAt=0;FailDeleteAt=0;DismountFails=$false;FirmwareChanges=$false;BootNextPresent=$false;BootReadFails=$false;BootOrderChanges=$false;WrongEsp=$false;UseReviewedFirmware=$true}
+        $result=Invoke-FixtureRetirement $fixture (New-MockOperations $fixture $behavior) -Apply -Configure023306BaselineGuard
+        Assert-True ($result.Status -ceq 'STAGE_RETIREMENT_FAILED' -and -not $result.Succeeded -and
+            ($result.Errors -join '; ') -match 'pinned 023306 original backup baseline' -and
+            $behavior.FirmwareCaptureCount -eq 1 -and $behavior.CopyCount -eq 0 -and $behavior.DeleteCount -eq 0 -and
+            (Test-Path -LiteralPath $fixture.StageDirectory)) '023306 accepted a changed firmware baseline or reached copy/removal.'
     }
     Invoke-TestCase 'WhatIf exits before importing helpers or touching filesystem/host state' {
         $before=(Get-ChildItem -LiteralPath $fixtureRoot -Force -Recurse -ErrorAction SilentlyContinue | Measure-Object).Count

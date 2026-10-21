@@ -3,6 +3,7 @@ param(
     [switch]$Apply,
     [switch]$CompletedRun201140,
     [switch]$CompletedRun224018,
+    [switch]$CompletedRun023306,
     [string]$ReadinessPath,
     [string]$ToolRoot
 )
@@ -24,13 +25,17 @@ if ((Split-Path -Leaf $WorktreeParent) -ieq 'worktrees' -and
     $WorkspaceRoot = $SourceRoot
 }
 
-if ($CompletedRun201140 -and $CompletedRun224018) {
-    throw 'CompletedRun201140 and CompletedRun224018 are mutually exclusive.'
+$selectedProfileCount = 0
+foreach ($profileSwitch in @($CompletedRun201140, $CompletedRun224018, $CompletedRun023306)) {
+    if ([bool]$profileSwitch) { $selectedProfileCount++ }
 }
-if (($CompletedRun201140 -or $CompletedRun224018) -and [string]::IsNullOrWhiteSpace($ReadinessPath)) {
+if ($selectedProfileCount -gt 1) {
+    throw 'CompletedRun201140, CompletedRun224018, and CompletedRun023306 are mutually exclusive.'
+}
+if (($CompletedRun201140 -or $CompletedRun224018 -or $CompletedRun023306) -and [string]::IsNullOrWhiteSpace($ReadinessPath)) {
     throw 'A completed-run profile requires the explicit EvidencePath from a fresh Get-GpuBaremetalReadiness.ps1 report.'
 }
-if (-not ($CompletedRun201140 -or $CompletedRun224018) -and -not [string]::IsNullOrWhiteSpace($ReadinessPath)) {
+if (-not ($CompletedRun201140 -or $CompletedRun224018 -or $CompletedRun023306) -and -not [string]::IsNullOrWhiteSpace($ReadinessPath)) {
     throw 'ReadinessPath is supported only with an explicit completed-run profile.'
 }
 
@@ -45,6 +50,7 @@ if ($WhatIfPreference) {
         EspMounted = $false
         CompletedRun201140 = [bool]$CompletedRun201140
         CompletedRun224018 = [bool]$CompletedRun224018
+        CompletedRun023306 = [bool]$CompletedRun023306
         Note = 'No probes, commands, or filesystem operations were executed. Default mode reviews and records evidence; -Apply requests removal of only the seven pinned files after all gates pass.'
     } | ConvertTo-Json -Depth 5
     return
@@ -58,13 +64,15 @@ $invokeParameters = @{
 }
 if ($PSBoundParameters.ContainsKey('Confirm')) { $invokeParameters.Confirm = [bool]$PSBoundParameters['Confirm'] }
 $result = & $retirementModule {
-    param($parameters, $useCompleted201140, $useCompleted224018, $workspace, $readiness)
+    param($parameters, $useCompleted201140, $useCompleted224018, $useCompleted023306, $workspace, $readiness)
     if ($useCompleted201140) {
         $null = Select-GpuStageRetirement201140Profile -WorkspaceRoot $workspace -ReadinessPath $readiness
     } elseif ($useCompleted224018) {
         $null = Select-GpuStageRetirement224018Profile -WorkspaceRoot $workspace -ReadinessPath $readiness
+    } elseif ($useCompleted023306) {
+        $null = Select-GpuStageRetirement023306Profile -WorkspaceRoot $workspace -ReadinessPath $readiness
     }
     Invoke-GpuStageRetirement @parameters
-} $invokeParameters ([bool]$CompletedRun201140) ([bool]$CompletedRun224018) $WorkspaceRoot $ReadinessPath
+} $invokeParameters ([bool]$CompletedRun201140) ([bool]$CompletedRun224018) ([bool]$CompletedRun023306) $WorkspaceRoot $ReadinessPath
 $result | ConvertTo-Json -Depth 24
 if (-not $result.Succeeded) { exit 1 }

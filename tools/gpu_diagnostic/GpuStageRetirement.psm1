@@ -90,6 +90,27 @@ $script:GpuRetirement224018HistoricalPlatformBytes = 111525L
 $script:GpuRetirement224018HistoricalRetirementSha256 = 'DF7F446426F63E21C5596E9CD1B35ECA0172C182B3E802B6267962B3EF8B1D75'
 $script:GpuRetirement224018HistoricalRetirementBytes = 105056L
 $script:GpuRetirement224018ProfileSelected = $false
+$script:GpuRetirement023306RunId = 'gpu-20261021T023306Z-f33dfae1e322470ca9315bbbf8d49185'
+$script:GpuRetirement023306JournalSha256 = 'AF913F6952E4614AB3A806DBC9C82667D62E5CA2CD955950030934D172DABAAC'
+$script:GpuRetirement023306JournalBytes = 44878L
+$script:GpuRetirement023306ArchiveSha256 = 'A988AE8937E5E785DC3EF87B64791BA3D424F5F3577089136F653DAB4E5AADC7'
+$script:GpuRetirement023306ArchiveBytes = 533L
+$script:GpuRetirement023306SourceCommit = '49fbf270093f5e65a3f00fd63077b113d662f301'
+$script:GpuRetirement023306ProbeSha256 = 'B03B7210D63494FAE909034406172CC76B97C48E6240B9CAFE593165F23FC5B2'
+$script:GpuRetirement023306ProbeBytes = 172544L
+$script:GpuRetirement023306ProbeRelativePath = '.codex-build\gb\a9315bbbf8d49185\l\ib-tcg-dump.exe'
+$script:GpuRetirement023306ReferenceLogSha256 = '22B1F571E7572C1D1448B14504AF18435EB487B39DB9E87C9592A95432A5C447'
+$script:GpuRetirement023306ReferenceLogBytes = 40838L
+$script:GpuRetirement023306ReferenceLogRelativePath = '.analysis\gpu-baremetal\runs\gpu-20261021T023306Z-f33dfae1e322470ca9315bbbf8d49185\actions\20261021T023634908Z-Backup-6667599ef49a4e44b62e049ac3f02ffa\tcglog.ib'
+$script:GpuRetirement023306OriginalFirmwareSha256 = '66786928B0A56B57EE9E2137A0645783C9E6C090B6E9B65F88FBF5B91DAA5007'
+$script:GpuRetirement023306OriginalFirmwareBytes = 2890L
+$script:GpuRetirement023306OriginalFirmwareRelativePath = '.analysis\gpu-baremetal\runs\gpu-20261021T023306Z-f33dfae1e322470ca9315bbbf8d49185\actions\20261021T023634908Z-Backup-6667599ef49a4e44b62e049ac3f02ffa\firmware-enumeration-backup-f52e3a8fa4b1421ab4497119e1a3287a.stdout.txt'
+$script:GpuRetirement023306FinalActionRelativePath = '.analysis\gpu-baremetal\runs\gpu-20261021T023306Z-f33dfae1e322470ca9315bbbf8d49185\actions\20261021T024702343Z-FinalVerify-d4bc5edd8707406f8b22c2fa341b6217'
+$script:GpuRetirement023306FinalResultRelativePath = $script:GpuRetirement023306FinalActionRelativePath + '\result.json'
+$script:GpuRetirement023306FinalResultSha256 = '6B51CD5351AAC75605868122730C38998093F5B73226DDA48A322179CA55093F'
+$script:GpuRetirement023306FinalResultBytes = 2221L
+$script:GpuRetirement023306BootManagerSha256 = '3F8A4CBBC97B89836DF92C4895236BE1FAC4A127665420D90509E897A7298511'
+$script:GpuRetirement023306ProfileSelected = $false
 $script:GpuRetirementSelectedReadinessPath = $null
 $script:GpuRetirementProfile = '150318'
 
@@ -979,6 +1000,108 @@ function Assert-GpuStageRetirement224018Proof {
     return @($extraPins.ToArray())
 }
 
+function Assert-GpuStageRetirement023306Proof {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][object]$Journal,
+        [Parameter(Mandatory = $true)][string]$WorkspaceRoot
+    )
+
+    $workspace = [IO.Path]::GetFullPath($WorkspaceRoot)
+    $runDirectory = Join-Path (Join-Path $workspace '.analysis\gpu-baremetal\runs') $script:GpuRetirement023306RunId
+    $last = $Journal.LastAction
+    $verification = $Journal.FinalVerification
+    $enumeration = if ($null -ne $verification) { $verification.FirmwareEnumeration } else { $null }
+    if ([string]$Journal.RunId -cne $script:GpuRetirement023306RunId -or
+        [IO.Path]::GetFullPath([string]$Journal.RunDirectory) -cne [IO.Path]::GetFullPath($runDirectory) -or
+        [string]$Journal.SourceCommit -cne $script:GpuRetirement023306SourceCommit -or
+        [string]$Journal.Phase -cne 'Complete' -or $null -ne $Journal.InProgress -or
+        $null -eq $last -or [string]$last.Action -cne 'FinalVerify' -or $last.Succeeded -ne $true -or
+        [string]$last.Status -cne 'FINAL_RESET_VERIFIED_GPU_UNATTESTED' -or
+        [IO.Path]::GetFullPath([string]$last.Directory) -cne [IO.Path]::GetFullPath((Join-Path $workspace $script:GpuRetirement023306FinalActionRelativePath))) {
+        throw 'The 023306 journal lacks the exact successful normal FinalVerify action.'
+    }
+    if ($null -eq $verification -or $verification.ResetBoundaryPassed -ne $true -or
+        $verification.ActivationAttempted -ne $true -or $verification.SecureBoot -ne $true -or
+        $verification.ActiveGpuProof -ne $false -or [string]$verification.GpuAttestation -cne 'UNATTESTED' -or
+        @($verification.Errors).Count -ne 0 -or $null -eq $verification.Health -or
+        $verification.Health.Passed -ne $true -or [string]$verification.Health.ExpectedResult -cne 'ABSENT' -or
+        [string]$verification.Health.Aggregate -cne 'ABSENT' -or
+        [int]$verification.Health.CpuCount -ne 20 -or [int]$verification.Health.ExpectedCpus -ne 20 -or
+        [int]$verification.Health.CpuPassCount -ne 0 -or $null -eq $verification.Esp -or
+        $verification.Esp.MatchesBaseline -ne $true -or
+        [string]$verification.Esp.BootManagerSha256 -cne $script:GpuRetirement023306BootManagerSha256 -or
+        [string]$verification.Esp.PartitionGuid -cne '187BC913-7576-4E6E-8D54-18EEB5C38FCD' -or
+        [int]$verification.Esp.DiskNumber -ne 0) {
+        throw 'The 023306 final verification does not satisfy reset, ABSENT health, Secure Boot, baseline ESP, and unattested-GPU gates.'
+    }
+    if ($null -eq $enumeration -or $enumeration.TextEqual -ne $true -or
+        [string]$enumeration.BaselineSha256 -cne $script:GpuRetirement023306OriginalFirmwareSha256 -or
+        [string]$enumeration.CurrentSha256 -cne $script:GpuRetirement023306OriginalFirmwareSha256 -or
+        [string]$enumeration.CaptureContext -cne 'SystemEspMountedAtS' -or
+        ($null -ne $enumeration.PSObject.Properties['ReviewedDifferenceAccepted'] -and $enumeration.ReviewedDifferenceAccepted -eq $true)) {
+        throw 'The 023306 final verification does not match its pinned original firmware baseline.'
+    }
+
+    $backupFirmware = $Journal.Backup.FirmwareEnumeration
+    $expectedFirmwarePath = Join-Path $workspace $script:GpuRetirement023306OriginalFirmwareRelativePath
+    if ($null -eq $backupFirmware -or
+        [IO.Path]::GetFullPath([string]$backupFirmware.Path) -cne [IO.Path]::GetFullPath($expectedFirmwarePath) -or
+        [string]$backupFirmware.Sha256 -cne $script:GpuRetirement023306OriginalFirmwareSha256 -or
+        [long]$backupFirmware.Bytes -ne $script:GpuRetirement023306OriginalFirmwareBytes) {
+        throw 'The 023306 original firmware baseline path or pin differs from the fixed Backup action.'
+    }
+    $firmwarePin = Assert-GpuRetirementProfilePin -Pin $backupFirmware -ExpectedPath $expectedFirmwarePath `
+        -ExpectedSha256 $script:GpuRetirement023306OriginalFirmwareSha256 -ExpectedBytes $script:GpuRetirement023306OriginalFirmwareBytes `
+        -WorkspaceRoot $workspace -Description 'Original 023306 firmware baseline'
+
+    $referenceLog = $Journal.Backup.ReferenceLog
+    $expectedReferencePath = Join-Path $workspace $script:GpuRetirement023306ReferenceLogRelativePath
+    if ($null -eq $referenceLog -or
+        [IO.Path]::GetFullPath([string]$referenceLog.Path) -cne [IO.Path]::GetFullPath($expectedReferencePath) -or
+        [string]$referenceLog.Sha256 -cne $script:GpuRetirement023306ReferenceLogSha256 -or
+        [long]$referenceLog.Bytes -ne $script:GpuRetirement023306ReferenceLogBytes) {
+        throw 'The 023306 TPM reference log path or pin differs from the fixed Backup action.'
+    }
+    $referencePin = Assert-GpuRetirementProfilePin -Pin $referenceLog -ExpectedPath $expectedReferencePath `
+        -ExpectedSha256 $script:GpuRetirement023306ReferenceLogSha256 -ExpectedBytes $script:GpuRetirement023306ReferenceLogBytes `
+        -WorkspaceRoot $workspace -Description 'Pinned 023306 TPM reference log'
+
+    $probePath = Join-Path $workspace $script:GpuRetirement023306ProbeRelativePath
+    if ($null -eq $Journal.Tools -or $null -eq $Journal.Tools.Probe -or
+        [IO.Path]::GetFullPath([string]$Journal.Tools.Probe.Path) -cne [IO.Path]::GetFullPath($probePath)) {
+        throw 'The 023306 health probe path differs from the fixed build output.'
+    }
+    $probePin = Assert-GpuRetirementProfilePin -Pin $Journal.Tools.Probe -ExpectedPath $probePath `
+        -ExpectedSha256 $script:GpuRetirement023306ProbeSha256 -ExpectedBytes $script:GpuRetirement023306ProbeBytes `
+        -WorkspaceRoot $workspace -Description 'Pinned 023306 health probe'
+
+    $finalResultPath = Join-Path $workspace $script:GpuRetirement023306FinalResultRelativePath
+    $finalResultPin = Assert-GpuRetirementProfilePin `
+        -Pin ([pscustomobject]@{ Path=$finalResultPath; Sha256=$script:GpuRetirement023306FinalResultSha256; Bytes=$script:GpuRetirement023306FinalResultBytes }) `
+        -ExpectedPath $finalResultPath -ExpectedSha256 $script:GpuRetirement023306FinalResultSha256 `
+        -ExpectedBytes $script:GpuRetirement023306FinalResultBytes -WorkspaceRoot $workspace -Description 'Successful 023306 FinalVerify result'
+    $finalResult = Get-Content -LiteralPath $finalResultPin.Path -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
+    $resultVerification = $finalResult.Details.FinalVerification
+    if ([string]$finalResult.Action -cne 'FinalVerify' -or
+        [string]$finalResult.Status -cne 'FINAL_RESET_VERIFIED_GPU_UNATTESTED' -or
+        $finalResult.Succeeded -ne $true -or
+        [IO.Path]::GetFullPath([string]$finalResult.RunDirectory) -cne [IO.Path]::GetFullPath($runDirectory) -or
+        [string]$finalResult.Details.Status -cne 'FINAL_RESET_VERIFIED_GPU_UNATTESTED' -or
+        $finalResult.Details.Succeeded -ne $true -or $null -eq $resultVerification -or
+        $resultVerification.ResetBoundaryPassed -ne $true -or $resultVerification.SecureBoot -ne $true -or
+        [string]$resultVerification.GpuAttestation -cne 'UNATTESTED' -or
+        $null -eq $resultVerification.Health -or $resultVerification.Health.Passed -ne $true -or
+        [string]$resultVerification.Health.ExpectedResult -cne 'ABSENT' -or
+        [string]$resultVerification.Health.Aggregate -cne 'ABSENT' -or
+        [int]$resultVerification.Health.CpuCount -ne 20 -or [int]$resultVerification.Health.ExpectedCpus -ne 20 -or
+        @($resultVerification.Errors).Count -ne 0) {
+        throw 'The pinned 023306 FinalVerify result is not the exact successful normal reset verification.'
+    }
+
+    return @($firmwarePin,$referencePin,$probePin,$finalResultPin)
+}
+
 function Select-GpuStageRetirement201140Profile {
     [CmdletBinding()]
     param(
@@ -986,7 +1109,7 @@ function Select-GpuStageRetirement201140Profile {
         [Parameter(Mandatory = $true)][string]$ReadinessPath
     )
 
-    if ($script:GpuRetirement201140ProfileSelected -or $script:GpuRetirement224018ProfileSelected) {
+    if ($script:GpuRetirement201140ProfileSelected -or $script:GpuRetirement224018ProfileSelected -or $script:GpuRetirement023306ProfileSelected) {
         throw 'A completed-run retirement profile is already bound in this module instance.'
     }
     $workspace = [IO.Path]::GetFullPath($WorkspaceRoot)
@@ -1060,7 +1183,7 @@ function Select-GpuStageRetirement224018Profile {
         [Parameter(Mandatory = $true)][string]$ReadinessPath
     )
 
-    if ($script:GpuRetirement201140ProfileSelected -or $script:GpuRetirement224018ProfileSelected) {
+    if ($script:GpuRetirement201140ProfileSelected -or $script:GpuRetirement224018ProfileSelected -or $script:GpuRetirement023306ProfileSelected) {
         throw 'A completed-run retirement profile is already bound in this module instance.'
     }
     $workspace = [IO.Path]::GetFullPath($WorkspaceRoot)
@@ -1127,6 +1250,78 @@ function Select-GpuStageRetirement224018Profile {
     }
 }
 
+function Select-GpuStageRetirement023306Profile {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$WorkspaceRoot,
+        [Parameter(Mandatory = $true)][string]$ReadinessPath
+    )
+
+    if ($script:GpuRetirement201140ProfileSelected -or $script:GpuRetirement224018ProfileSelected -or $script:GpuRetirement023306ProfileSelected) {
+        throw 'A completed-run retirement profile is already bound in this module instance.'
+    }
+    $workspace = [IO.Path]::GetFullPath($WorkspaceRoot)
+    $readinessRoot = Join-Path $workspace '.analysis\gpu-baremetal-readiness'
+    if (-not [IO.Directory]::Exists($readinessRoot)) { throw 'The workspace readiness evidence directory is missing.' }
+    $readinessRootFull = [IO.Path]::GetFullPath($readinessRoot).TrimEnd([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $readinessFull = Assert-GpuRetirementSafeWorkspaceFile -Path $ReadinessPath -WorkspaceRoot $workspace
+    $prefix = $readinessRootFull + [IO.Path]::DirectorySeparatorChar
+    if (-not $readinessFull.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'ReadinessPath must name a report under .analysis\gpu-baremetal-readiness.'
+    }
+    $relative = $readinessFull.Substring($prefix.Length)
+    if ($relative -notmatch '^([0-9a-fA-F]{32})\\readiness\.json$') {
+        throw 'ReadinessPath must explicitly name <guid>\readiness.json under .analysis\gpu-baremetal-readiness.'
+    }
+    $readinessGuid = $Matches[1].ToLowerInvariant()
+    $readinessDirectory = Join-Path $readinessRootFull $readinessGuid
+    if ([IO.Path]::GetFullPath([IO.Path]::GetDirectoryName($readinessFull)) -cne [IO.Path]::GetFullPath($readinessDirectory)) {
+        throw 'Readiness report directory does not match its GUID path.'
+    }
+    $readinessPin = Get-GpuStageRetirementPin -Path $readinessFull
+    $readiness = Get-Content -LiteralPath $readinessFull -Raw -Encoding UTF8 | ConvertFrom-Json -ErrorAction Stop
+    if ($readiness.SchemaVersion -ne 1 -or [string]$readiness.Status -cne 'BLOCKED_READINESS' -or
+        $readiness.Succeeded -ne $false -or
+        [IO.Path]::GetFullPath([string]$readiness.EvidencePath) -cne $readinessFull -or
+        [IO.Path]::GetFullPath([string]$readiness.EvidenceDirectory) -cne [IO.Path]::GetFullPath($readinessDirectory) -or
+        $null -eq $readiness.Selector -or $readiness.Selector.Exists -ne $false -or $readiness.Selector.Valid -ne $true -or
+        $null -ne $readiness.Selector.Error -or $null -eq $readiness.Cleanup -or $readiness.Cleanup.Succeeded -ne $true -or
+        @($readiness.Cleanup.Errors).Count -ne 0 -or $null -eq $readiness.Esp -or
+        $readiness.Esp.Inspected -ne $true -or [string]$readiness.Esp.MountStateAfterCleanup -cne 'Unmounted' -or
+        $null -eq $readiness.Effects -or $readiness.Effects.EspFilesChanged -ne $false -or
+        $readiness.Effects.FirmwareChanged -ne $false -or $readiness.Effects.BootStateChanged -ne $false -or
+        $readiness.Effects.EspTemporarilyMounted -ne $true -or $null -eq $readiness.ExistingStage -or
+        $readiness.ExistingStage.Exists -ne $true -or $readiness.ExistingStage.Complete -ne $true) {
+        throw 'The explicit readiness report is not a complete, cleanly unmounted BLOCKED_READINESS capture with no host changes and no active selector.'
+    }
+
+    $script:GpuRetirement023306ProfileSelected = $true
+    $script:GpuRetirementSelectedReadinessPath = $readinessFull
+    $script:GpuRetirementProfile = '023306'
+    $script:GpuRetirementRunId = $script:GpuRetirement023306RunId
+    $script:GpuRetirementAuditRelativePath = '.analysis\gpu-baremetal-readiness\' + $readinessGuid + '\readiness.json'
+    $script:GpuRetirementAuditSha256 = $readinessPin.Sha256
+    $script:GpuRetirementAuditBytes = [long]$readinessPin.Bytes
+    $script:GpuRetirementJournalSha256 = $script:GpuRetirement023306JournalSha256
+    $script:GpuRetirementJournalBytes = $script:GpuRetirement023306JournalBytes
+    $script:GpuRetirementArchiveSha256 = $script:GpuRetirement023306ArchiveSha256
+    $script:GpuRetirementArchiveBytes = $script:GpuRetirement023306ArchiveBytes
+    $script:GpuRetirementSourceCommit = $script:GpuRetirement023306SourceCommit
+    $script:GpuRetirementProbeSha256 = $script:GpuRetirement023306ProbeSha256
+    $script:GpuRetirementProbeBytes = $script:GpuRetirement023306ProbeBytes
+    $script:GpuRetirementReferenceLogSha256 = $script:GpuRetirement023306ReferenceLogSha256
+    $script:GpuRetirementReferenceLogBytes = $script:GpuRetirement023306ReferenceLogBytes
+    return [pscustomobject]@{
+        Profile = '023306'
+        RunId = $script:GpuRetirementRunId
+        ReadinessPath = $readinessFull
+        ReadinessPin = $readinessPin
+        JournalSha256 = $script:GpuRetirementJournalSha256
+        ArchiveSha256 = $script:GpuRetirementArchiveSha256
+        SourceCommit = $script:GpuRetirementSourceCommit
+    }
+}
+
 function Assert-GpuStageRetirementEvidence {
     [CmdletBinding()]
     param(
@@ -1179,6 +1374,14 @@ function Assert-GpuStageRetirementEvidence {
         $verification.FirmwareEnumeration.ReviewedDifferenceAccepted -eq $true -and
         [string]$verification.FirmwareEnumeration.BaselineSha256 -ceq $script:GpuRetirement224018OriginalFirmwareSha256 -and
         [string]$verification.FirmwareEnumeration.CurrentSha256 -ceq $script:GpuRetirement224018CurrentFirmwareSha256
+    } elseif ($script:GpuRetirement023306ProfileSelected) {
+        $null -ne $verification -and $null -ne $verification.FirmwareEnumeration -and
+        $verification.FirmwareEnumeration.TextEqual -eq $true -and
+        [string]$verification.FirmwareEnumeration.BaselineSha256 -ceq $script:GpuRetirement023306OriginalFirmwareSha256 -and
+        [string]$verification.FirmwareEnumeration.CurrentSha256 -ceq $script:GpuRetirement023306OriginalFirmwareSha256 -and
+        [string]$verification.FirmwareEnumeration.CaptureContext -ceq 'SystemEspMountedAtS' -and
+        ($null -eq $verification.FirmwareEnumeration.PSObject.Properties['ReviewedDifferenceAccepted'] -or
+         $verification.FirmwareEnumeration.ReviewedDifferenceAccepted -ne $true)
     } else {
         $null -ne $verification -and $null -ne $verification.FirmwareEnumeration -and
         $verification.FirmwareEnumeration.TextEqual -eq $true
@@ -1685,6 +1888,8 @@ function Invoke-GpuStageRetirement {
             $profileEvidencePins = @(Assert-GpuStageRetirement201140Proof -Journal $journal -WorkspaceRoot $WorkspaceRoot)
         } elseif ($script:GpuRetirement224018ProfileSelected) {
             $profileEvidencePins = @(Assert-GpuStageRetirement224018Proof -Journal $journal -WorkspaceRoot $WorkspaceRoot)
+        } elseif ($script:GpuRetirement023306ProfileSelected) {
+            $profileEvidencePins = @(Assert-GpuStageRetirement023306Proof -Journal $journal -WorkspaceRoot $WorkspaceRoot)
         }
         $probePath = [IO.Path]::GetFullPath((Join-Path ([string]$journal.Paths.LoaderBuild) 'ib-tcg-dump.exe'))
         if ([IO.Path]::GetFullPath([string]$journal.Tools.Probe.Path) -cne $probePath -or
@@ -1783,6 +1988,13 @@ function Invoke-GpuStageRetirement {
             $baselineText = $reviewedFirmwareText
             $report.FirmwareBaselineSource = 'REVIEWED_' + $script:GpuRetirementProfile + '_FINAL_CAPTURE'
             $report.ReviewedFirmwareBaselinePin = $reviewedFirmwarePin
+        }
+        elseif ($script:GpuRetirement023306ProfileSelected) {
+            if (-not $report.OriginalFirmwareBaselineEqual) {
+                throw 'Current firmware enumeration differs from the pinned 023306 original backup baseline; no reviewed-capture override is permitted.'
+            }
+            $baselineText = $archivedBaselineText
+            $report.FirmwareBaselineSource = 'ARCHIVED_BACKUP'
         }
         elseif ($report.OriginalFirmwareBaselineEqual) {
             $baselineText = $archivedBaselineText
