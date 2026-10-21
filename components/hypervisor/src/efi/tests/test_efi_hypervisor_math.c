@@ -1383,7 +1383,9 @@ int main(int argc, char **argv)
                        offsetof(HV_EFI_CONTEXT, GpuHostPat) == 1192 &&
                        offsetof(HV_EFI_CONTEXT, GpuVmWcStatePhysical) == 1200 &&
                        offsetof(HV_EFI_CONTEXT, GpuVmWcEntry) == 1208 &&
-                       sizeof(HV_EFI_CONTEXT) == 1216,
+                       offsetof(HV_EFI_CONTEXT, StorageDiagnosticEntry) == 1216 &&
+                       offsetof(HV_EFI_CONTEXT, StorageDiagnosticStatePhysical) == 1224 &&
+                       sizeof(HV_EFI_CONTEXT) == 1232,
                        "AP activation, EPT audit, and guest transition state append without ABI drift");
     failures += expect(HV_EFI_RESIDENT_CODE_PAGES == 3 &&
                        HV_EFI_GUEST_TRANSITION_CODE_PAGES == 1,

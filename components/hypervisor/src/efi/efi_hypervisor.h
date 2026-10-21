@@ -783,6 +783,8 @@ typedef struct HV_EFI_CONTEXT {
     uint64_t GpuHostPat;                          /* 1192 */
     uint64_t GpuVmWcStatePhysical;                /* 1200; test image only */
     uint64_t GpuVmWcEntry;                        /* 1208; test image only */
+    uint64_t StorageDiagnosticEntry;              /* 1216 */
+    uint64_t StorageDiagnosticStatePhysical;      /* 1224 */
 } HV_EFI_CONTEXT;
 
 /* Source-compatible descriptive aliases for the guest descriptor fields. */
@@ -879,6 +881,9 @@ _Static_assert(offsetof(HV_EFI_CONTEXT, RuntimeAnalysisEntry) == 1144,
                "runtime analysis entry ABI drift");
 _Static_assert(offsetof(HV_EFI_CONTEXT, RuntimeAnalysisStatePhysical) == 1152,
                "runtime analysis state ABI drift");
+_Static_assert(offsetof(HV_EFI_CONTEXT, StorageDiagnosticEntry) == 1216 &&
+               offsetof(HV_EFI_CONTEXT, StorageDiagnosticStatePhysical) == 1224,
+               "storage diagnostic context ABI drift");
 _Static_assert(offsetof(HV_EFI_CONTEXT, UserCommandState) == 1168,
                "user command state ABI drift");
 _Static_assert(sizeof(HV_EFI_MEMORY_DESCRIPTOR_VIEW) == 40,

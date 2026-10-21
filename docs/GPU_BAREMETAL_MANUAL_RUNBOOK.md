@@ -1,6 +1,54 @@
 # Intel UHD 770 bare-metal diagnostic runbook
 
-## Current checkpoint: run 213919 retired; fresh readiness clear
+## Current checkpoint: run 225049 archived; five staged files retained
+
+Run `gpu-20261021T225049Z-9ac846fd923441cf9b7f0a75a2e0d246` is complete and
+archived. FinalVerify passed reset, Secure Boot, all 20 expected `ABSENT`
+health observations and the Windows boot-manager hash. GPU isolation remains
+unattested. The latest readiness inspection found only the five files owned by
+this completed run retained on the ESP. Do not start Prepare until those files
+are retired and a new readiness result reports `READY_FOR_FRESH_PREPARE`.
+
+From elevated 64-bit PowerShell in the main workspace, review and apply the
+run-specific retirement profile. It is bound to the saved readiness report
+below and to run225049's archived evidence. Stop if Review does not succeed;
+apply only after it reports `REVIEWED_STAGE_READY_FOR_RETIREMENT`.
+
+```powershell
+Set-Location 'C:\Users\jayli\OneDrive\Documents\Projects\hsinv'
+$readinessPath = '.\.analysis\gpu-baremetal-readiness\d34e0d3f9e9d45679c79529c3fc9545b\readiness.json'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun225049 -ReadinessPath $readinessPath
+```
+
+After a successful review, apply the same profile once:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun225049 -ReadinessPath $readinessPath -Apply
+```
+
+Require `STAGE_RETIRED`, `Succeeded: true`, no errors, and a successfully
+unmounted ESP. Then capture fresh readiness; the saved report is only the
+retirement input and must not be reused for Prepare:
+
+```powershell
+$readiness = powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Get-GpuBaremetalReadiness.ps1 | Out-String | ConvertFrom-Json
+$readiness | Select-Object Status, Blockers, EvidencePath | ConvertTo-Json -Depth 8
+```
+
+Continue only if the fresh result says `READY_FOR_FRESH_PREPARE` with no
+blockers. If retirement or readiness fails, preserve all evidence and stop;
+do not retry Apply or delete ESP files manually. Confirm the diagnostic
+worktree is on the intended committed revision and clean before Prepare. Run
+the stages below one at a time and stop on any failure. The operator performs
+the reboot manually after Arm; the script does not reboot automatically.
+
+The next-build diagnostics attempt a read-only, bounded VT-d and storage PCI
+snapshot after a traced storage failure. They add evidence for investigation;
+they do not claim to fix the observed boot-manager read failure. See the
+[225049 investigation](GPU_PAYLOAD_FAILURE_INVESTIGATION.md#run-225049-boot-manager-volume-open-fails-after-payload-return)
+for output fields and their limits.
+
+## Historical checkpoint: run 213919 retired
 
 Run `gpu-20261021T213919Z-61d3e8eb278f4c819457cd6aa8fb80b1` is archived. Its
 journal is `Complete`, with no action in progress or final failure, and the
@@ -43,6 +91,8 @@ by the start-begin marker. The short video does not show a StartImage return
 error or the later Windows UI. The observed PCI refusal is separate from the
 older post-activation storage failure; this run never reached activation and
 does not validate a fix for that failure.
+
+## Fresh-run stages
 
 Use elevated 64-bit PowerShell from the main workspace. Execute one command at
 a time and require `Succeeded: true` before advancing through Arm. No VM is
@@ -408,11 +458,12 @@ git -C .\.codex-build\worktrees\gpu-windows-validation status --short --branch
 ```
 
 ```powershell
-git -C .\.codex-build\worktrees\gpu-windows-validation merge-base --is-ancestor 15c79ba HEAD
+git -C .\.codex-build\worktrees\gpu-windows-validation rev-parse HEAD
 ```
 
-Require branch `feat/smbios-boot-serial-probe`, no local changes, and exit code
-zero from the ancestry check. Do not update source between Prepare and Arm.
+Require branch `feat/smbios-boot-serial-probe`, no local changes, and the
+intended committed source revision. Compare the revision with the one approved
+for the run before Prepare. Do not update source between Prepare and Arm.
 
 Have the tested full-system backup and recovery media ready, connect the
 recovery disk, and keep the BitLocker recovery key available offline. The
@@ -530,7 +581,10 @@ The expected health-only success status is
 `COLLECTED_HEALTH_ONLY_GPU_UNATTESTED`. A failure status still produces
 important evidence. Preserve the complete output and the action directory's
 `esp-payload-diagnostic.txt`, `esp-handoff-status.txt` when present, health captures,
-and console photographs. Keep the raw EFI statuses and shim phase fields.
+and console photographs. Keep the raw EFI statuses, shim phase fields, and
+every console line beginning `storage_fault`; these VT-d snapshot details are
+console diagnostics and do not add another ESP file. A `capture=attempted`
+line records that the query was issued, not that all register reads were valid.
 The existing diagnostic distinguishes file read, device-path construction,
 `LoadImage`, and `StartImage`, and records each high-level returned status.
 Those phases alone do not identify which filesystem protocol call failed

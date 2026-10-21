@@ -58,6 +58,7 @@ else()
             shadow_ept.cpp
             efi_hypervisor.c
             efi_hypervisor_math.c
+            storage_fault_diagnostic.c
             iommu_isolation.cpp
             iommu_runtime.c
             interrupt_policy.cpp
@@ -91,6 +92,8 @@ else()
         if(HYPERSINV_GPU_DIAGNOSTIC_NATIVE)
             target_compile_definitions(uefi_hypervisor PRIVATE
                 HYPERSINV_GPU_DIAGNOSTIC_NATIVE=1)
+            target_link_options(uefi_hypervisor PRIVATE
+                /INCLUDE:HvStorageResidentQuery)
         endif()
         if(HYPERSINV_GPU_DIAGNOSTIC_OUTPUT_CONFIRMED)
             target_compile_definitions(uefi_hypervisor PRIVATE
@@ -259,6 +262,21 @@ else()
 endif()
 add_test(NAME uefi_hypervisor_static_contracts
     COMMAND uefi_hypervisor_static_contracts)
+
+add_executable(uefi_hypervisor_storage_fault_tests
+    tests/test_storage_fault_diagnostic.c
+    storage_fault_diagnostic.c)
+target_include_directories(uefi_hypervisor_storage_fault_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_features(uefi_hypervisor_storage_fault_tests PRIVATE c_std_11)
+if(MSVC)
+    target_compile_options(uefi_hypervisor_storage_fault_tests PRIVATE /W4 /WX /GS-)
+else()
+    target_compile_options(uefi_hypervisor_storage_fault_tests PRIVATE
+        -Wall -Wextra -Werror)
+endif()
+add_test(NAME uefi_hypervisor_storage_fault_tests
+    COMMAND uefi_hypervisor_storage_fault_tests)
 
 if(EXISTS "${HYPERSINV_UEFI_SUPPORT_DIR}/hv_boot_diagnostic.h")
     add_executable(uefi_hypervisor_boot_diagnostic_tests
@@ -633,6 +651,10 @@ if(WIN32)
     add_test(NAME uefi_hypervisor_gpu_stage_retirement_213919_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
             -File "${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/gpu_diagnostic/tests/Test-GpuStageRetirement213919.ps1"
+            -ToolRoot "${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/gpu_diagnostic")
+    add_test(NAME uefi_hypervisor_gpu_stage_retirement_225049_tests
+        COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
+            -File "${CMAKE_CURRENT_SOURCE_DIR}/../../../../tests/Test-GpuStageRetirement225049.ps1"
             -ToolRoot "${CMAKE_CURRENT_SOURCE_DIR}/../../../../tools/gpu_diagnostic")
     add_test(NAME uefi_hypervisor_gpu_final_firmware_inspection_tests
         COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass

@@ -196,6 +196,14 @@ target_include_directories(efi_storage_probe_test PRIVATE
 target_link_libraries(efi_storage_probe_test PRIVATE sha256)
 add_test(NAME efi_storage_probe_test COMMAND efi_storage_probe_test)
 
+add_executable(efi_storage_fault_report_test
+    src/fixtures/tests/efi_storage_fault_report_test.c
+    src/loader/efi_storage_fault_report.c)
+target_include_directories(efi_storage_fault_report_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/vendor
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/loader)
+add_test(NAME efi_storage_fault_report_test COMMAND efi_storage_fault_report_test)
+
 add_executable(handoff_diagnostic_test
     src/fixtures/tests/handoff_diagnostic_test.c
     src/loader/handoff_diagnostic.c)
@@ -757,7 +765,8 @@ if(IB_PAYLOAD_REPLAY_INDEPENDENT)
         IB_PAYLOAD_REPLAY_INDEPENDENT=1)
 endif()
 if(IB_FIRMWARE_STORAGE_PROBE)
-    target_sources(loader PRIVATE src/loader/efi_storage_probe.c)
+    target_sources(loader PRIVATE src/loader/efi_storage_probe.c
+        src/loader/efi_storage_fault_report.c)
     target_compile_definitions(loader PRIVATE IB_FIRMWARE_STORAGE_PROBE=1)
 endif()
 if(MSVC)
@@ -864,7 +873,7 @@ if(IB_STATIC_RUNTIME AND MSVC)
                                reference_log tcglog_test
                                tcglog_ib_test pcr_gate_test replay_test
                                divergence_test sha256_test reference_log_test
-                               boot_restore_test efi_file_test efi_storage_probe_test image_launch_test payload_diagnostic_test handoff_diagnostic_test tcg2_test
+                               boot_restore_test efi_file_test efi_storage_probe_test efi_storage_fault_report_test image_launch_test payload_diagnostic_test handoff_diagnostic_test tcg2_test
                                inventory_entry_test shim_inventory_test shim_chain_test uefi_runtime_abi_test
                                replay_uefi_path_test
                                install_sign_test install_authenticode_test

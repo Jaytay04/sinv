@@ -10,6 +10,7 @@ param(
     [switch]$CompletedRun160027,
     [switch]$CompletedRun193833,
     [switch]$CompletedRun213919,
+    [switch]$CompletedRun225049,
     [string]$ReadinessPath,
     [string]$ToolRoot
 )
@@ -32,23 +33,23 @@ if ((Split-Path -Leaf $WorktreeParent) -ieq 'worktrees' -and
 }
 
 $selectedProfileCount = 0
-foreach ($profileSwitch in @($CompletedRun201140, $CompletedRun224018, $CompletedRun023306, $CompletedRun032117, $CompletedRun042142, $CompletedRun062106, $CompletedRun160027, $CompletedRun193833, $CompletedRun213919)) {
+foreach ($profileSwitch in @($CompletedRun201140, $CompletedRun224018, $CompletedRun023306, $CompletedRun032117, $CompletedRun042142, $CompletedRun062106, $CompletedRun160027, $CompletedRun193833, $CompletedRun213919, $CompletedRun225049)) {
     if ([bool]$profileSwitch) { $selectedProfileCount++ }
 }
 if ($selectedProfileCount -gt 1) {
-    throw 'CompletedRun201140, CompletedRun224018, CompletedRun023306, CompletedRun032117, CompletedRun042142, CompletedRun062106, CompletedRun160027, CompletedRun193833, and CompletedRun213919 are mutually exclusive.'
+    throw 'Completed-run retirement profiles are mutually exclusive.'
 }
-if (($CompletedRun201140 -or $CompletedRun224018 -or $CompletedRun023306 -or $CompletedRun032117 -or $CompletedRun042142 -or $CompletedRun062106 -or $CompletedRun160027 -or $CompletedRun193833 -or $CompletedRun213919) -and [string]::IsNullOrWhiteSpace($ReadinessPath)) {
+if (($CompletedRun201140 -or $CompletedRun224018 -or $CompletedRun023306 -or $CompletedRun032117 -or $CompletedRun042142 -or $CompletedRun062106 -or $CompletedRun160027 -or $CompletedRun193833 -or $CompletedRun213919 -or $CompletedRun225049) -and [string]::IsNullOrWhiteSpace($ReadinessPath)) {
     throw 'A completed-run profile requires the explicit EvidencePath from a fresh Get-GpuBaremetalReadiness.ps1 report.'
 }
-if (-not ($CompletedRun201140 -or $CompletedRun224018 -or $CompletedRun023306 -or $CompletedRun032117 -or $CompletedRun042142 -or $CompletedRun062106 -or $CompletedRun160027 -or $CompletedRun193833 -or $CompletedRun213919) -and -not [string]::IsNullOrWhiteSpace($ReadinessPath)) {
+if (-not ($CompletedRun201140 -or $CompletedRun224018 -or $CompletedRun023306 -or $CompletedRun032117 -or $CompletedRun042142 -or $CompletedRun062106 -or $CompletedRun160027 -or $CompletedRun193833 -or $CompletedRun213919 -or $CompletedRun225049) -and -not [string]::IsNullOrWhiteSpace($ReadinessPath)) {
     throw 'ReadinessPath is supported only with an explicit completed-run profile.'
 }
 
 # WhatIf is an informational preview: return before loading any platform helpers,
 # probing the host, mounting the ESP, or creating evidence files.
 if ($WhatIfPreference) {
-    $stageWord = if ($CompletedRun042142 -or $CompletedRun062106 -or $CompletedRun160027) { 'five' } else { 'seven' }
+    $stageWord = if ($CompletedRun042142 -or $CompletedRun062106 -or $CompletedRun160027 -or $CompletedRun225049) { 'five' } else { 'seven' }
     [pscustomobject]@{
         Action = if ($Apply) { 'ApplyRetirement' } else { 'ReviewRetirement' }
         Preview = $true
@@ -64,6 +65,7 @@ if ($WhatIfPreference) {
         CompletedRun160027 = [bool]$CompletedRun160027
         CompletedRun193833 = [bool]$CompletedRun193833
         CompletedRun213919 = [bool]$CompletedRun213919
+        CompletedRun225049 = [bool]$CompletedRun225049
         Note = "No probes, commands, or filesystem operations were executed. Default mode reviews and records evidence; -Apply requests removal of only the $stageWord pinned files after all gates pass."
     } | ConvertTo-Json -Depth 5
     return
@@ -77,7 +79,7 @@ $invokeParameters = @{
 }
 if ($PSBoundParameters.ContainsKey('Confirm')) { $invokeParameters.Confirm = [bool]$PSBoundParameters['Confirm'] }
 $result = & $retirementModule {
-    param($parameters, $useCompleted201140, $useCompleted224018, $useCompleted023306, $useCompleted032117, $useCompleted042142, $useCompleted062106, $useCompleted160027, $useCompleted193833, $useCompleted213919, $workspace, $readiness)
+    param($parameters, $useCompleted201140, $useCompleted224018, $useCompleted023306, $useCompleted032117, $useCompleted042142, $useCompleted062106, $useCompleted160027, $useCompleted193833, $useCompleted213919, $useCompleted225049, $workspace, $readiness)
     if ($useCompleted201140) {
         $null = Select-GpuStageRetirement201140Profile -WorkspaceRoot $workspace -ReadinessPath $readiness
     } elseif ($useCompleted224018) {
@@ -96,8 +98,10 @@ $result = & $retirementModule {
         $null = Select-GpuStageRetirement193833Profile -WorkspaceRoot $workspace -ReadinessPath $readiness
     } elseif ($useCompleted213919) {
         $null = Select-GpuStageRetirement213919Profile -WorkspaceRoot $workspace -ReadinessPath $readiness
+    } elseif ($useCompleted225049) {
+        $null = Select-GpuStageRetirement225049Profile -WorkspaceRoot $workspace -ReadinessPath $readiness
     }
     Invoke-GpuStageRetirement @parameters
-} $invokeParameters ([bool]$CompletedRun201140) ([bool]$CompletedRun224018) ([bool]$CompletedRun023306) ([bool]$CompletedRun032117) ([bool]$CompletedRun042142) ([bool]$CompletedRun062106) ([bool]$CompletedRun160027) ([bool]$CompletedRun193833) ([bool]$CompletedRun213919) $WorkspaceRoot $ReadinessPath
+} $invokeParameters ([bool]$CompletedRun201140) ([bool]$CompletedRun224018) ([bool]$CompletedRun023306) ([bool]$CompletedRun032117) ([bool]$CompletedRun042142) ([bool]$CompletedRun062106) ([bool]$CompletedRun160027) ([bool]$CompletedRun193833) ([bool]$CompletedRun213919) ([bool]$CompletedRun225049) $WorkspaceRoot $ReadinessPath
 $result | ConvertTo-Json -Depth 24
 if (-not $result.Succeeded) { exit 1 }

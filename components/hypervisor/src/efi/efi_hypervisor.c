@@ -9,6 +9,7 @@
 #include "runtime_shadow.h"
 #include "scanner.h"
 #include "shadow_ept.h"
+#include "storage_fault_diagnostic.h"
 #include "gpu_native.h"
 #include "gpu_boot.h"
 #include "efi_boot_diagnostic.h"
@@ -205,7 +206,94 @@ typedef struct HV_EFI_PHYSICAL_IOMMU_STATE {
     HV_EFI_IOMMU_RUNTIME Runtime;
     HV_EFI_IOMMU_ACPI_SHADOW AcpiShadow;
     HV_EFI_IOMMU_LEGACY_TABLE_RESULT Tables;
+    HV_STORAGE_DIAGNOSTIC_STATE Storage;
 } HV_EFI_PHYSICAL_IOMMU_STATE;
+
+#if defined(HYPERSINV_GPU_DIAGNOSTIC_NATIVE) && HYPERSINV_GPU_DIAGNOSTIC_NATIVE
+/* UEFI PCI_IO prefix through GetLocation, matching the firmware ABI. */
+typedef struct HV_STORAGE_PCI_IO HV_STORAGE_PCI_IO;
+typedef EFI_STATUS (EFIAPI *HV_STORAGE_PCI_ACCESS)(
+    HV_STORAGE_PCI_IO *, UINT32, UINT32, UINTN, VOID *);
+struct HV_STORAGE_PCI_IO {
+    VOID *PollMem, *PollIo;
+    VOID *MemRead, *MemWrite, *IoRead, *IoWrite;
+    HV_STORAGE_PCI_ACCESS PciRead, PciWrite;
+    VOID *CopyMem, *Map, *Unmap, *AllocateBuffer, *FreeBuffer, *Flush;
+    EFI_STATUS (EFIAPI *GetLocation)(HV_STORAGE_PCI_IO *, UINTN *, UINTN *,
+                                      UINTN *, UINTN *);
+};
+static EFI_HANDLE gHvStorageImageHandle;
+static EFI_GUID gHvStoragePciIoGuid = {
+    UINT32_C(0x4cf5b200), UINT16_C(0x68b8), UINT16_C(0x4ca5),
+    { 0x9e, 0xec, 0xb2, 0x3e, 0x3f, 0x50, 0x02, 0x9a }
+};
+static EFI_GUID gHvStorageDevicePathGuid = {
+    UINT32_C(0x09576e91), UINT16_C(0x6d3f), UINT16_C(0x11d2),
+    { 0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b }
+};
+static EFI_GUID gHvStorageLoadedImageGuid = EFI_LOADED_IMAGE_PROTOCOL_GUID;
+
+static void HvStorageDiscoverTarget(HV_EFI_PHYSICAL_IOMMU_STATE *physical)
+{
+    EFI_LOADED_IMAGE_PROTOCOL *image = NULL;
+    EFI_DEVICE_PATH_PROTOCOL *path = NULL;
+    EFI_HANDLE controller = NULL;
+    HV_STORAGE_PCI_IO *pci = NULL;
+    UINTN segment, bus, device, function;
+    uint32_t identity, classWord, command;
+    uint32_t i;
+    if (physical == NULL || gBS == NULL || gBS->HandleProtocol == NULL ||
+        gBS->LocateDevicePath == NULL || gHvStorageImageHandle == NULL ||
+        EFI_ERROR(gBS->HandleProtocol(gHvStorageImageHandle,
+            &gHvStorageLoadedImageGuid, (VOID **)&image)) || image == NULL ||
+        image->DeviceHandle == NULL ||
+        EFI_ERROR(gBS->HandleProtocol(image->DeviceHandle,
+            &gHvStorageDevicePathGuid, (VOID **)&path)) || path == NULL ||
+        EFI_ERROR(gBS->LocateDevicePath(&gHvStoragePciIoGuid, &path,
+                                        &controller)) || controller == NULL ||
+        EFI_ERROR(gBS->HandleProtocol(controller, &gHvStoragePciIoGuid,
+                                      (VOID **)&pci)) || pci == NULL ||
+        pci->GetLocation == NULL || pci->PciRead == NULL ||
+        EFI_ERROR(pci->GetLocation(pci, &segment, &bus, &device,
+                                   &function)) || segment > 0xffff ||
+        bus > 0xff || device > 31 || function > 7 ||
+        EFI_ERROR(pci->PciRead(pci, 2, 0, 1, &identity)) ||
+        EFI_ERROR(pci->PciRead(pci, 2, 4, 1, &command)) ||
+        EFI_ERROR(pci->PciRead(pci, 2, 8, 1, &classWord)) ||
+        (identity & 0xffff) == 0xffff ||
+        ((classWord >> 24) & 0xff) != 1) return;
+    physical->Storage.TargetBdf = ((uint32_t)segment << 16) |
+        ((uint32_t)bus << 8) | ((uint32_t)device << 3) |
+        (uint32_t)function;
+    physical->Storage.TargetIdentity = identity;
+    physical->Storage.TargetClass = classWord;
+    physical->Storage.TargetBeforeCommand = command & 0xffff;
+    physical->Storage.Flags |= HV_STORAGE_DIAGNOSTIC_TARGET_VALID;
+    for (i = 0; i < physical->McfgCount; ++i) {
+        const HV_EFI_IOMMU_MCFG_SEGMENT *m = &physical->Mcfg[i];
+        uint64_t offset, size;
+        if (m->Segment != segment || bus < m->StartBus ||
+            bus > m->EndBus) continue;
+        offset = ((uint64_t)(bus - m->StartBus) << 20) |
+                 ((uint64_t)device << 15) | ((uint64_t)function << 12);
+        size = ((uint64_t)(m->EndBus - m->StartBus + 1) << 20);
+        if (offset > size - 16 || m->EcamBase > UINT64_MAX - offset)
+            continue;
+        physical->Storage.TargetEcam = m->EcamBase + offset;
+        physical->Storage.Flags |= HV_STORAGE_DIAGNOSTIC_TARGET_ECAM_VALID;
+        break;
+    }
+}
+
+static uint32_t HvStoragePrebootRead32(void *unused, uint64_t address,
+                                        uint32_t *value)
+{
+    (void)unused;
+    if (value == NULL || (address & 3) != 0) return 0;
+    *value = *(volatile uint32_t *)(uintptr_t)address;
+    return 1;
+}
+#endif
 
 static EFI_STATUS HvEfiAllocateRuntime(EFI_MEMORY_TYPE type, UINTN pages,
                                        EFI_PHYSICAL_ADDRESS *address);
@@ -519,8 +607,13 @@ static EFI_STATUS HvEfiAdmitDmaIsolation(
                 return EFI_SECURITY_VIOLATION;
             }
             physicalState->Signature = HV_EFI_PHYSICAL_IOMMU_SIGNATURE;
+#if defined(HYPERSINV_GPU_DIAGNOSTIC_NATIVE) && HYPERSINV_GPU_DIAGNOSTIC_NATIVE
+            HvStorageDiscoverTarget(physicalState);
+#endif
             context->PhysicalIommuStatePhysical = statePhysical;
             context->PhysicalIommuStatePages = (uint32_t)statePages;
+            context->StorageDiagnosticStatePhysical =
+                statePhysical + offsetof(HV_EFI_PHYSICAL_IOMMU_STATE, Storage);
             context->PhysicalIommuTablePhysical = tablePhysical;
             context->PhysicalIommuTablePages =
                 HV_EFI_PHYSICAL_IOMMU_TABLE_PAGES;
@@ -1162,6 +1255,10 @@ static EFI_STATUS HvEfiAllocateProcessorRecordResources(
         rootContext->RuntimeCapabilities;
     processorContext->PhysicalIommuStatePhysical =
         rootContext->PhysicalIommuStatePhysical;
+    processorContext->StorageDiagnosticStatePhysical =
+        rootContext->StorageDiagnosticStatePhysical;
+    processorContext->StorageDiagnosticEntry =
+        rootContext->StorageDiagnosticEntry;
     processorContext->PhysicalIommuStatePages =
         rootContext->PhysicalIommuStatePages;
     processorContext->DmaIsolationMode = rootContext->DmaIsolationMode;
@@ -2900,6 +2997,39 @@ static EFI_STATUS HvEfiPreparePhysicalIommu(
     state->Enabled = 1;
     state->DetachRemaining = context->EnabledProcessorCount;
     context->DmaIsolationState = HV_EFI_IOMMU_RUNTIME_ENABLED;
+#if defined(HYPERSINV_GPU_DIAGNOSTIC_NATIVE) && HYPERSINV_GPU_DIAGNOSTIC_NATIVE
+    {
+        HV_STORAGE_DIAGNOSTIC_STATE *storage = &state->Storage;
+        uint32_t j;
+        uint32_t restoreRecordFound = 0;
+        storage->UnitCount = state->Dmar.UnitCount;
+        for (j = 0; j < storage->UnitCount; ++j) {
+            storage->Units[j].RegisterBase = state->Programs[j].RegisterBase;
+            storage->Units[j].Capability = state->Programs[j].Capability;
+            HvStorageCaptureUnit(&storage->Units[j], 0,
+                                 HvStoragePrebootRead32, NULL);
+        }
+        for (j = 0; j < state->PciStateCount; ++j) {
+            const HV_EFI_IOMMU_PCI_COMMAND_STATE *pci = &state->PciStates[j];
+            if ((storage->Flags & HV_STORAGE_DIAGNOSTIC_TARGET_VALID) != 0 &&
+                pci->Segment == (storage->TargetBdf >> 16) &&
+                pci->Bus == ((storage->TargetBdf >> 8) & 0xff) &&
+                pci->Device == ((storage->TargetBdf >> 3) & 31) &&
+                pci->Function == (storage->TargetBdf & 7)) {
+                restoreRecordFound = 1;
+                storage->TargetRestoredCommand = pci->OriginalCommand;
+                if (pci->Restored != 0 &&
+                    pci->OriginalCommand == storage->TargetBeforeCommand)
+                    storage->Flags |= HV_STORAGE_DIAGNOSTIC_TARGET_RESTORE_MATCH;
+                break;
+            }
+        }
+        if ((storage->Flags & HV_STORAGE_DIAGNOSTIC_TARGET_VALID) != 0 &&
+            restoreRecordFound == 0)
+            storage->Flags |= HV_STORAGE_DIAGNOSTIC_TARGET_RESTORE_ABSENT;
+        storage->Flags |= HV_STORAGE_DIAGNOSTIC_BASELINE_CAPTURED;
+    }
+#endif
 
 cleanup:
     gBS->FreePool(denied);
@@ -3386,6 +3516,10 @@ static void EFIAPI HvEfiApPrepareProcessorState(void *procedureArgument)
     processorContext->RuntimeScannerCodeSize =
         rootContext->RuntimeScannerCodeSize;
     processorContext->RuntimeScannerEntry = rootContext->RuntimeScannerEntry;
+    processorContext->StorageDiagnosticEntry =
+        rootContext->StorageDiagnosticEntry;
+    processorContext->StorageDiagnosticStatePhysical =
+        rootContext->StorageDiagnosticStatePhysical;
     processorContext->RuntimeProcessEntry = rootContext->RuntimeProcessEntry;
     processorContext->RuntimeShadowEntry = rootContext->RuntimeShadowEntry;
     processorContext->RuntimeAnalysisEntry =
@@ -4357,6 +4491,9 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
     }
     gST = systemTable;
     gBS = systemTable->BootServices;
+#if defined(HYPERSINV_GPU_DIAGNOSTIC_NATIVE) && HYPERSINV_GPU_DIAGNOSTIC_NATIVE
+    gHvStorageImageHandle = imageHandle;
+#endif
     HvEfiBootDiagnosticAttach(imageHandle);
     HvEfiDebugInitializeSerial();
 
@@ -4541,6 +4678,18 @@ EFI_STATUS EFIAPI HvEfiMainBody(EFI_HANDLE imageHandle,
     context->RuntimeAnalysisEntry = context->RuntimeScannerCodeBase +
         ((uintptr_t)HvEfiRuntimeAnalysisResidentCommand -
          (uintptr_t)HvEfiRuntimeScannerResidentStart);
+#if defined(HYPERSINV_GPU_DIAGNOSTIC_NATIVE) && HYPERSINV_GPU_DIAGNOSTIC_NATIVE
+    if ((uintptr_t)HvStorageResidentQuery <
+            (uintptr_t)HvEfiRuntimeScannerResidentStart ||
+        (uintptr_t)HvStorageResidentQuery >=
+            (uintptr_t)HvEfiRuntimeScannerResidentEnd) {
+        return HvEfiFailAndFree(context, contextPa, codePa, 0, 0, 0, 0, 0, 0,
+                                0, EFI_BAD_BUFFER_SIZE);
+    }
+    context->StorageDiagnosticEntry = context->RuntimeScannerCodeBase +
+        ((uintptr_t)HvStorageResidentQuery -
+         (uintptr_t)HvEfiRuntimeScannerResidentStart);
+#endif
     HvEfiZero((void *)(uintptr_t)context->RuntimeScannerStatePhysical,
               HV_EFI_RUNTIME_SCANNER_STATE_PAGES * HV_EFI_PAGE_SIZE);
     ((HV_EFI_RUNTIME_SCAN_STATE *)(uintptr_t)

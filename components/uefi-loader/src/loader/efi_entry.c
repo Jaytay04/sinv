@@ -276,9 +276,182 @@ static void con_print_digest(const UINT8 digest[32])
 }
 
 #if IB_FIRMWARE_STORAGE_PROBE
+#include "efi_storage_fault_report.h"
+
 static efi_storage_probe_state_t g_storage_probe;
 static int g_storage_probe_started;
 static int g_storage_probe_failure_sampled;
+static efi_storage_fault_report_t g_storage_fault_report;
+static int g_storage_fault_report_captured;
+
+static int storage_fault_selector_is_bounded(UINT32 Selector)
+{
+    UINT32 unit_selector;
+
+    if (Selector <= 2u) {
+        return 1;
+    }
+    if (Selector < HV_STORAGE_DIAGNOSTIC_UNIT_BASE) {
+        return 0;
+    }
+    unit_selector = Selector - HV_STORAGE_DIAGNOSTIC_UNIT_BASE;
+    return unit_selector < HV_STORAGE_DIAGNOSTIC_MAX_UNITS *
+                           HV_STORAGE_DIAGNOSTIC_UNIT_STRIDE;
+}
+
+static int storage_fault_cpuid_query(void *Context, UINT32 Selector,
+                                     efi_storage_fault_registers_t *Registers)
+{
+    (void)Context;
+    if (Registers == NULL || !storage_fault_selector_is_bounded(Selector)) {
+        return 0;
+    }
+#if defined(_MSC_VER) && defined(_M_X64)
+    {
+        int values[4];
+        __cpuidex(values, (int)HV_STORAGE_DIAGNOSTIC_LEAF, (int)Selector);
+        Registers->Eax = (UINT32)values[0];
+        Registers->Ebx = (UINT32)values[1];
+        Registers->Ecx = (UINT32)values[2];
+        Registers->Edx = (UINT32)values[3];
+        return 1;
+    }
+#else
+    return 0;
+#endif
+}
+
+static void con_print_storage_fault_report(
+    const efi_storage_fault_report_t *report, BOOLEAN compact)
+{
+    UINT32 index;
+    int outer_unavailable;
+
+    if (report == NULL) {
+        con_print(L"storage_fault status=unavailable\r\n");
+        return;
+    }
+    switch (report->Status) {
+    case EFI_STORAGE_FAULT_REPORT_NOT_CAPTURED:
+        con_print(L"storage_fault status=not_captured\r\n");
+        return;
+    case EFI_STORAGE_FAULT_REPORT_UNAVAILABLE:
+        con_print(L"storage_fault status=unavailable\r\n");
+        return;
+    case EFI_STORAGE_FAULT_REPORT_UNSUPPORTED:
+        con_print(L"storage_fault status=unsupported\r\n");
+        return;
+    case EFI_STORAGE_FAULT_REPORT_MALFORMED:
+        con_print(L"storage_fault status=malformed\r\n");
+        return;
+    case EFI_STORAGE_FAULT_REPORT_AVAILABLE:
+    default:
+        break;
+    }
+
+    outer_unavailable =
+        (report->Metadata.Edx & HV_STORAGE_DIAGNOSTIC_OUTER_UNAVAILABLE) != 0u;
+    con_print(L"storage_fault status=supported capture=");
+    con_print(outer_unavailable ? L"unavailable" : L"attempted");
+    con_print(L" global_flags=0x"); con_print_hex(report->Metadata.Edx, 8u);
+    con_print(L" units=0x"); con_print_hex(report->UnitCount, 2u);
+    con_print(L"\r\n");
+
+    if (compact) {
+        con_print(L"storage_fault cached_target bdf=0x");
+        con_print_hex(report->StorageIdentity.Eax, 8u);
+        con_print(L" ids=0x"); con_print_hex(report->StorageIdentity.Ebx, 8u);
+        con_print(L" command_pair=0x");
+        con_print_hex(report->StorageIdentity.Edx, 8u);
+        con_print(L" live_command=0x"); con_print_hex(report->LiveState.Eax, 8u);
+        con_print(L" target_flags=0x"); con_print_hex(report->LiveState.Ecx, 8u);
+        con_print(L"\r\n");
+        for (index = 0u; index < report->UnitCount; index++) {
+            const efi_storage_fault_unit_t *unit = &report->Units[index];
+            con_print(L"storage_fault cached_unit=0x");
+            con_print_hex(index, 2u);
+            con_print(L" fsts_base=0x");
+            con_print_hex(unit->StatusAndFaults.Eax, 8u);
+            con_print(L" fsts_failure=0x");
+            con_print_hex(unit->StatusAndFaults.Ebx, 8u);
+            con_print(L" gsts_base=0x");
+            con_print_hex(unit->StatusAndFaults.Ecx, 8u);
+            con_print(L" gsts_failure=0x");
+            con_print_hex(unit->StatusAndFaults.Edx, 8u);
+            con_print(L" valid_flags=0x");
+            con_print_hex(unit->CapAndValidity.Ecx, 8u);
+            con_print(L"\r\n");
+        }
+        return;
+    }
+
+    con_print(L"storage_fault metadata signature=0x");
+    con_print_hex(report->Metadata.Eax, 8u);
+    con_print(L" version=0x"); con_print_hex(report->Metadata.Ebx, 8u);
+    con_print(L" unit_count=0x"); con_print_hex(report->Metadata.Ecx, 8u);
+    con_print(L" flags=0x"); con_print_hex(report->Metadata.Edx, 8u);
+    con_print(L"\r\n");
+    con_print(L"storage_fault target bdf=0x");
+    con_print_hex(report->StorageIdentity.Eax, 8u);
+    con_print(L" vendor_device=0x");
+    con_print_hex(report->StorageIdentity.Ebx, 8u);
+    con_print(L" class_revision=0x");
+    con_print_hex(report->StorageIdentity.Ecx, 8u);
+    con_print(L" command_pair=0x");
+    con_print_hex(report->StorageIdentity.Edx, 8u);
+    con_print(L"\r\n");
+    con_print(L"storage_fault live command=0x");
+    con_print_hex(report->LiveState.Eax, 8u);
+    con_print(L" vendor_device=0x"); con_print_hex(report->LiveState.Ebx, 8u);
+    con_print(L" flags=0x"); con_print_hex(report->LiveState.Ecx, 8u);
+    con_print(L" reserved=0x"); con_print_hex(report->LiveState.Edx, 8u);
+    con_print(L"\r\n");
+    for (index = 0u; index < report->UnitCount; index++) {
+        const efi_storage_fault_unit_t *unit = &report->Units[index];
+        con_print(L"storage_fault unit=0x"); con_print_hex(index, 2u);
+        con_print(L" fsts_baseline=0x");
+        con_print_hex(unit->StatusAndFaults.Eax, 8u);
+        con_print(L" fsts_failure=0x");
+        con_print_hex(unit->StatusAndFaults.Ebx, 8u);
+        con_print(L" gsts_baseline=0x");
+        con_print_hex(unit->StatusAndFaults.Ecx, 8u);
+        con_print(L" gsts_failure=0x");
+        con_print_hex(unit->StatusAndFaults.Edx, 8u);
+        con_print(L"\r\nstorage_fault unit=0x"); con_print_hex(index, 2u);
+        con_print(L" failure_frcd_word0=0x");
+        con_print_hex(unit->FailureFrcd.Eax, 8u);
+        con_print(L" word1=0x"); con_print_hex(unit->FailureFrcd.Ebx, 8u);
+        con_print(L" word2=0x"); con_print_hex(unit->FailureFrcd.Ecx, 8u);
+        con_print(L" word3=0x"); con_print_hex(unit->FailureFrcd.Edx, 8u);
+        con_print(L"\r\nstorage_fault unit=0x"); con_print_hex(index, 2u);
+        con_print(L" cap_low=0x");
+        con_print_hex(unit->CapAndValidity.Eax, 8u);
+        con_print(L" cap_high=0x"); con_print_hex(unit->CapAndValidity.Ebx, 8u);
+        con_print(L" valid_flags=0x");
+        con_print_hex(unit->CapAndValidity.Ecx, 8u);
+        con_print(L" fro_fri=0x");
+        con_print_hex(unit->CapAndValidity.Edx, 8u);
+        con_print(L"\r\nstorage_fault unit=0x");
+        con_print_hex(index, 2u);
+        con_print(L" baseline_frcd_word0=0x");
+        con_print_hex(unit->BaselineFrcd.Eax, 8u);
+        con_print(L" word1=0x"); con_print_hex(unit->BaselineFrcd.Ebx, 8u);
+        con_print(L" word2=0x"); con_print_hex(unit->BaselineFrcd.Ecx, 8u);
+        con_print(L" word3=0x"); con_print_hex(unit->BaselineFrcd.Edx, 8u);
+        con_print(L"\r\n");
+    }
+}
+
+static void storage_fault_report_capture_once(void)
+{
+    if (g_storage_fault_report_captured) {
+        return;
+    }
+    g_storage_fault_report_captured = 1;
+    efi_storage_fault_report_capture(&g_storage_fault_report,
+                                     storage_fault_cpuid_query, NULL);
+    con_print_storage_fault_report(&g_storage_fault_report, FALSE);
+}
 
 static void con_print_storage_probe(const efi_storage_probe_result_t *result)
 {
@@ -347,7 +520,7 @@ static void storage_probe_before_payload(EFI_HANDLE image_handle)
 static void storage_probe_after_volume_failure(const efi_file_io_trace_t *trace)
 {
     efi_storage_probe_result_t result;
-    if (!g_storage_probe_started || g_storage_probe_failure_sampled ||
+    if (trace == NULL || g_storage_probe_failure_sampled ||
         trace->Operation != EFI_FILE_IO_OPEN_VOLUME ||
         !EFI_ERROR(trace->RawStatus)) {
         return;
@@ -355,6 +528,10 @@ static void storage_probe_after_volume_failure(const efi_file_io_trace_t *trace)
     /* Preserve the first traced volume error before this independent block read.
      * Never retry OpenVolume or create an extra diagnostic file here. */
     g_storage_probe_failure_sampled = 1;
+    storage_fault_report_capture_once();
+    if (!g_storage_probe_started) {
+        return;
+    }
     con_print_storage_cpu_state();
     con_print(L"storage probe[post_filesystem_failure] read_begin\r\n");
     (void)efi_storage_probe_sample(&g_storage_probe,
@@ -716,6 +893,12 @@ static EFI_STATUS restore_and_handoff(EFI_HANDLE image_handle,
 #endif
     if (launch != IMAGE_LAUNCH_OK) {
         con_print(L"loader production handoff: FAIL (boot manager launch)\r\n");
+#if IB_FIRMWARE_STORAGE_PROBE
+        if (boot_manager_read_trace.Operation != EFI_FILE_IO_NONE &&
+            EFI_ERROR(boot_manager_read_trace.RawStatus)) {
+            con_print_storage_fault_report(&g_storage_fault_report, TRUE);
+        }
+#endif
         return child_status;
     }
     con_print(L"boot manager launch: PASS\r\n");

@@ -1,5 +1,91 @@
 # GPU diagnostic payload failure investigation
 
+## Run 225049: boot-manager volume open fails after payload return
+
+Run `gpu-20261021T225049Z-9ac846fd923441cf9b7f0a75a2e0d246` is closed and
+archived. Its journal is `Complete`; the active selector is absent. FinalVerify
+passed reset, Secure Boot, all 20 expected `ABSENT` health observations, and the
+Windows boot-manager hash. The version-1 firmware policy accepted the saved
+textual difference as equivalent: the three generic CD/DVD, removable-device,
+and network application entries and their display-order tail changed. The
+stable retained entries matched. This is a textual policy result, not proof of
+historical raw firmware-variable equality. GPU isolation remains unattested.
+
+Collection action
+`20261021T231112144Z-Collect-9a39bd424a764fa88575412b5f9f2e0a` found all 20
+custom health signatures `ABSENT`. The boot capture shows payload status zero after
+reporting 20 of 20 CPUs prepared and VMX-ready, with zero preparation and
+activation failures. Both `handoff-status.txt` and
+`payload-diagnostic.txt` were explicitly absent at collection. All five staged
+binary files matched their saved pins. In the operator's boot capture, the
+first traced `OpenVolume` returned `EFI_TIMEOUT` (`0x8000000000000012`) after
+the payload return.
+A separate Block I/O read of LBA 0 then returned `EFI_DEVICE_ERROR` (7) on the
+same cached device identity; the corresponding pre-payload read had succeeded.
+Later filesystem operations returned device errors. These observations
+localize the failure to storage access after activation, but do not establish
+whether DMA translation, PCI quiescing, firmware queues or another condition
+caused it. Clearing and restoring Bus Master Enable could affect a live storage
+queue; this remains a hypothesis, not a proven cause or an authorized bypass.
+
+`IMG_6825.MOV` is 10,400,718 bytes, SHA-256
+`241AA1ED996FA0CFDF9B233E9EA5A894DA568AC9D9BEAB645E4ABBCC11BF675F`.
+The decoder reports 95 frames but decodes only 88, through 3.625 seconds.
+The outer shim's `start_image() returned Device Error` follows the loader's
+boot-manager read failure. The loader returns that read error before attempting
+the Windows boot manager's `LoadImage` or `StartImage`; the shim message alone
+does not identify either Windows operation as the failure.
+
+The next candidate adds a bounded, read-only storage fault snapshot.
+When the first traced `OpenVolume` failure returns, the loader attempts the
+root diagnostic snapshot before the existing one-block Block I/O discriminator,
+so that the additional block read cannot overwrite the first captured fault. It also
+prints the cached summary before returning a boot-manager read error. Console
+records use the `storage_fault` prefix and report the interface status,
+snapshot phase, target PCI identity and command state, per-unit VT-d fault
+register validity, FSTS/GSTS, CAP/FRO/FRI and bounded FRCD words. The text
+`capture=attempted` means a query was issued; it does not mean a register read
+succeeded or produced a valid fault record. A query can be unavailable when
+the diagnostic native path is unsupported.
+
+The new HVD1 diagnostic interface is a CPL0, BSP-only, read-only query. Its
+signature is `STG1` (`0x53544731`), version 1, with at most eight cached VT-d
+units. Subleaf 0 returns the one-shot root snapshot summary; subleaf 1 returns
+the target storage function's packed BDF, vendor/device and class/revision,
+plus PCI Command before and after restoration; subleaf 2 returns live Command,
+identity and target flags. Unit records start at `0x100 + 4*i`: the first
+returns baseline/failure FSTS and GSTS, the second failure FRCD words, the
+third CAP and validity/FRO/FRI, and the fourth baseline FRCD words. The legacy
+health query at leaf `0x48565031`, subleaf 0, is unchanged.
+
+The implementation maps only validated cached DMAR pages and the target's
+validated ECAM page through a temporary uncached, read-only, non-executable
+scanner mapping, then removes that mapping. It does not call EFI, write or
+clear hardware registers, poll, retry, reset devices, or write another
+diagnostic file. The snapshot is attempted once after a traced storage error;
+later queries return the cached result. A missing or invalid VT-d fault record
+does not prove that DMA was working or that no fault occurred. Even a captured
+fault is evidence to correlate, not proof that the fault caused the I/O error.
+The Block I/O samples still cannot prove uncached hardware access or working
+DMA/interrupt delivery. No specific physical fix is established by this run.
+
+Run-specific retirement is now supported by `-CompletedRun225049`. The profile
+binds the completed journal, archive, exact retained-stage readiness report,
+original run evidence and the five owned ESP files. It requires Review before
+Apply and retains verified copies before removal. The stage is still retained
+at this documentation checkpoint; apply it only after a successful review.
+
+Validation passed: both Release builds, all 33 loader host tests and all 65
+Hypervisor CTests, plus the native image self-containment audit at 57,846
+`.hvscan` bytes. The new model tests exercise bounded fault-record reads and
+private-window admission; the loader fixture covers bounded and unavailable
+query results. The retirement fixture verifies five stage rows and 33 actual
+evidence pins, rejecting 14 mutated proofs. A review caught a truncated journal
+hash constant; it was corrected and the fixture now also verifies the selected
+profile's journal/archive hashes and byte counts against the actual files.
+The focused retirement test passed again after that correction. No VM or
+physical reboot was performed during this implementation work.
+
 ## Run 213919: host-bridge readback stops before activation
 
 Run `gpu-20261021T213919Z-61d3e8eb278f4c819457cd6aa8fb80b1` used source

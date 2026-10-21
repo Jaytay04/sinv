@@ -1317,6 +1317,10 @@ ResidentInstructionExit:
     ; Phase 1: Check for custom health leaf first
     cmp eax, HV_EFI_HEALTH_LEAF
     je ResidentHealthCpuid
+IFDEF HYPERSINV_GPU_DIAGNOSTIC_NATIVE
+    cmp eax, HV_STORAGE_DIAGNOSTIC_LEAF
+    je ResidentStorageDiagnosticCpuid
+ENDIF
 
     ; CPUID.01H:ECX.OSXSAVE reflects CR4.OSXSAVE.  VM exit restores the
     ; firmware-derived host CR4, so mirror only the guest OSXSAVE bit into
@@ -1384,6 +1388,55 @@ ResidentHealthCpuWrite:
     mov dword ptr [r11 + CONTEXT_GUEST_RCX], HV_EFI_HEALTH_READY OR HV_EFI_HEALTH_PERSISTENT
     mov dword ptr [r11 + CONTEXT_GUEST_RDX], 0
     mov dword ptr [r11 + CONTEXT_HEALTH_SEEN], 1
+    jmp ResidentAdvanceRip
+
+IFDEF HYPERSINV_GPU_DIAGNOSTIC_NATIVE
+ResidentStorageDiagnosticCpuid:
+    ; Operational failure hook: CPL0 and BSP only. This does not attest EBS.
+    mov ecx, VMCS_GUEST_CS_SELECTOR
+    vmread rax, rcx
+    jbe ResidentFatal
+    test al, 3
+    jnz ResidentStorageDiagnosticUnavailable
+    mov eax, dword ptr [r11 + CONTEXT_CURRENT_PROCESSOR_NUMBER]
+    cmp eax, dword ptr [r11 + CONTEXT_BSP_PROCESSOR_NUMBER]
+    jne ResidentStorageDiagnosticUnavailable
+    mov rax, qword ptr [r11 + CONTEXT_STORAGE_DIAGNOSTIC_STATE_PA]
+    test rax, rax
+    jz ResidentStorageDiagnosticOuterUnavailable
+    cmp rax, SCANNER_WINDOW_VA
+    jae ResidentStorageDiagnosticUnavailable
+    mov rax, qword ptr [r11 + CONTEXT_STORAGE_DIAGNOSTIC_ENTRY]
+    mov rcx, qword ptr [r11 + CONTEXT_RUNTIME_SCANNER_CODE_BASE]
+    cmp rax, rcx
+    jb ResidentStorageDiagnosticUnavailable
+    add rcx, qword ptr [r11 + CONTEXT_RUNTIME_SCANNER_CODE_SIZE]
+    jc ResidentStorageDiagnosticUnavailable
+    cmp rax, rcx
+    jae ResidentStorageDiagnosticUnavailable
+    mov r15, r11
+    mov rcx, r11
+    sub rsp, 20h
+    call rax
+    add rsp, 20h
+    mov r11, r15
+    mov r9d, dword ptr [r11 + CONTEXT_LAST_EXIT_LENGTH]
+    jmp ResidentAdvanceRip
+ResidentStorageDiagnosticOuterUnavailable:
+    cmp dword ptr [r11 + CONTEXT_GUEST_RCX], 0
+    jne ResidentStorageDiagnosticUnavailable
+    mov qword ptr [r11 + CONTEXT_GUEST_RAX], HV_STORAGE_DIAGNOSTIC_SIGNATURE
+    mov qword ptr [r11 + CONTEXT_GUEST_RBX], 1
+    mov qword ptr [r11 + CONTEXT_GUEST_RCX], 0
+    mov qword ptr [r11 + CONTEXT_GUEST_RDX], HV_STORAGE_DIAGNOSTIC_OUTER_UNAVAILABLE
+    jmp ResidentAdvanceRip
+ResidentStorageDiagnosticUnavailable:
+    mov qword ptr [r11 + CONTEXT_GUEST_RAX], 0
+    mov qword ptr [r11 + CONTEXT_GUEST_RBX], 0
+    mov qword ptr [r11 + CONTEXT_GUEST_RCX], 0
+    mov qword ptr [r11 + CONTEXT_GUEST_RDX], 0
+    jmp ResidentAdvanceRip
+ENDIF
 
 ResidentAdvanceRip:
     mov ecx, VMCS_GUEST_RIP
