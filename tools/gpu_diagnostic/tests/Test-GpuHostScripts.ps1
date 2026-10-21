@@ -822,7 +822,7 @@ try {
             'Get-GpuCanonicalPath', 'Get-GpuPathComparisonValue', 'Get-GpuSourceCommit', 'Get-GpuStatus',
             'Get-Item', 'Import-Module', 'Invoke-GpuHostPlatformAction', 'Join-Path',
             'New-Item', 'New-Object', 'Read-GpuJson', 'Remove-Item',
-            'Save-Gpu042142ReviewEntryJournal', 'Save-GpuJournal', 'Set-StrictMode',
+            'Save-Gpu042142ReviewEntryJournal', 'Save-Gpu062106ReviewEntryJournal', 'Save-GpuJournal', 'Set-StrictMode',
             'Split-Path', 'Test-GpuFinalVerifyRetry', 'Test-GpuReparsePoint', 'Test-Path', 'Write-GpuJson',
             'Write-Warning', 'git'
         )
