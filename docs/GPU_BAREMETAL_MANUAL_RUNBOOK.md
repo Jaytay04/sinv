@@ -11,11 +11,37 @@ version-1 firmware comparison accepted the current text as equal to its saved
 baseline; no reviewed-difference override was needed. GPU isolation remains
 unattested.
 
-Seven stage files remain on the ESP and require ownership-reviewed retirement
-before a fresh Prepare. Do not use the `CompletedRun193833` retirement profile
-for this run. Use a helper specifically pinned to run 213919 once available,
-then require fresh readiness with no blockers. Preserve the journal and stage
-evidence until that review is complete.
+Fresh readiness report `dead4fd712384ff7ba04ad97900ffe9b`, captured from clean
+source `070596b498cfda7e5baf474511d91bfe3358e3fc`, is blocked only by the seven
+retained stage files. Their names, sizes and hashes match the archived run's
+Collection evidence. The dedicated `CompletedRun213919` profile binds this
+report and the completed run; earlier retirement profiles do not apply.
+File-only validation verified seven stage pins and 32 supporting proof pins;
+eight modified proof records were rejected. All 28 related Windows CTests pass.
+The investigation did not mount or change the ESP.
+
+Use elevated 64-bit PowerShell from the main workspace. Review first:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun213919 -ReadinessPath $readiness.EvidencePath
+```
+
+Require `REVIEWED_STAGE_READY_FOR_RETIREMENT` and `Succeeded: true`. Then apply:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun213919 -ReadinessPath $readiness.EvidencePath -Apply
+```
+
+Require `STAGE_RETIRED`, then capture readiness again:
+
+```powershell
+$readiness = powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Get-GpuBaremetalReadiness.ps1 | ConvertFrom-Json
+$readiness | Select-Object Status, Blockers, EvidencePath | ConvertTo-Json -Depth 8
+```
+
+Only `READY_FOR_FRESH_PREPARE` with no blockers permits the fresh-run steps
+below. Preserve both retirement receipts and the original run evidence. A
+failed or partial Apply requires evidence review before further cleanup.
 
 The payload did not reach runtime activation: startup detail `0xC0000000`
 identifies a PCI command readback mismatch at `0000:00:00.0`, where bus mastering
@@ -26,8 +52,9 @@ function's PCI identity in both scans before excluding only that function from
 command writes. Other PCI audits and verified-restoration requirements remain
 enforced. Physical activation remains unvalidated. See the
 [run 213919 investigation](GPU_PAYLOAD_FAILURE_INVESTIGATION.md#run-213919-host-bridge-readback-stops-before-activation).
-The native Release build, all 62 Hypervisor CTests and the static image audit
-pass. These checks did not execute the EFI payload or start a VM.
+The host-bridge change passed the native Release build, its 62-test Hypervisor
+suite and the static image audit. These checks did not execute the EFI payload
+or start a VM.
 
 This run's saved handoff trace shows diagnostic write/readback, Windows
 boot-manager read, device-path construction and LoadImage succeeding, followed

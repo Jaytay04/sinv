@@ -68,6 +68,25 @@ archive SHA-256 is
 `753AB939E5EFC65F81B1B4EEAA49A2FDB1245472DBF57E76FF1161232A243E69`.
 Seven stage files remain for run-specific ownership-reviewed retirement.
 
+The subsequent readiness report `dead4fd712384ff7ba04ad97900ffe9b` is
+12,050 bytes, SHA-256
+`6A6A7CCBDADABF131451E7AF025A3B495C897CD88E1B7F7EEED5186707FA1831`.
+It records clean source `070596b498cfda7e5baf474511d91bfe3358e3fc` and exactly
+seven retained files totaling 1,289,874 bytes, matching the Collection pins;
+the five installer-staged files also match Stage. Retained stage ownership is
+its only blocker. `CompletedRun213919` binds this report, the closed journal
+and archive, normal successful FinalVerify result and version-1 firmware
+comparison evidence. Its firmware gate requires the original equal-text
+baseline and does not accept a reviewed-difference fallback. The preserved raw
+before/after captures have no BootNext, BootOrder `[0,1,2]` and zero findings;
+this establishes stability at final verification, not historical raw equality.
+File-only validation passed against the actual completed evidence: seven stage
+pins and 32 supporting proof pins, with the immutable journal, archive and
+readiness report unchanged. Eight in-memory mutations of the proof were
+rejected. All 28 related Windows CTests passed, including the new profile's
+13-assertion fixture. No live probe, ESP mount, firmware write or VM was used;
+the operator's retirement Review and Apply remain pending.
+
 This failure occurs before IOMMU programming and VMX activation. The separate
 OpenVolume failure observed after successful activation in run 160027 remains
 unvalidated; this run provides no evidence that it is fixed. The PCR replay
