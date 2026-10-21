@@ -1,5 +1,72 @@
 # GPU diagnostic payload failure investigation
 
+## Seventh physical run: AP preparation succeeds; later image start reports Device Error
+
+Run `gpu-20261021T042142Z-8137a024c456457b840ce906358bbac2` used source
+`a52aa25e918223abae295876800933df9b642e46`, which includes the four-level
+VT-d table-format change. The operator's console photos show the payload
+launch reported `PASS`, with `payload_launch=ok`, `payload_status=0`, and
+`shim_load_phase=firmware_load` / `shim_load_status=0`. The startup record is
+valid and reports stage `return`, reason `none`, status zero; all 20 CPUs
+were prepared and VMX-ready. Resource, preparation, and activation statuses
+are `0x00000002` (ready), with preparation and activation failure fields zero.
+This run no longer shows the earlier AP-preparation failure.
+
+A later console photo reports `start_image() returned Device Error`. The
+available capture does not identify which image-start operation returned
+that status. The collection recorded all 20 CPUs as `ABSENT`, Secure Boot on,
+and the ESP matching its backup, but `handoff-status.txt` and
+`payload-diagnostic.txt` were absent from the ESP at collection. There is no
+persisted startup-record file from this collection. The photos and collection
+therefore do not establish the exact handoff failure, whether the payload remained
+resident, whether firmware fell back to another path, or any GPU-isolation
+result. The loader source reports the payload diagnostic, writes handoff
+status, may launch an optional inventory image, and then attempts the Windows
+boot manager; the missing files prevent correlating the console error to
+those operations.
+
+Rollback and the operator's full power-cycle completed. FinalVerify confirmed
+a changed boot ID, Secure Boot on, all 20 CPUs `ABSENT`, and the original
+Windows boot-manager hash. Its only error was a textual firmware-enumeration
+difference: the archived baseline is SHA-256
+`66786928B0A56B57EE9E2137A0645783C9E6C090B6E9B65F88FBF5B91DAA5007`
+(2890 bytes), and the current capture is
+`7D975992028402E8B90F58AF695D0234F028C9B8B106E1BA36BCD5595E32D4E4`
+(4336 bytes). The comparison shows three generic firmware application blocks
+(`UEFI:CD/DVD Drive`, `UEFI:Removable Device`, and `UEFI:Network Device`)
+and their display-order GUID references added; the Windows and two USB blocks
+are unchanged. This is only a text comparison. The run has no historical raw
+BootOrder capture, so it does not establish raw firmware-variable equality or
+that the added entries are benign.
+
+The journal remains `Disarmed` and the selector is retained. The failed
+FinalVerify intent is preserved, and no rollback is needed. Capture fresh
+evidence with the run-specific,
+read-only inspection:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Inspect-GpuFinalFirmware.ps1 -Run042142
+```
+
+Require `READONLY_FIRMWARE_REVIEW_CAPTURED`, `Succeeded: true`,
+`SelectorAndJournalUnchanged: true`, `EspUnmounted: true`,
+`CleanupSucceeded: true`, and empty `Errors` and `CleanupErrors`. Also require
+health `ABSENT` on all 20 CPUs, stable firmware text, stable raw boot-selection
+captures, BootNext absent, no selected entry targeting the retained stage,
+and zero integrity findings. Preserve the full result and its evidence pin.
+The inspector does not complete recovery or prove historical raw BootOrder
+equality; its `RecoveryCompleted` field remains false. Wait for the
+receipt-bound completion instructions before retrying FinalVerify or
+archiving this selector. Do not use the reviewed-difference flag for this run
+without that explicit completion step. This pending review does not prove the
+payload failure cause or GPU isolation.
+
+Offline validation passed all five related firmware-inspection, review,
+module-scope, and host-platform tests. A separate file-only check matched all
+11 saved evidence/tool/source pins and the actual failed journal, verified
+the no-effects preview, and confirmed that the selector and journal stayed
+unchanged. No VM or live inspection was run during this validation.
+
 ## Sixth physical run: VT-d supports only the 48-bit table format
 
 Run `gpu-20261021T032117Z-e70cc55505f948aab50c6c830b9048b1` used clean source
@@ -55,9 +122,10 @@ retain detection of genuine external references and reject mismatched
 registers, missing bounds, corrupt targets, and invalid table extents.
 No audit bypass or image-specific exemption was added.
 
-This corrects the measured table-format mismatch in source and host models.
-The new image has not been signed, staged, armed, or booted; no VM was started.
-Successful physical activation and GPU isolation remain unverified.
+This corrected the measured table-format mismatch in source and host models.
+At that point, the rebuilt image had not been signed, staged, armed, or booted;
+no VM was started for that run. The seventh physical run above later exercised
+the updated image, but successful GPU isolation remains unverified.
 
 FinalVerify completed with Secure Boot enabled, all 20 CPUs ABSENT, the reset
 boundary passed, the Windows boot-manager and firmware-text baselines matched,
