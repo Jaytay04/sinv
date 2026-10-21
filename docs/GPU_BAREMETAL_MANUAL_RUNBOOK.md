@@ -1,22 +1,80 @@
 # Intel UHD 770 bare-metal diagnostic runbook
 
 This procedure runs the physical-host GPU diagnostic and records where the
-payload-to-Windows handoff fails. It is not a VM test. The last completed run,
-`gpu-20261021T042142Z-8137a024c456457b840ce906358bbac2`, passed recovery
-verification and is archived. The physical activation still has no GPU
-isolation attestation. Its console showed successful AP preparation and payload
-return, followed later by `start_image() returned Device Error`; the exact
-failing EFI operation remains unknown. The diagnostics in commit `15c79ba`
-report the file, device-path, `LoadImage`, `StartImage`, and returned EFI
-statuses, and check the handoff status and diagnostic files after writing.
-They do not claim data persisted across a later power loss.
+payload-to-Windows handoff fails. It is not a VM test. Run
+`gpu-20261021T062106Z-d7c2add0ddc44d0fb3b06badc7018942` completed
+`FinalVerify` with
+`FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED`. Its phase is
+complete and there is no action in progress. The payload returned status zero
+after preparing 20 of 20 processors. The console also recorded a transient
+diagnostic-file write path returning `EFI_TIMEOUT` (`0x12`) with readback not
+run, followed by the `bootmgfw` file-read path returning `EFI_DEVICE_ERROR`
+(`0x7`) before `LoadImage` or `StartImage`. The exact failing filesystem
+operation and any storage or DMA cause remain unproven. No payload fix has
+been made. The physical activation has no GPU isolation attestation.
 
-The archived run left exactly five files in `EFI\insecure-boot`:
-`shimx64.efi`, `grubx64.efi`, `payload.efi`, `tcglog.ib`, and
-`manifest.sha256`. Before another stage, retire those files using only the
-closed profile for that archived run. The original firmware-text baseline is
-preserved. Do not treat a firmware-text change on a future run as reviewed by
-the older run's inspection.
+## Current cleanup: archive and retire run 062106
+
+Use elevated 64-bit Windows PowerShell from the main workspace. Archive the
+completed run before starting another run. Then capture fresh readiness and,
+if it reports only the retained stage as a blocker, review and retire that
+stage with its run-specific profile. Stop on any other blocker, failed status,
+or error. Preserve all evidence; do not manually delete EFI files or retry a
+failed `-Apply` action.
+
+```powershell
+Set-Location 'C:\Users\jayli\OneDrive\Documents\Projects\hsinv'
+```
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Archive
+```
+
+Require `SELECTOR_ARCHIVED` and `JournalPreserved: true`. The retirement
+profile checks the archived selector against the exact 533-byte copy with
+SHA-256 `4510690FAD83991612344C958E26C334F19850F71D54B6D51669F7EF94AAB484`.
+
+Capture and display a new readiness result:
+
+```powershell
+$readiness = powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Get-GpuBaremetalReadiness.ps1 | Out-String | ConvertFrom-Json
+```
+
+```powershell
+$readiness | Select-Object Status, Blockers, EvidencePath | ConvertTo-Json -Depth 8
+```
+
+If readiness is `READY_FOR_FRESH_PREPARE`, skip retirement and continue to
+step 2. If it is `BLOCKED_READINESS` only because the 062106 stage is retained,
+review it using the exact evidence path captured above:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun062106 -ReadinessPath $readiness.EvidencePath
+```
+
+Require `REVIEWED_STAGE_READY_FOR_RETIREMENT`, `Succeeded: true`, no errors,
+and successful cleanup with the ESP unmounted. Only then apply the same
+run-specific profile:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun062106 -ReadinessPath $readiness.EvidencePath -Apply
+```
+
+Require `STAGE_RETIRED`, `Succeeded: true`, no errors, and successful cleanup
+with the ESP unmounted. Capture readiness again and require
+`READY_FOR_FRESH_PREPARE` with no blockers:
+
+```powershell
+$readiness = powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Get-GpuBaremetalReadiness.ps1 | Out-String | ConvertFrom-Json
+```
+
+```powershell
+$readiness | Select-Object Status, Blockers, EvidencePath | ConvertTo-Json -Depth 8
+```
+
+If review or apply fails, or readiness shows any additional blocker, stop and
+preserve the evidence. Do not retry `-Apply` or generically delete EFI files.
+The older `042142` retirement profile does not apply to run 062106.
 
 ## Before starting
 
@@ -55,7 +113,7 @@ prove Intel GOP routing. The native path requires a supported Intel GOP mode,
 one active pipe, and a framebuffer no larger than 8 MiB. Save open work and use
 a controlled network. Do not unbind the Intel Windows driver.
 
-## 1. Inspect readiness and retire the previous stage
+## Before starting another run
 
 Optional preview only:
 
@@ -73,44 +131,10 @@ $readiness = powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-bu
 $readiness | Select-Object Status, Blockers, EvidencePath | ConvertTo-Json -Depth 8
 ```
 
-If it already reports `READY_FOR_FRESH_PREPARE`, skip the retirement commands
-and continue to step 2.
-
-If readiness reports `BLOCKED_READINESS` only because the previous stage is
-retained, review it against the completed `042142` run:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun042142 -ReadinessPath $readiness.EvidencePath
-```
-
-Require `REVIEWED_STAGE_READY_FOR_RETIREMENT`, `Succeeded: true`, no errors,
-and successful cleanup with the ESP unmounted. This profile compares the
-current mounted-ESP firmware text with the fresh reviewed capture for run
-042142. It requires BootNext absent, bounded BootOrder entries, no references
-to staged boot entries, and zero integrity findings. The saved raw selection
-does not prove historical BootOrder continuity. Preserve all local and
-external copies. If any check fails, stop and retain its evidence; do not
-delete ESP files manually.
-
-Only after review passes, apply the same closed profile:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun042142 -ReadinessPath $readiness.EvidencePath -Apply
-```
-
-Require `STAGE_RETIRED`, `Succeeded: true`, no errors, and cleanup success.
-Then inspect readiness again and require `READY_FOR_FRESH_PREPARE`:
-
-```powershell
-$readiness = powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Get-GpuBaremetalReadiness.ps1 | Out-String | ConvertFrom-Json
-```
-
-```powershell
-$readiness | Select-Object Status, Blockers, EvidencePath | ConvertTo-Json -Depth 8
-```
-
-If there is any blocker other than that retained stage, stop and resolve it
-before Prepare. Never generically delete or retry an interrupted action.
+The complete archive and retirement procedure for the current completed run is
+above. The earlier 042142 retirement procedure is historical and must not be
+reused for 062106. Before Prepare, require fresh readiness status
+`READY_FOR_FRESH_PREPARE` with no blockers.
 
 ## 2. Prepare, build, sign, back up, and stage
 
@@ -231,10 +255,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees
 ```
 
 Require `SELECTOR_ARCHIVED` and `JournalPreserved: true`. If FinalVerify fails
-only because the firmware text differs, preserve its evidence and stop. The
-`042142` firmware inspection and reviewed-difference flag are pinned to that
-completed run; do not reuse them for a new run. Obtain a read-only review
-profile pinned to the new run before any reviewed-difference verification.
+only because the firmware text differs, preserve its evidence and stop.
+Firmware inspection and reviewed-difference profiles are pinned to a specific
+completed run; use only a profile and fresh review capture for that exact run.
+Neither the `042142` nor `062106` profile applies to a later run.
 Recovery verification and `GPU_UNATTESTED` do not prove GPU isolation or
 successful native scanout.
 
@@ -250,7 +274,20 @@ Follow its saved recovery state; do not edit evidence or firmware baselines to
 make checks pass. If Windows cannot boot, use the prepared recovery media and
 full-system backup.
 
-## Validation of this guide
+## Validation of the 062106 cleanup
+
+The focused retirement fixtures passed 10 cases and 56 assertions. A
+process-local prearchive test checked all 45 saved proof pins using the live
+selector's identical expected archive bytes. It did not create an archive or
+change the selector, journal, or result. The unchanged production proof
+rejected the missing archive. The complete production proof still requires
+the operator's successful Archive command and fresh readiness evidence.
+
+The static build and all 52 hypervisor host tests passed. All 27 PowerShell
+blocks in this guide parsed successfully. Validation did not start a VM,
+mount the ESP, remove staged files, or change firmware or boot selection.
+
+## Historical validation of the 042142 retirement procedure
 
 The 042142 retirement proof matched all 47 saved evidence pins without changing
 the archived journal, selector, or result. The static build passed, and all 48
