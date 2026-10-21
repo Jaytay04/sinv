@@ -1,350 +1,256 @@
 # Manual Intel UHD 770 bare-metal test
 
-**Archived run instructions.** This guide produced run `032117`, which is now
-recovered, complete, and archived. Its saved diagnostic confirms a VT-d
-table-format mismatch; see the
-[sixth-run investigation](GPU_PAYLOAD_FAILURE_INVESTIGATION.md#sixth-physical-run-vt-d-supports-only-the-48-bit-table-format).
-The `-CompletedRun023306` retirement commands below do not own the retained
-`032117` stage. A new run requires its own retirement review and an updated
-guide after offline verification of the table-format fix.
+This runbook starts a fresh physical-host test with the existing `gpu-host-test.ps1`
+workflow. It does not use the VM payload workflow. The previous physical run,
+`gpu-20261021T032117Z-e70cc55505f948aab50c6c830b9048b1`, completed recovery and
+was archived; its seven staged files remain on the ESP until the matched,
+bounded retirement procedure in step 2 removes them.
 
-This is the operator-run physical test you requested, using the existing
-`gpu-host-test.ps1` workflow. It is separate from the completed VM test.
-The agent has not staged, armed, rebooted, or changed the primary host for this
-guide. Repository automated VMX and boot validation remains in disposable VMs;
-this guide does not change `AGENTS.md`.
+The new `032117` retirement profile passed its read-only check against the
+archived evidence and 10 related host regression tests. All 24 PowerShell
+blocks below were syntax-checked. No live retirement, VM, or host boot action
+was performed while preparing this guide.
 
-Use **`gpu-host-test.ps1` for this guide**, not `gpu-payload-test.ps1`.
-The latter's `Complete` result belongs to the VM, not your physical machine.
+The measured failure was a VT-d table-format mismatch: the remapper supported
+48-bit tables while advertising a 39-bit maximum guest address width (MGAW).
+Candidate fix `ada3e4f` selects a second-level table format supported by all
+units while keeping the DMA and table-address limits at 39 bits. Its unsigned
+native build, resident-image audit, and 43 host tests passed offline. The fix
+has not yet been activated on this host; this run tests that physical behavior.
+See the [failure analysis](GPU_PAYLOAD_FAILURE_INVESTIGATION.md#sixth-physical-run-vt-d-supports-only-the-48-bit-table-format)
+for the saved evidence and scope of the result.
 
-Run `023306` passed ordinary recovery verification and its selector is
-archived. The payload failed the VT-d programming-plan capability check; see
-the [investigation](GPU_PAYLOAD_FAILURE_INVESTIGATION.md#fifth-physical-run-vt-d-programming-plan-capability-rejection).
-Its retained stage must pass the fixed `-CompletedRun023306` retirement below
-before a fresh run. The older retirement profiles do not own these files.
-
-The [startup diagnostic VM test](GPU_STARTUP_DIAGNOSTIC_VM_RESULT.md) passed
-signed EFI boot, the version-1 startup record, and four CPU health checks.
-It used Windows 26200.9457, versus the host's
-26200.9711, and needed a hard-stop fallback after graceful shutdown timed out.
-It did not exercise the physical Intel GPU, native VT-d enforcement, native
-framebuffer mapping, or host MOK acceptance. This is a diagnostic experiment,
-not a validated deployment.
-
-The new run must include commit `01142a0`. The previous image reported
-`0x89030B0B`: runtime installation, programming-plan stage, and
-`REMAPPING_UNSUPPORTED` as both primary and final result. It prepared all 20
-CPUs and stopped before activation. The new image records the rejected unit,
-predicate, and the capability fields used by that check. It preserves the
-admission policy; the cause is still awaiting a physical measurement.
-Its unsigned native build, resident-image audit, all 43 host tests, and
-loader formatter regression passed. No VM is needed or started by this guide;
-the current VM path does not exercise physical VT-d installation. Live
-retirement and the next physical boot remain operator steps.
+The prior photo's PCR replay refusal is an independent loader gate. Do not
+clear PCRs or weaken that check. Preserve the complete payload diagnostic and
+photograph any console result. A successful recovery or a health-only result
+does not prove GPU isolation.
 
 ## Before starting
 
-Use elevated **64-bit Windows PowerShell**, and run each command separately.
-Do not paste the entire guide into a terminal. Wait for a successful result
-before the next forward action. All paths below start at the main workspace;
-the scripts operate on the feature worktree and leave `main` untouched.
-After your normal Windows restart, confirm that audio and displays work at
-baseline before starting the new experiment.
+Use elevated **64-bit Windows PowerShell**. Run each fenced command separately
+and wait for its result before continuing. Commands start from the main
+workspace; the scripts operate from the feature worktree.
 
 ```powershell
 Set-Location 'C:\Users\jayli\OneDrive\Documents\Projects\hsinv'
 ```
 
-Confirm the feature worktree is clean and contains the new diagnostics:
+Confirm the feature worktree is clean, on the expected branch, and contains
+the candidate fix:
 
 ```powershell
 git -C .\.codex-build\worktrees\gpu-windows-validation status --short --branch
 ```
 
 ```powershell
-git -C .\.codex-build\worktrees\gpu-windows-validation merge-base --is-ancestor 01142a0 HEAD
+git -C .\.codex-build\worktrees\gpu-windows-validation merge-base --is-ancestor ada3e4f HEAD
 ```
 
-Require branch `feat/smbios-boot-serial-probe`, no changed/untracked files, and
-exit code zero from the ancestry check. The main checkout may remain on `main`.
+Require branch `feat/smbios-boot-serial-probe`, no changes or untracked files,
+and exit code zero from the ancestry check. Do not make source changes, pull,
+commit, or switch branches between Prepare and Arm.
 
-Keep the recovery disk connected, a tested full-system backup and recovery
-media available, and any BitLocker recovery key offline. The recovery folder
-must already exist on a different physical disk from Windows:
-`E:\CodexBackup\Recovery\hsinv-gpu-test`. A folder or an ESP copy alone is
-not a full-system backup.
+Keep the tested full-system backup and recovery media available, the external
+recovery disk connected, and the BitLocker recovery key available offline.
+The recovery folder must be on a different physical disk from Windows:
+`E:\CodexBackup\Recovery\hsinv-gpu-test`. An ESP copy alone is not a full
+system backup. Keep Secure Boot enabled and use the existing host shim/MOK
+trust setup; do not clear keys or weaken signature checks. Confirm VMX and
+VT-d are enabled in firmware.
 
-Choose the attached USB media before readiness and Prepare. Keep that device
-configuration through the test boot, rollback, and recovery verification.
-Record any necessary insertion or removal; preserve the original firmware
-baseline and review the actual difference if FinalVerify reports a mismatch.
-Do not reuse a reviewed-difference approval from another run.
+Keep the USB-device configuration stable from readiness inspection through
+recovery verification. Record any insertion or removal. Check that audio and
+both displays work normally before the test so post-run changes are visible.
+Keep the main display on NVIDIA and connect the diagnostic display to the
+motherboard's Intel HDMI/DP output. Windows monitor detection does not prove
+Intel GOP routing. The native path requires a supported linear Intel GOP mode,
+one active pipe, and a stride-times-height extent no larger than 8 MiB; it
+does not select a connector or set a mode.
 
-Keep the main display and firmware console on NVIDIA. Connect the diagnostic
-display to the motherboard's Intel HDMI/DP output. Windows detecting that
-monitor does not prove an active Intel firmware/GOP mode or exclusive ownership.
-The native path needs a supported linear Intel GOP mode, one active pipe, and
-a stride-times-height extent of at most 8 MiB. It does not enable a connector
-or set a display mode for you. Unsupported state must remain unsupported.
+Save open work and use an offline or controlled network. Do not manually
+unbind the Intel Windows driver. Firmware/SMM remain trusted and can write to
+display or DMA state outside the hypervisor's enforcement.
 
-Secure Boot must stay enabled. The existing project signer must already be
-accepted through the host's intended shim/MOK trust path. A successful local
-signature check or VM firmware-db append does not prove that prerequisite.
-Use the existing [shim inventory procedure](EFI_INVENTORY_PATH_B.md) for its
-scope; do not clear keys, weaken validation, or disable Windows security to
-force this test through. VMX/VT-d availability is also required.
+## 1. Inspect readiness and preserve its evidence path
 
-Save work and use an offline or controlled network. Do not stop/unbind the
-Intel Windows driver manually: native boot enforcement is responsible for
-guest exclusion. Firmware/SMM are explicitly trusted; their display or DMA
-writes can silently violate root ownership without a guaranteed latch.
-
-## 1. Inspect readiness before creating another run
-
-Optional preview; this performs no queries or filesystem operations:
+Optional preview:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Get-GpuBaremetalReadiness.ps1 -WhatIf
 ```
 
-Then run the actual inspection:
+Run the inspection and retain the exact evidence path in the same PowerShell
+session:
 
 ```powershell
 $readiness = powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Get-GpuBaremetalReadiness.ps1 | Out-String | ConvertFrom-Json
 ```
 
-Display the captured result and keep this PowerShell session open through
-retirement:
+```powershell
+$readiness | ConvertTo-Json -Depth 8
+```
+
+The normal inspection saves local evidence and temporarily mounts the system
+ESP at `S:` for reads, then removes its own mount. It does not write ESP files
+or firmware. Require `READY_FOR_FRESH_PREPARE` to proceed. If the result is
+`BLOCKED_READINESS` because the retained `EFI\insecure-boot` stage exists,
+continue to step 2. Preserve the report's exact `$readiness.EvidencePath`.
+Resolve any other blocker before continuing. An active selector is handled
+with Status and, only after successful completed verification, Archive; do
+not choose a run by timestamp.
+
+## 2. Retire only the completed 032117 stage, if readiness is blocked by it
+
+This profile is pinned to archived run `gpu-20261021T032117Z-e70cc55505f948aab50c6c830b9048b1`
+and its seven recorded stage files. The old profiles for runs `023306`,
+`201140`, `224018`, and `150318` do not own these files. Do not use them here.
+If readiness is already clear, skip to step 3.
+
+First perform the live review:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun032117 -ReadinessPath $readiness.EvidencePath
+```
+
+Require `REVIEWED_STAGE_READY_FOR_RETIREMENT`, `Succeeded: true`, successful
+cleanup with the ESP unmounted, and no errors. Review must preserve verified
+local and external copies of all seven files, confirm Windows health is
+`ABSENT` on all 20 expected CPUs, check the archived mounted-ESP firmware-text
+baseline (`66786928B0A56B57EE9E2137A0645783C9E6C090B6E9B65F88FBF5B91DAA5007`,
+2890 bytes), and verify raw boot selection
+has no BootNext, no referenced staged entry, and no integrity findings. This
+profile has no reviewed-firmware-difference override. If any check fails,
+preserve its evidence and stop.
+
+Only after the review passes, apply the bounded retirement:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun032117 -ReadinessPath $readiness.EvidencePath -Apply
+```
+
+Require `STAGE_RETIRED`, `Succeeded: true`, successful cleanup, and the ESP
+unmounted. Apply rechecks the review conditions and removes only the seven
+hash-matched files and their empty stage directory. It preserves Windows Boot
+Manager, BCD, firmware variables, the archived journal, and archive. Do not
+retry after a partial removal or cleanup error.
+
+Run readiness again and require a fresh `READY_FOR_FRESH_PREPARE`:
+
+```powershell
+$readiness = powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Get-GpuBaremetalReadiness.ps1 | Out-String | ConvertFrom-Json
+```
 
 ```powershell
 $readiness | ConvertTo-Json -Depth 8
 ```
 
-This saves local observations and temporarily mounts the system ESP at `S:`
-using the existing owned-mount helper. It removes only its own mount afterward.
-It does not write ESP files or firmware variables, sign, stop a driver, or arm
-a boot. `S:` must be free. Require `READY_FOR_FRESH_PREPARE` before step 2.
-This result is a preparation gate, not proof of MOK trust, GOP suitability,
-GPU isolation, or framebuffer ownership.
+## 3. Prepare a fresh run
 
-**Current retry prerequisite:** run
-`gpu-20261021T023306Z-f33dfae1e322470ca9315bbbf8d49185` completed ordinary
-reset verification and its selector is archived. Archive preserved its stage.
-The recorded collection contains seven files: the five installed files,
-`handoff-status.txt`, and `payload-diagnostic.txt`. This guide starts a new run;
-it does not reuse those signed artifacts.
-
-If inspection finds that stage, stop at `BLOCKED_READINESS` before Prepare,
-Build, Backup, Stage, or Arm. The only expected blocker is the retained
-`EFI\insecure-boot` directory. Preserve the report's exact `EvidencePath`.
-The explicit `-CompletedRun023306` profile below validates that report against
-the fixed completed journal, archive, and all seven recorded file hashes.
-The no-argument profile belongs to `150318`; `-CompletedRun201140` and
-`-CompletedRun224018` belong to those older runs. Use none of them for this stage.
-If readiness is already
-`READY_FOR_FRESH_PREPARE`, skip retirement and continue at step 2.
-
-### Retire the matched completed stage
-
-First run the live review from elevated PowerShell:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun023306 -ReadinessPath $readiness.EvidencePath
-```
-
-Require `REVIEWED_STAGE_READY_FOR_RETIREMENT`, `Succeeded: true`,
-`EspUnmounted: true`, and no cleanup errors. Review does not remove ESP files.
-It saves and verifies local and external copies of all seven files, confirms
-health `ABSENT` on the expected CPUs, and checks the saved firmware baseline.
-The separately pinned read-only audit tool checks raw BootNext/BootOrder and
-referenced entries without a broad TPM/MOK capture. BootNext must be absent
-and no referenced boot entry may target the stage. A changed hash, unknown
-file, failed read, changed boot selection, or unavailable recovery copy stops
-the operation.
-
-The profile requires the exact completed `023306` journal, archive, successful
-ordinary FinalVerify result, and original `66786928...1DAA5007` firmware
-baseline (2890 bytes). Live mounted-ESP firmware text must equal that baseline:
-`FirmwareBaselineSource: ARCHIVED_BACKUP`,
-`OriginalFirmwareBaselineEqual: true`, and `FirmwareBaselineEqual: true`.
-This profile accepts no reviewed
-firmware difference. Fresh raw boot selection must remain stable throughout
-retirement, with BootNext absent, no referenced stage entry, and zero integrity
-findings. This run has no historical raw BootOrder snapshot to compare against;
-the check does not claim one or attest unreferenced boot variables. Do not
-rewrite the baseline or delete firmware entries to force a match.
-
-Only after that successful review, perform the bounded removal:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun023306 -ReadinessPath $readiness.EvidencePath -Apply
-```
-
-Apply repeats the checks, saves fresh verified copies and a removal intent,
-and removes only the seven matching files and their now-empty directory.
-Windows Boot Manager, BCD, firmware variables, the completed journal, and its
-archive are preserved. Require `STAGE_RETIRED`, `Succeeded: true`,
-`EspUnmounted: true`, and no cleanup errors. If any removal or cleanup fails,
-preserve its receipt and do not retry a partial removal.
-
-Repeat the readiness command after successful retirement. Require a fresh
-`READY_FOR_FRESH_PREPARE` before step 2. Do not delete or rename the directory
-generically, reuse the old stage, or rerun old rollback. This retirement
-profile cannot remove a future run's files.
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Get-GpuBaremetalReadiness.ps1
-```
-
-If inspection instead finds an active selector, inspect its saved state:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Status
-```
-
-Only when that exact run has successful `FinalVerify`, phase `Complete`, and
-no action in progress, archive its selector:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Archive
-```
-
-If Status says `NOT_PREPARED`, skip Archive. Archive preserves evidence; it
-does not clean the ESP. Re-run the readiness inspection after resolving its
-specific blocker. Do not edit a journal or select a run by directory timestamp.
-
-## 2. Prepare the fresh physical run
-
-Only after readiness and the manual prerequisites above pass:
+Proceed only after readiness passes and the physical-output and recovery
+prerequisites are confirmed:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Prepare -PhysicalOutputConfirmed -RecoveryReady
 ```
 
-Require `PREPARED_READONLY_GATE_PASS`. Save the printed run/journal paths.
-These switches are your declarations, not connector/GOP/MOK verification.
-Prepare records the host and clean feature commit; it does not activate GPU
-isolation. Do not edit source, pull, commit, or switch branches between Prepare
-and Arm. A changed revision requires closing that run and starting a fresh one.
+Require `PREPARED_READONLY_GATE_PASS` and save the printed run and journal
+paths. The two switches record your confirmations; they do not verify GOP,
+MOK trust, GPU ownership, or isolation.
 
-## 3. Build and test
+## 4. Build and run host tests
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Build
 ```
 
-Require `BUILD_AND_TESTS_PASS`, both component CTest suites green, and unsigned
-`.hvscan` pass. The scripts find Visual Studio themselves. This is a new
-run-specific build, not reuse of the VM binaries. Native GPU support and
-physical-output confirmation are on; the synthetic VM self-test is off.
-The host loader disables VM debug ports and enables replay-independent payload
-loading. The signed VM test used debug ports on, so its loader hash differs.
+Require `BUILD_AND_TESTS_PASS`, passing component tests, and unsigned resident
+image audit. This builds for this run; do not substitute VM artifacts.
 
-## 4. Sign and audit
+## 5. Sign and audit the artifacts
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Sign
 ```
 
-Require `SIGNATURE_AND_AUDIT_PASS`. Signing uses the existing current-user key
-without exporting it or creating firmware trust. Preserve both signed hashes
-and the signed `.hvscan` result. Do not substitute a VM payload or bypass a
-signature failure.
+Require `SIGNATURE_AND_AUDIT_PASS`. Preserve the signed artifact hashes and
+audit evidence. Signing does not create firmware trust. Stop on any failure.
 
-## 5. Back up the recorded system ESP
+## 6. Back up the system ESP
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Backup
 ```
 
-Require `ESP_BACKUP_VERIFIED` and verified local/external manifests. Backup
-records ESP identity, firmware enumeration, EFI files, a logical system BCD
-export, and reference TPM logs. It does not modify Windows Boot Manager.
-Do not raw-copy a locked BCD hive, delete an older `.bak`, or bypass a residue
-failure. A Backup failure goes to the recovery section, not another Backup.
+Require `ESP_BACKUP_VERIFIED` and verified local and external manifests. The
+backup records ESP identity, files, firmware enumeration, a logical system
+BCD export, and TPM reference logs. It does not modify Windows Boot Manager.
+Do not raw-copy the locked BCD hive, delete a `.bak`, or bypass a residue
+failure. Preserve a failed action and follow step 13; do not retry Backup.
 
-## 6. Stage the signed files
+## 7. Stage the signed files
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Stage
 ```
 
-Require `STAGE_READBACK_PASS`. This is the first forward step that writes EFI
-payload files to the ESP. It verifies their hashes and leaves Windows Boot
-Manager unchanged. It does not arm the next boot.
+Require `STAGE_READBACK_PASS`. This writes the run's EFI payload files to the
+ESP and verifies their hashes. Windows Boot Manager remains unchanged; the
+next boot is not yet armed.
 
-## 7. Arm this run's one-shot boot
+## 8. Arm the one-shot boot
 
-Recheck recovery access, MOK prerequisites, and all preceding receipts first:
+Recheck recovery-disk access, MOK prerequisites, and all preceding receipts.
+Then run:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Arm
 ```
 
-Require `ARMED_MANUAL_REBOOT_REQUIRED`. This changes owned BootNext/Boot####
-state; it does not reboot. Do not arm again or change BootOrder.
+Require `ARMED_MANUAL_REBOOT_REQUIRED`. This changes only the workflow-owned
+one-shot boot state and does not reboot. Do not arm again or change BootOrder.
 
-## 8. Perform the physical test boot
+## 9. Boot once and record the console
 
 Record the console externally if possible. A verified legacy COM1 connection
-can capture hypervisor serial output; a USB serial dongle alone does not
-provide the required legacy I/O port. Do not enable VM debug-port writes on
-the host. Photograph any firmware, shim, gate, or payload error exactly.
-
-After saving work, run this command yourself to consume the armed boot:
+can capture hypervisor serial output; a USB serial adapter alone is not the
+required legacy I/O port. Photograph any firmware, shim, gate, or payload
+message exactly. After saving work, manually restart:
 
 ```powershell
 shutdown.exe /r /t 0
 ```
 
 Watch both displays. If admitted, the Intel display should show the one-time
-red `ROOT GPU` diagnostic while Windows uses NVIDIA. Record a photograph and
-the run ID. Absence of the pattern, a halt, signature rejection, or Windows
-health `ABSENT` is not a successful physical test. Do not weaken admission,
-force a display mode, sleep/hibernate, or loop repeated boots to obtain a pass.
+red `ROOT GPU` diagnostic while Windows uses NVIDIA. Do not weaken admission,
+force a display mode, or repeat boots to obtain a pass. A PCR-bank replay
+refusal is independent: preserve it as evidence and do not clear PCRs.
 
-## 9. Collect evidence after Windows returns
+## 10. Collect the post-boot evidence
 
-Open elevated PowerShell, return to the main workspace, then run:
+After Windows returns, open elevated PowerShell in the main workspace:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Collect
 ```
 
-The health-only success status is
-`COLLECTED_HEALTH_ONLY_GPU_UNATTESTED`. Require every CPU captured at Prepare
-to pass, Secure Boot on, and the same Windows Boot Manager hash. Collection
-also saves available `handoff-status.txt` and `payload-diagnostic.txt` as
-`esp-handoff-status.txt` and `esp-payload-diagnostic.txt` in its action directory.
-Preserve the exact `payload_launch`, `payload_status`, `shim_load_phase`, and
-`shim_load_status` values. The new loader also captures `startup_record` and,
-when valid, `startup_stage`, `startup_reason`, `startup_status`, processor,
-CPU counts, and preparation/activation failure fields. Preserve the entire
-file. A valid returned-error record narrows the internal startup failure;
-`unavailable` or `invalid` does not identify a stage. A file can be unavailable
-if boot stopped before writing it; preserve the console capture in that case.
-This record cannot persist a nonreturning fail-stop or guarantee a fresh file
-when writing fails. Do not clear TPM PCRs to bypass the replay guard.
+The expected health-only success status is
+`COLLECTED_HEALTH_ONLY_GPU_UNATTESTED`. Require all expected CPUs to pass,
+Secure Boot on, and the same Windows Boot Manager hash. `GPU_UNATTESTED` is
+the collector's explicit scope; do not relabel it as isolation success.
 
-For `startup_stage=ap_prepare`, untagged details 10-16 identify memory-policy
-preparation substeps. Preserve the complete unsigned decimal value of a
-high-bit detail. Substeps 1..24 use the earlier IOMMU/GPU result layout;
-substeps 32..63 use the new capability layout. The
-[capability mapping](GPU_PAYLOAD_FAILURE_INVESTIGATION.md#capability-evidence-for-a-future-diagnostic-run)
-identifies unit index, VERSION/SAGAW/MGAW/SLLPS rejection, requested table width,
-version, supported formats, address width, 2 MiB support, and final runtime
-result. Do not decode the new group as the old stage/primary/final triple.
-Even when the console is not visible, the collected file may contain this
-evidence. Save the entire file before beginning recovery.
+Preserve the complete action-directory `esp-payload-diagnostic.txt`,
+`esp-handoff-status.txt` when present, and a clear console photograph. Keep
+all startup fields intact, including `startup_detail`, AP preparation status,
+and shim/payload launch status. The startup record can identify returned
+errors but cannot record a nonreturning failure. PCR replay refusal is a
+separate loader gate; it does not explain a payload startup failure. Do not
+decode capability-detail records using the older detail layout; use the
+[failure analysis](GPU_PAYLOAD_FAILURE_INVESTIGATION.md#capability-evidence-for-a-future-diagnostic-run).
 
-`replay=ABORTED` alone does not explain a payload failure: the loader is
-replay-independent. A healthy hypervisor or a visible pattern also does not
-independently attest every plane/GGTT/DMA permission. The Windows collector
-always reports GPU isolation as unattested; do not relabel that result.
+If collection fails, preserve the evidence and use step 13. Do not run Arm
+again.
 
-If collection fails, use the recovery path below. Do not run another Arm.
-
-## 10. Disarm, then reset the platform
+## 11. Disarm and reset the platform
 
 After collection, clear only this run's owned one-shot state:
 
@@ -352,230 +258,64 @@ After collection, clear only this run's owned one-shot state:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Disarm
 ```
 
-Require success. `DISARMED_RESET_REQUIRED` means the physical reset is still
-needed. There is no runtime return of the live Intel adapter to WDDM; pages
-stay pinned for that session. After saving work, perform a full shutdown:
+Require successful disarm. `DISARMED_RESET_REQUIRED` means the machine still
+needs a full reset. Save work and shut Windows down fully:
 
 ```powershell
 shutdown.exe /s /t 0
 ```
 
-Once powered off, power the machine on and boot the original Windows Boot
-Manager normally. Do not use sleep or hibernation as the reset boundary.
+After power-off, turn the machine on and boot the original Windows Boot
+Manager. Sleep and hibernation do not satisfy the reset boundary.
 
-## 11. Verify recovery and preserve the result
+## 12. Verify recovery, then archive
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 FinalVerify
 ```
 
 Require `FINAL_RESET_VERIFIED_GPU_UNATTESTED`, `Succeeded: true`, phase
-`Complete`, a changed boot ID after disarm, health `ABSENT` on all expected
-CPUs, Secure Boot on, both adapters restored, unchanged Windows Boot Manager,
-and matching firmware enumeration in the same ESP mount context. This is
-recovery proof, not proof the preceding GPU experiment succeeded.
+`Complete`, a boot ID different from the disarm boot ID, health `ABSENT` on
+every expected CPU, Secure Boot on, restored adapters, unchanged Windows Boot
+Manager, and matching firmware text captured in the same ESP context. A
+firmware mismatch is a failed verification until separately reviewed by the designated
+read-only firmware review workflow. Preserve its captures; do not approve a
+difference from an older run. Recovery verification does not prove the GPU
+test succeeded.
 
-Only then archive the selector:
+Only after successful FinalVerify, archive the selector:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Archive
 ```
 
-Use ordinary FinalVerify for a new run. `-ReviewedFirmwareDifference` accepts
-only the specifically reviewed runs and receipts encoded in the helper; it
-is not a general exception to the firmware comparison. If a fresh run's
-comparison fails, preserve its captures for a new review.
+Require `SELECTOR_ARCHIVED` and `JournalPreserved: true`. Archive does not
+remove staged files. Retire a completed stage only with a future matched
+profile for that exact run; never reuse the 032117 retirement profile.
 
-Keep the journal, signed hashes, CTest/audit logs, console captures, monitor
-photograph, and external recovery copy. Stage files remain evidence until
-separately reviewed and retired; Archive does not remove them. A retirement
-procedure must match that exact completed run and its files. Keep all retained
-repository VM folders on disk as well.
+## 13. Recovery after failure or interruption
 
-## Recovery after a failed or interrupted action
-
-Stop forward actions and preserve the reported paths. Query the exact saved
-run, then use the existing recovery entry point:
+Stop forward actions, preserve all reported paths, and inspect the exact run:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Status
 ```
 
+Use rollback for a failed or interrupted run, including a failure before Arm:
+
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-rollback.ps1
 ```
 
-After an Arm intent, rollback can report
-`RECOVERY_PENDING_USER_POWER_CYCLE`. Require successful cleanup, perform the
-full shutdown/power-on boundary from step 10, then run FinalVerify. Rollback
-does not perform runtime hand-back or erase staged files.
+If rollback reports `RECOVERY_PENDING_USER_POWER_CYCLE`, perform the full
+shutdown and power-on from step 11, then run FinalVerify. Rollback does not
+return the live Intel adapter to WDDM or erase staged files. For an early
+abort with no Arm intent and no recorded ESP target, follow the rollback
+result; do not guess a firmware entry.
 
-For an early abort with no Arm intent and no recorded ESP backup,
-`DISARMED_NO_ACTIVATION` can be followed by FinalVerify without reboot;
-require `VERIFIED_ABORTED_NO_ACTIVATION` before Archive. If an owned ESP mount
-was acquired, its unmount receipt must also succeed. Never unmount an unrelated
-`S:` assignment.
-
-If phase is already `Disarmed` and only FinalVerify failed, correct the
-reported verification issue and retry **FinalVerify**, not the already
-completed cleanup. Keep every previous receipt. A cleanup error is not success
-just because an entry is absent; do not reinterpret an installer's exit code.
-
-Windows [disk numbers can change across restarts](https://learn.microsoft.com/en-us/windows-hardware/drivers/storage/msft-disk).
-Recovery verification checks the manifest and journal against the current
-recovery disk's stable identity, verifies their recorded disk numbers agree
-with each other, and requires the recovery disk to remain separate from the
-Windows disk. The backup files and their hashes must still match.
-
-Run `gpu-20261020T224018Z-31b7c15e56584f84a68d89b7b3ecb1a1` exposed an
-incorrect comparison of the saved recovery disk number with its current
-number: the same USB disk changed from 1 to 2, with unchanged unique ID and
-serial number. That comparison is corrected. The run subsequently completed
-reviewed FinalVerify and Archive; do not repeat its recovery commands or edit
-the journal or manifest to replace the old disk number.
-
-### Archived 224018 firmware inspection: completed history
-
-This section records completed recovery work. Its commands are historical;
-do not repeat them for the archived run or use them for the new test.
-
-The subsequent FinalVerify for
-`gpu-20261020T224018Z-31b7c15e56584f84a68d89b7b3ecb1a1` passed the external
-backup, reset, Secure Boot, 20-CPU ABSENT health, adapter, and original Windows
-Boot Manager checks. Its only remaining error was the firmware-text mismatch.
-The saved mounted-ESP baseline is `4A1535FA...A723FAE` (4336 bytes); the new
-capture is `66786928...AA5007` (2890 bytes). The text removes the three generic
-CD/DVD, removable-device, and network blocks and their display-order
-references. The Windows and two USB blocks are unchanged. This comparison
-does not establish historical raw BootOrder equality or the cause of the
-enumeration change.
-
-The operator captured the fixed-run read-only inspection using:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Inspect-GpuFinalFirmware.ps1 -Run224018
-```
-
-Require `READONLY_FIRMWARE_REVIEW_CAPTURED`, `Succeeded: true`,
-`SelectorAndJournalUnchanged: true`, `EspUnmounted: true`, and no cleanup
-errors. The helper checks the exact failed journal and text captures, then
-captures fresh ABSENT health, Windows Boot Manager integrity, raw BootNext
-and BootOrder, and stable mounted firmware text. It requires BootNext absent,
-no referenced staged entry, zero integrity findings, and unchanged raw boot
-selection during its observation window. It does not assume the old run's
-BootOrder or modify firmware.
-
-The inspection passed. Its saved receipt is
-`.analysis/gpu-final-firmware-review/1dccd9d33d1b4c808fd1059291a6d19b/result.json`,
-SHA-256 `0E7107911CF43F4144F4E67AEBB647623003AF543FA38974EBEAE518F0D1642E`
-(15415 bytes). Both raw captures have BootNext absent, BootOrder `[0,1,2]`,
-and zero integrity findings. Fresh health reported ABSENT on all 20 CPUs;
-the ESP was unmounted and the selector and journal remained unchanged.
-Preserve this receipt instead of rerunning inspection after this helper
-update or another recovery action changes the captured source or journal.
-
-The completion helper selects this fixed review only for run `224018`. It
-checks the pinned receipt and its underlying files, the original baseline,
-the exact reviewed current text, host and artifact identities, and the current
-FinalVerify intent. It then repeats the raw boot-selection and mounted
-firmware checks while ordinary FinalVerify owns the ESP mount. Fresh BootOrder
-must match `[0,1,2]`; another device or firmware change still blocks completion.
-The baseline remains preserved, and historical raw BootOrder equality and
-unreferenced firmware variables remain outside this review's scope.
-
-The operator completed the reviewed recovery using:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 FinalVerify -ReviewedFirmwareDifference
-```
-
-The result was
-`FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED`,
-`Succeeded: true`, phase `Complete`, with an empty verification error list.
-The comparison retains `TextEqual: false` and records
-`ReviewedDifferenceAccepted: true`. Archive then returned `SELECTOR_ARCHIVED`;
-the selector is absent and the journal remains `Complete`. These are completed
-steps, not commands to repeat. Do not rewrite the baseline or use this approval
-for another run.
-
-The payload's physical IOMMU preparation failure (`startup_detail=4`) remains
-unresolved. The new run collects the expanded diagnostics described above;
-successful recovery verification does not mark that payload test as passed.
-
-### Historical 201140 recovery: already complete
-
-The following records the completed recovery of the old run. Do not repeat
-these inspection or reviewed-FinalVerify commands as part of the new test.
-Use the stage-retirement prerequisite in step 1 to prepare the next run.
-
-For the specific `gpu-20261020T201140Z-6e6e86230a2549b28be3274dfe56cec7`
-failure captured at `2026-10-20T20:50:30Z`, the only textual changes are three
-generic BCD entry identifiers and their printed application-block order. The
-reset, Secure Boot, 20-CPU ABSENT health, and boot-manager checks passed. That
-does not make the failed final verification complete.
-
-From elevated PowerShell in the main workspace, collect separate read-only
-evidence with the fixed-run inspection helper:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Inspect-GpuFinalFirmware.ps1
-```
-
-Require `READONLY_FIRMWARE_REVIEW_CAPTURED`, successful ESP cleanup, and unchanged
-selector/journal pins. The helper checks the two exact reviewed text captures,
-fresh health, the mounted ESP and Microsoft boot manager, and two raw
-boot-selection observations. It requires BootNext absent, zero audit findings,
-no staged toolkit reference among entries selected by BootOrder, and stable
-BootOrder during the observation window. It writes only new local evidence and
-temporarily mounts the ESP; it does not change boot selection or delete files.
-
-This helper is pinned to that failed run and capture. It reports
-`RecoveryCompleted: false` and cannot prove historical raw BootOrder equality;
-no raw pre-arm snapshot exists. Preserve its complete result for review before
-another FinalVerify or Archive. Do not run the older stage-retirement helper
-against this run.
-
-The inspection has now passed for that run. Its immutable result is
-`.analysis/gpu-final-firmware-review/8abb7b84ca644a7c84019a1f29b35bb4/result.json`,
-SHA-256 `BEA6DCA1FC904B13830908471D6239A906F71AA6937630B32CBA6DC3C2C023D9`.
-Both raw captures have BootNext absent, BootOrder `[0,1,2,3,4,5]`, and zero
-findings; fresh health reported ABSENT on all 20 CPUs. The ESP was unmounted
-and the selector/journal were unchanged. The inspector ran with the module
-pins from revision `485d6de`; preserve that receipt rather than rerunning it
-after the recovery code changes.
-
-The first reviewed FinalVerify attempt at `2026-10-20T21:26:30Z` exposed a
-PowerShell module-scope bug: nested forced imports removed `Write-GpuJson`
-from the dispatcher's scope. Its read-only captures and successful ESP unmount
-receipt were saved, but the completion journal and failure receipt could not
-be written. The journal remains `Disarmed` with an interrupted `FinalVerify`
-intent. Preserve that action directory. The repaired helper reuses loaded
-modules and avoids the retirement factory's forced imports; it does not edit
-the journal or relax any review gate.
-
-The state machine permits retrying FinalVerify from this interrupted
-`Disarmed` state. No additional rollback or reset is required for this writer
-failure. For this exact reviewed difference, run:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 FinalVerify -ReviewedFirmwareDifference
-```
-
-Require `FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED`,
-`Succeeded: true`, and phase `Complete`. This opt-in applies only to the pinned
-201140 run, receipt, firmware captures, and reviewed post-reset boot session.
-It repeats the ordinary final checks and requires fresh read-only raw
-boot-selection captures and exact reviewed current firmware text. An unrelated
-change, a set BootNext, an audit finding, a changed BootOrder, or another failed
-verification gate must still fail. `FirmwareEnumeration.TextEqual` remains
-false; `ReviewedDifferenceAccepted` records the limited acceptance separately.
-The original baseline and previous failed action evidence are preserved.
-
-Only after that successful final result, run the ordinary Archive command from
-step 11. This does not attest GPU isolation, historical raw BootOrder equality,
-or the complete namespace of unreferenced Boot variables.
-
-If Windows cannot boot, choose the original Windows Boot Manager through the
-verified firmware menu or use the prepared recovery media and full-system
-backup. These Windows scripts cannot recover an unbootable Windows session.
-Do not format an ESP, clear firmware keys, or restore an unidentified file.
+Do not retry an interrupted forward action. The only retry allowed by this
+workflow is FinalVerify after the run is already `Disarmed` and verification
+alone failed; preserve all earlier receipts. Never edit a journal, manifest,
+or firmware baseline to make a check pass. If Windows cannot boot, use the
+prepared recovery media and full-system backup; these scripts cannot repair
+an unbootable Windows session.
