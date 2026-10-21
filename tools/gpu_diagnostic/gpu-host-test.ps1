@@ -172,6 +172,35 @@ function Save-Gpu160027ReviewEntryJournal {
     return $copyPin
 }
 
+function Save-Gpu193833ReviewEntryJournal {
+    param([object]$State, [string]$ActionDirectory)
+
+    $expectedRun = Join-Path ([string]$State.WorkspaceRoot) '.analysis\gpu-baremetal\runs\gpu-20261021T193833Z-c48461667089493988074edfaf008d56'
+    if ([string]$State.RunId -cne 'gpu-20261021T193833Z-c48461667089493988074edfaf008d56') {
+        throw 'The entry-journal checkpoint supports only the fixed 193833 run.'
+    }
+    Assert-GpuSamePath ([string]$State.RunDirectory) $expectedRun
+    $null = Assert-GpuPathWithin -Path $ActionDirectory -Root (Join-Path $expectedRun 'actions') -MustExist
+    if ((Split-Path -Leaf $ActionDirectory) -cnotmatch '^[0-9]{8}T[0-9]{9}Z-FinalVerify-[0-9a-f]{32}$') {
+        throw 'The entry-journal checkpoint requires a FinalVerify action directory.'
+    }
+    $journalPath = Join-Path $expectedRun 'journal.json'
+    $originalPin = Get-GpuFilePin -Path $journalPath
+    if ($originalPin.Sha256 -cne '557AB91F1760F4FEA7EE4E54135E6E0B7B45B0ADA16CE91D09A2B508ADA44E18' -or
+        $originalPin.Bytes -ne 45269L) {
+        throw 'The 193833 journal differs from the exact pre-retry inspection pin; preserve the existing intent.'
+    }
+    $copyPath = Join-Path $ActionDirectory 'reviewed-firmware-entry-journal.json'
+    $null = Assert-GpuPathWithin -Path $copyPath -Root $ActionDirectory
+    [IO.File]::Copy($journalPath, $copyPath, $false)
+    $copyPin = Get-GpuFilePin -Path $copyPath
+    if ($copyPin.Sha256 -cne $originalPin.Sha256 -or $copyPin.Bytes -ne $originalPin.Bytes) {
+        throw 'The 193833 pre-retry journal copy failed readback; preserve the original journal.'
+    }
+    Assert-GpuFilePin -Pin $originalPin
+    return $copyPin
+}
+
 function Assert-GpuRecordedState($State, [string]$Directory) {
     foreach ($Name in @('SchemaVersion','RunId','WorkspaceRoot','SourceRoot','SourceCommit',
         'RunDirectory','RecoveryBase','RecoveryRunDirectory','Phase','InProgress','SourcePins',
@@ -437,6 +466,12 @@ try {
         [string]$State.RunId -ceq 'gpu-20261021T160027Z-672213bf26314f69990e6d2305c55fff') {
         $EntryJournalCheckpointPending = $true
         $null = Save-Gpu160027ReviewEntryJournal -State $State -ActionDirectory $ActionDirectory
+        $EntryJournalCheckpointPending = $false
+    }
+    if ($Action -eq 'FinalVerify' -and $ReviewedFirmwareDifference -and
+        [string]$State.RunId -ceq 'gpu-20261021T193833Z-c48461667089493988074edfaf008d56') {
+        $EntryJournalCheckpointPending = $true
+        $null = Save-Gpu193833ReviewEntryJournal -State $State -ActionDirectory $ActionDirectory
         $EntryJournalCheckpointPending = $false
     }
     if ($null -ne $State.InProgress) {

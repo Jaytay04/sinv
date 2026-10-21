@@ -61,6 +61,59 @@ function Select-GpuFinalFirmwareReviewProfile {
         $script:GpuFinalReviewBoundRunId = $RunId
         return
     }
+    if ([string]::Equals($RunId, 'gpu-20261021T193833Z-c48461667089493988074edfaf008d56', [StringComparison]::Ordinal)) {
+        $script:GpuFinalReviewRunId = 'gpu-20261021T193833Z-c48461667089493988074edfaf008d56'
+        $script:GpuFinalReviewReviewDirectoryName = '8b8a27d744ae4fcd806c4017156da6af'
+        $script:GpuFinalReviewBackupActionName = '20261021T194754121Z-Backup-ba3d1ef07fe64145916eea9506cca303'
+        $script:GpuFinalReviewOriginalFinalActionName = '20261021T200510255Z-FinalVerify-38149ac12747467cbb64e46552b7abae'
+        $script:GpuFinalReviewBaselineLeaf = 'firmware-enumeration-backup-890dee938db04defbe3b879ede88023a.stdout.txt'
+        $script:GpuFinalReviewOriginalCurrentLeaf = 'firmware-enumeration-final-6a3e5467babe4872aec6689e6c95f51b.stdout.txt'
+        $script:GpuFinalReviewFirmwareObservationLeaves = @('stage-retirement-firmware-17db98e0171b4c938bf1199b734a248f.stdout.txt', 'stage-retirement-firmware-fd8f201a2d5c4bfaad282e8903113ad6.stdout.txt')
+        $script:GpuFinalReviewRawObservationLeaves = @('before-boot-selection.json', 'after-boot-selection.json')
+        $script:GpuFinalReviewProbeBuildId = '88074edfaf008d56'
+        $script:GpuFinalReviewSourceCommit = '15842e7d789eddaea401754734ce9540a10b69e7'
+        $script:GpuFinalReviewDisarmedBootId = '2026-10-21T19:51:47.5000000Z'
+        $script:GpuFinalReviewCurrentBootId = '2026-10-21T20:03:49.5000000Z'
+        $script:GpuFinalReviewJournalSha256 = '557AB91F1760F4FEA7EE4E54135E6E0B7B45B0ADA16CE91D09A2B508ADA44E18'
+        $script:GpuFinalReviewJournalBytes = 45269L
+        $script:GpuFinalReviewSelectorSha256 = 'E0611ECB3A3F1DC94A064D40783E68A495C5FFED761BE01626C4BC95E63916A3'
+        $script:GpuFinalReviewSelectorBytes = 533L
+        $script:GpuFinalReviewBaselineSha256 = '98E5ECE5B987B754CD1C059C34E9D87A1CFB569E758BCC21971CA21D4EDC2D80'
+        $script:GpuFinalReviewCurrentFirmwareSha256 = '66786928B0A56B57EE9E2137A0645783C9E6C090B6E9B65F88FBF5B91DAA5007'
+        $script:GpuFinalReviewBaselineFirmwareBytes = 4336L
+        $script:GpuFinalReviewCurrentFirmwareBytes = 2890L
+        $script:GpuFinalReviewIbauditSha256 = 'C16517939C887A7991DF4A0CDF05604AEC030141D9DA1FC45FDE8E989EC599A4'
+        $script:GpuFinalReviewIbauditBytes = 246784L
+        $script:GpuFinalReviewReferenceLogSha256 = 'F7C93F246F4E2E6FAA3ABB6AF4C17DDABECD201A8F035FF1211755D676D990A8'
+        $script:GpuFinalReviewReferenceLogBytes = 40838L
+        $script:GpuFinalReviewProbeSha256 = 'F2CACE0FA3BF07140593B64E48529C6CA5AF0EA036E4B500F2F98C3046212333'
+        $script:GpuFinalReviewProbeBytes = 172544L
+        $script:GpuFinalReviewAuditResultSha256 = '82B73A584E7DF37F223D0E5F9B8E5E69B4E68A854F1905E17F9E9AA66B1346EF'
+        $script:GpuFinalReviewAuditResultBytes = 16103L
+        $script:GpuFinalReviewRawSha256 = '450434A4447DC11F57FBC9859C5369960DBAA7D42B1700CAA8BC74B849099B9F'
+        $script:GpuFinalReviewRawBytes = 253L
+        $script:GpuFinalReviewBootManagerSha256 = '3F8A4CBBC97B89836DF92C4895236BE1FAC4A127665420D90509E897A7298511'
+        $script:GpuFinalReviewInspectorSha256 = '0F127D49BC45C8F597CD0AE0B7D1CF2016E5FAE41509EBB276779483C87A0E75'
+        $script:GpuFinalReviewInspectorBytes = 46304L
+        $script:GpuFinalReviewStateSha256 = '067655F6843E5DF811D7B9E37A73A26BF893B1A88EFE414BE1F235594CDB51EC'
+        $script:GpuFinalReviewStateBytes = 19843L
+        $script:GpuFinalReviewPlatformHistoricalSha256 = '66A3B826C01A3F3A3D962DB5798C81FA0FE758325BC0734D93778691409125B2'
+        $script:GpuFinalReviewPlatformHistoricalBytes = 133220L
+        $script:GpuFinalReviewPlatformCurrentSha256 = '0881A2EBE0C292107DDD7D83E165830FEBE617A31B0CA1A8FF731DB723EDFC4C'
+        $script:GpuFinalReviewPlatformCurrentBytes = 133298L
+        $script:GpuFinalReviewRetirementSha256 = '24CDEFAE98EFFCFF664CB269E3642C35E4920EB7560F1492010C766486143E59'
+        $script:GpuFinalReviewRetirementBytes = 372336L
+        $script:GpuFinalReviewFinalResultSha256 = '23B01D517A650AE90D58180086E2BC9D2BB06899476E29F740FDE3304CCBED35'
+        $script:GpuFinalReviewFinalResultBytes = 2285L
+        $script:GpuFinalReviewHealthStdoutSha256 = 'D7CD426CF81128F690B80686D1C8FCF3FC03FB4BFADD4A8A612359E769153EA9'
+        $script:GpuFinalReviewHealthStdoutBytes = 1698L
+        $script:GpuFinalReviewHealthStderrSha256 = 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855'
+        $script:GpuFinalReviewHealthStderrBytes = 0L
+        $script:GpuFinalReviewExpectedBootOrder = @(0, 1, 2)
+        $script:GpuFinalReviewProfileId = '193833'
+        $script:GpuFinalReviewBoundRunId = $RunId
+        return
+    }
     if ([string]::Equals($RunId, 'gpu-20261021T160027Z-672213bf26314f69990e6d2305c55fff', [StringComparison]::Ordinal)) {
         $script:GpuFinalReviewRunId = 'gpu-20261021T160027Z-672213bf26314f69990e6d2305c55fff'
         $script:GpuFinalReviewReviewDirectoryName = '2933898a57284570b022635a3398a3a4'
@@ -169,7 +222,7 @@ function Select-GpuFinalFirmwareReviewProfile {
     }
     if (-not [string]::Equals($RunId, 'gpu-20261020T224018Z-31b7c15e56584f84a68d89b7b3ecb1a1', [StringComparison]::Ordinal) -and
         -not [string]::Equals($RunId, 'gpu-20261021T042142Z-8137a024c456457b840ce906358bbac2', [StringComparison]::Ordinal)) {
-        throw 'The final firmware review supports only four fixed reviewed run profiles; 160027 is separately fixed.'
+        throw 'The final firmware review supports only four fixed reviewed run profiles; 160027 and 193833 are separately fixed.'
     }
 
     $script:GpuFinalReviewRunId = 'gpu-20261020T224018Z-31b7c15e56584f84a68d89b7b3ecb1a1'
@@ -444,10 +497,10 @@ function Assert-GpuFinalFirmwareReviewReceiptShape {
         @($Receipt.Errors).Count -ne 0 -or @($Receipt.CleanupErrors).Count -ne 0) {
         throw 'The saved firmware review receipt is incomplete, failed, or reports host changes.'
     }
-    if ($script:GpuFinalReviewProfileId -in @('224018', '042142', '062106', '160027') -and [string]$Receipt.Profile -cne $script:GpuFinalReviewProfileId) {
+    if ($script:GpuFinalReviewProfileId -in @('224018', '042142', '062106', '160027', '193833') -and [string]$Receipt.Profile -cne $script:GpuFinalReviewProfileId) {
         throw "The saved firmware review receipt does not identify the fixed $($script:GpuFinalReviewProfileId) profile."
     }
-    if ($script:GpuFinalReviewProfileId -in @('224018', '042142', '062106', '160027') -and [string]$Receipt.RunId -cne $script:GpuFinalReviewRunId) {
+    if ($script:GpuFinalReviewProfileId -in @('224018', '042142', '062106', '160027', '193833') -and [string]$Receipt.RunId -cne $script:GpuFinalReviewRunId) {
         throw "The saved firmware review receipt run ID does not exactly match the fixed $($script:GpuFinalReviewProfileId) run."
     }
     Assert-GpuFinalReviewEqual $reviewDirectory ([string]$Receipt.EvidenceDirectory) 'Saved firmware review evidence directory'
@@ -493,7 +546,7 @@ function Assert-GpuFinalFirmwareReviewReceiptShape {
         [string]$firmware.CaptureContext -cne 'SystemEspMountedAtS') {
         throw 'FinalVerify did not observe the reviewed mounted-ESP firmware-text mismatch.'
     }
-    if ($script:GpuFinalReviewProfileId -in @('042142', '062106', '160027')) {
+    if ($script:GpuFinalReviewProfileId -in @('042142', '062106', '160027', '193833')) {
         $verification = $State.FinalVerification
         $expectedError = 'Firmware enumeration differs from the saved textual baseline.'
         if ([string]$verification.BootId -cne $script:GpuFinalReviewCurrentBootId -or
@@ -536,7 +589,7 @@ function Assert-GpuFinalFirmwareReviewReceiptShape {
     Assert-GpuFinalReviewPinPair $beforePins.Modules $afterPins.Modules 'State' $stateModulePath $script:GpuFinalReviewStateSha256 $script:GpuFinalReviewStateBytes
     Assert-GpuFinalReviewPinPair $beforePins.Modules $afterPins.Modules 'Platform' $platformModulePath $script:GpuFinalReviewPlatformHistoricalSha256 $script:GpuFinalReviewPlatformHistoricalBytes
     Assert-GpuFinalReviewPinPair $beforePins.Modules $afterPins.Modules 'Retirement' $retirementModulePath $script:GpuFinalReviewRetirementSha256 $script:GpuFinalReviewRetirementBytes
-    if ($script:GpuFinalReviewProfileId -in @('042142', '062106', '160027')) {
+    if ($script:GpuFinalReviewProfileId -in @('042142', '062106', '160027', '193833')) {
         Assert-GpuFinalReviewPinPair $beforePins $afterPins 'FinalResult' $finalResultPath $script:GpuFinalReviewFinalResultSha256 $script:GpuFinalReviewFinalResultBytes
         Assert-GpuFinalReviewFailedFinalResult -Path $finalResultPath
         $entryJournalPath = Join-Path $ActionDirectory 'reviewed-firmware-entry-journal.json'
@@ -564,7 +617,7 @@ function Assert-GpuFinalFirmwareReviewReceiptShape {
     $healthReceipt = Get-GpuFinalReviewProperty $Receipt 'Health'
     $healthVerdictReceipt = Get-GpuFinalReviewProperty $healthReceipt 'Verdict'
     $healthCpuPassCount = Get-GpuFinalReviewProperty $healthVerdictReceipt 'CpuPassCount'
-    $healthCpuPassCountInvalid = $script:GpuFinalReviewProfileId -in @('062106', '160027') -and
+    $healthCpuPassCountInvalid = $script:GpuFinalReviewProfileId -in @('062106', '160027', '193833') -and
         ($null -eq $healthCpuPassCount -or [int]$healthCpuPassCount -ne 0)
     if ($null -eq $Receipt.Health -or $Receipt.Health.CommandSucceeded -ne $true -or
         $null -eq $Receipt.Health.Verdict -or $Receipt.Health.Verdict.Passed -ne $true -or
@@ -646,7 +699,7 @@ function Assert-GpuFinalReviewLivePin {
 
 function Assert-GpuFinalReviewCurrentPlatformPin {
     param([Parameter(Mandatory = $true)][object]$Pin)
-    if ($script:GpuFinalReviewProfileId -in @('042142', '062106', '160027')) {
+    if ($script:GpuFinalReviewProfileId -in @('042142', '062106', '160027', '193833')) {
         Assert-GpuFinalReviewPinRecord -Pin $Pin -ExpectedPath ([string]$Pin.Path) `
             -ExpectedSha256 $script:GpuFinalReviewPlatformCurrentSha256 `
             -ExpectedBytes $script:GpuFinalReviewPlatformCurrentBytes `
@@ -686,7 +739,7 @@ function Assert-GpuFinalReviewReceiptFiles {
     Assert-GpuFinalReviewPinRecord $modulePin $Paths.StateModulePath $script:GpuFinalReviewStateSha256 $script:GpuFinalReviewStateBytes 'Current host state module'
     $retirementPin = Get-GpuFinalReviewStatePin -StateModule $StateModule -Path $Paths.RetirementModulePath
     Assert-GpuFinalReviewPinRecord $retirementPin $Paths.RetirementModulePath $script:GpuFinalReviewRetirementSha256 $script:GpuFinalReviewRetirementBytes 'Current retirement module'
-    if ($script:GpuFinalReviewProfileId -in @('042142', '062106', '160027')) {
+    if ($script:GpuFinalReviewProfileId -in @('042142', '062106', '160027', '193833')) {
         $null = Assert-GpuFinalReviewLivePin $StateModule $Receipt.PinsBefore.FinalResult $Paths.FinalResultPath $script:GpuFinalReviewFinalResultSha256 $script:GpuFinalReviewFinalResultBytes 'Failed FinalVerify result'
         Assert-GpuFinalReviewFailedFinalResult -Path $Paths.FinalResultPath
         $null = Assert-GpuFinalReviewEntryJournal -Path $Paths.EntryJournalPath -State $Paths.State -ActionDirectory $Paths.ActionDirectory
@@ -722,7 +775,7 @@ function Assert-GpuFinalReviewReceiptFiles {
         if ($integrityText -cne [string]$capture.IntegrityOutput) { throw 'Saved boot-manager integrity output differs from the review record.' }
     }
     $health = Assert-GpuFinalReviewCommandReceipt $StateModule ([string]$Receipt.Health.ReceiptPath) $Paths.ProbePath @('health') $evidenceRoot 'Saved health observation'
-    if ($script:GpuFinalReviewProfileId -in @('042142', '062106', '160027')) {
+    if ($script:GpuFinalReviewProfileId -in @('042142', '062106', '160027', '193833')) {
         $healthStdoutPin = Get-GpuFinalReviewStatePin -StateModule $StateModule -Path ([string]$health.StdoutPath)
         Assert-GpuFinalReviewPinRecord $healthStdoutPin ([string]$health.StdoutPath) $script:GpuFinalReviewHealthStdoutSha256 $script:GpuFinalReviewHealthStdoutBytes 'Pinned health stdout'
         $healthStderrPin = Get-GpuFinalReviewStatePin -StateModule $StateModule -Path ([string]$health.StderrPath)

@@ -1984,6 +1984,12 @@ catch {
                 Phase = 'Disarmed'; RunId = $reviewRunId; ExpectedCalls = 0; NativeSucceeded = $false
                 ExpectedSucceeded = $false; ExpectedStatus = 'FINAL_VERIFY_FAILED_GPU_UNATTESTED'
             }
+            [pscustomobject]@{
+                Name = 'fixed-193833-reviewed-difference'; ReviewAccepted = $true; ReviewThrows = $false
+                PreflightValid = $true; SecureBoot = $true; ResetPassed = $true
+                Phase = 'Disarmed'; RunId = 'gpu-20261021T193833Z-c48461667089493988074edfaf008d56'; ExpectedCalls = 1; NativeSucceeded = $true
+                ExpectedSucceeded = $true; ExpectedStatus = 'FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED'
+            }
         )
         foreach ($reviewCase in $reviewCases) {
             $actionDirectory = Join-Path $runRoot ('final-verify-review-action-' + $reviewCase.Name)

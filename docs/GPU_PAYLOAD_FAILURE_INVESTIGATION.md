@@ -67,6 +67,26 @@ does not prove historical raw firmware-variable equality. The fixed
 `Inspect-GpuFinalFirmware.ps1 -Run193833` profile captures fresh read-only
 evidence for the existing run's review without changing its selector or journal.
 
+The operator's successful review receipt is
+`8b8a27d744ae4fcd806c4017156da6af/result.json`, SHA-256
+`82B73A584E7DF37F223D0E5F9B8E5E69B4E68A854F1905E17F9E9AA66B1346EF`
+(16103 bytes). Both raw files are SHA-256
+`450434A4447DC11F57FBC9859C5369960DBAA7D42B1700CAA8BC74B849099B9F`
+(253 bytes), with no BootNext, BootOrder `[0,1,2]` and zero findings. Both mounted
+firmware captures match the current 2890-byte text. Secure Boot and all 20
+`ABSENT` results pass, and the selector/journal remain unchanged. The closed
+completion profile binds those observations and the original failed result,
+preserves an immutable pre-retry journal copy, and requires fresh observations
+before accepting the specific firmware-text difference. Completion and Archive
+are still operator steps; no host workflow was executed by this update.
+
+File-only validation passed against the actual receipt, saved command outputs,
+failed result, raw selection files and module pins, using a scratch copy of the
+unchanged entry journal. The 193833 profile fixture passed 5 cases/45 assertions,
+the journal-copy fixture passed 21 assertions, all 18 related Windows CTests
+passed, and dispatcher/state coverage passed 53 cases/529 assertions. These
+checks executed no native diagnostic, ESP mount, live host query or VM.
+
 Future Prepare journals use a separately pinned version-1 policy that compares
 all retained firmware entries while allowing only those exact empty generic
 tail placeholders to change independently. Backup retains full text and raw

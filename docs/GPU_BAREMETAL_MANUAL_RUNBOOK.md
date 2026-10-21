@@ -1,6 +1,6 @@
 # Intel UHD 770 bare-metal diagnostic runbook
 
-## Current checkpoint: run 193833 needs firmware-difference review
+## Current checkpoint: run 193833 review captured; completion pending
 
 Run `gpu-20261021T193833Z-c48461667089493988074edfaf008d56` returned
 `COLLECTED_HEALTH_FAIL_GPU_UNATTESTED`. The payload stopped at the PCI quiesce
@@ -14,16 +14,31 @@ Boot, reset, all 20 `ABSENT` observations and the original boot-manager hash.
 Its remaining failure is the removal of three empty generic firmware entries
 (CD/DVD, removable device and network) and their display-order references.
 Windows Boot Manager and both physical USB entries are unchanged in the saved
-text. Capture fresh read-only review evidence from elevated PowerShell:
+text. The operator captured fresh read-only review evidence at
+`.analysis/gpu-final-firmware-review/8b8a27d744ae4fcd806c4017156da6af/result.json`.
+The before/after raw captures both report BootNext absent, BootOrder `[0,1,2]`,
+zero integrity findings and the saved boot-manager/reference-log hashes. Secure
+Boot and all 20 `ABSENT` observations pass. The selector and journal are unchanged;
+the ESP is unmounted and cleanup succeeded.
+
+Complete recovery from elevated PowerShell:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Inspect-GpuFinalFirmware.ps1 -Run193833
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 FinalVerify -ReviewedFirmwareDifference
 ```
 
-Require `READONLY_FIRMWARE_REVIEW_CAPTURED`. This does not complete recovery or
-authorize retirement. Preserve its receipt for the run-specific completion
-review; do not use another run's review or retirement switch. No live recovery
-action was run by the investigation.
+Require `FINAL_RESET_VERIFIED_REVIEWED_FIRMWARE_DIFFERENCE_GPU_UNATTESTED`,
+`Succeeded: true` and phase `Complete`. Only then archive:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\gpu-host-test.ps1 Archive
+```
+
+The completion helper is restricted to this exact run and pinned review
+receipt. It preserves the inspected failed journal before recording retry intent,
+rechecks fresh reset/health/ESP and raw selection evidence, and retains the
+original `TextEqual: false`. Capture alone does not complete recovery or
+authorize retirement. No live recovery action was run by the investigation.
 
 ## Firmware comparison for new runs
 

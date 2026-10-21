@@ -823,7 +823,7 @@ try {
             'Get-Item', 'Import-Module', 'Invoke-GpuHostPlatformAction', 'Join-Path',
             'New-Item', 'New-Object', 'Read-GpuJson', 'Remove-Item',
             'Save-Gpu042142ReviewEntryJournal', 'Save-Gpu062106ReviewEntryJournal',
-            'Save-Gpu160027ReviewEntryJournal', 'Save-GpuJournal', 'Set-StrictMode',
+            'Save-Gpu160027ReviewEntryJournal', 'Save-Gpu193833ReviewEntryJournal', 'Save-GpuJournal', 'Set-StrictMode',
             'Split-Path', 'Test-GpuFinalVerifyRetry', 'Test-GpuReparsePoint', 'Test-Path', 'Write-GpuJson',
             'Where-Object', 'Write-Warning', 'git'
         )
