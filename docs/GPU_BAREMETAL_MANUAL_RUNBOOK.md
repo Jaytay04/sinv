@@ -1,6 +1,6 @@
 # Intel UHD 770 bare-metal diagnostic runbook
 
-## Current checkpoint: run 213919 archived; stage retirement pending
+## Current checkpoint: run 213919 retired; fresh readiness clear
 
 Run `gpu-20261021T213919Z-61d3e8eb278f4c819457cd6aa8fb80b1` is archived. Its
 journal is `Complete`, with no action in progress or final failure, and the
@@ -11,37 +11,18 @@ version-1 firmware comparison accepted the current text as equal to its saved
 baseline; no reviewed-difference override was needed. GPU isolation remains
 unattested.
 
-Fresh readiness report `dead4fd712384ff7ba04ad97900ffe9b`, captured from clean
-source `070596b498cfda7e5baf474511d91bfe3358e3fc`, is blocked only by the seven
-retained stage files. Their names, sizes and hashes match the archived run's
-Collection evidence. The dedicated `CompletedRun213919` profile binds this
-report and the completed run; earlier retirement profiles do not apply.
-File-only validation verified seven stage pins and 32 supporting proof pins;
-eight modified proof records were rejected. All 28 related Windows CTests pass.
-The investigation did not mount or change the ESP.
+The operator completed retirement Review, then authorized an elevated Windows
+MCP launch for Apply and fresh readiness. Retirement receipt
+`1ae60d3eceea4fc8a400aeec5d54204c` records `STAGE_RETIRED`, seven files removed,
+no cleanup errors, the ESP unmounted and no host boot-state change. All 14
+local/external stage backup copies were rehashed against their original pins.
+The dedicated `CompletedRun213919` retirement is complete; do not repeat it.
 
-Use elevated 64-bit PowerShell from the main workspace. Review first:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun213919 -ReadinessPath $readiness.EvidencePath
-```
-
-Require `REVIEWED_STAGE_READY_FOR_RETIREMENT` and `Succeeded: true`. Then apply:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun213919 -ReadinessPath $readiness.EvidencePath -Apply
-```
-
-Require `STAGE_RETIRED`, then capture readiness again:
-
-```powershell
-$readiness = powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Get-GpuBaremetalReadiness.ps1 | ConvertFrom-Json
-$readiness | Select-Object Status, Blockers, EvidencePath | ConvertTo-Json -Depth 8
-```
-
-Only `READY_FOR_FRESH_PREPARE` with no blockers permits the fresh-run steps
-below. Preserve both retirement receipts and the original run evidence. A
-failed or partial Apply requires evidence review before further cleanup.
+Fresh readiness `a45c299287c54504847625edf56f3c6d`, captured from clean source
+`a7139f42f4e5458791c2c29816c770fae0d1dad5`, returns
+`READY_FOR_FRESH_PREPARE` with no blockers, no selector and no retained stage.
+The ESP is unmounted. Preserve both retirement receipts and the original run
+evidence. The fresh-run steps below have not started.
 
 The payload did not reach runtime activation: startup detail `0xC0000000`
 identifies a PCI command readback mismatch at `0000:00:00.0`, where bus mastering

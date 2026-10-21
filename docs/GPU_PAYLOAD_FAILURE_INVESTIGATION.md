@@ -66,7 +66,7 @@ successfully and the active selector is absent. The completed journal SHA-256
 is `0811B1AECFDA426C49A566F72DE2D0D93653D3CF267006544AE34160F92F0C47`; the
 archive SHA-256 is
 `753AB939E5EFC65F81B1B4EEAA49A2FDB1245472DBF57E76FF1161232A243E69`.
-Seven stage files remain for run-specific ownership-reviewed retirement.
+Archive retained seven stage files for subsequent ownership-reviewed retirement.
 
 The subsequent readiness report `dead4fd712384ff7ba04ad97900ffe9b` is
 12,050 bytes, SHA-256
@@ -84,8 +84,22 @@ File-only validation passed against the actual completed evidence: seven stage
 pins and 32 supporting proof pins, with the immutable journal, archive and
 readiness report unchanged. Eight in-memory mutations of the proof were
 rejected. All 28 related Windows CTests passed, including the new profile's
-13-assertion fixture. No live probe, ESP mount, firmware write or VM was used;
-the operator's retirement Review and Apply remain pending.
+13-assertion fixture. This static validation used no live probe, ESP mount,
+firmware write or VM.
+
+The operator subsequently completed Review receipt
+`426ae9053d944105986e68d0b5c78c14` and authorized Windows MCP to launch the
+retirement and readiness scripts with Windows elevation. The elevated task
+completed at `2026-10-21T22:45:45.6230434Z`. Apply receipt
+`1ae60d3eceea4fc8a400aeec5d54204c`, SHA-256
+`FA1CC57728A03452ED8943ACE4795210B7F4ED587F63BBED32673D83EB4A99E7`,
+reports `STAGE_RETIRED`, all seven files removed, no cleanup errors, an
+unmounted ESP and no host boot-state change. All 14 local/external stage
+backup copies were rehashed successfully. Fresh readiness
+`a45c299287c54504847625edf56f3c6d` is 8,107 bytes, SHA-256
+`E812FB2DCCCB5A65D869265EAA8FC06430543A492E1A3EF23428849F5342EEB2`.
+It records clean source `a7139f42f4e5458791c2c29816c770fae0d1dad5`, no selector
+or stage, no blockers and `READY_FOR_FRESH_PREPARE`. No fresh run was started.
 
 This failure occurs before IOMMU programming and VMX activation. The separate
 OpenVolume failure observed after successful activation in run 160027 remains
