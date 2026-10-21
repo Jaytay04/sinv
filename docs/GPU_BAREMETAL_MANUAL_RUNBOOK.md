@@ -12,8 +12,8 @@ The latter's `Complete` result belongs to the VM, not your physical machine.
 Run `224018` passed reviewed recovery verification and its selector is
 archived. The payload still failed physical IOMMU preparation; see the
 [investigation](GPU_PAYLOAD_FAILURE_INVESTIGATION.md#fourth-physical-run-iommu-preparation-failed).
-Its retained stage needs its own reviewed retirement before a fresh run;
-the `201140` retirement profile below does not apply to `224018`.
+Its retained stage must pass the fixed `-CompletedRun224018` retirement below
+before a fresh run. The older retirement profiles do not own these files.
 
 The [startup diagnostic VM test](GPU_STARTUP_DIAGNOSTIC_VM_RESULT.md) passed
 signed EFI boot, the version-1 startup record, and four CPU health checks.
@@ -23,10 +23,16 @@ It did not exercise the physical Intel GPU, native VT-d enforcement, native
 framebuffer mapping, or host MOK acceptance. This is a diagnostic experiment,
 not a validated deployment.
 
-The new run must include commit `ddb7b11`, which corrects the overlapping
-VT-d MMIO protection windows that blocked AP preparation. Its native-enabled
-EFI build, resident-image audit, and 37 host tests passed. That correction has
-not yet been confirmed by a physical boot; the earlier VM result predates it.
+The new run must include commit `00184a8`, which includes the MMIO-union
+correction and the expanded GPU/IOMMU failure diagnostics. The last physical
+boot prepared all 20 CPUs and then failed physical IOMMU setup. The new image
+records the exact failed substep and available planner/runtime result; it
+does not relax that admission check. Its unsigned native build, resident-image
+audit, and six relevant host tests passed. No VM is needed or started by this
+guide; the current VM path does not exercise physical VT-d installation.
+The updated retirement helper passed its synthetic contract tests and an
+offline validation of 30 saved evidence pins. All 42 hypervisor host tests
+passed. Live retirement and the next physical boot remain operator steps.
 
 ## Before starting
 
@@ -41,14 +47,14 @@ baseline before starting the new experiment.
 Set-Location 'C:\Users\jayli\OneDrive\Documents\Projects\hsinv'
 ```
 
-Confirm the feature worktree is clean and contains the AP fix:
+Confirm the feature worktree is clean and contains the new diagnostics:
 
 ```powershell
 git -C .\.codex-build\worktrees\gpu-windows-validation status --short --branch
 ```
 
 ```powershell
-git -C .\.codex-build\worktrees\gpu-windows-validation merge-base --is-ancestor ddb7b11 HEAD
+git -C .\.codex-build\worktrees\gpu-windows-validation merge-base --is-ancestor 00184a8 HEAD
 ```
 
 Require branch `feat/smbios-boot-serial-probe`, no changed/untracked files, and
@@ -114,7 +120,7 @@ This result is a preparation gate, not proof of MOK trust, GOP suitability,
 GPU isolation, or framebuffer ownership.
 
 **Current retry prerequisite:** run
-`gpu-20261020T201140Z-6e6e86230a2549b28be3274dfe56cec7` completed reviewed
+`gpu-20261020T224018Z-31b7c15e56584f84a68d89b7b3ecb1a1` completed reviewed
 reset verification and its selector is archived. Archive preserved its stage.
 The recorded collection contains seven files: the five installed files,
 `handoff-status.txt`, and `payload-diagnostic.txt`. This guide starts a new run;
@@ -123,10 +129,11 @@ it does not reuse those signed artifacts.
 If inspection finds that stage, stop at `BLOCKED_READINESS` before Prepare,
 Build, Backup, Stage, or Arm. The only expected blocker is the retained
 `EFI\insecure-boot` directory. Preserve the report's exact `EvidencePath`.
-The explicit `-CompletedRun201140` profile below validates that report against
+The explicit `-CompletedRun224018` profile below validates that report against
 the fixed completed journal, archive, and all seven recorded file hashes.
-The no-argument retirement profile still belongs to the older `150318` run;
-do not use it for this stage. If readiness is already
+The no-argument retirement profile belongs to `150318`, and
+`-CompletedRun201140` belongs to `201140`; use neither for this stage.
+If readiness is already
 `READY_FOR_FRESH_PREPARE`, skip retirement and continue at step 2.
 
 ### Retire the matched completed stage
@@ -134,7 +141,7 @@ do not use it for this stage. If readiness is already
 First run the live review from elevated PowerShell:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun201140 -ReadinessPath $readiness.EvidencePath
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun224018 -ReadinessPath $readiness.EvidencePath
 ```
 
 Require `REVIEWED_STAGE_READY_FOR_RETIREMENT`, `Succeeded: true`,
@@ -148,13 +155,14 @@ file, failed read, changed boot selection, or unavailable recovery copy stops
 the operation.
 
 The original firmware baseline remains preserved. This profile requires the
-exact successful reviewed-difference final result from `201140` and its pinned
+exact successful reviewed-difference final result from `224018` and its pinned
 review evidence. Its live firmware text must match the exact reviewed
-`4A1535FA...A723FAE` capture. For that capture, `FirmwareBaselineSource` is
-`REVIEWED_201140_FINAL_CAPTURE` and `OriginalFirmwareBaselineEqual` is false.
+`66786928...1DAA5007` capture. For that capture, `FirmwareBaselineSource` is
+`REVIEWED_224018_FINAL_CAPTURE` and `OriginalFirmwareBaselineEqual` is false.
 `FirmwareBaselineEqual` must still be true for the selected capture after the
 live health and raw boot checks. Every later checkpoint must match that same
-selected text and raw boot order; other changes still stop retirement.
+selected text and raw boot order `[0,1,2]`; BootNext must be absent and
+integrity findings zero. Other changes still stop retirement.
 Historical raw BootOrder equality and unreferenced boot variables remain
 outside the evidence's scope. Do not rewrite the baseline or delete firmware
 entries to force a match.
@@ -162,7 +170,7 @@ entries to force a match.
 Only after that successful review, perform the bounded removal:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun201140 -ReadinessPath $readiness.EvidencePath -Apply
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun224018 -ReadinessPath $readiness.EvidencePath -Apply
 ```
 
 Apply repeats the checks, saves fresh verified copies and a removal intent,
@@ -311,10 +319,13 @@ if boot stopped before writing it; preserve the console capture in that case.
 This record cannot persist a nonreturning fail-stop or guarantee a fresh file
 when writing fails. Do not clear TPM PCRs to bypass the replay guard.
 
-For `startup_stage=ap_prepare`, details 10-16 now identify the two allocations,
-memory-map retrieval/version, EPT memory-type plan, deny inventory, or scanner
-allowlist separately. The full mapping is in the
-[AP failure investigation](GPU_PAYLOAD_FAILURE_INVESTIGATION.md#vt-d-mmio-inventory-overlap-confirmed-and-corrected).
+For `startup_stage=ap_prepare`, untagged details 10-16 identify memory-policy
+preparation substeps. A high-bit detail identifies an IOMMU/GPU substep and
+its available result codes; preserve its complete unsigned decimal value.
+The [diagnostic mapping](GPU_PAYLOAD_FAILURE_INVESTIGATION.md#vm-coverage-and-gpu-domain-diagnostic-completion)
+distinguishes capability/scope, PCI/RMRR ownership, allocation, identity/root
+planning, DID validation, and translation-table construction. Do not interpret
+the packed value as one of the older small detail IDs.
 
 `replay=ABORTED` alone does not explain a payload failure: the loader is
 replay-independent. A healthy hypervisor or a visible pattern also does not
@@ -409,20 +420,19 @@ Windows disk. The backup files and their hashes must still match.
 Run `gpu-20261020T224018Z-31b7c15e56584f84a68d89b7b3ecb1a1` exposed an
 incorrect comparison of the saved recovery disk number with its current
 number: the same USB disk changed from 1 to 2, with unchanged unique ID and
-serial number. Its first FinalVerify passed the reset, Secure Boot, adapter,
-and 20-CPU ABSENT checks, then stopped before ESP verification. After updating
-the helper, retry ordinary `FinalVerify` directly from `Disarmed`; the saved
-reset boundary does not require another rollback or power cycle. Do not edit
-the journal or manifest to replace the old disk number. All remaining ESP,
-boot-manager, backup-file, and firmware checks still have to pass before
-Archive.
+serial number. That comparison is corrected. The run subsequently completed
+reviewed FinalVerify and Archive; do not repeat its recovery commands or edit
+the journal or manifest to replace the old disk number.
 
-### Current 224018 firmware inspection
+### Archived 224018 firmware inspection: completed history
 
-The next FinalVerify for
+This section records completed recovery work. Its commands are historical;
+do not repeat them for the archived run or use them for the new test.
+
+The subsequent FinalVerify for
 `gpu-20261020T224018Z-31b7c15e56584f84a68d89b7b3ecb1a1` passed the external
 backup, reset, Secure Boot, 20-CPU ABSENT health, adapter, and original Windows
-Boot Manager checks. Its only remaining error is the firmware-text mismatch.
+Boot Manager checks. Its only remaining error was the firmware-text mismatch.
 The saved mounted-ESP baseline is `4A1535FA...A723FAE` (4336 bytes); the new
 capture is `66786928...AA5007` (2890 bytes). The text removes the three generic
 CD/DVD, removable-device, and network blocks and their display-order
@@ -430,7 +440,7 @@ references. The Windows and two USB blocks are unchanged. This comparison
 does not establish historical raw BootOrder equality or the cause of the
 enumeration change.
 
-Before any further boot test, run the fixed-run read-only inspection:
+The operator captured the fixed-run read-only inspection using:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Inspect-GpuFinalFirmware.ps1 -Run224018
@@ -478,9 +488,9 @@ the selector is absent and the journal remains `Complete`. These are completed
 steps, not commands to repeat. Do not rewrite the baseline or use this approval
 for another run.
 
-The payload's physical IOMMU preparation failure (`startup_detail=4`) still
-requires investigation before another full boot test. Successful recovery
-verification does not mark that payload test as passed.
+The payload's physical IOMMU preparation failure (`startup_detail=4`) remains
+unresolved. The new run collects the expanded diagnostics described above;
+successful recovery verification does not mark that payload test as passed.
 
 ### Historical 201140 recovery: already complete
 
