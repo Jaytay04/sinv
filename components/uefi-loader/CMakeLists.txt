@@ -43,6 +43,9 @@ option(IB_PAYLOAD_REPLAY_INDEPENDENT
 option(IB_FIRMWARE_STORAGE_PROBE
     "Trace bounded read-only boot-volume probes around payload activation"
     OFF)
+option(IB_BUILD_BOOT_CHAIN_LOADER
+    "Build the isolated restore-first Windows boot-chain EFI image"
+    OFF)
 
 option(IB_QEMU_DEBUG_PORTS
     "Emit loader diagnostics to QEMU debug/serial I/O ports (VM-only)"
@@ -173,6 +176,19 @@ target_include_directories(boot_restore_test PRIVATE
 )
 target_link_libraries(boot_restore_test PRIVATE sha256)
 add_test(NAME boot_restore_test COMMAND boot_restore_test)
+
+add_executable(boot_chain_test
+    src/fixtures/tests/boot_chain_test.c
+    src/loader/boot_chain.c
+    src/loader/efi_file.c
+)
+target_include_directories(boot_chain_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/vendor
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/common
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/loader
+)
+target_link_libraries(boot_chain_test PRIVATE sha256)
+add_test(NAME boot_chain_test COMMAND boot_chain_test)
 
 add_executable(efi_file_test
     src/fixtures/tests/efi_file_test.c
@@ -807,6 +823,50 @@ target_compile_options(inventory_loader PRIVATE
 if(MSVC)
     target_compile_options(inventory_loader PRIVATE "$<$<COMPILE_LANGUAGE:C>:/Oi->")
 endif()
+
+# --- boot_chain_loader.efi: restore-first firmware Windows handoff ----------
+# This separate entry is the BOOT-ONLY route for the installer-owned one-shot
+# replacement profile. It restores the hash-pinned canonical Windows Boot
+# Manager before calling firmware LoadImage on its full file device path.
+# Keep replay, payload, TPM, shim policy hooks, and inventory code out of this
+# target so the normal firmware signature policy remains in force.
+if(IB_BUILD_BOOT_CHAIN_LOADER)
+    add_executable(boot_chain_loader
+        src/loader/boot_chain.c
+        src/loader/boot_chain_entry.c
+        src/loader/boot_restore.c
+        src/loader/efi_file.c
+        src/loader/sbat.c
+        src/common/sha256.c
+        src/vendor/efi_crt.c
+    )
+    target_include_directories(boot_chain_loader PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/vendor
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/common
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/loader
+    )
+    target_compile_options(boot_chain_loader PRIVATE
+        "$<$<AND:$<COMPILE_LANGUAGE:C>,$<C_COMPILER_ID:MSVC>>:/GS->")
+    if(MSVC)
+        target_compile_options(boot_chain_loader PRIVATE
+            "$<$<COMPILE_LANGUAGE:C>:/Oi->")
+    endif()
+    set_target_properties(boot_chain_loader PROPERTIES
+        SUFFIX ".efi"
+        MSVC_RUNTIME_LIBRARY ""
+    )
+    if(MSVC)
+        target_link_options(boot_chain_loader PRIVATE
+            /SUBSYSTEM:EFI_APPLICATION
+            /ENTRY:EfiMain
+            /FIXED:NO
+            /INCREMENTAL:NO
+            /INCLUDE:g_hypersinv_loader_sbat
+            /MANIFEST:NO
+            /NODEFAULTLIB
+        )
+    endif()
+endif()
 set_target_properties(inventory_loader PROPERTIES
     SUFFIX ".efi"
     MSVC_RUNTIME_LIBRARY ""
@@ -874,7 +934,7 @@ if(IB_STATIC_RUNTIME AND MSVC)
                                tcglog_ib_test pcr_gate_test replay_test
                                divergence_test sha256_test reference_log_test
                                boot_restore_test efi_file_test efi_storage_probe_test efi_storage_fault_report_test image_launch_test payload_diagnostic_test handoff_diagnostic_test tcg2_test
-                               inventory_entry_test shim_inventory_test shim_chain_test uefi_runtime_abi_test
+                               boot_chain_test inventory_entry_test shim_inventory_test shim_chain_test uefi_runtime_abi_test
                                replay_uefi_path_test
                                install_sign_test install_authenticode_test
                                install_stage_test install_oneshot_test
