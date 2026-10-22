@@ -1,5 +1,72 @@
 # GPU diagnostic payload failure investigation
 
+## Run 235806: firmware diagnostic capture and final verification
+
+Run `gpu-20261021T235806Z-3310d94e692146aa8ec669fca65019f2` used source commit
+`6e7b87906d277009fcdeafc4d14d402737c6febd`. It is complete and archived; the
+active selector is absent. The automation record is
+`.analysis/gpu-host-automation/final-235806/automation-result.json`. FinalVerify
+passed the reset boundary, Secure Boot, all 20 expected `ABSENT` health
+observations, and the boot-manager hash. The version-1
+`StableEntriesAndGenericTailV1` firmware policy accepted the textual difference
+without an override. GPU isolation remains unattested. No new run has started.
+
+Collection found all 20 health signatures absent, all five staged binaries
+matching their pins, and both `handoff-status.txt` and
+`payload-diagnostic.txt` absent. The new VT-d/storage fault console diagnostics
+were not preserved, so this run does not resolve the post-activation storage
+failure or establish a physical fix.
+
+A post-boot TBS capture matching the Collection boot ID is preserved under
+`.analysis/gpu-235806-investigation/current-tcg/mcp/` (98,215 bytes,
+SHA-256 `F7435F4CB6410EE108941F660E979ACC4AA097F3DB87957B511C8D0F3D2B13FF`).
+It contains 39 fully parsed events. The PCR 4 application event for
+`bootmgfw.efi` has PE hash
+`F1CBD3773547541226DBDB42C42E04CF230F14A1B48E48DBD8AD695ADF7E955C`, matching
+the pinned Windows boot-manager image's statically computed PE/COFF digest.
+The pinned shim, loader, and payload PE/COFF digests match no application event.
+A driver-image event is present but its path is undecoded. This supports
+investigating whether firmware dispatched BootNext; it does not prove that the
+test chain never ran or that the firmware measurements are complete. See
+`.analysis/gpu-235806-investigation/pe-measurement-comparison.json` for the
+comparison. The next useful evidence is a direct, complete boot-console capture
+and stronger proof of which EFI image firmware dispatched, before changing the
+payload again. A failed firmware-only attempt followed by another firmware
+boot would not necessarily create an additional Windows startup record. The
+captured Windows log alone cannot exclude that sequence.
+
+The inspected reference project at
+`C:\Users\jayli\OneDrive\Documents\Projects\insecure-boot` uses a different
+boot design. Its installer backs up the canonical boot manager and replaces it
+with shim; its loader restores the original. This project stages a dedicated BootNext path
+and preserves the canonical boot-manager file. The reference also replaces
+the firmware's TCG-spec setting from 2.0 to 1.2, cold-resets before PCR replay,
+then restores the setting and installs its own TCG2 protocol for the replayed
+log. This project does not install a custom TCG2 protocol. The reference maps
+the payload itself and passes the loader's image handle to the payload entry,
+then frees that mapping after return; this project uses
+firmware `LoadImage`, calls the payload entry directly, and keeps the resident
+image. These are architectural differences to account for when tracing
+dispatch and handoff, not established fixes for the storage failure. Both
+paths need firmware storage access after payload execution. Do not port the
+reference project's boot-manager replacement or TPM changes as an assumed fix.
+Relevant reference sources are `source/host/ib-install/src/esp.rs`,
+`source/crates/ib-loader/src/{main,nvram,payload,bootmgfw}.rs`, and
+`source/crates/ib-tcg2/src/{lib,instance,log}.rs`. Its README is empty. The
+reference was inspected read-only; none of its binaries or scripts was run.
+
+A useful next diagnostic is a durable entry marker written while storage is
+still healthy, before payload activation. That would help distinguish a loader
+dispatch failure from later storage loss when the console is missed. A console
+marker before the new fault query would also distinguish entering that query
+from returning from it. Neither addition is implemented by this comparison;
+the existing native diagnostic has not been physically validated by this run.
+
+The five files from run 235806 remain on the ESP. No run-specific retirement
+profile for 235806 exists yet. Do not use a prior run's retirement profile or
+begin another run until an ownership-reviewed profile is available and fresh
+readiness passes.
+
 ## Run 225049: boot-manager volume open fails after payload return
 
 Run `gpu-20261021T225049Z-9ac846fd923441cf9b7f0a75a2e0d246` is closed and

@@ -1,52 +1,37 @@
 # Intel UHD 770 bare-metal diagnostic runbook
 
-## Current checkpoint: run 225049 archived; five staged files retained
+## Current checkpoint: run 235806 archived; stage retained
 
-Run `gpu-20261021T225049Z-9ac846fd923441cf9b7f0a75a2e0d246` is complete and
+Run `gpu-20261021T235806Z-3310d94e692146aa8ec669fca65019f2` is complete and
 archived. FinalVerify passed reset, Secure Boot, all 20 expected `ABSENT`
-health observations and the Windows boot-manager hash. GPU isolation remains
-unattested. The latest readiness inspection found only the five files owned by
-this completed run retained on the ESP. Do not start Prepare until those files
-are retired and a new readiness result reports `READY_FOR_FRESH_PREPARE`.
+health observations, and the boot-manager hash. The version-1
+`StableEntriesAndGenericTailV1` policy accepted the textual firmware difference
+without an override. GPU isolation remains unattested. The active selector is
+absent; the five files from this run remain on the ESP. No retirement profile
+for this run exists, so do not reuse `CompletedRun225049` or another historical
+profile and do not start Prepare yet.
 
-From elevated 64-bit PowerShell in the main workspace, review and apply the
-run-specific retirement profile. It is bound to the saved readiness report
-below and to run225049's archived evidence. Stop if Review does not succeed;
-apply only after it reports `REVIEWED_STAGE_READY_FOR_RETIREMENT`.
+The run's TBS log matched the collected boot ID and measured the canonical
+Windows boot manager in PCR 4. The test shim, loader, and payload measurements
+were not found in the parsed events. This supports investigating firmware
+BootNext dispatch but does not prove that the test chain never ran. Collection
+also found both diagnostic text files absent, so the new VT-d/storage fault
+snapshot was not saved. See the
+[235806 investigation](GPU_PAYLOAD_FAILURE_INVESTIGATION.md#run-235806-firmware-diagnostic-capture-and-final-verification).
 
-```powershell
-Set-Location 'C:\Users\jayli\OneDrive\Documents\Projects\hsinv'
-$readinessPath = '.\.analysis\gpu-baremetal-readiness\d34e0d3f9e9d45679c79529c3fc9545b\readiness.json'
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun225049 -ReadinessPath $readinessPath
-```
+Before another run, obtain an ownership-reviewed retirement profile bound to
+run 235806 and its current retained stage. Then review/apply that profile and
+capture fresh readiness. Continue only when readiness reports
+`READY_FOR_FRESH_PREPARE` with no blockers. Preserve all evidence if a step
+fails; do not reuse another run's profile, retry an interrupted Apply, or
+delete ESP files manually. Confirm the diagnostic worktree is on the intended
+committed revision and clean before Prepare. The operator performs any reboot
+manually; the scripts do not reboot automatically.
 
-After a successful review, apply the same profile once:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Retire-GpuCompletedStage.ps1 -CompletedRun225049 -ReadinessPath $readinessPath -Apply
-```
-
-Require `STAGE_RETIRED`, `Succeeded: true`, no errors, and a successfully
-unmounted ESP. Then capture fresh readiness; the saved report is only the
-retirement input and must not be reused for Prepare:
-
-```powershell
-$readiness = powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\gpu_diagnostic\Get-GpuBaremetalReadiness.ps1 | Out-String | ConvertFrom-Json
-$readiness | Select-Object Status, Blockers, EvidencePath | ConvertTo-Json -Depth 8
-```
-
-Continue only if the fresh result says `READY_FOR_FRESH_PREPARE` with no
-blockers. If retirement or readiness fails, preserve all evidence and stop;
-do not retry Apply or delete ESP files manually. Confirm the diagnostic
-worktree is on the intended committed revision and clean before Prepare. Run
-the stages below one at a time and stop on any failure. The operator performs
-the reboot manually after Arm; the script does not reboot automatically.
-
-The next-build diagnostics attempt a read-only, bounded VT-d and storage PCI
-snapshot after a traced storage failure. They add evidence for investigation;
-they do not claim to fix the observed boot-manager read failure. See the
-[225049 investigation](GPU_PAYLOAD_FAILURE_INVESTIGATION.md#run-225049-boot-manager-volume-open-fails-after-payload-return)
-for output fields and their limits.
+The 235806 post-boot TBS evidence and PE comparison are stored under
+`.analysis/gpu-235806-investigation/`. The next investigation should first
+prove which EFI image firmware dispatched and capture the full boot console,
+including any `storage_fault` lines, before another payload change.
 
 ## Historical checkpoint: run 213919 retired
 
