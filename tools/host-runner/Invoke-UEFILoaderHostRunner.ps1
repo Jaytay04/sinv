@@ -2087,10 +2087,10 @@ function Invoke-HostBuild {
     }
     # The replay-era smoke images (replay/pe_rehash/divergence/handoff),
     # handoff_fixture_gen.exe and ibaudit.exe went away with the loader
-    rewrite: their CMake targets were built from src/loader sources that no
-    longer exist, so a clean build cannot produce them.  Requiring them here
-    would fail every clean run and only a stale binary left in the build tree
-    could satisfy them, so they are not required at all.
+    # rewrite: their CMake targets were built from src/loader sources that no
+    # longer exist, so a clean build cannot produce them.  Requiring them here
+    # would fail every clean run and only a stale binary left in the build tree
+    # could satisfy them, so they are not required at all.
     foreach ($Artifact in @(
             'build\windows\loader.efi',
             'build\windows\tcglog_efi_smoke.efi',
@@ -2397,16 +2397,21 @@ function New-HostStage {
     }
     New-Item -ItemType Directory -Force -Path $Stage,$Evidence | Out-Null
     # Retired with the loader rewrite.  These workflows stage loader binaries
-    whose CMake targets were built from src/loader sources that no longer exist:
-    the replay/pe_rehash/divergence/handoff smoke images, and ibaudit.exe, which
-    the nested-Windows branch hashes into nested-SHA256SUMS.txt and hands to the
-    guest.  Refusing here reports the reason instead of failing on a missing file
-    deep inside staging.
+    # whose CMake targets were built from src/loader sources that no longer exist:
+    # the replay/pe_rehash/divergence/handoff smoke images, and ibaudit.exe, which
+    # the nested-Windows branch hashes into nested-SHA256SUMS.txt and hands to the
+    # guest.  handoff_fixture_gen.exe went away the same way, so the production-
+    # handoff, one-shot and hypervisor-smoke branches that synthesise a tcglog.ib
+    # with it are retired here too.  Refusing here reports the reason instead of
+    # failing on a missing file deep inside staging.
     if ($Workflow -in @(
             'LinuxReplayDryRun', 'LinuxPeRehash',
             'LinuxDivergenceManifest', 'LinuxHandoffMechanics',
             'LinuxNestedWindowsE2E', 'LinuxNestedWindowsHypervisorE2E',
-            'LinuxBootNextE2E')) {
+            'LinuxBootNextE2E',
+            'LinuxProductionHandoff', 'LinuxOneShotCycle',
+            'LinuxHypervisorSmoke', 'LinuxHypervisorPostEbsSmoke',
+            'LinuxHypervisorPostEbsInterruptSmoke')) {
         throw "Workflow '$Workflow' is retired: its loader artifacts no longer have build targets."
     }
     if ($Workflow -in @(
