@@ -20,6 +20,10 @@ extern "C" {
 #define IB_BOOTMGFW_PATH "\\EFI\\Microsoft\\Boot\\bootmgfw.efi"
 /* Where the host tool stages the original boot manager. */
 #define IB_BOOTMGFW_BACKUP "\\ib-bootmgfw.efi"
+/* Where the restored copy is staged and verified before it replaces the boot
+ * manager, so the boot manager's own path is never the first place the copy
+ * is written. */
+#define IB_BOOTMGFW_STAGING "\\ib-bootmgfw.tmp"
 /* Where the shim looks for `MokManager`, next to itself. */
 #define IB_BOOTMGFW_MOK_MANAGER "\\EFI\\Microsoft\\Boot\\mmx64.efi"
 /* Where the shim looks for the loader it runs: this image, under its staged

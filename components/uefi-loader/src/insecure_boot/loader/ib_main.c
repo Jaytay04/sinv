@@ -260,6 +260,7 @@ static ib_loader_code ib_main_run(ib_loader_error_t *error) {
     code = outcome;
 
 done:
+    ib_fs_close_volume(&volume);
     ib_bytes_free(&payload);
     ib_bytes_free(&dump_bytes);
     ib_bytes_free(&config_bytes);

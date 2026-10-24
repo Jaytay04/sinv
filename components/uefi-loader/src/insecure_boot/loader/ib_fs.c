@@ -109,6 +109,10 @@ ib_loader_code ib_fs_open(ib_fs_volume_t *volume, ib_loader_error_t *error) {
     ib_efi_status status;
     ib_loader_code code;
 
+    /* A volume that failed to open has nothing to close, and the caller's
+     * cleanup relies on that being the state rather than an uninitialised one. */
+    volume->root = NULL;
+
     code = ib_fs_image_file_system(&file_system, &device, error);
     if (code != IB_LOADER_OK) {
         return code;
@@ -126,9 +130,22 @@ ib_loader_code ib_fs_open(ib_fs_volume_t *volume, ib_loader_error_t *error) {
     return IB_LOADER_OK;
 }
 
-/* The whole metadata record of `file`, as `get_boxed_info` returns it. */
+/* Release the volume's root directory handle.  Rust's `Volume` closes it when
+ * it goes out of scope; C has no such step, so the caller that opened the
+ * volume calls this on every way out.  An unopened volume is a no-op. */
+void ib_fs_close_volume(ib_fs_volume_t *volume) {
+    if (volume->root != NULL) {
+        ib_fs_close(volume->root);
+        volume->root = NULL;
+    }
+}
+
+/* The whole metadata record of `file`, as `get_boxed_info` returns it.  Rust
+ * reads the fixed fields through bounds-checked slice indexing, so the C port
+ * has to refuse a record too short for them itself; `path` is what makes that
+ * refusal reportable. */
 static ib_loader_code ib_fs_boxed_info(ib_efi_file_protocol *file,
-                                       ib_bytes_t *out,
+                                       const char *path, ib_bytes_t *out,
                                        ib_loader_error_t *error) {
     ib_uintn size = 0;
     ib_efi_status status = file->get_info(file, (ib_efi_guid_t *)&ib_guid_file_info,
@@ -147,6 +164,16 @@ static ib_loader_code ib_fs_boxed_info(ib_efi_file_protocol *file,
         ib_bytes_free(out);
         ib_loader_error_uefi(error, status);
         return IB_LOADER_ERR_UEFI;
+    }
+
+    if (out->length < IB_FS_INFO_HEADER) {
+        /* Every field the callers read sits at a fixed offset inside the fixed
+         * part of a FileInfo, so a record shorter than that part is a corrupt
+         * record, not a short read: refuse it instead of reading past the
+         * allocation the firmware handed back. */
+        ib_bytes_free(out);
+        ib_loader_error_str(error, IB_LOADER_ERR_METADATA, path);
+        return IB_LOADER_ERR_METADATA;
     }
 
     return IB_LOADER_OK;
@@ -211,7 +238,7 @@ static ib_loader_code ib_fs_contents(const char *path, ib_efi_file_protocol *fil
     ib_uintn read;
     ib_efi_status status;
 
-    code = ib_fs_boxed_info(file, &info, error);
+    code = ib_fs_boxed_info(file, path, &info, error);
     if (code != IB_LOADER_OK) {
         return code;
     }
@@ -297,8 +324,10 @@ ib_loader_code ib_fs_read_saved(ib_fs_volume_t *volume, const char *path,
         return IB_LOADER_ERR_MISSING_ARTIFACT;
     }
 
-    code = ib_fs_boxed_info(file, &info, error);
+    code = ib_fs_boxed_info(file, path, &info, error);
     if (code != IB_LOADER_OK) {
+        /* The handle is open on this path, and Rust's drop would close it. */
+        ib_fs_close(file);
         return code;
     }
     ib_memcpy(&saved->create, info.data + IB_FS_INFO_CREATE_AT, IB_FS_TIME_LEN);
@@ -338,8 +367,11 @@ ib_loader_code ib_fs_write_saved(ib_fs_volume_t *volume, const char *path,
     ib_bytes_t info;
     ib_u8 *storage;
     ib_char16 name[IB_FS_NAME_CAPACITY];
+    const uint16_t *stored_name;
     size_t name_chars;
     size_t name_size;
+    size_t units;
+    size_t limit;
     size_t info_size;
     size_t storage_size;
     ib_uintn written;
@@ -360,17 +392,30 @@ ib_loader_code ib_fs_write_saved(ib_fs_volume_t *volume, const char *path,
     }
 
     /* The name the volume gave the file is the one to put back on it. */
-    code = ib_fs_boxed_info(file, &info, error);
+    code = ib_fs_boxed_info(file, path, &info, error);
     if (code != IB_LOADER_OK) {
         ib_fs_close(file);
         return code;
     }
-    name_chars = ib_utf16_len((const uint16_t *)(info.data + IB_FS_INFO_NAME_AT));
-    if (name_chars + 1 > IB_FS_NAME_CAPACITY) {
-        name_chars = IB_FS_NAME_CAPACITY - 1;
+    /* The name is read out of the metadata record, so the scan is bounded by
+     * the code units that record actually holds: `ib_utf16_len` would walk
+     * past the allocation on an unterminated name.  The terminator is written
+     * locally instead of copied, so a truncated record is never read past. */
+    stored_name = (const uint16_t *)(info.data + IB_FS_INFO_NAME_AT);
+    units = (info.length - IB_FS_INFO_NAME_AT) / 2u;
+    limit = units < (IB_FS_NAME_CAPACITY - 1u) ? units
+                                               : (IB_FS_NAME_CAPACITY - 1u);
+    name_chars = 0;
+    while (name_chars < limit && stored_name[name_chars] != 0u) {
+        name_chars++;
     }
-    name_size = (name_chars + 1) * 2;
-    ib_memcpy(name, info.data + IB_FS_INFO_NAME_AT, name_size);
+    if (name_chars == limit && limit == (IB_FS_NAME_CAPACITY - 1u)) {
+        /* No terminator inside the window the record allows: keep the longest
+         * name the volume accepts, which is what the old clamp produced. */
+        name_chars = IB_FS_NAME_CAPACITY - 1u;
+    }
+    name_size = (name_chars + 1u) * 2u;
+    ib_memcpy(name, stored_name, name_chars * 2u);
     name[name_chars] = 0;
     ib_bytes_free(&info);
 
@@ -424,8 +469,10 @@ ib_loader_code ib_fs_wipe(ib_fs_volume_t *volume, const char *path,
         return IB_LOADER_ERR_MISSING_ARTIFACT;
     }
 
-    code = ib_fs_boxed_info(file, &info, error);
+    code = ib_fs_boxed_info(file, path, &info, error);
     if (code != IB_LOADER_OK) {
+        /* The handle is open on this path, and Rust's drop would close it. */
+        ib_fs_close(file);
         return code;
     }
     size64 = ib_fs_get_u64(info.data + IB_FS_INFO_FILE_SIZE_AT);

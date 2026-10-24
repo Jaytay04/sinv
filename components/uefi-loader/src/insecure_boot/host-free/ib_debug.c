@@ -115,6 +115,31 @@ static const ib_attribute_name IB_ATTRIBUTE_NAMES[] = {
     { 0x00000080u, "ENHANCED_AUTHENTICATED_ACCESS" },
 };
 
+/* Append `format` to `body` and report the new length.  `ib_snprintf` returns
+ * the length it *would* have written, so its raw return value cannot be the
+ * running offset: once the body is full the next append would point past the
+ * array and ask for an underflowed capacity.  The offset is clamped to the
+ * last writable index, which keeps `body` NUL-terminated and turns every
+ * later append into a no-op. */
+static size_t ib_attribute_append(char *body, size_t capacity, size_t used,
+                                  const char *format, ...) {
+    va_list arguments;
+    size_t written;
+    size_t next;
+
+    if (used + 1u > capacity) {
+        return used;
+    }
+
+    va_start(arguments, format);
+    written = (size_t)ib_vsnprintf(body + used, capacity - used, format,
+                                   arguments);
+    va_end(arguments);
+
+    next = used + written;
+    return (next > capacity - 1u) ? (capacity - 1u) : next;
+}
+
 void ib_variable_attributes_debug(uint32_t attributes, char *buffer,
                                   size_t capacity) {
     char body[128];
@@ -133,15 +158,15 @@ void ib_variable_attributes_debug(uint32_t attributes, char *buffer,
             continue;
         }
         known |= entry->bit;
-        used += (size_t)ib_snprintf(body + used, sizeof(body) - used, "%s%s",
-                                    first ? "" : " | ", entry->name);
+        used = ib_attribute_append(body, sizeof(body), used, "%s%s",
+                                   first ? "" : " | ", entry->name);
         first = 0;
     }
 
     extra = attributes & ~known;
     if (extra != 0) {
-        used += (size_t)ib_snprintf(body + used, sizeof(body) - used, "%s%#x",
-                                    first ? "" : " | ", (unsigned)extra);
+        used = ib_attribute_append(body, sizeof(body), used, "%s%#x",
+                                   first ? "" : " | ", (unsigned)extra);
         first = 0;
     }
 

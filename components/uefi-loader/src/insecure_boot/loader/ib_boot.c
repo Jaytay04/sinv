@@ -188,8 +188,20 @@ ib_efi_status ib_boot_load_image(ib_efi_handle parent,
 
     if (!IB_EFI_IS_ERROR(status)) {
         *out_image = image;
+        return status;
+    }
+
+    /* The spec lets the firmware return an allocated image handle together
+     * with EFI_SECURITY_VIOLATION, and a caller cannot release a handle it
+     * was never given: release the rejected load here so it cannot leak. */
+    if (image != NULL) {
+        ib_boot_unload_image(image);
     }
     return status;
+}
+
+ib_efi_status ib_boot_unload_image(ib_efi_handle image) {
+    return ib_boot_services()->unload_image(image);
 }
 
 ib_efi_status ib_boot_start_image(ib_efi_handle image) {

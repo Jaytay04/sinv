@@ -1263,17 +1263,18 @@ function Invoke-HostBuild {
     if ($Result.ExitCode -ne 0) {
         throw "The host build failed with exit code $($Result.ExitCode)."
     }
+    # The replay-era smoke images (replay/pe_rehash/divergence/handoff),
+    # handoff_fixture_gen.exe and ibaudit.exe went away with the loader
+    rewrite: their CMake targets were built from src/loader sources that no
+    longer exist, so a clean build cannot produce them.  Requiring them here
+    would fail every clean run and only a stale binary left in the build tree
+    could satisfy them, so they are not required at all.
     foreach ($Artifact in @(
             'build\windows\loader.efi',
-            'build\windows\replay_efi_smoke.efi',
-            'build\windows\pe_rehash_efi_smoke.efi',
-            'build\windows\divergence_efi_smoke.efi',
-            'build\windows\handoff_efi_smoke.efi',
+            'build\windows\tcglog_efi_smoke.efi',
             'build\windows\handoff_payload_stub.efi',
             'build\windows\handoff_bootmgr_stub.efi',
-            'build\windows\handoff_fixture_gen.exe',
             'build\windows-static\ib-tcg-dump.exe',
-            'build\windows-static\ibaudit.exe',
             'build\windows-static\install_authenticode_test.exe',
             'build\windows-static\ib-install.exe')) {
         $Path = Join-Path $Config.ProjectRoot $Artifact
@@ -1286,21 +1287,9 @@ function Invoke-HostBuild {
         LoaderSha256 = (Get-FileHash -LiteralPath `
             (Join-Path $Config.ProjectRoot 'build\windows\loader.efi') `
             -Algorithm SHA256).Hash
-        ReplayEfiSmokeSha256 = (Get-FileHash -LiteralPath `
+        TcglogEfiSmokeSha256 = (Get-FileHash -LiteralPath `
             (Join-Path $Config.ProjectRoot `
-                'build\windows\replay_efi_smoke.efi') `
-            -Algorithm SHA256).Hash
-        PeRehashEfiSmokeSha256 = (Get-FileHash -LiteralPath `
-            (Join-Path $Config.ProjectRoot `
-                'build\windows\pe_rehash_efi_smoke.efi') `
-            -Algorithm SHA256).Hash
-        DivergenceEfiSmokeSha256 = (Get-FileHash -LiteralPath `
-            (Join-Path $Config.ProjectRoot `
-                'build\windows\divergence_efi_smoke.efi') `
-            -Algorithm SHA256).Hash
-        HandoffEfiSmokeSha256 = (Get-FileHash -LiteralPath `
-            (Join-Path $Config.ProjectRoot `
-                'build\windows\handoff_efi_smoke.efi') `
+                'build\windows\tcglog_efi_smoke.efi') `
             -Algorithm SHA256).Hash
         TcgDumpSha256 = (Get-FileHash -LiteralPath `
             (Join-Path $Config.ProjectRoot `
@@ -1309,10 +1298,6 @@ function Invoke-HostBuild {
         InstallerSha256 = (Get-FileHash -LiteralPath `
             (Join-Path $Config.ProjectRoot `
                 'build\windows-static\ib-install.exe') `
-            -Algorithm SHA256).Hash
-        AuditSha256 = (Get-FileHash -LiteralPath `
-            (Join-Path $Config.ProjectRoot `
-                'build\windows-static\ibaudit.exe') `
             -Algorithm SHA256).Hash
     }
 }
@@ -1338,6 +1323,18 @@ function New-HostStage {
         throw "RunId already exists: $RunId"
     }
     New-Item -ItemType Directory -Force -Path $Stage,$Evidence | Out-Null
+    # Retired with the loader rewrite.  These workflows stage loader binaries
+    whose CMake targets were built from src/loader sources that no longer exist:
+    the replay/pe_rehash/divergence/handoff smoke images, and ibaudit.exe, which
+    the nested-Windows branch hashes into nested-SHA256SUMS.txt and hands to the
+    guest.  Refusing here reports the reason instead of failing on a missing file
+    deep inside staging.
+    if ($Workflow -in @(
+            'LinuxReplayDryRun', 'LinuxPeRehash',
+            'LinuxDivergenceManifest', 'LinuxHandoffMechanics',
+            'LinuxNestedWindowsE2E', 'LinuxBootNextE2E')) {
+        throw "Workflow '$Workflow' is retired: its loader artifacts no longer have build targets."
+    }
     if ($Workflow -in @(
             'LinuxPositive', 'LinuxReplayDryRun', 'LinuxPeRehash',
             'LinuxDivergenceManifest', 'LinuxHandoffMechanics',

@@ -46,6 +46,11 @@ typedef struct {
 
 ib_loader_code ib_fs_open(ib_fs_volume_t *volume, ib_loader_error_t *error);
 
+/* Release the volume's root handle.  Rust's `Volume` closes it on scope exit;
+ * the C port has no scope exit, so the caller calls this on every way out of
+ * an open, and it is safe on a volume that never opened. */
+void ib_fs_close_volume(ib_fs_volume_t *volume);
+
 ib_loader_code ib_fs_read_optional(ib_fs_volume_t *volume, const char *path,
                                    int *present, ib_bytes_t *out,
                                    ib_loader_error_t *error);
