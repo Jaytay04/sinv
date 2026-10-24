@@ -1302,6 +1302,18 @@ function Invoke-HostBuild {
     }
 }
 
+# Workflows whose loader artifacts lost their CMake targets in the loader
+# rewrite: the replay/pe_rehash/divergence/handoff smoke images, ibaudit.exe
+# (hashed into nested-SHA256SUMS.txt and handed to the guest) and
+# handoff_fixture_gen.exe (used to synthesise the tcglog.ib those branches
+# stage).  Refused before a RunId is consumed, before any run directory is
+# created, and before any build or VM start is attempted.
+$script:UhrRetiredWorkflows = @(
+    'LinuxReplayDryRun', 'LinuxPeRehash',
+    'LinuxDivergenceManifest', 'LinuxHandoffMechanics',
+    'LinuxNestedWindowsE2E', 'LinuxBootNextE2E',
+    'LinuxProductionHandoff', 'LinuxOneShotCycle')
+
 function New-HostStage {
     param(
         [Parameter(Mandatory=$true)][string]$RunId,
@@ -1315,6 +1327,14 @@ function New-HostStage {
             'WindowsProbe', 'WindowsCapture', 'WindowsNestedPrep')]
         [string]$Workflow
     )
+    # Retired with the loader rewrite: these workflows stage loader binaries
+    # whose CMake targets were built from src/loader sources that no longer
+    # exist.  Refusing here reports the reason instead of failing on a missing
+    # file deep inside staging, and it happens before this run's directories
+    # exist, so the request is rejected without leaving a run directory behind.
+    if ($Workflow -in $script:UhrRetiredWorkflows) {
+        throw "Workflow '$Workflow' is retired: its loader artifacts no longer have build targets."
+    }
     if (-not (Test-UhrRunId $RunId)) { throw "Unsafe RunId: $RunId" }
     $RunRoot = Join-Path (Join-Path $Config.StateRoot 'runs') $RunId
     $Stage = Join-Path $RunRoot 'stage'
@@ -1323,21 +1343,6 @@ function New-HostStage {
         throw "RunId already exists: $RunId"
     }
     New-Item -ItemType Directory -Force -Path $Stage,$Evidence | Out-Null
-    # Retired with the loader rewrite.  These workflows stage loader binaries
-    # whose CMake targets were built from src/loader sources that no longer exist:
-    # the replay/pe_rehash/divergence/handoff smoke images, and ibaudit.exe, which
-    # the nested-Windows branch hashes into nested-SHA256SUMS.txt and hands to the
-    # guest.  handoff_fixture_gen.exe went away the same way, so the production-
-    # handoff, one-shot and hypervisor-smoke branches that synthesise a tcglog.ib
-    # with it are retired here too.  Refusing here reports the reason instead of
-    # failing on a missing file deep inside staging.
-    if ($Workflow -in @(
-            'LinuxReplayDryRun', 'LinuxPeRehash',
-            'LinuxDivergenceManifest', 'LinuxHandoffMechanics',
-            'LinuxNestedWindowsE2E', 'LinuxBootNextE2E',
-            'LinuxProductionHandoff', 'LinuxOneShotCycle')) {
-        throw "Workflow '$Workflow' is retired: its loader artifacts no longer have build targets."
-    }
     if ($Workflow -in @(
             'LinuxPositive', 'LinuxReplayDryRun', 'LinuxPeRehash',
             'LinuxDivergenceManifest', 'LinuxHandoffMechanics',
@@ -1907,6 +1912,11 @@ function Invoke-LiveWorkflow {
     if (-not $AuthorizeVmStop) {
         throw 'Live workflows require -AuthorizeVmStop.'
     }
+    # Same refusal as New-HostStage, before any build is started: a retired
+    # workflow must not consume a RunId, build, or start a VM.
+    if ($Workflow -in $script:UhrRetiredWorkflows) {
+        throw "Workflow '$Workflow' is retired: its loader artifacts no longer have build targets."
+    }
     if ($Workflow -eq 'LinuxPositive') {
         $Name = 'Linux'
         $WorkflowId = 'linux-positive'
@@ -2234,6 +2244,13 @@ function Invoke-WslNestedWindowsE2E {
     if (-not $AuthorizeLiveVmRun -or -not $AuthorizeVmStop) {
         throw 'The WSL nested E2E gate requires VM-run and VM-stop authorization.'
     }
+    # Retired with the loader rewrite: every mode of this gate stages one of
+    # LinuxBootNextE2E, LinuxNestedWindowsE2E or LinuxNestedWindowsHypervisorE2E,
+    # whose loader artifacts no longer have CMake targets.  Refuse here, before
+    # wsl.exe is resolved, before the WSL preflight, before any host build and
+    # before a RunId or run directory is created, so the request is rejected with
+    # no side effects.
+    throw 'The WSL nested E2E gate is retired: its loader artifacts no longer have build targets.'
     $WslCommand = Get-Command 'wsl.exe' -ErrorAction Stop
     $WslPath = $WslCommand.Source
     $InvokeWsl = {

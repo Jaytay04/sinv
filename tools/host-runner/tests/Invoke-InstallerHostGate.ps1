@@ -4,6 +4,14 @@ param(
     [Parameter(Mandatory=$true)][string]$StateRoot
 )
 
+# Retired with the loader rewrite: this gate's inputs lost their CMake
+# targets when the replay loader's diagnostics and fixture generators were
+# removed (handoff_fixture_gen.exe and handoff_payload_stub.efi), so a clean build cannot satisfy it.  Refuse here, before
+# the core module is imported, before a gate run directory exists and before
+# the missing-binary assertion, so the reason is reported instead of a stale
+# binary from an older build tree being used by accident.
+throw 'The installer host gate is retired: its gate binaries no longer have build targets.'
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 

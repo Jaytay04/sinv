@@ -4,6 +4,14 @@ param(
     [Parameter(Mandatory=$true)][string]$StateRoot
 )
 
+# Retired with the loader rewrite: this gate's inputs lost their CMake
+# targets when the replay loader's diagnostics and fixture generators were
+# removed (handoff_bootmgr_stub.efi, and it chains into Invoke-InstallerHostGate.ps1), so a clean build cannot satisfy it.  Refuse here, before
+# the core module is imported, before a gate run directory exists and before
+# the missing-binary assertion, so the reason is reported instead of a stale
+# binary from an older build tree being used by accident.
+throw 'The one-shot installer host gate is retired: its gate binaries no longer have build targets.'
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
