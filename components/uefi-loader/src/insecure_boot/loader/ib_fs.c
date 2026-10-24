@@ -147,18 +147,29 @@ void ib_fs_close_volume(ib_fs_volume_t *volume) {
 static ib_loader_code ib_fs_boxed_info(ib_efi_file_protocol *file,
                                        const char *path, ib_bytes_t *out,
                                        ib_loader_error_t *error) {
-    ib_uintn size = 0;
+    ib_uintn capacity = 0;
+    ib_uintn written;
     ib_efi_status status = file->get_info(file, (ib_efi_guid_t *)&ib_guid_file_info,
-                                          &size, NULL);
+                                          &capacity, NULL);
 
     if (IB_EFI_IS_ERROR(status) && status != IB_EFI_BUFFER_TOO_SMALL) {
         ib_loader_error_uefi(error, status);
         return IB_LOADER_ERR_UEFI;
     }
 
-    out->data = ib_boot_alloc((size_t)size);
-    out->length = (size_t)size;
-    status = file->get_info(file, (ib_efi_guid_t *)&ib_guid_file_info, &size,
+    if (capacity < IB_FS_INFO_HEADER) {
+        /* The size the firmware says the record needs is already enough to
+         * judge: a record too short for the fixed part of a FileInfo is corrupt
+         * before it is read, and there is nothing worth allocating for it. */
+        ib_loader_error_str(error, IB_LOADER_ERR_METADATA, path);
+        return IB_LOADER_ERR_METADATA;
+    }
+
+    out->data = ib_boot_alloc((size_t)capacity);
+    out->length = 0;
+
+    written = capacity;
+    status = file->get_info(file, (ib_efi_guid_t *)&ib_guid_file_info, &written,
                             out->data);
     if (IB_EFI_IS_ERROR(status)) {
         ib_bytes_free(out);
@@ -166,15 +177,18 @@ static ib_loader_code ib_fs_boxed_info(ib_efi_file_protocol *file,
         return IB_LOADER_ERR_UEFI;
     }
 
-    if (out->length < IB_FS_INFO_HEADER) {
-        /* Every field the callers read sits at a fixed offset inside the fixed
-         * part of a FileInfo, so a record shorter than that part is a corrupt
-         * record, not a short read: refuse it instead of reading past the
-         * allocation the firmware handed back. */
+    /* The length that matters is the one the firmware reports for the record
+     * it actually wrote, not the capacity it offered: a shorter record leaves
+     * the tail of the allocation untouched, and every caller below indexes
+     * that record by fixed offset, so the untouched tail would be read as
+     * metadata or as filename characters.  Refuse a record that does not fit
+     * the fixed part, and one that claims more than was allocated. */
+    if (written > capacity || written < IB_FS_INFO_HEADER) {
         ib_bytes_free(out);
         ib_loader_error_str(error, IB_LOADER_ERR_METADATA, path);
         return IB_LOADER_ERR_METADATA;
     }
+    out->length = (size_t)written;
 
     return IB_LOADER_OK;
 }
