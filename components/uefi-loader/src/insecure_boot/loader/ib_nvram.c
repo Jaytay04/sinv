@@ -366,7 +366,7 @@ static void ib_nvram_restore_tcg_2(size_t offset) {
     ib_bytes_free(&data);
 }
 
-void ib_nvram_clear_residue(size_t offset) {
+void ib_nvram_clear_residue(size_t offset, int have_setup) {
     size_t index;
 
     ib_boot_set_watchdog_timer();
@@ -401,9 +401,11 @@ void ib_nvram_clear_residue(size_t offset) {
 
     ib_nvram_sweep();
 
-    ib_console_println("");
-    ib_console_println("insecure-boot: AMI Setup:");
-    ib_nvram_restore_tcg_2(offset);
+    if (have_setup) {
+        ib_console_println("");
+        ib_console_println("insecure-boot: AMI Setup:");
+        ib_nvram_restore_tcg_2(offset);
+    }
 
     ib_console_println("");
     ib_console_println("insecure-boot: Variables cleared");

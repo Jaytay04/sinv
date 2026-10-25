@@ -118,6 +118,7 @@ static ib_loader_code ib_main_run(ib_loader_error_t *error) {
     int have_dump = 0;
     int have_tpm = 0;
     int have_tcg2 = 0;
+    int have_setup = 1;
 
     code = ib_fs_open(&volume, error);
     if (code != IB_LOADER_OK) {
@@ -143,6 +144,13 @@ static ib_loader_code ib_main_run(ib_loader_error_t *error) {
     tcg_spec_offset = ib_config_tcg_spec_offset(&config);
 
     code = ib_nvram_ensure_tcg_1_2(tcg_spec_offset, error);
+    if (code == IB_LOADER_ERR_NO_SETUP_VARIABLE) {
+        have_setup = 0;
+        ib_console_println(
+            "experimental boot: no AMI Setup variable; this firmware keeps "
+            "no TPM UEFI spec version to reconfigure");
+        code = IB_LOADER_OK;
+    }
     if (code != IB_LOADER_OK) {
         goto done;
     }
@@ -236,7 +244,7 @@ static ib_loader_code ib_main_run(ib_loader_error_t *error) {
 
     /* The enrollment and the shim leave variables behind, and the boots after
      * this one want the spec version they found here. */
-    ib_nvram_clear_residue(tcg_spec_offset);
+    ib_nvram_clear_residue(tcg_spec_offset, have_setup);
 
     outcome = ib_main_tail(&payload, error);
 

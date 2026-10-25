@@ -23,12 +23,14 @@ extern "C" {
 
 /* Brings the TPM UEFI spec version down to TCG 1.2.  A byte already at TCG 1.2
  * passes through; a byte at TCG 2.0 is flipped, written back, and the machine
- * is cold-reset (this path never returns). */
+ * is cold-reset (this path never returns).  Firmware that keeps no AMI `Setup`
+ * variable reports IB_LOADER_ERR_NO_SETUP_VARIABLE for the caller to decide. */
 ib_loader_code ib_nvram_ensure_tcg_1_2(size_t offset, ib_loader_error_t *error);
 
-/* Deletes every MOK/SBAT/SSP variable, restores the TCG 2.0 byte, and waits.
- * Failures are printed and otherwise ignored. */
-void ib_nvram_clear_residue(size_t offset);
+/* Deletes every MOK/SBAT/SSP variable, restores the TCG 2.0 byte when the
+ * firmware has a `Setup` variable to restore it in, and waits.  Failures are
+ * printed and otherwise ignored. */
+void ib_nvram_clear_residue(size_t offset, int have_setup);
 
 #ifdef __cplusplus
 }
