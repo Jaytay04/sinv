@@ -970,12 +970,42 @@ function Invoke-Stage {
         }
         Write-Utf8NoBom -Path (Join-Path $StageDirectory 'manifest.sha256') `
             -Text (($ManifestLines -join "`r`n") + "`r`n")
+        # The insecure-boot loader reads its staged artifacts from the root of
+        # the boot volume, not from the EFI\insecure-boot stage directory.
+        $ConfigBytes = [byte[]]@(0x49, 0x42, 0x43, 0x4F, 0x4E, 0x46, 0x49, 0x47,
+            0x01, 0x00, 0x00, 0x00, 0x1B, 0x00)
+        [IO.File]::WriteAllBytes((Join-Path $EspDrive 'ib-config.bin'), $ConfigBytes)
+        Copy-Item -LiteralPath $EfiPath -Destination (Join-Path $EspDrive 'ib-load.efi')
         $BootManagerPath = $EspDrive + '\EFI\Microsoft\Boot\bootmgfw.efi'
         $BootManagerAtInstall = (Get-FileHash -LiteralPath $BootManagerPath `
             -Algorithm SHA256).Hash
         if ($BootManagerAtInstall -cne $BootManagerBefore) {
             throw 'bootmgfw.efi changed after initial inspection.'
         }
+                # The insecure-boot loader restores the Windows boot manager from
+                # \ib-bootmgfw.efi and then wipes that backup, its own staging copy,
+                # and the two Microsoft\Boot files whose names it clears. A wipe of
+                # an absent file is a hard failure, so every one of them has to exist
+                # before the reboot that runs the loader.
+        $BackupPath = $EspDrive + '\ib-bootmgfw.efi'
+        if (Test-Path -LiteralPath $BackupPath -PathType Leaf) {
+            throw 'ib-bootmgfw.efi already exists on the boot volume; refusing to overwrite staged state.'
+        }
+        Copy-Item -LiteralPath $BootManagerPath -Destination $BackupPath
+        if ((Get-FileHash -LiteralPath $BackupPath -Algorithm SHA256).Hash -cne $BootManagerBefore) {
+            throw 'the staged boot-manager backup does not match the boot manager it was copied from.'
+        }
+        $WipeSiblingsCreated = @()
+        foreach ($WipeName in @('mmx64.efi', 'grubx64.efi')) {
+            $WipePath = $EspDrive + '\EFI\Microsoft\Boot\' + $WipeName
+            if (-not (Test-Path -LiteralPath $WipePath -PathType Leaf)) {
+                # A short ASCII marker stands in for a firmware file the loader only
+                # needs to find, zero and remove on this disposable VM.
+                [IO.File]::WriteAllBytes($WipePath, [byte[]](0x49, 0x53, 0x20, 0x57, 0x49, 0x50, 0x45, 0x0D, 0x0A))
+                $WipeSiblingsCreated += $WipeName
+            }
+        }
+
         $Install = Invoke-CapturedProcess -FilePath $InstallerPath `
             -Arguments @('oneshot', '--mode', 'bootnext', '--profile',
                 $(if ($ValidationProfile -ceq 'SignedNative') { 'legacy' } else { 'vm-direct' }),
@@ -996,6 +1026,7 @@ function Invoke-Stage {
         }
         [pscustomobject]@{
             EspDrive = $EspDrive
+            WipeSiblingsCreated = ($WipeSiblingsCreated -join ',')
             BootNextOutput = $Install.Stdout
             BootNextError = $Install.Stderr
         }
