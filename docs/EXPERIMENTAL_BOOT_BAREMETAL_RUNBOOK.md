@@ -209,7 +209,7 @@ Copy-Item $Payload                      (Join-Path $Stage 'payload.efi')
 
 # The loader parses this as an IBTCGLOG dump and aborts the run if it is not
 # one, so it has to be a real capture from this machine.
-& (Join-Path $Dist 'ib-tcg-dump.exe') capture --out (Join-Path $Stage 'tcglog.ib')
+& (Join-Path $Src 'insecure-boot-c\reference_binaries\ib-tcg-dump.exe') (Join-Path $Stage 'tcglog.ib')
 
 $Lines = @('schema=1')
 foreach ($Name in @('shimx64.efi', 'grubx64.efi')) {

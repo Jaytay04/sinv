@@ -74,7 +74,7 @@ Copy-Item (Join-Path $Dist   'loader.efi')     (Join-Path $Stage 'ib-loader.efi'
 Copy-Item (Join-Path $Dist   'uefi_hypervisor.efi') (Join-Path $Stage 'payload-vm.efi') -Force
 Copy-Item (Join-Path $Dist   'ib-tcg-dump.exe') $Stage -Force
 Copy-Item $Hv (Join-Path $Stage 'payload-physical.efi') -Force
-& (Join-Path $Dist 'ib-tcg-dump.exe') capture --out (Join-Path $Stage 'tcglog.ib')
+& (Join-Path $RefBin 'ib-tcg-dump.exe') (Join-Path $Stage 'tcglog.ib')
 Get-ChildItem $Stage | ForEach-Object {
     "$($_.Name)  $($_.Length)  $((Get-FileHash $_.FullName -Algorithm SHA256).Hash)"
 }

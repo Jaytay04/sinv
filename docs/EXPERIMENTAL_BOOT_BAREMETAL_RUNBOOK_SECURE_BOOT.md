@@ -85,7 +85,7 @@ Copy-Item (Join-Path $Dist   'loader.efi')     (Join-Path $Work 'ib-loader.efi')
 # not one, so it has to be a real capture - a text placeholder stops the payload
 # from ever starting.
 Set-Location $Work
-& (Join-Path $Dist 'ib-tcg-dump.exe') capture --out (Join-Path $Work 'tcglog.ib')
+& (Join-Path $RefBin 'ib-tcg-dump.exe') (Join-Path $Work 'tcglog.ib')
 Set-Location $env:TEMP
 
 Get-ChildItem $Work | ForEach-Object {
@@ -94,10 +94,17 @@ Get-ChildItem $Work | ForEach-Object {
 ```
 
 Compare the four hashes with section 1 before going on. `tcglog.ib` is the one
-that varies: it is whatever the machine measured on this boot. If `capture`
-fails, stage nothing instead of a placeholder - the loader then prints
-`no tcglog.ib in the root of the boot volume` and runs the payload without the
-PCR replay, which is a worse test but still a test.
+that varies: it is whatever the machine measured on this boot.
+
+Two traps, both learned on hardware. `dist\ib-tcg-dump.exe capture` writes an
+`IBLG` boot-chain-recorder container, which the loader rejects with
+`the file does not begin with a TCG replay dump signature` - use the Rust
+tool in `reference_binaries` (it takes the output path positionally) as above.
+And a text placeholder is worse than nothing: the loader wipes the staged files
+and restores Windows before it parses this dump, so a bad dump costs a boot and
+never reaches the payload. If the capture fails, stage nothing: the loader then
+prints `no tcglog.ib in the root of the boot volume` and runs the payload
+without the PCR replay.
 
 ## 3. Pre-flight
 
