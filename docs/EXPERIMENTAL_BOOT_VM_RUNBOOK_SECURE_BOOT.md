@@ -74,15 +74,14 @@ Copy-Item (Join-Path $Dist   'loader.efi')     (Join-Path $Stage 'ib-loader.efi'
 Copy-Item (Join-Path $Dist   'uefi_hypervisor.efi') (Join-Path $Stage 'payload-vm.efi') -Force
 Copy-Item (Join-Path $Dist   'ib-tcg-dump.exe') $Stage -Force
 Copy-Item $Hv (Join-Path $Stage 'payload-physical.efi') -Force
-[IO.File]::WriteAllBytes((Join-Path $Stage 'tcglog.ib'),
-    [Text.Encoding]::ASCII.GetBytes("vm secure-boot probe; replay intentionally skipped.`r`n"))
+& (Join-Path $Dist 'ib-tcg-dump.exe') capture --out (Join-Path $Stage 'tcglog.ib')
 Get-ChildItem $Stage | ForEach-Object {
     "$($_.Name)  $($_.Length)  $((Get-FileHash $_.FullName -Algorithm SHA256).Hash)"
 }
 ```
 
 `ib-install.exe` `F9AD423D...`, `shimx64.efi` `351E131D...`, `mmx64.efi`
-`D383E37E...`, `ib-loader.efi` `99ABD240...`, `ib-tcg-dump.exe` `7D5CBCEC...` -
+`D383E37E...`, `ib-loader.efi` `B1D264F1...`, `ib-tcg-dump.exe` `7D5CBCEC...` -
 mismatch means stop.
 
 ## 0.5 The installer needs an AMI `Setup` variable that VMware does not have
@@ -262,12 +261,12 @@ Then:
 2. **Boot 2 - loader.** Screen:
 
    ```text
-   hsinv-boot: Hello, World!
+   experimental boot: Hello, World!
    experimental boot: no AMI Setup variable; this firmware keeps no TPM UEFI spec version to reconfigure
-   hsinv-boot: the Windows boot manager is back in place
-   hsinv-boot: wiping MOK/SBAT/SSP variables
-   hsinv-boot: Variables cleared
-   hsinv-boot: entering the payload at <address>
+   experimental boot: the Windows boot manager is back in place
+   experimental boot: wiping MOK/SBAT/SSP variables
+   experimental boot: Variables cleared
+   experimental boot: entering the payload at <address>
    ```
 
    No cold reset: the TCG flip only happens when `Setup` exists.

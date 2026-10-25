@@ -120,7 +120,7 @@ Get-ChildItem $Dist | Where-Object Extension -in '.efi','.exe' |
 The images those tests used:
 
 ```text
-loader.efi        99ABD2405A1128FC38F245B5181C268B3106FB3B58EB81AEC477FE241F193D2E
+loader.efi        B1D264F149D07264CF0473248C2CE98754C73922AA701681D596356698CAE417
 ib-install.exe    32891889F3288962B17CE9EAB8B17C43B9080E18CDE64E8D305ECEDB567A28C2
 ib-tcg-dump.exe   7D5CBCEC44332A0FAF51C738D82B54C7398BF2E247E2F3B981758170D850925E
 ```
@@ -206,10 +206,10 @@ Copy-Item (Join-Path $Dist 'loader.efi') (Join-Path $Stage 'shimx64.efi')
 Copy-Item (Join-Path $Dist 'loader.efi') (Join-Path $Stage 'grubx64.efi')
 Copy-Item $Payload                      (Join-Path $Stage 'payload.efi')
 
-# Replay-independent build: a sentinel log is enough; measurements are not the
-# subject of this test.
-[IO.File]::WriteAllBytes((Join-Path $Stage 'tcglog.ib'),
-    [Text.Encoding]::ASCII.GetBytes("bare-metal probe; replay intentionally skipped.`r`n"))
+
+# The loader parses this as an IBTCGLOG dump and aborts the run if it is not
+# one, so it has to be a real capture from this machine.
+& (Join-Path $Dist 'ib-tcg-dump.exe') capture --out (Join-Path $Stage 'tcglog.ib')
 
 $Lines = @('schema=1')
 foreach ($Name in @('shimx64.efi', 'grubx64.efi')) {
@@ -277,12 +277,12 @@ Expected sequence, screen (loader, ConOut; exact order is what the tested
 `dist\loader.efi` prints):
 
 ```text
-hsinv-boot: Hello, World!
-hsinv-boot: the Windows boot manager is back in place
-hsinv-boot: wiping MOK/SBAT/SSP variables
-hsinv-boot: Variables cleared
-hsinv-boot: TPM on <start method> ...
-hsinv-boot: entering the payload at <address>
+experimental boot: Hello, World!
+experimental boot: the Windows boot manager is back in place
+experimental boot: wiping MOK/SBAT/SSP variables
+experimental boot: Variables cleared
+experimental boot: TPM on <start method> ...
+experimental boot: entering the payload at <address>
 ```
 
 On a firmware that keeps no AMI `Setup` variable (VMware, some others) the
@@ -329,12 +329,12 @@ On AMI firmware whose `Setup` byte at offset 27 reads TCG 2.0, the loader writes
 TCG 1.2, prints
 
 ```text
-hsinv-boot: TCG UEFI spec version was TCG 2.0, now TCG 1.2
-hsinv-boot: resetting, every staged file stays for the next boot
+experimental boot: TCG UEFI spec version was TCG 2.0, now TCG 1.2
+experimental boot: resetting, every staged file stays for the next boot
 ```
 
 and cold-resets. If the byte already reads TCG 1.2, the loader prints
-`hsinv-boot: TCG UEFI spec version is already TCG 1.2` and boots straight
+`experimental boot: TCG UEFI spec version is already TCG 1.2` and boots straight
 through; no re-arm is needed. `BootNext` was consumed by the firmware, so the
 reboot lands in Windows. Nothing on the ESP was modified yet. Re-arm and boot
 once more:

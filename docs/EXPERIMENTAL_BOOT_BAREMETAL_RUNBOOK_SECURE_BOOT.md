@@ -37,7 +37,7 @@ Working directory: `C:\hsinv-sb`. Five files plus the payload.
 | Name in CWD | Copy from | Bytes | SHA-256 |
 | --- | --- | --- | --- |
 | `ib-install.exe` | `.codex-build\insecure-boot-c\reference_binaries\ib-install.exe` | 1,761,792 | `F9AD423DBDE31E341DB431CCC9E2A689DC2F7A10820BEDF9D154B5BC776FAAAD` |
-| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 89,088 | `99ABD2405A1128FC38F245B5181C268B3106FB3B58EB81AEC477FE241F193D2E` |
+| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 89,088 | `B1D264F149D07264CF0473248C2CE98754C73922AA701681D596356698CAE417` |
 | `shimx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\shimx64.efi` | 1,036,008 | `351E131D3C4A636704E9CAE7D1296BAF8A05BECA9922CFEBBFA48933C9BF1AD3` |
 | `mmx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\mmx64.efi` | 874,360 | `D383E37E4CF82DFFCAAD3A0BD54C7634E04E13169297AE157DBF205122E9C44A` |
 | `tcglog.ib` | generated in section 2 | small | not pinned |
@@ -80,15 +80,24 @@ Copy-Item (Join-Path $RefBin 'ib-install.exe') $Work -Force
 Copy-Item (Join-Path $RefBin 'shimx64.efi')    $Work -Force
 Copy-Item (Join-Path $RefBin 'mmx64.efi')      $Work -Force
 Copy-Item (Join-Path $Dist   'loader.efi')     (Join-Path $Work 'ib-loader.efi') -Force
-[IO.File]::WriteAllBytes((Join-Path $Work 'tcglog.ib'),
-    [Text.Encoding]::ASCII.GetBytes("secure-boot probe; replay intentionally skipped.`r`n"))
+
+# The loader parses this file as an IBTCGLOG dump and aborts the run if it is
+# not one, so it has to be a real capture - a text placeholder stops the payload
+# from ever starting.
+Set-Location $Work
+& (Join-Path $Dist 'ib-tcg-dump.exe') capture --out (Join-Path $Work 'tcglog.ib')
+Set-Location $env:TEMP
 
 Get-ChildItem $Work | ForEach-Object {
     "$($_.Name)  $($_.Length)  $((Get-FileHash $_.FullName -Algorithm SHA256).Hash)"
 }
 ```
 
-Compare the four hashes with section 1 before going on.
+Compare the four hashes with section 1 before going on. `tcglog.ib` is the one
+that varies: it is whatever the machine measured on this boot. If `capture`
+fails, stage nothing instead of a placeholder - the loader then prints
+`no tcglog.ib in the root of the boot volume` and runs the payload without the
+PCR replay, which is a worse test but still a test.
 
 ## 3. Pre-flight
 
@@ -204,7 +213,7 @@ What it wrote, so you can check it:
 | --- | --- |
 | `\ib-load.efi` | your hypervisor |
 | `\ib-config.bin` | `IBCONFIG` v1, Setup offset (default 0x1B) |
-| `\tcglog.ib` | the sentinel you wrote |
+| `\tcglog.ib` | the measured-boot log `ib-tcg-dump capture` wrote |
 | `\ib-bootmgfw.efi` | backup of the real Windows boot manager |
 | `EFI\Microsoft\Boot\bootmgfw.efi` | **shim** (replaces the boot manager) |
 | `EFI\Microsoft\Boot\mmx64.efi` | MokManager |
@@ -248,17 +257,17 @@ Shim verifies the loader against the MOK you just enrolled and runs
 `grubx64.efi`. Screen:
 
 ```text
-hsinv-boot: Hello, World!
-hsinv-boot: the Windows boot manager is back in place
-hsinv-boot: wiping MOK/SBAT/SSP variables
-hsinv-boot: Variables cleared
-hsinv-boot: TCG UEFI spec version was TCG 2.0, now TCG 1.2
-hsinv-boot: resetting, every staged file stays for the next boot
+experimental boot: Hello, World!
+experimental boot: the Windows boot manager is back in place
+experimental boot: wiping MOK/SBAT/SSP variables
+experimental boot: Variables cleared
+experimental boot: TCG UEFI spec version was TCG 2.0, now TCG 1.2
+experimental boot: resetting, every staged file stays for the next boot
 ```
 
 then a cold reset. The unit restarts into shim again by itself — no re-arm
 needed, because shim is the boot manager now. Second time through the same lines
-read `hsinv-boot: TCG UEFI spec version is already TCG 1.2` and the boot
+read `experimental boot: TCG UEFI spec version is already TCG 1.2` and the boot
 continues.
 
 Firmware that keeps no AMI `Setup` variable prints instead:
