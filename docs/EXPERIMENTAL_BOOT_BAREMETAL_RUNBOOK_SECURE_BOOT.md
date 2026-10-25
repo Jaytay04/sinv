@@ -260,6 +260,15 @@ Photograph the screens; this is the evidence that matters most.
 
 ## 6. Boot 2: TCG flip (only if `Setup` byte is TCG 2.0)
 
+> If an earlier attempt aborted between the flip and the restore at the end of
+> the run, the machine is left in TCG 1.2 and every dump captured now is a
+> TCG 1.2 boot, not the genuine TCG 2.0 chain the replay is meant to record.
+> Symptom: this boot prints `experimental boot: TCG UEFI spec version is
+> already TCG 1.2` where the first run should have flipped it. Fix before
+> staging again: run `C:\hsinv-baremetal\restore-tcg.ps1` elevated (it reads
+> byte `0x1B` of `Setup` and writes `0x02` back only if it reads `0x01`),
+> reboot, then record a fresh `tcglog.ib` with the writer from section 2.
+
 Shim verifies the loader against the MOK you just enrolled and runs
 `grubx64.efi`. Screen:
 
