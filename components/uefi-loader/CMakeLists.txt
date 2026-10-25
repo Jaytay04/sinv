@@ -420,6 +420,12 @@ if(MSVC)
     target_link_options(loader PRIVATE /INCLUDE:ib_sbat_section /INCREMENTAL:NO)
 endif()
 
+# shim refuses a second-stage image whose non-BSS section starts inside the
+# image headers, and MSVC emits exactly that for an empty `.data` section.  The
+# built image is the only place that shows it, so the test reads the image.
+add_executable(pe_image_layout_test src/fixtures/tests/pe_image_layout_test.c)
+add_test(NAME pe_image_layout_test COMMAND pe_image_layout_test $<TARGET_FILE:loader>)
+
 add_executable(uefi_runtime_abi_test src/fixtures/tests/uefi_runtime_abi_test.c)
 target_include_directories(uefi_runtime_abi_test PRIVATE src/vendor)
 add_test(NAME uefi_runtime_abi_test COMMAND uefi_runtime_abi_test)

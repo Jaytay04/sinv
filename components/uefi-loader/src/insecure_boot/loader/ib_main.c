@@ -42,6 +42,14 @@
 /* Where the host tool stages the payload in the boot volume. */
 #define IB_MAIN_PAYLOAD_NAME "\\ib-load.efi"
 
+/* MSVC leaves `.data` with no raw bytes when the image needs no initialised
+ * writable data, and marks the empty section as initialised data anyway.  shim
+ * refuses every non-BSS section that sits inside the image headers, reporting
+ * "Section N is inside image headers" and then EFI_UNSUPPORTED, so the image
+ * never reaches its entry point under Secure Boot.  One initialised byte keeps
+ * the section real, with a raw pointer past the headers.  Nothing reads it. */
+volatile unsigned char ib_data_section_anchor = 0x5a;
+
 /* How long an error is left on the console before the image gives up: five
  * seconds, in the microseconds `Stall` takes. */
 #define IB_MAIN_ERROR_STALL 5000000u
