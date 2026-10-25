@@ -103,6 +103,41 @@ differences:
   what a recovery prompt is made of.
 - Start serial capture (115200 8N1) — the hypervisor still speaks only `0x3F8`.
 
+### Serial capture, concretely
+
+Run this in a second elevated PowerShell window and leave it open through the
+whole run; it blocks. No extra tools needed (this host reports `COM1` at a
+115200 max, and the port opens cleanly):
+
+```powershell
+$Log  = 'C:\hsinv-baremetal\hypervisor-serial.log'
+$Port = New-Object System.IO.Ports.SerialPort 'COM1',115200,'None',8,'One'
+$Port.ReadTimeout = 500
+$Port.Open()
+"capturing COM1 115200 8N1 to $Log - leave this window open"
+$Stop = (Get-Date).AddMinutes(60)
+while ((Get-Date) -lt $Stop) {
+    try {
+        $Chunk = $Port.ReadExisting()
+        if ($Chunk) { Add-Content -LiteralPath $Log -Value $Chunk -NoNewline -Encoding Ascii }
+    } catch { }
+    Start-Sleep -Milliseconds 100
+}
+$Port.Close()
+```
+
+If you prefer a terminal with logging, install PuTTY: Serial, `COM1`, 115200,
+8N1, Connection -> Serial, then Logging -> "All session output" to a file.
+
+Two things to expect:
+
+- Start it **before** the reboot in section 5, not before section 4. The
+  installer writes to the ESP; nothing talks to the port yet.
+- The log stays empty through boot 1 (MokManager) and boot 2 (loader): the
+  loader prints to the screen only, because the shipped `dist\loader.efi` was
+  built without `IB_CONSOLE_SERIAL_MIRROR`. The first bytes you should see are
+  `uefi hypervisor: ...` when the payload starts in boot 3.
+
 ## 4. Sign and stage
 
 Elevated PowerShell, inside the working directory, console attached (it prompts):
