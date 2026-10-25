@@ -101,6 +101,11 @@ differences:
 - Reconfirm `manage-bde -status C:` is `Protection Off`/`Suspended`, and record
   the recovery key. BitLocker plus a changed TPM spec-version byte is exactly
   what a recovery prompt is made of.
+- `robocopy` will report `FAILED 2` on `EFI\Microsoft\Boot\BCD` and `BCD.LOG`:
+  Windows holds them open. That is expected and harmless here — staging never
+  writes those two, and if a full ESP restore is ever needed, `bcdboot` rebuilds
+  them. What has to match is the boot manager: check the backup's
+  `bootmgfw.efi` hash against the one `preflight.txt` recorded.
 - Start serial capture from a second machine (115200 8N1) — the hypervisor still
   speaks only `0x3F8`, and nothing on the booting machine can read it.
 
