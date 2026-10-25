@@ -139,7 +139,7 @@ ib_loader_code ib_nvram_ensure_tcg_1_2(size_t offset, ib_loader_error_t *error) 
 
     byte = &data.data[offset];
     if (*byte == IB_NVRAM_TCG_1_2) {
-        ib_console_println("insecure-boot: TCG UEFI spec version is already TCG 1.2");
+        ib_console_println("experimental boot: TCG UEFI spec version is already TCG 1.2");
         ib_bytes_free(&data);
         return IB_LOADER_OK;
     }
@@ -156,8 +156,8 @@ ib_loader_code ib_nvram_ensure_tcg_1_2(size_t offset, ib_loader_error_t *error) 
             return IB_LOADER_ERR_PROTECTED_VARIABLES;
         }
 
-        ib_console_println("insecure-boot: TCG UEFI spec version was TCG 2.0, now TCG 1.2");
-        ib_console_println("insecure-boot: resetting, every staged file stays for the next boot");
+        ib_console_println("experimental boot: TCG UEFI spec version was TCG 2.0, now TCG 1.2");
+        ib_console_println("experimental boot: resetting, every staged file stays for the next boot");
         ib_boot_reset_cold();
         /* Unreachable: reset_cold never returns. */
         ib_bytes_free(&data);
@@ -313,14 +313,14 @@ static void ib_nvram_restore_tcg_2(size_t offset) {
         char message[256];
         ib_loader_error_message(&error, message, sizeof(message));
         ib_console_printf(
-            "insecure-boot: Setup read failed: %s (no AMI Setup variable?)\n",
+            "experimental boot: Setup read failed: %s (no AMI Setup variable?)\n",
             message);
         return;
     }
 
     if ((size_t)data.length <= offset) {
         ib_console_printf(
-            "insecure-boot: Setup: too small (%llu bytes) for offset %#llx\n",
+            "experimental boot: Setup: too small (%llu bytes) for offset %#llx\n",
             (unsigned long long)data.length, (unsigned long long)offset);
         ib_bytes_free(&data);
         return;
@@ -330,7 +330,7 @@ static void ib_nvram_restore_tcg_2(size_t offset) {
         ib_u8 *byte = &data.data[offset];
 
         if (*byte == IB_NVRAM_TCG_2_0) {
-            ib_console_printf("insecure-boot: Setup[%#llx] already %u\n",
+            ib_console_printf("experimental boot: Setup[%#llx] already %u\n",
                               (unsigned long long)offset,
                               (unsigned)IB_NVRAM_TCG_2_0);
             ib_bytes_free(&data);
@@ -350,14 +350,14 @@ static void ib_nvram_restore_tcg_2(size_t offset) {
                 ib_variable_attributes_debug(attributes, attrs_text,
                                              sizeof(attrs_text));
                 ib_console_printf(
-                    "insecure-boot: Setup[%#llx]: %u -> %u (%llu bytes, %s)\n",
+                    "experimental boot: Setup[%#llx]: %u -> %u (%llu bytes, %s)\n",
                     (unsigned long long)offset, (unsigned)old,
                     (unsigned)IB_NVRAM_TCG_2_0,
                     (unsigned long long)data.length, attrs_text);
             } else {
                 char status_text[48];
                 ib_status_debug(status, status_text, sizeof(status_text));
-                ib_console_printf("insecure-boot: Setup write FAILED: %s\n",
+                ib_console_printf("experimental boot: Setup write FAILED: %s\n",
                                   status_text);
             }
         }
@@ -372,7 +372,7 @@ void ib_nvram_clear_residue(size_t offset, int have_setup) {
     ib_boot_set_watchdog_timer();
 
     ib_console_println("");
-    ib_console_println("insecure-boot: wiping MOK/SBAT/SSP variables");
+    ib_console_println("experimental boot: wiping MOK/SBAT/SSP variables");
     ib_console_println("");
 
     for (index = 0; index < IB_NVRAM_KILL_COUNT; index++) {
@@ -403,12 +403,12 @@ void ib_nvram_clear_residue(size_t offset, int have_setup) {
 
     if (have_setup) {
         ib_console_println("");
-        ib_console_println("insecure-boot: AMI Setup:");
+        ib_console_println("experimental boot: AMI Setup:");
         ib_nvram_restore_tcg_2(offset);
     }
 
     ib_console_println("");
-    ib_console_println("insecure-boot: Variables cleared");
+    ib_console_println("experimental boot: Variables cleared");
 
     for (index = 0; index < 5; index++) {
         ib_boot_stall(1000000);

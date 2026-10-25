@@ -482,7 +482,7 @@ ib_loader_code ib_payload_run(const ib_u8 *pe, size_t pe_len,
         return code;
     }
 
-    ib_console_printf("insecure-boot: entering the payload at %#018llx\n",
+    ib_console_printf("experimental boot: entering the payload at %#018llx\n",
                       (unsigned long long)(uintptr_t)(base + image.entry));
     returned = ib_payload_call(base, &image);
 
@@ -490,7 +490,7 @@ ib_loader_code ib_payload_run(const ib_u8 *pe, size_t pe_len,
     {
         char status_text[48];
         ib_status_debug(returned, status_text, sizeof(status_text));
-        ib_console_printf("insecure-boot: the payload returned %s\n",
+        ib_console_printf("experimental boot: the payload returned %s\n",
                           status_text);
     }
 

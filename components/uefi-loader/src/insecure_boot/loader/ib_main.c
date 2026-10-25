@@ -86,10 +86,10 @@ static ib_efi_status IB_EFIAPI ib_main_entry(ib_efi_handle image_handle,
     ib_efi_set_system_table(system_table);
     ib_efi_set_image_handle(image_handle);
 
-    ib_console_println("insecure-boot: Hello, World!");
+    ib_console_println("experimental boot: Hello, World!");
 
     if (ib_uacpi_init(&acpi_error) != IB_UACPI_STATUS_OK) {
-        ib_console_println("insecure-boot: ACPI bring-up failed: %s",
+        ib_console_println("experimental boot: ACPI bring-up failed: %s",
                            ib_uacpi_status_message(acpi_error.status));
         ib_boot_stall(IB_MAIN_ERROR_STALL);
         return IB_EFI_LOAD_ERROR;
@@ -100,7 +100,7 @@ static ib_efi_status IB_EFIAPI ib_main_entry(ib_efi_handle image_handle,
         char message[384];
 
         ib_loader_error_message(&error, message, sizeof(message));
-        ib_console_println("insecure-boot: %s", message);
+        ib_console_println("experimental boot: %s", message);
         ib_boot_stall(IB_MAIN_ERROR_STALL);
         return IB_EFI_DEVICE_ERROR;
     }
@@ -180,7 +180,7 @@ static ib_loader_code ib_main_run(ib_loader_error_t *error) {
     }
     if (!dump_present) {
         ib_console_println(
-            "insecure-boot: no %s in the root of the boot volume",
+            "experimental boot: no %s in the root of the boot volume",
             IB_TCGLOG_FILE_NAME);
     }
 
@@ -247,7 +247,7 @@ static ib_loader_code ib_main_run(ib_loader_error_t *error) {
         }
     } else {
         ib_console_println(
-            "insecure-boot: no TPM 2.0 command-response-buffer interface");
+            "experimental boot: no TPM 2.0 command-response-buffer interface");
     }
 
     /* The enrollment and the shim leave variables behind, and the boots after
@@ -270,7 +270,7 @@ static ib_loader_code ib_main_run(ib_loader_error_t *error) {
             goto done;
         }
         ib_console_println(
-            "insecure-boot: EFI_TCG2_PROTOCOL withdrawn before the image unloads");
+            "experimental boot: EFI_TCG2_PROTOCOL withdrawn before the image unloads");
     }
 
     code = outcome;
@@ -323,7 +323,7 @@ static ib_loader_code ib_main_probe(ib_tpm_crb_t *out, int *out_found,
 
     ib_tpm_crb_start_method_display(ib_tpm_crb_start_method(out), method,
                                     sizeof(method));
-    ib_console_println("insecure-boot: TPM on %s using start method %s",
+    ib_console_println("experimental boot: TPM on %s using start method %s",
                        ib_tpm_crb_hardware_id(out), method);
     ib_console_println("  command buffer: %u bytes",
                        (unsigned)ib_tpm_crb_command_size(out));

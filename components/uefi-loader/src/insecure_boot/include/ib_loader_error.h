@@ -5,7 +5,7 @@
  * shows them with their own `Display`.  C has no such nesting, so the nested
  * `Display` is rendered once, at construction, into `inner`; the outer `Display`
  * the enum documents is produced by `ib_loader_error_message`, which is what a
- * line like `insecure-boot: {error}` prints.
+ * line like `experimental boot: {error}` prints.
  */
 #ifndef IB_LOADER_ERROR_H
 #define IB_LOADER_ERROR_H

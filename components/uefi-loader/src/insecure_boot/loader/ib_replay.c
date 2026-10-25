@@ -187,7 +187,7 @@ ib_loader_code ib_replay_run(ib_tpm_crb_t *tpm, const ib_tcglog_t *dump,
 
     ib_tcglog_algorithm_display(bank.algorithm, algorithm, sizeof(algorithm));
 
-    ib_console_println("insecure-boot: replaying %u events from %s",
+    ib_console_println("experimental boot: replaying %u events from %s",
                        (unsigned)ib_tcglog_event_count(dump),
                        IB_TCGLOG_FILE_NAME);
     ib_console_println("  bank:             %s, %zu bytes per digest", algorithm,

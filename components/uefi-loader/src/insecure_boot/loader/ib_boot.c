@@ -25,7 +25,7 @@ void *ib_boot_alloc(size_t size) {
     if (IB_EFI_IS_ERROR(status)) {
         /* The Rust loader allocates infallibly; the global allocator aborts
          * when the firmware refuses.  This is that abort, made visible. */
-        ib_console_println("insecure-boot: out of pool memory");
+        ib_console_println("experimental boot: out of pool memory");
         for (;;) {
             services->stall(1000000);
         }

@@ -320,7 +320,7 @@ ib_loader_code ib_tcg2_loader_install(ib_tcg2_t *out, ib_tpm_crb_t tpm,
     ib_tcg2_instance_final_events(instance, &table_address, &events,
                                   &table_spare);
 
-    ib_console_println("insecure-boot: EFI_TCG2_PROTOCOL installed");
+    ib_console_println("experimental boot: EFI_TCG2_PROTOCOL installed");
     ib_console_println(
         "  displaced:      %zu of %zu EFI_TCG_PROTOCOL, %zu of %zu EFI_TCG2_PROTOCOL",
         displaced.v1_removed, displaced.v1_found, displaced.v2_removed,
@@ -367,7 +367,7 @@ ib_loader_code ib_tcg2_loader_exercise(ib_tcg2_t *tcg2,
     }
     if (found != handle) {
         ib_console_println(
-            "insecure-boot: a search by GUID still finds an interface this could not take away");
+            "experimental boot: a search by GUID still finds an interface this could not take away");
     }
 
     status = ib_boot_open_protocol_exclusive(handle, &ib_guid_tcg2_protocol,
@@ -386,7 +386,7 @@ ib_loader_code ib_tcg2_loader_exercise(ib_tcg2_t *tcg2,
         }
 
         ib_console_println(
-            "insecure-boot: the installed protocol answers a consumer");
+            "experimental boot: the installed protocol answers a consumer");
         ib_console_println(
             "  GetCapability:  revision %u.%u, TPM present %s, %u banks",
             (unsigned)capability.protocol_version.major,

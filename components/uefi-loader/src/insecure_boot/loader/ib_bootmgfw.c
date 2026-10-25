@@ -90,7 +90,7 @@ static ib_loader_code ib_bootmgfw_replace(ib_fs_volume_t *volume,
                           displaced->length, displaced_saved,
                           &rollback_error) != IB_LOADER_OK) {
         ib_console_println(
-            "insecure-boot: the boot manager could not be put back after a "
+            "experimental boot: the boot manager could not be put back after a "
             "failed restore");
     }
     return code;
@@ -177,7 +177,7 @@ ib_loader_code ib_bootmgfw_restore(ib_fs_volume_t *volume,
         goto done;
     }
 
-    ib_console_println("insecure-boot: the Windows boot manager is back in place");
+    ib_console_println("experimental boot: the Windows boot manager is back in place");
     code = IB_LOADER_OK;
     goto done;
 
@@ -226,7 +226,7 @@ ib_loader_code ib_bootmgfw_start(ib_loader_error_t *error) {
     cleanup_status = ib_boot_unload_image_if_owned(image, &identity);
     if (IB_EFI_IS_ERROR(cleanup_status)) {
         ib_console_println(
-            "insecure-boot: could not release the returned child image");
+            "experimental boot: could not release the returned child image");
     }
     if (IB_EFI_IS_ERROR(status)) {
         /* Preserve the original StartImage status; cleanup is best-effort and
