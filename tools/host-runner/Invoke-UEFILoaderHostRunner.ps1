@@ -5513,29 +5513,16 @@ switch ($Action) {
         break
     }
     'RunInstallerHostGate' {
-        if (-not $SkipBuild) { Invoke-HostBuild | Out-Host }
-        & (Join-Path $PSScriptRoot 'tests\Invoke-InstallerHostGate.ps1') `
-            -ProjectRoot $UefiProjectRoot -StateRoot $Config.StateRoot
-        break
+        throw 'The installer host gate is retired: its gate binaries no longer have build targets.'
     }
     'RunInstallerOneShotHostGate' {
-        if (-not $SkipBuild) { Invoke-HostBuild | Out-Host }
-        & (Join-Path $PSScriptRoot `
-            'tests\Invoke-InstallerOneShotHostGate.ps1') `
-            -ProjectRoot $UefiProjectRoot -StateRoot $Config.StateRoot
-        break
+        throw 'The one-shot installer host gate is retired: its gate binaries no longer have build targets.'
     }
     'RunAuditHostGate' {
-        if (-not $SkipBuild) { Invoke-HostBuild | Out-Host }
-        & (Join-Path $PSScriptRoot 'tests\Invoke-AuditHostGate.ps1') `
-            -ProjectRoot $UefiProjectRoot -StateRoot $Config.StateRoot
-        break
+        throw 'The audit host gate is retired: its gate binaries no longer have build targets.'
     }
     'RunFixtureHostGate' {
-        if (-not $SkipBuild) { Invoke-HostBuild | Out-Host }
-        & (Join-Path $PSScriptRoot 'tests\Invoke-FixtureHostGate.ps1') `
-            -ProjectRoot $UefiProjectRoot -StateRoot $Config.StateRoot
-        break
+        throw 'The fixture host gate is retired: its gate binaries no longer have build targets.'
     }
     'RunLinuxPositivePath' { Invoke-LiveWorkflow LinuxPositive; break }
     'RunLinuxHypervisorSmoke' {
