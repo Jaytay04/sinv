@@ -1225,7 +1225,8 @@ function New-GuestPackage {
 }
 
 function Invoke-GpuGuestPhase {
-    param([string]$Mode, [string]$RunId, [string]$EfiHash)
+    param([string]$Mode, [string]$RunId, [string]$EfiHash, [string]$RunIdVariable,
+        [int]$Attempt = 1)
     if ($null -eq $script:VmBootStartedUtc) {
         throw 'GuestInfo request cannot be published without a recorded VM boot start.'
     }
@@ -1283,6 +1284,28 @@ function Invoke-GpuGuestPhase {
         Clear-VmwareGuestInfoVariables -Selected $script:Selected `
             -VariableNames @($Transport.RequestVariableNames +
                 $Response.ResponseVariableNames)
+        if ($Mode -cne 'Diagnose' -and $Attempt -lt 3 -and
+            [string]$Response.Result.Message -ceq 'The local RunId has already been used.') {
+            # A restarted SYSTEM worker can re-consume the still-published
+            # manifest and reject the in-flight RunId. The guest dedupe is
+            # per-RunId, so a fresh authenticated request is the only way to
+            # recover the phase without re-provisioning the guest.
+            $RetryRunId = New-UhrRunId 'windows-probe'
+            if (-not [string]::IsNullOrEmpty($RunIdVariable)) {
+                Set-Variable -Name $RunIdVariable -Value $RetryRunId -Scope Script
+            }
+            [IO.File]::AppendAllText((Join-Path $script:RunRoot 'phase-retries.jsonl'),
+                (([ordered]@{
+                    Utc = [DateTime]::UtcNow.ToString('o')
+                    Mode = $Mode
+                    Attempt = $Attempt
+                    RejectedRunId = $RunId
+                    RetryRunId = $RetryRunId
+                } | ConvertTo-Json -Compress) + "`n"), [Text.UTF8Encoding]::new($false))
+            Start-Sleep -Seconds 15
+            return Invoke-GpuGuestPhase -Mode $Mode -RunId $RetryRunId -EfiHash $EfiHash `
+                -RunIdVariable $RunIdVariable -Attempt ($Attempt + 1)
+        }
         if ($Mode -cne 'Diagnose') {
             # A fresh authenticated read-only request preserves diagnostics
             # before snapshot recovery. Its result never changes the failure.
@@ -2132,12 +2155,12 @@ try {
     $script:VmOffConfirmed = $false
 
     $InspectPaths = Invoke-GpuGuestPhase -Mode 'Inspect' `
-        -RunId $script:InspectRunId -EfiHash $EfiHash
+        -RunId $script:InspectRunId -EfiHash $EfiHash -RunIdVariable 'InspectRunId'
     $script:InspectStatus = 'PASS'
     $script:InspectEvidence = Assert-GuestInspection -Paths $InspectPaths -Phase 'Inspect'
 
     $StagePaths = Invoke-GpuGuestPhase -Mode 'Stage' `
-        -RunId $script:StageRunId -EfiHash $EfiHash
+        -RunId $script:StageRunId -EfiHash $EfiHash -RunIdVariable 'StageRunId'
     $script:StageStatus = 'PASS'
     $script:StageEvidence = Assert-GuestInspection -Paths $StagePaths -Phase 'Stage'
 
