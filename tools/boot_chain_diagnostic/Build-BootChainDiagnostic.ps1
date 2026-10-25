@@ -13,7 +13,7 @@ if ($WhatIfPreference) {
         FilesystemChangesPerformed = $false
         NativeCommandsExecuted = $false
         VmStarted = $false
-        Note = 'Build, test, and package an unsigned boot-only candidate. No signing, ESP access, firmware changes, VM startup, or reboot.'
+        Note = 'Build, test, and package unsigned VM-only boot-chain fixtures. No signing, ESP access, firmware changes, VM startup, or reboot.'
     } | ConvertTo-Json -Depth 5
     return
 }
@@ -101,45 +101,61 @@ try {
 
     Invoke-BootChainNative -Program $git -Arguments @('-C', $sourceRoot, 'rev-parse', 'HEAD') -Label 'source-head'
     Invoke-BootChainNative -Program $git -Arguments @('-C', $sourceRoot, 'status', '--porcelain', '--untracked-files=all') -Label 'source-status'
-    $sourcePins = @(
+    $pinPaths = @(
         'components/uefi-loader/CMakeLists.txt',
-        'components/uefi-loader/src/loader/boot_chain.c',
-        'components/uefi-loader/src/loader/boot_chain.h',
-        'components/uefi-loader/src/loader/boot_chain_entry.c',
-        'components/uefi-loader/src/loader/boot_restore.c',
-        'components/uefi-loader/src/loader/boot_restore.h',
-        'components/uefi-loader/src/loader/efi_file.c',
-        'components/uefi-loader/src/loader/efi_file.h',
-        'components/uefi-loader/src/loader/sbat.c',
-        'components/uefi-loader/src/common/sha256.c',
-        'components/uefi-loader/src/common/sha256.h',
-        'components/uefi-loader/src/vendor/efi_crt.c',
-        'components/uefi-loader/src/vendor/Uefi.h',
-        'components/uefi-loader/src/fixtures/tests/boot_chain_test.c',
-        'tools/boot_chain_diagnostic/Build-BootChainDiagnostic.ps1'
-    ) | ForEach-Object { Get-BootChainPin -Path (Join-Path $sourceRoot $_) }
+        'components/uefi-loader/src/insecure_boot/loader/ib_bootmgfw.c',
+        'components/uefi-loader/src/insecure_boot/loader/ib_boot.c',
+        'components/uefi-loader/src/insecure_boot/loader/ib_fs.c',
+        'components/uefi-loader/src/insecure_boot/loader/ib_console.c',
+        'components/uefi-loader/src/insecure_boot/loader/ib_efi_glue.c',
+        'components/uefi-loader/src/insecure_boot/host-free/ib_util.c',
+        'components/uefi-loader/src/insecure_boot/host-free/ib_format.c',
+        'components/uefi-loader/src/insecure_boot/host-free/ib_debug.c',
+        'components/uefi-loader/src/fixtures/boot_chain_vm_fixture.c',
+        'components/uefi-loader/src/fixtures/tests/ib_bootmgfw_port_test.c',
+        'components/uefi-loader/src/fixtures/tests/ib_port_safety_test.c',
+        'tools/boot_chain_diagnostic/Build-BootChainDiagnostic.ps1',
+        'tools/boot_chain_diagnostic/Test-BootChainVm.py',
+        'tools/host-runner/tests/Test-RetiredGateDispatch.ps1'
+    ) | ForEach-Object { Join-Path $sourceRoot $_ }
+    $pinPaths += @(Get-ChildItem -LiteralPath (Join-Path $sourceRoot 'components/uefi-loader/src/insecure_boot/include') -Filter '*.h' -File | ForEach-Object { $_.FullName })
+    $sourcePins = @($pinPaths | ForEach-Object { Get-BootChainPin -Path $_ })
     $toolchain = Initialize-BootChainToolchain
     Write-BootChainJson -Path (Join-Path $evidenceDirectory 'toolchain.json') -Value $toolchain
 
     Invoke-BootChainNative -Program $toolchain.Tools.'cmake.exe' -Arguments @(
         '-S', (Join-Path $sourceRoot 'components\uefi-loader'), '-B', $buildDirectory,
         '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release', '-DIB_STATIC_RUNTIME=ON',
-        '-DIB_BUILD_BOOT_CHAIN_LOADER=ON', '-DIB_QEMU_DEBUG_PORTS=OFF',
+        '-DIB_BUILD_BOOT_CHAIN_VM_FIXTURES=ON', '-DIB_QEMU_DEBUG_PORTS=OFF',
         '-DIB_PAYLOAD_REPLAY_INDEPENDENT=OFF', '-DIB_FIRMWARE_STORAGE_PROBE=OFF'
     ) -Label 'configure'
-    # All host fixtures are required by the component CTest registration.
-    Invoke-BootChainNative -Program $toolchain.Tools.'cmake.exe' -Arguments @('--build', $buildDirectory, '--parallel', '4') -Label 'build'
+    # Explicit targets keep the full replay/payload loader outside this build.
+    $buildArguments = @('--build', $buildDirectory, '--parallel', '4', '--target',
+        'boot_chain_vm_fixture', 'boot_chain_vm_child', 'ib_bootmgfw_port_test', 'ib_port_safety_test',
+        'tcglog_test', 'tcglog_ib_test', 'pcr_gate_test', 'sha256_test', 'install_sign_test',
+        'install_stage_test', 'install_oneshot_test', 'install_bootnext_test', 'audit_vars_test',
+        'audit_tcg_version_test', 'audit_bootmgr_test', 'audit_baseline_test', 'ib-nested-e2e-service',
+        'hypervisor_health_test', 'uefi_runtime_abi_test')
+    Invoke-BootChainNative -Program $toolchain.Tools.'cmake.exe' -Arguments $buildArguments -Label 'build'
     Invoke-BootChainNative -Program $toolchain.Tools.'ctest.exe' -Arguments @('--test-dir', $buildDirectory, '--output-on-failure', '--no-tests=error') -Label 'ctest'
+    Invoke-BootChainNative -Program (Get-Command powershell.exe -CommandType Application).Source -Arguments @(
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+        (Join-Path $sourceRoot 'tools/host-runner/tests/Test-RetiredGateDispatch.ps1')
+    ) -Label 'retired-gate-dispatch'
 
-    $artifact = Join-Path $buildDirectory 'boot_chain_loader.efi'
+    $artifact = Join-Path $buildDirectory 'boot_chain_vm_fixture.efi'
     Invoke-BootChainNative -Program $toolchain.Tools.'dumpbin.exe' -Arguments @('/headers', $artifact) -Label 'efi-headers'
     $packageDirectory = Join-Path $evidenceDirectory 'package'
     [IO.Directory]::CreateDirectory($packageDirectory) | Out-Null
-    $packagedArtifact = Join-Path $packageDirectory 'boot_chain_loader.efi'
-    Copy-Item -LiteralPath $artifact -Destination $packagedArtifact -ErrorAction Stop
-    $artifactPin = Get-BootChainPin -Path $artifact
-    $packagePin = Get-BootChainPin -Path $packagedArtifact
-    if ($artifactPin.Sha256 -ne $packagePin.Sha256 -or $artifactPin.Bytes -ne $packagePin.Bytes) { throw 'Packaged artifact differs from the build.' }
+    $artifactPins = [ordered]@{}
+    foreach ($name in @('boot_chain_vm_fixture.efi', 'boot_chain_vm_child.efi')) {
+        $builtPin = Get-BootChainPin -Path (Join-Path $buildDirectory $name)
+        $packagedArtifact = Join-Path $packageDirectory $name
+        Copy-Item -LiteralPath $builtPin.Path -Destination $packagedArtifact -ErrorAction Stop
+        $packagePin = Get-BootChainPin -Path $packagedArtifact
+        if ($builtPin.Sha256 -ne $packagePin.Sha256 -or $builtPin.Bytes -ne $packagePin.Bytes) { throw 'Packaged artifact differs from the build.' }
+        $artifactPins[$name] = $packagePin
+    }
     foreach ($sourcePin in $sourcePins) {
         $currentPin = Get-BootChainPin -Path $sourcePin.Path
         if ($currentPin.Sha256 -ne $sourcePin.Sha256 -or $currentPin.Bytes -ne $sourcePin.Bytes) {
@@ -149,7 +165,7 @@ try {
     $result = [pscustomobject]@{
         SchemaVersion = 1
         Action = 'BuildBootChainDiagnostic'
-        Status = 'BUILD_AND_TESTS_PASS_UNSIGNED_NOT_BOOT_VALIDATED'
+        Status = 'BUILD_AND_TESTS_PASS_VM_FIXTURES_NOT_BOOT_VALIDATED'
         Succeeded = $true
         GeneratedUtc = [DateTime]::UtcNow.ToString('o')
         SourceRoot = $sourceRoot
@@ -158,8 +174,9 @@ try {
         SourcePins = @($sourcePins)
         BuildDirectory = $buildDirectory
         EvidenceDirectory = $evidenceDirectory
-        Artifact = $packagePin
-        BootMode = 'BOOT_CHAIN_ONLY'
+        PackageDirectory = $packageDirectory
+        Artifacts = [pscustomobject]$artifactPins
+        BootMode = 'BOOT_CHAIN_VM_FIXTURE'
         Signature = 'UNSIGNED'
         Replay = 'NOT_REQUESTED'
         Payload = 'NOT_REQUESTED'
@@ -169,7 +186,7 @@ try {
         FirmwareChanged = $false
         VmStarted = $false
         RebootPerformed = $false
-        NextStep = 'Review and independently sign/verify the candidate before a separately authorized disposable-VM replacement/restore test. No deployment is performed by this script.'
+        NextStep = 'Run Test-BootChainVm.py with --build-directory set to PackageDirectory and a new --evidence-directory. These are synthetic VM-only fixtures, not deployable Windows loaders.'
     }
     Write-BootChainJson -Path (Join-Path $evidenceDirectory 'result.json') -Value $result
     $result | ConvertTo-Json -Depth 12

@@ -50,6 +50,9 @@ option(IB_BUILD_BOOT_CHAIN_LOADER
 option(IB_QEMU_DEBUG_PORTS
     "Emit loader diagnostics to QEMU debug/serial I/O ports (VM-only)"
     OFF)
+option(IB_BUILD_BOOT_CHAIN_VM_FIXTURES
+    "Build VM-only restore and firmware-handoff fixtures without TPM or payload code"
+    OFF)
 
 enable_testing()
 
@@ -421,6 +424,55 @@ add_executable(uefi_runtime_abi_test src/fixtures/tests/uefi_runtime_abi_test.c)
 target_include_directories(uefi_runtime_abi_test PRIVATE src/vendor)
 add_test(NAME uefi_runtime_abi_test COMMAND uefi_runtime_abi_test)
 
+# Exercise the actual C port's ordinary ownership/recovery helpers on the host.
+add_executable(ib_bootmgfw_port_test
+    src/fixtures/tests/ib_bootmgfw_port_test.c
+    src/insecure_boot/loader/ib_bootmgfw.c
+    src/insecure_boot/loader/ib_boot.c
+    src/insecure_boot/loader/ib_efi_glue.c
+    src/insecure_boot/host-free/ib_util.c)
+target_include_directories(ib_bootmgfw_port_test PRIVATE src/insecure_boot/include)
+add_test(NAME ib_bootmgfw_port_test COMMAND ib_bootmgfw_port_test)
+
+add_executable(ib_port_safety_test
+    src/fixtures/tests/ib_port_safety_test.c
+    src/insecure_boot/host-free/ib_debug.c
+    src/insecure_boot/host-free/ib_format.c
+    src/insecure_boot/host-free/ib_util.c)
+target_include_directories(ib_port_safety_test PRIVATE src/insecure_boot/include)
+add_test(NAME ib_port_safety_test COMMAND ib_port_safety_test)
+
+if(IB_BUILD_BOOT_CHAIN_VM_FIXTURES)
+    if(NOT MSVC OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+        message(FATAL_ERROR "Boot-chain VM fixtures require the MSVC x64 toolchain")
+    endif()
+    # This source list deliberately excludes the main loader, TPM, replay,
+    # NVRAM mutation, custom TCG protocols, and manual payload mapper.
+    add_executable(boot_chain_vm_fixture
+        src/fixtures/boot_chain_vm_fixture.c
+        src/insecure_boot/loader/ib_bootmgfw.c
+        src/insecure_boot/loader/ib_boot.c
+        src/insecure_boot/loader/ib_fs.c
+        src/insecure_boot/loader/ib_console.c
+        src/insecure_boot/loader/ib_efi_glue.c
+        src/insecure_boot/host-free/ib_format.c
+        src/insecure_boot/host-free/ib_util.c)
+    add_executable(boot_chain_vm_child src/fixtures/boot_chain_vm_fixture.c)
+    target_compile_definitions(boot_chain_vm_child PRIVATE IB_VM_CHILD=1)
+    get_filename_component(_ib_fixture_bin "${CMAKE_C_COMPILER}" DIRECTORY)
+    get_filename_component(_ib_fixture_host "${_ib_fixture_bin}" DIRECTORY)
+    get_filename_component(_ib_fixture_binroot "${_ib_fixture_host}" DIRECTORY)
+    get_filename_component(_ib_fixture_vcroot "${_ib_fixture_binroot}" DIRECTORY)
+    foreach(_fixture IN ITEMS boot_chain_vm_fixture boot_chain_vm_child)
+        target_include_directories(${_fixture} PRIVATE src/insecure_boot/include)
+        target_compile_options(${_fixture} PRIVATE /GS- /Oi-)
+        set_target_properties(${_fixture} PROPERTIES SUFFIX ".efi" MSVC_RUNTIME_LIBRARY "")
+        target_link_options(${_fixture} PRIVATE /SUBSYSTEM:EFI_APPLICATION /ENTRY:EfiMain
+            /FIXED:NO /INCREMENTAL:NO /MANIFEST:NO /NODEFAULTLIB
+            "${_ib_fixture_vcroot}/lib/x64/chkstk.obj")
+    endforeach()
+endif()
+
 # --- Static CRT wiring --------------------------------------------------------
 # Applied to every Windows host target (tcglog + pcr_gate libs, host tests,
 # ib-tcg-dump). tcglog_efi_smoke and loader are deliberately excluded: they are
@@ -436,7 +488,7 @@ if(IB_STATIC_RUNTIME AND MSVC)
                                install_bootnext_test
                                audit_vars_test audit_tcg_version_test
                                audit_bootmgr_test audit_baseline_test
-                               uefi_runtime_abi_test
+                               uefi_runtime_abi_test ib_bootmgfw_port_test ib_port_safety_test
                                ib-tcg-dump hypervisor_health_test ib-install
                                ib-nested-e2e-service)
         set_target_properties(${_target} PROPERTIES

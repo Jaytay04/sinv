@@ -1,108 +1,99 @@
-# Restore-first Windows boot-chain candidate
+# Boot-chain recovery and ownership tests
 
-This isolates the boot-manager restoration and Windows handoff pattern from the
-local `insecure-boot` reference. Hypervisor activation is deferred. The candidate
-is a separate `boot_chain_loader.efi`; it does not replace the existing `loader`
-target or change the GPU host workflow.
+This workflow tests the C port's ordinary filesystem restoration and firmware
+image handoff in isolation. Its VM image links the real `ib_fs.c`, `ib_boot.c`,
+and `ib_bootmgfw.c` helpers, with a separate fixture entry and synthetic EFI
+child. It excludes the production entry, TPM/replay code, NVRAM mutation,
+custom TCG protocols, manual payload mapper, and hypervisor.
 
-## Implemented flow
+The fixture is **VM-only**: it uses QEMU debug ports and exits QEMU when done.
+Do not install either fixture on a physical ESP. This workflow does not validate
+Windows boot, Secure Boot trust/enrollment, GPU isolation, or the full loader.
 
-The intended, separately validated chain is firmware → signed shim at the
-canonical Windows Boot Manager path → signed `grubx64.efi` sibling containing
-this loader → restored Windows Boot Manager → Windows.
+## Fixes exercised
 
-The new entry runs the existing `boot_restore_run()` transaction first. It
-requires an installer-owned backup and SHA-256 record, verifies the backup,
-writes and verifies a temporary copy, replaces the canonical target, verifies
-the restored bytes, and cleans up the verified transaction. A missing or
-invalid backup prevents Windows image loading; it does not guess another file.
-The restore hash record remains for post-boot verification. FAT rename operations
-are not an atomic power-loss guarantee.
+- A missing canonical boot-manager file no longer prevents restoration from
+  a verified staged copy. Failed restoration retains backup/staging evidence.
+- Image lifetime is checked against a snapshot of the owned LoadedImage
+  identity. An application returning a security/error status is not assumed to
+  be an unstarted image. If the initial identity query fails, the known-owned
+  image is released before entry and the operation fails closed.
+- A failed create caused by a missing parent directory no longer returns a
+  null file handle as success.
+- The Device Path Utilities GUID matches UEFI section 10.5:
+  `0379BE4E-D706-437D-B037-EDB82FB772A4`. Its previous final bytes prevented
+  locating the firmware service, which the VM handoff test exposed.
+- Both runner dispatchers reject retired gate actions before invoking builds,
+  staging, or gate scripts.
 
-Only after restoration succeeds does the loader build a full device path from
-its loaded ESP device handle to `\EFI\Microsoft\Boot\bootmgfw.efi`. It calls
-firmware `LoadImage(FALSE, parent, path, NULL, 0, ...)`, then `StartImage`.
-`FALSE` corresponds to the reference's
-[`BootPolicy::ExactMatch`](https://docs.rs/uefi/latest/uefi/proto/enum.BootPolicy.html).
-No source buffer, manual PE mapper, shim verification hook, or security-policy
-override is used. Firmware applies its configured authentication policy;
-Secure Boot must be enabled and checked independently during a later boot test.
+The restore helper still has a delete/write interruption window. Its retained
+files provide recovery material, not guaranteed automatic firmware recovery or
+crash atomicity. The tests do not authorize a primary-host boot test.
 
-Console events and best-effort `EFI\insecure-boot\handoff-status.txt` events
-identify entry, restore, path construction, image load, image start, and returned
-errors. The marker header states `BOOT_CHAIN_ONLY`, `replay=NOT_REQUESTED`, and
-`payload=NOT_REQUESTED`. File-write errors cannot veto restoration or handoff.
-Cleanup errors are recorded without replacing the primary launch error. A
-return from Windows is abnormal, including a returned `EFI_SUCCESS`, which is
-reported as `EFI_ABORTED`.
+## Build and host verification
 
-## Build and host tests
-
-Run from the shared repository root in a normal PowerShell window:
+From the shared repository root:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\boot_chain_diagnostic\Build-BootChainDiagnostic.ps1 -WhatIf
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\.codex-build\worktrees\gpu-windows-validation\tools\boot_chain_diagnostic\Build-BootChainDiagnostic.ps1
+$tools = '.\.codex-build\worktrees\gpu-windows-validation\tools\boot_chain_diagnostic'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$tools\Build-BootChainDiagnostic.ps1" -WhatIf
+$build = powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$tools\Build-BootChainDiagnostic.ps1" | ConvertFrom-Json
+$build | Select-Object Status, PackageDirectory, EvidenceDirectory
 ```
 
-The real command discovers an existing Visual Studio C++ installation, enables
-its x64 environment in that process, configures the loader component with
-`IB_BUILD_BOOT_CHAIN_LOADER=ON`, builds it and its host fixtures, and runs the
-component CTest suite. The option defaults to `OFF` in ordinary builds. Other
-existing component targets may be compiled for the suite; only the boot-chain
-image is copied into the package.
+Requires an installed Visual Studio x64 C++ toolchain, CMake, and Ninja. The
+script uses fresh short build paths and packages only
+`boot_chain_vm_fixture.efi` and `boot_chain_vm_child.efi`. It explicitly builds
+the host test targets rather than the full production loader. It runs the
+component's 17 CTests and the eight-case retired-gate dispatch test. Source and
+artifact hashes, toolchain paths, native-command receipts, and EFI headers are
+saved under `.analysis\boot-chain-diagnostic\<id>`.
 
-It saves logs, exit-code receipts, source hashes, EFI headers, and an **unsigned**
-candidate under `.analysis\boot-chain-diagnostic\<id>`. Build state uses a short,
-unique `.codex-build\bc\<id>` path. It checks source pins again after the build
-and verifies the package copy. Success is
-`BUILD_AND_TESTS_PASS_UNSIGNED_NOT_BOOT_VALIDATED`. It neither signs nor deploys
-anything, mounts an ESP, writes firmware variables, starts a VM, nor reboots.
-`-WhatIf` returns before any filesystem access or native command.
+New host tests include real restore/image-wrapper code with mocked firmware and
+filesystem failures, allocation/free balance, returned-application versus
+pre-entry rejection, reused handles, rollback failures, and identity-query
+failure. A second fixture checks the port's own x64 ABI offsets, formatter
+canaries, and the Device Path Utilities GUID. The original 15 tests alone do
+not test the port; these are additional registered tests.
 
-Host tests exercise restore-before-load ordering, failed restoration blocking
-load/start, the full device-path prefix and Windows file node, exact-match/null
-source arguments, path/load/start errors, child/exit-data cleanup, cleanup-error
-markers, a returned success status, and marker failures that do not block the
-handoff. Existing restore tests exercise file transaction and rollback failures.
-These tests do not validate firmware image authentication or an actual Windows
-boot.
+## Disposable VM verification
 
-## What was not incorporated
+Requires Python 3 and the installed Windows QEMU distribution, including stock
+`share\edk2-x86_64-code.fd` and `share\edk2-i386-vars.fd`. After the build:
 
-| Reference behavior | Treatment in this candidate |
+```powershell
+$vmEvidence = Join-Path (Get-Location) ('.analysis\boot-chain-vm\' + [guid]::NewGuid().ToString('N'))
+python.exe "$tools\Test-BootChainVm.py" --build-directory $build.PackageDirectory --evidence-directory $vmEvidence
+```
+
+This command starts four short, sequential, headless QEMU instances with 512 MiB
+RAM, one emulated CPU, no networking, and generated 64 MiB GPT/FAT16 ESPs. Every
+case has a private firmware-variable copy and a disposable disk overlay. The
+base disk hash must remain unchanged. No physical disk or host ESP is attached.
+Each instance exits through the fixture's debug-exit device; timeout handling
+kills and waits for that owned QEMU process. No host reboot occurs.
+
+The cases are:
+
+| Case | Required result |
 | --- | --- |
-| AMI `Setup` TCG version byte edits, downgrade to TCG 1.2, automatic cold reset, and later restoration to TCG 2.0 | Omitted. No firmware setup writes or resets. |
-| Direct TPM CRB discovery/commands and replaying saved measurements into PCR0–7 | Omitted. No TPM command or PCR replay code is linked. |
-| Replacing/displacing TCG/TCG2 protocols, publishing reconstructed logs, suppressing later measurements, and protocol self-exercise/uninstall | Omitted. The firmware's genuine measurement path remains in place. |
-| Deleting MOK, SBAT, SSP, and other shim security variables, including the cross-GUID sweep | Omitted. No NVRAM variable cleanup or evidence removal. |
-| Manual mapping and direct entry into an unsigned payload | Omitted. No payload is loaded at all; normal firmware loading is used for Windows. |
-| Hypervisor, VMX/AP startup, GPU isolation, or post-activation storage handling | Deferred. This candidate establishes the boot-only boundary and does not fix or attest those behaviors. |
-| uACPI initialization, TPM/ACPI probes, and associated Rust crates | Omitted because this path needs only ordinary firmware file and image services. |
-| Deleting or wiping the staged payload, saved TCG log, configuration, MokManager, and running loader before handoff | Omitted. This path has none of the payload/log/config inputs and performs no broad artifact wipe. Only the existing verified restore transaction removes its temporary/displaced files and consumed backup. |
-| Root-level `\ib-bootmgfw.efi` backup and restoration of saved file timestamps/attributes | Kept this repository's sibling `.bak`/`.sha256` transaction instead. Original file metadata is not restored by that helper. |
-| Reference prebuilt executables, EFI binaries, Rust loader replacement, and five-second error stall | Not copied or executed. New C sources reuse this repository's restore/file helpers; failures return with console/file diagnostics. |
-| Automatic signing, MOK enrollment, MokManager deployment, ESP replacement, BootNext/BootOrder changes, and boot testing | Not automated by this build script. Candidate remains unsigned and unbooted. |
+| Existing target | Restored bytes match backup; firmware starts the synthetic child; its returned error is preserved. |
+| Missing target, retained stage | Canonical file is recreated; the same real firmware handoff succeeds. |
+| Missing backup | Restoration fails closed and preserves the canonical file. |
+| Missing parent directory | Create fails without a null dereference; backup and stage remain intact. |
 
-## Deployment boundary and remaining work
+Success is `BOOT_ONLY_VM_PASS`. Per-case logs, exit status, timeout result,
+input hashes, base-image hashes, command lines, and a stopped-process result
+are stored in the selected evidence directory. The synthetic child deliberately
+returns `EFI_LOAD_ERROR`; this tests the same status value that can otherwise
+be confused with a pre-entry firmware rejection.
 
-The existing installer has a legacy `oneshot --mode replace` route with the
-required `.bak`, `.sha256`, `.ibnew`, `.ibold`, and Microsoft Boot sibling paths.
-It has **not** been changed or invoked here. Its legacy preflight checks manifest
-hashes but does not call its Authenticode verification callback. Do not treat
-those hashes as proof that a loader is signed or trusted. A later signed
-deployment workflow must independently verify the shim pin, candidate signer,
-MOK certificate/enrollment, Secure Boot state, original boot-manager backup,
-and owned recovery state before replacing anything.
+## Explicit exclusions
 
-No primary-host runbook for canonical boot-manager replacement is supplied.
-The next end-to-end validation belongs in an explicitly selected disposable VM
-with a snapshot and verified recovery, when VM use is available. No VM was
-started for this implementation. Existing run journals, archived selectors, and
-retained ESP stage files remain outside this source/build change.
-
-Reference points: `source/host/ib-install/src/esp.rs` for canonical placement;
-`source/crates/ib-loader/src/bootmgfw.rs` for restore/path-based handoff;
-`main.rs`, `nvram.rs`, `payload.rs`, and `source/crates/ib-tcg2/src/lib.rs` for the
-omitted behaviors. Inspection of those sources is not independent evidence of
-successful execution on this host.
+No TPM mode downgrade, PCR replay/falsification, reconstructed logs, measurement
+suppression, replacement TCG protocols, MOK/SBAT/SSP variable wiping, unsigned
+manual payload mapping, hypervisor/AP/VMX execution, uACPI initialization, MOK
+enrollment, signing, MokManager deployment, host ESP replacement, or host boot
+selection changes occur in this workflow. Reference Rust sources and prebuilt
+reference binaries are not executed. The full production `loader` remains a
+separate target and is not the image exercised by this VM test.
