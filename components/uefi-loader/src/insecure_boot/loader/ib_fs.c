@@ -369,7 +369,12 @@ static ib_loader_code ib_fs_create(ib_fs_volume_t *volume, const char *path,
     if (code != IB_LOADER_OK) {
         return code;
     }
-    /* create() always yields a handle. */
+    /* NOT_FOUND can mean a missing parent directory even with CREATE set.
+     * The optional-open helper reports that as success with no handle. */
+    if (!present || *out == NULL) {
+        ib_loader_error_str(error, IB_LOADER_ERR_MISSING_ARTIFACT, path);
+        return IB_LOADER_ERR_MISSING_ARTIFACT;
+    }
     return IB_LOADER_OK;
 }
 

@@ -32,14 +32,13 @@ static ib_loader_code ib_bootmgfw_matches(ib_fs_volume_t *volume,
 /* Promote the verified staged copy into the boot manager's path.  The bytes
  * written are the bytes that were read back off the volume, so the file that
  * lands at the path is the copy that was verified to be on the volume rather
- * than one held only in memory.  The file protocol has no rename, so the path
- * really is empty for the interval between the delete and the write: what
- * makes that survivable is that the staged copy and the backup both stay on
- * the volume for a later boot to promote from, not a promise that the path
- * is never empty.  The displaced file goes back from RAM on a best-effort
- * basis so this boot can still run; the failure that started the rollback is
- * what gets reported, and a rollback that itself failed is said out loud
- * rather than overwriting the cause. */
+ * than one held only in memory.  This wrapper uses delete/write, so the path
+ * really is empty for the interval between the delete and the write.  The
+ * staged copy and backup remain as recovery material if a later operation
+ * fails; they do not make this interval crash-atomic or ensure firmware can
+ * boot from those files.  Restoring a displaced file from RAM is best effort;
+ * the failure that started rollback remains the reported cause, and a failed
+ * rollback is reported without replacing that cause. */
 static ib_loader_code ib_bootmgfw_replace(ib_fs_volume_t *volume,
                                           const ib_bytes_t *staged,
                                           const ib_fs_saved_t *saved,
@@ -54,7 +53,13 @@ static ib_loader_code ib_bootmgfw_replace(ib_fs_volume_t *volume,
 
     code = ib_fs_delete(volume, IB_BOOTMGFW_PATH, error);
     if (code != IB_LOADER_OK) {
-        return code;
+        if (code != IB_LOADER_ERR_MISSING_ARTIFACT || have_displaced) {
+            return code;
+        }
+        /* A prior read established that there was no original to roll back
+         * to.  The target can therefore already be absent; continue with the
+         * verified staged bytes instead of treating absence as a hard error. */
+        ib_loader_error_str(error, IB_LOADER_OK, NULL);
     }
 
     code = ib_fs_write_saved(volume, IB_BOOTMGFW_PATH, staged->data,
@@ -76,8 +81,9 @@ static ib_loader_code ib_bootmgfw_replace(ib_fs_volume_t *volume,
     /* The path now holds nothing, or only part of the original: a machine that
      * cannot boot Windows is exactly what this transaction exists to prevent,
      * so the displaced file goes back before the failure is reported.  The
-     * staged copy is deliberately left on the volume by the caller: it is the
-     * complete copy a later boot can promote from if this rollback fails too.
+     * staged copy is deliberately left on the volume by the caller as
+     * recovery material if this rollback fails too.  It is not a firmware
+     * boot path and does not imply automatic recovery.
      */
     if (have_displaced &&
         ib_fs_write_saved(volume, IB_BOOTMGFW_PATH, displaced->data,
@@ -91,16 +97,10 @@ static ib_loader_code ib_bootmgfw_replace(ib_fs_volume_t *volume,
 }
 
 /* Put the original boot manager back, with the metadata the backup carried.
- * The Rust reference deletes the shim and then writes the original out of
- * RAM, so a write that fails in between leaves a machine with no boot manager
- * at all and nothing on the volume to recover from.  This keeps the recovery
- * transaction the previous replay loader had -- stage a copy, read it back
- * off the volume, promote those bytes, verify, roll back -- expressed with
- * the file protocol's primitives, which have no rename.  The path is
- * genuinely empty for the interval between the delete and the write; the
- * durability comes from the staged copy and the backup both staying on the
- * volume, which a later boot can promote from.  Deliberately stronger than
- * the reference here, and recorded as such in the commit. */
+ * This wrapper's promotion has a delete/write interval
+ * and is not crash-atomic.  Staging and backup remain available when promotion
+ * fails, but this does not make the staged copy firmware-bootable or guarantee
+ * automatic recovery if the canonical path is absent after a crash. */
 ib_loader_code ib_bootmgfw_restore(ib_fs_volume_t *volume,
                                    ib_loader_error_t *error) {
     ib_bytes_t bytes;
@@ -156,16 +156,17 @@ ib_loader_code ib_bootmgfw_restore(ib_fs_volume_t *volume,
         }
     }
     if (code != IB_LOADER_OK) {
-        goto staging_gone;
+        /* Keep any stage bytes and the source backup for explicit recovery
+         * and diagnosis, even when read-back did not validate the stage. */
+        goto done;
     }
 
     code = ib_bootmgfw_replace(volume, &staged, &saved, &displaced,
                                &displaced_saved, have_displaced, error);
     if (code != IB_LOADER_OK) {
-        /* The promotion failed with the path empty or partial.  The staged
-         * copy deliberately stays on the volume: it is the complete copy the
-         * next boot promotes, and the backup it came from is still there.
-         * Nothing on this path may remove either of them. */
+        /* The promotion failed with the path empty or partial.  Keep the
+         * staged copy and source backup intact for explicit recovery.  Neither
+         * file is assumed to be a firmware boot path. */
         goto done;
     }
 
@@ -180,17 +181,6 @@ ib_loader_code ib_bootmgfw_restore(ib_fs_volume_t *volume,
     code = IB_LOADER_OK;
     goto done;
 
-staging_gone:
-    /* A step that failed before the boot manager's path was touched: nothing
-     * was displaced, so the staged copy is only clutter and the backup alone
-     * is enough to start over.  Its removal is best effort: the restore result
-     * stays the error that started it. */
-    if (ib_fs_wipe(volume, IB_BOOTMGFW_STAGING, &probe_error) != IB_LOADER_OK) {
-        ib_console_println(
-            "insecure-boot: the staged copy of the boot manager is still on the "
-            "volume");
-    }
-
 done:
     ib_bytes_free(&bytes);
     ib_bytes_free(&staged);
@@ -201,8 +191,10 @@ done:
 ib_loader_code ib_bootmgfw_start(ib_loader_error_t *error) {
     ib_efi_device_path_protocol *device_path = NULL;
     ib_efi_handle image = NULL;
+    ib_boot_image_identity_t identity;
     ib_loader_code code;
     ib_efi_status status;
+    ib_efi_status cleanup_status;
 
     code = ib_fs_file_device_path(IB_BOOTMGFW_PATH, &device_path, error);
     if (code != IB_LOADER_OK) {
@@ -216,20 +208,29 @@ ib_loader_code ib_bootmgfw_start(ib_loader_error_t *error) {
         return IB_LOADER_ERR_UEFI;
     }
 
+    /* StartImage can return either because firmware rejected entry or because
+     * the child application itself returned.  Snapshot the loaded-image
+     * protocol so cleanup can identify this image without guessing from the
+     * returned EFI status.  Before entry the child is still known-owned;
+     * release it and stop if its identity cannot be captured. */
+    status = ib_boot_capture_image_identity(image, &identity);
+    if (IB_EFI_IS_ERROR(status)) {
+        (void)ib_boot_unload_image(image);
+        ib_fs_device_path_free(device_path);
+        ib_loader_error_uefi(error, status);
+        return IB_LOADER_ERR_UEFI;
+    }
+
     status = ib_boot_start_image(image);
     ib_fs_device_path_free(device_path);
+    cleanup_status = ib_boot_unload_image_if_owned(image, &identity);
+    if (IB_EFI_IS_ERROR(cleanup_status)) {
+        ib_console_println(
+            "insecure-boot: could not release the returned child image");
+    }
     if (IB_EFI_IS_ERROR(status)) {
-        /* These are the statuses the firmware returns when it refused the
-         * image before its entry point ran, which leaves the loaded image
-         * allocated and this caller the only one able to release it.  An
-         * application that ran and returned its own error has already been
-         * released by the firmware, so its handle is left alone. */
-        if (status == IB_EFI_SECURITY_VIOLATION ||
-            status == IB_EFI_ACCESS_DENIED ||
-            status == IB_EFI_UNSUPPORTED ||
-            status == IB_EFI_LOAD_ERROR) {
-            ib_boot_unload_image(image);
-        }
+        /* Preserve the original StartImage status; cleanup is best-effort and
+         * its result must not replace the operation's failure. */
         ib_loader_error_uefi(error, status);
         return IB_LOADER_ERR_UEFI;
     }

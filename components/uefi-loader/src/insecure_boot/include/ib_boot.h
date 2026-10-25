@@ -24,6 +24,26 @@ typedef struct {
     size_t length;
 } ib_bytes_t;
 
+/* A value snapshot of a child image's LoadedImage protocol before
+ * StartImage.  Pointer-valued fields are stored as integer address tokens so
+ * callers never retain or dereference potentially freed protocol pointers. */
+typedef struct {
+    uintptr_t interface_address;
+    ib_u32 revision;
+    uintptr_t parent_handle_address;
+    uintptr_t system_table_address;
+    uintptr_t device_handle_address;
+    uintptr_t file_path_address;
+    uintptr_t reserved_address;
+    ib_u32 load_options_size;
+    uintptr_t load_options_address;
+    uintptr_t image_base_address;
+    ib_u64 image_size;
+    ib_efi_memory_type image_code_type;
+    ib_efi_memory_type image_data_type;
+    uintptr_t unload_address;
+} ib_boot_image_identity_t;
+
 void ib_bytes_free(ib_bytes_t *bytes);
 
 /* Pool allocation.  `ib_boot_alloc` never returns NULL: like the Rust global
@@ -79,6 +99,14 @@ ib_efi_status ib_boot_load_image(ib_efi_handle parent,
  * with EFI_SECURITY_VIOLATION, so this is needed even for a load that failed. */
 ib_efi_status ib_boot_unload_image(ib_efi_handle image);
 ib_efi_status ib_boot_start_image(ib_efi_handle image);
+/* Snapshot a loaded image before StartImage.  After it returns,
+ * ib_boot_unload_image_if_owned queries the child handle again and unloads
+ * only when the same LoadedImage interface and identity are still registered.
+ * A missing/replaced interface is a successful no-op. */
+ib_efi_status ib_boot_capture_image_identity(
+    ib_efi_handle image, ib_boot_image_identity_t *out_identity);
+ib_efi_status ib_boot_unload_image_if_owned(
+    ib_efi_handle image, const ib_boot_image_identity_t *identity);
 
 /* Variables. */
 ib_efi_status ib_boot_get_variable(const ib_char16 *name,
