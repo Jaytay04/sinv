@@ -101,20 +101,32 @@ differences:
 - Reconfirm `manage-bde -status C:` is `Protection Off`/`Suspended`, and record
   the recovery key. BitLocker plus a changed TPM spec-version byte is exactly
   what a recovery prompt is made of.
-- Start serial capture (115200 8N1) — the hypervisor still speaks only `0x3F8`.
+- Start serial capture from a second machine (115200 8N1) — the hypervisor still
+  speaks only `0x3F8`, and nothing on the booting machine can read it.
 
 ### Serial capture, concretely
 
-Run this in a second elevated PowerShell window and leave it open through the
-whole run; it blocks. No extra tools needed (this host reports `COM1` at a
-115200 max, and the port opens cleanly):
+It cannot run on the machine under test. That machine reboots, so any reader
+process dies with it, and during boot 1-3 no OS is running to read the port at
+all. Serial is still the only live channel for the payload
+(`HvEfiDebugPrintAscii` writes `0x3F8` and `0xE9`; the hypervisor never uses
+`ConOut`), so the screen stays blank once it starts.
+
+Capture from a second machine, wired to the board's COM header:
+
+- second PC with a USB-serial adapter, or DB9 plus a null-modem cable;
+- a BMC/IPMI Serial-over-LAN console, with the session logged to a file;
+- a hardware serial logger.
+
+On that second machine, point the port at the adapter (not necessarily `COM1`)
+and log to a file:
 
 ```powershell
 $Log  = 'C:\hsinv-baremetal\hypervisor-serial.log'
-$Port = New-Object System.IO.Ports.SerialPort 'COM1',115200,'None',8,'One'
+$Port = New-Object System.IO.Ports.SerialPort 'COM3',115200,'None',8,'One'
 $Port.ReadTimeout = 500
 $Port.Open()
-"capturing COM1 115200 8N1 to $Log - leave this window open"
+"capturing 115200 8N1 to $Log - leave this window open"
 $Stop = (Get-Date).AddMinutes(60)
 while ((Get-Date) -lt $Stop) {
     try {
@@ -126,17 +138,21 @@ while ((Get-Date) -lt $Stop) {
 $Port.Close()
 ```
 
-If you prefer a terminal with logging, install PuTTY: Serial, `COM1`, 115200,
-8N1, Connection -> Serial, then Logging -> "All session output" to a file.
+Or PuTTY there: Serial, the adapter's port, 115200, 8N1, Logging -> "All session
+output". Start it **before** the reboot in section 5.
 
 Two things to expect:
 
-- Start it **before** the reboot in section 5, not before section 4. The
-  installer writes to the ESP; nothing talks to the port yet.
+- `COM1` in this machine's Device Manager proves nothing about the board: the
+  SuperIO port may have no header wired. Check the board before relying on it.
 - The log stays empty through boot 1 (MokManager) and boot 2 (loader): the
   loader prints to the screen only, because the shipped `dist\loader.efi` was
-  built without `IB_CONSOLE_SERIAL_MIRROR`. The first bytes you should see are
-  `uefi hypervisor: ...` when the payload starts in boot 3.
+  built without `IB_CONSOLE_SERIAL_MIRROR`. First bytes should be
+  `uefi hypervisor: ...` in boot 3.
+
+With no second machine, skip serial. The screen going blank after the loader
+lines is expected, and the verdict still comes from section 7: `ib-tcg-dump.exe
+health` in Windows after boot 3. You lose the in-boot markers, not the result.
 
 ## 4. Sign and stage
 
