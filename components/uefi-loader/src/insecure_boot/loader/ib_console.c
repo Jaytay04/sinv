@@ -18,10 +18,28 @@
 
 /* COM1 lives in port space: the same 0x3F8 the hypervisor writes with an out
  * instruction. A pointer at 0x3F8 touches low memory instead, which is why an
- * earlier version of this mirror printed nothing. */
+ * earlier version of this mirror printed nothing. The firmware may also leave
+ * the line at a different word length or baud - VMware's does, and five-bit
+ * framing turned every line into ch & 0x1F - so program 115200 8N1 first. */
+static int ib_console_serial_ready;
+
+static void ib_console_serial_init(void) {
+    __outbyte(0x3f9u, 0x00u);
+    __outbyte(0x3fbu, 0x80u);
+    __outbyte(0x3f8u, 0x01u);
+    __outbyte(0x3f9u, 0x00u);
+    __outbyte(0x3fbu, 0x03u);
+    __outbyte(0x3fau, 0xc7u);
+    __outbyte(0x3fcu, 0x0bu);
+    ib_console_serial_ready = 1;
+}
+
 static void ib_console_serial_char(char ch) {
     unsigned long spin = 0;
 
+    if (!ib_console_serial_ready) {
+        ib_console_serial_init();
+    }
     while ((__inbyte(0x3fdu) & 0x20u) == 0u && spin < 200000ul) {
         spin++;
     }

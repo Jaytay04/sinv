@@ -292,7 +292,19 @@ static ib_loader_code ib_main_tail(const ib_bytes_t *payload,
         return code;
     }
 
-    return ib_bootmgfw_start(error);
+    code = ib_bootmgfw_start(error);
+    if (code != IB_LOADER_OK) {
+        /* The machine is already restored: the boot manager is back in place,
+         * the staged files are gone and the Setup byte is back at TCG 2.0, so
+         * a reset lands in the same Windows the hand-off was going to start.
+         * Firmware that refuses LoadImage here (AMI: EFI_LOAD_ERROR) would
+         * otherwise leave the outcome to its own boot order. */
+        ib_console_println(
+            "experimental boot: could not start the restored boot manager; "
+            "resetting so the firmware starts it");
+        ib_boot_reset_cold();
+    }
+    return code;
 }
 
 static ib_loader_code ib_main_probe(ib_tpm_crb_t *out, int *out_found,
