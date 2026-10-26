@@ -91,6 +91,10 @@ ib_efi_status ib_boot_open_protocol_exclusive(ib_efi_handle handle,
 ib_efi_status ib_boot_close_protocol_exclusive(ib_efi_handle handle,
                                                const ib_efi_guid_t *protocol);
 
+/* Environment probes used by the hand-off diagnostics. */
+ib_efi_status ib_boot_probe_get_time(void);
+void ib_boot_probe_memory_map(ib_uintn *out_size, ib_uintn *out_count);
+
 /* Images. */
 ib_efi_status ib_boot_load_image(ib_efi_handle parent,
                                  ib_efi_device_path_protocol *device_path,

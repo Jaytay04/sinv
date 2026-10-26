@@ -8,8 +8,8 @@
 
 /* Shim vendor GUID: `Mok*`, `Sbat*`, `HSIStatus`, ... */
 static const ib_efi_guid_t IB_NVRAM_SHIM_LOCK = {
-    0x605dab50u, 0xe046u, 0x4670u,
-    {0x8a, 0x0c, 0x6f, 0x9a, 0xba, 0x2d, 0x42, 0xd7}};
+    0x605dab50u, 0xe046u, 0x4300u,
+    {0xab, 0xb6, 0x3d, 0xd8, 0x10, 0xdd, 0x8b, 0x23}};
 
 /* Default AMI Aptio "Setup" variable GUID. */
 static const ib_efi_guid_t IB_NVRAM_AMI_SETUP = {
@@ -228,18 +228,24 @@ static int ib_nvram_sweep_pass(void) {
     ib_char16 *cursor = ib_boot_alloc(capacity);
     size_t cursor_units = 0;
     int deleted = 0;
+    ib_efi_guid_t vendor;
 
     cursor[0] = 0;
+    /* The previous name and the previous vendor GUID form one cursor: UEFI
+     * requires both to be handed back, so the vendor has to survive across
+     * iterations. Resetting it while keeping the name is what produced
+     * INVALID_PARAMETER here. */
+    ib_memset(&vendor, 0, sizeof(vendor));
     for (;;) {
-        ib_efi_guid_t vendor;
+        ib_efi_guid_t vendor_in = vendor;
         size_t size = capacity;
         ib_efi_status status;
 
-        ib_memset(&vendor, 0, sizeof(vendor));
         ib_memcpy(name, cursor, (cursor_units + 1) * sizeof(ib_char16));
 
         status = ib_boot_get_next_variable_name(&size, name, &vendor);
         if (status == IB_EFI_BUFFER_TOO_SMALL) {
+            vendor = vendor_in;
             /* Not a name yet: re-query with the cursor intact and a bigger
              * buffer, exactly what the Rust iterator does. */
             size_t needed = size + sizeof(ib_char16);

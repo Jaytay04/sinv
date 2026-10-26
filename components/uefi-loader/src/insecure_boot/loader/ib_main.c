@@ -61,6 +61,21 @@ volatile unsigned char ib_data_section_anchor = 0x5a;
 static ib_loader_code ib_main_run(ib_loader_error_t *error);
 
 /* Runs the payload, then starts the restored boot manager. */
+/* Print what the environment says about the two runtime services the Windows
+ * boot manager touches first, so a failure can be tied to a point in time. */
+static void ib_main_probe_environment(const char *where) {
+    char status_text[48];
+    ib_efi_status status = ib_boot_probe_get_time();
+    ib_uintn map_size = 0;
+    ib_uintn map_count = 0;
+
+    ib_boot_probe_memory_map(&map_size, &map_count);
+    ib_status_debug(status, status_text, sizeof(status_text));
+    ib_console_printf(
+        "experimental boot: probe %s: GetTime=%s map=%#llx/%llu\n", where,
+        status_text, (unsigned long long)map_size,
+        (unsigned long long)map_count);
+}
 static ib_loader_code ib_main_tail(const ib_bytes_t *payload,
                                    const ib_bytes_t *boot_manager,
                                    ib_efi_device_path_protocol *boot_manager_path,
@@ -271,6 +286,7 @@ static ib_loader_code ib_main_run(ib_loader_error_t *error) {
      * this one want the spec version they found here. */
     ib_nvram_clear_residue(tcg_spec_offset, have_setup);
 
+    ib_main_probe_environment("before payload");
     outcome = ib_main_tail(&payload, &boot_manager, boot_manager_path, error);
 
     /* The protocol's functions live in this image, so it cannot outlive it.  An
@@ -302,6 +318,8 @@ done:
     return code;
 }
 
+/* Print what the environment says about the two runtime services the Windows
+ * boot manager touches first, so a failure can be tied to a point in time. */
 static ib_loader_code ib_main_tail(const ib_bytes_t *payload,
                                    const ib_bytes_t *boot_manager,
                                    ib_efi_device_path_protocol *boot_manager_path,
@@ -309,6 +327,9 @@ static ib_loader_code ib_main_tail(const ib_bytes_t *payload,
     ib_loader_code code;
 
     code = ib_payload_run(payload->data, payload->length, error);
+    if (code == IB_LOADER_OK) {
+        ib_main_probe_environment("after payload");
+    }
     if (code != IB_LOADER_OK) {
         /* Nothing was activated, and the machine is already restored, so the
          * only useful outcome is the same one the hand-off failure takes: a

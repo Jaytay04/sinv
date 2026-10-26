@@ -76,6 +76,11 @@ void ib_console_write(const char *text) {
     }
 
     while (*text != '\0') {
+        /* UEFI moves down and returns to the left margin as two separate
+         * operations: a bare LF walks the output diagonally. */
+        if (*text == '\n') {
+            units[used++] = '\r';
+        }
         units[used++] = (ib_char16)(unsigned char)*text;
         text++;
         if (used == IB_CONSOLE_CHUNK - 1) {

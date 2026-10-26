@@ -179,6 +179,50 @@ ib_efi_status ib_boot_close_protocol_exclusive(ib_efi_handle handle,
                                   NULL);
 }
 
+/* Environment probes: the Windows boot manager's early init calls
+ * RuntimeServices->GetTime, and an EFI_UNSUPPORTED from there maps straight to
+ * STATUS_NOT_SUPPORTED (0xc00000bb). The memory map and the attribute protocol
+ * are the other things that change once the payload has taken the machine over,
+ * so all three are sampled at the same points. */
+typedef ib_efi_status (IB_EFIAPI *ib_boot_get_time_fn)(ib_efi_time *time, void *capabilities);
+
+ib_efi_status ib_boot_probe_get_time(void) {
+    ib_efi_system_table *table = ib_efi_get_system_table();
+    ib_efi_time now;
+
+    if (table == NULL || table->runtime_services == NULL ||
+        table->runtime_services->get_time == NULL) {
+        return IB_EFI_UNSUPPORTED;
+    }
+    ib_memset(&now, 0, sizeof(now));
+    return ((ib_boot_get_time_fn)table->runtime_services->get_time)(&now, NULL);
+}
+
+void ib_boot_probe_memory_map(ib_uintn *out_size, ib_uintn *out_count) {
+    ib_efi_system_table *table = ib_efi_get_system_table();
+    ib_uintn size = 0;
+    ib_uintn key = 0;
+    ib_uintn descriptor_size = 0;
+    ib_u32 descriptor_version = 0;
+    ib_efi_status status;
+
+    *out_size = 0;
+    *out_count = 0;
+    if (table == NULL || table->boot_services == NULL ||
+        table->boot_services->get_memory_map == NULL) {
+        return;
+    }
+    /* A zero-length query returns the required size and the descriptor size
+     * without allocating anything; nothing is consumed here. */
+    status = table->boot_services->get_memory_map(
+        &size, NULL, &key, &descriptor_size, &descriptor_version);
+    (void)status;
+    *out_size = size;
+    if (descriptor_size != 0) {
+        *out_count = size / descriptor_size;
+    }
+}
+
 ib_efi_status ib_boot_load_image(ib_efi_handle parent,
                                  ib_efi_device_path_protocol *device_path,
                                  ib_efi_handle *out_image) {
