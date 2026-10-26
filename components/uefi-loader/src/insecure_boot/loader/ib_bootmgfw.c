@@ -221,6 +221,46 @@ ib_loader_code ib_bootmgfw_start(const ib_u8 *bytes, size_t length,
         return IB_LOADER_ERR_UEFI;
     }
 
+    /* shim's loader installs LoadedImage itself: it zeroes the struct and fills
+     * a subset, so ImageCodeType/ImageDataType stay 0 (EfiReservedMemoryType)
+     * even though the image memory is EfiLoaderCode. Fill what is missing - EDK2
+     * uses EfiLoaderCode/EfiLoaderData for an EFI application - and say what the
+     * child will actually see, not what it arrived with.
+     *
+     * This has to happen before the identity snapshot below: the snapshot
+     * records these two fields, and changing them afterwards would make the
+     * cleanup step decide the handle is no longer this image and skip the
+     * unload. */
+    {
+        void *interface = NULL;
+        ib_efi_loaded_image_protocol *loaded;
+        ib_efi_status probe = ib_boot_services()->handle_protocol(
+            image, (ib_efi_guid_t *)&ib_guid_loaded_image, &interface);
+
+        loaded = (ib_efi_loaded_image_protocol *)interface;
+        if (!IB_EFI_IS_ERROR(probe) && loaded != NULL) {
+            unsigned code_before = (unsigned)loaded->image_code_type;
+            unsigned data_before = (unsigned)loaded->image_data_type;
+
+            if (loaded->image_code_type == 0) {
+                loaded->image_code_type = IbEfiLoaderCode;
+            }
+            if (loaded->image_data_type == 0) {
+                loaded->image_data_type = IbEfiLoaderData;
+            }
+
+            ib_console_printf(
+                "experimental boot: child LoadedImage: base=%#llx size=%#llx "
+                "code=%u->%u data=%u->%u device=%d path=%d\n",
+                (unsigned long long)(uintptr_t)loaded->image_base,
+                (unsigned long long)loaded->image_size,
+                code_before, (unsigned)loaded->image_code_type,
+                data_before, (unsigned)loaded->image_data_type,
+                loaded->device_handle != NULL ? 1 : 0,
+                loaded->file_path != NULL ? 1 : 0);
+        }
+    }
+
     /* StartImage can return either because firmware rejected entry or because
      * the child application itself returned.  Snapshot the loaded-image
      * protocol so cleanup can identify this image without guessing from the
@@ -236,42 +276,6 @@ ib_loader_code ib_bootmgfw_start(const ib_u8 *bytes, size_t length,
             status_text);
         ib_loader_error_uefi(error, status);
         return IB_LOADER_ERR_UEFI;
-    }
-
-    /* shim's loader installs LoadedImage itself: it zeroes the struct and fills
-     * a subset, so ImageCodeType/ImageDataType stay 0 (EfiReservedMemoryType)
-     * even though the image memory is EfiLoaderCode. Windows Boot Manager is
-     * known to care about the LoadedImage it is given, so record what the child
-     * actually sees before entering it. */
-    {
-        void *interface = NULL;
-        ib_efi_loaded_image_protocol *loaded;
-        ib_efi_status probe = ib_boot_services()->handle_protocol(
-            image, (ib_efi_guid_t *)&ib_guid_loaded_image, &interface);
-
-        loaded = (ib_efi_loaded_image_protocol *)interface;
-        if (!IB_EFI_IS_ERROR(probe) && loaded != NULL) {
-            ib_console_printf(
-                "experimental boot: child LoadedImage: base=%#llx size=%#llx "
-                "code=%u data=%u device=%d path=%d\n",
-                (unsigned long long)(uintptr_t)loaded->image_base,
-                (unsigned long long)loaded->image_size,
-                (unsigned)loaded->image_code_type,
-                (unsigned)loaded->image_data_type,
-                loaded->device_handle != NULL ? 1 : 0,
-                loaded->file_path != NULL ? 1 : 0);
-
-            /* Candidate fix for the Windows early-init failure. shim zeroes the
-             * struct and never fills these two, so the child is told its image
-             * memory is EfiReservedMemoryType while shim allocated it as
-             * EfiLoaderCode. Only fill what is missing. */
-            if (loaded->image_code_type == 0) {
-                loaded->image_code_type = IbEfiLoaderCode;
-            }
-            if (loaded->image_data_type == 0) {
-                loaded->image_data_type = IbEfiLoaderData;
-            }
-        }
     }
 
     status = ib_boot_start_image(image);

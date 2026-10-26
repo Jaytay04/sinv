@@ -634,6 +634,24 @@ static int test_unexpected_success_after_firmware_unload_is_not_unloaded_again(v
     return 1;
 }
 
+static int test_zero_memory_types_are_normalized_before_the_snapshot(void) {
+    ib_loader_error_t error;
+
+    fixture_boot_reset();
+    fixture_loaded_image.image_code_type = (ib_efi_memory_type)0;
+    fixture_loaded_image.image_data_type = (ib_efi_memory_type)0;
+    CHECK(ib_bootmgfw_start(fixture_backup, sizeof(fixture_backup),
+                            fixture_device_path, &error) ==
+          IB_LOADER_ERR_BOOT_MANAGER_RETURNED);
+    CHECK(fixture_loaded_image.image_code_type == IbEfiLoaderCode);
+    CHECK(fixture_loaded_image.image_data_type == IbEfiLoaderData);
+    /* The snapshot must be taken after the fill, or cleanup decides this is
+     * some other image and leaves it loaded. */
+    CHECK(fixture_unload_calls == 1);
+    CHECK(fixture_pool_balanced());
+    return 1;
+}
+
 static int test_missing_bytes_are_refused(void) {
     ib_loader_error_t error;
 
@@ -710,6 +728,8 @@ int main(void) {
           test_unexpected_success_after_firmware_unload_is_not_unloaded_again },
         { "load failure releases the returned handle",
           test_load_failure_releases_returned_handle_and_device_path },
+        { "zero memory types are filled before the identity snapshot",
+          test_zero_memory_types_are_normalized_before_the_snapshot },
         { "missing boot manager bytes are refused before any load",
           test_missing_bytes_are_refused }
     };
