@@ -34,9 +34,12 @@ extern "C" {
 ib_loader_code ib_bootmgfw_restore(ib_fs_volume_t *volume,
                                    ib_loader_error_t *error);
 
-/* Loads the restored boot manager from its own path and starts it.  Returning
- * at all means Windows did not boot, reported as that error. */
-ib_loader_code ib_bootmgfw_start(ib_loader_error_t *error);
+/* Starts the restored boot manager from bytes the loader read before the
+ * payload ran, and returns only if Windows did not boot.  The bytes matter:
+ * shim owns LoadImage by then, and only its source-buffer branch avoids the
+ * file I/O that fails once the payload has taken the machine over. */
+ib_loader_code ib_bootmgfw_start(const ib_u8 *bytes, size_t length,
+                                 ib_loader_error_t *error);
 
 #ifdef __cplusplus
 }

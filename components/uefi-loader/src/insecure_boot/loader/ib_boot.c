@@ -200,6 +200,27 @@ ib_efi_status ib_boot_load_image(ib_efi_handle parent,
     return status;
 }
 
+/* Loads an image from bytes the caller already holds.  This is the path that
+ * survives shim's hooks: shim replaces LoadImage, and its path-based branch
+ * reads the file through firmware services, while the source-buffer branch
+ * only relocates what it is given. */
+ib_efi_status ib_boot_load_image_from_buffer(ib_efi_handle parent,
+                                             const void *bytes, ib_uintn length,
+                                             ib_efi_handle *out_image) {
+    ib_efi_handle image = NULL;
+    ib_efi_status status = ib_boot_services()->load_image(
+        IB_FALSE, parent, NULL, (void *)(uintptr_t)bytes, length, &image);
+
+    if (!IB_EFI_IS_ERROR(status)) {
+        *out_image = image;
+        return status;
+    }
+    if (image != NULL) {
+        ib_boot_unload_image(image);
+    }
+    return status;
+}
+
 ib_efi_status ib_boot_unload_image(ib_efi_handle image) {
     return ib_boot_services()->unload_image(image);
 }

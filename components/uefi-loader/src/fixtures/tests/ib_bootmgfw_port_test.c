@@ -457,10 +457,8 @@ static ib_efi_status IB_EFIAPI fixture_load_image(
     ib_boolean boot_policy, ib_efi_handle parent,
     ib_efi_device_path_protocol *device_path, void *source_buffer,
     ib_uintn source_size, ib_efi_handle *image_handle) {
-    (void)source_buffer;
-    (void)source_size;
     if (boot_policy != IB_FALSE || parent != fixture_parent_handle ||
-        device_path == NULL) {
+        (device_path == NULL && (source_buffer == NULL || source_size == 0))) {
         fixture_service_errors++;
         return IB_EFI_INVALID_PARAMETER;
     }
@@ -553,7 +551,7 @@ static int test_child_returned_security_violation_was_already_unloaded(void) {
     fixture_boot_reset();
     fixture_start_behavior = FixtureStartRemovesImage;
     fixture_start_status = IB_EFI_SECURITY_VIOLATION;
-    code = ib_bootmgfw_start(&error);
+    code = ib_bootmgfw_start(fixture_backup, sizeof(fixture_backup), &error);
     CHECK(code == IB_LOADER_ERR_UEFI);
     CHECK(error.status == IB_EFI_SECURITY_VIOLATION);
     CHECK(fixture_unload_calls == 0);
@@ -568,7 +566,7 @@ static int test_preentry_rejection_unloads_same_registered_image(void) {
 
     fixture_boot_reset();
     fixture_start_status = IB_EFI_SECURITY_VIOLATION;
-    code = ib_bootmgfw_start(&error);
+    code = ib_bootmgfw_start(fixture_backup, sizeof(fixture_backup), &error);
     CHECK(code == IB_LOADER_ERR_UEFI);
     CHECK(error.status == IB_EFI_SECURITY_VIOLATION);
     CHECK(fixture_unload_calls == 1);
@@ -581,7 +579,7 @@ static int test_snapshot_failure_stops_before_entry(void) {
     ib_loader_error_t error;
     fixture_boot_reset();
     fixture_query_status = IB_EFI_DEVICE_ERROR;
-    CHECK(ib_bootmgfw_start(&error) == IB_LOADER_ERR_UEFI);
+    CHECK(ib_bootmgfw_start(fixture_backup, sizeof(fixture_backup), &error) == IB_LOADER_ERR_UEFI);
     CHECK(error.status == IB_EFI_DEVICE_ERROR);
     CHECK(fixture_start_calls == 0);
     CHECK(fixture_unload_calls == 1);
@@ -597,7 +595,7 @@ static int test_reused_handle_is_not_unloaded(void) {
     fixture_boot_reset();
     fixture_start_behavior = FixtureStartReusesHandle;
     fixture_start_status = IB_EFI_SECURITY_VIOLATION;
-    code = ib_bootmgfw_start(&error);
+    code = ib_bootmgfw_start(fixture_backup, sizeof(fixture_backup), &error);
     CHECK(code == IB_LOADER_ERR_UEFI);
     CHECK(error.status == IB_EFI_SECURITY_VIOLATION);
     CHECK(fixture_unload_calls == 0);
@@ -610,7 +608,7 @@ static int test_unexpected_success_return_cleans_owned_image(void) {
     ib_loader_code code;
 
     fixture_boot_reset();
-    code = ib_bootmgfw_start(&error);
+    code = ib_bootmgfw_start(fixture_backup, sizeof(fixture_backup), &error);
     CHECK(code == IB_LOADER_ERR_BOOT_MANAGER_RETURNED);
     CHECK(error.code == IB_LOADER_ERR_BOOT_MANAGER_RETURNED);
     CHECK(fixture_unload_calls == 1);
@@ -624,10 +622,19 @@ static int test_unexpected_success_after_firmware_unload_is_not_unloaded_again(v
 
     fixture_boot_reset();
     fixture_start_behavior = FixtureStartRemovesImage;
-    code = ib_bootmgfw_start(&error);
+    code = ib_bootmgfw_start(fixture_backup, sizeof(fixture_backup), &error);
     CHECK(code == IB_LOADER_ERR_BOOT_MANAGER_RETURNED);
     CHECK(fixture_unload_calls == 0);
     CHECK(fixture_pool_balanced());
+    return 1;
+}
+
+static int test_missing_bytes_are_refused(void) {
+    ib_loader_error_t error;
+
+    fixture_boot_reset();
+    CHECK(ib_bootmgfw_start(NULL, 0, &error) == IB_LOADER_ERR_MISSING_ARTIFACT);
+    CHECK(!fixture_loaded_registered);
     return 1;
 }
 
@@ -637,7 +644,7 @@ static int test_load_failure_releases_returned_handle_and_device_path(void) {
 
     fixture_boot_reset();
     fixture_load_status = IB_EFI_SECURITY_VIOLATION;
-    code = ib_bootmgfw_start(&error);
+    code = ib_bootmgfw_start(fixture_backup, sizeof(fixture_backup), &error);
     CHECK(code == IB_LOADER_ERR_UEFI);
     CHECK(error.status == IB_EFI_SECURITY_VIOLATION);
     CHECK(fixture_unload_calls == 1);
@@ -691,8 +698,10 @@ int main(void) {
           test_unexpected_success_return_cleans_owned_image },
         { "unexpected success after firmware unload avoids double unload",
           test_unexpected_success_after_firmware_unload_is_not_unloaded_again },
-        { "load failure balances handle and device-path cleanup",
-          test_load_failure_releases_returned_handle_and_device_path }
+        { "load failure releases the returned handle",
+          test_load_failure_releases_returned_handle_and_device_path },
+        { "missing boot manager bytes are refused before any load",
+          test_missing_bytes_are_refused }
     };
     size_t index;
 

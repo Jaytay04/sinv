@@ -62,6 +62,7 @@ static ib_loader_code ib_main_run(ib_loader_error_t *error);
 
 /* Runs the payload, then starts the restored boot manager. */
 static ib_loader_code ib_main_tail(const ib_bytes_t *payload,
+                                   const ib_bytes_t *boot_manager,
                                    ib_loader_error_t *error);
 
 /* Probes the TPM, prints what it reports about itself, and hands it over. */
@@ -114,6 +115,7 @@ static ib_loader_code ib_main_run(ib_loader_error_t *error) {
     ib_config_error_t config_error;
     ib_bytes_t config_bytes = { 0, 0 };
     ib_bytes_t payload = { 0, 0 };
+    ib_bytes_t boot_manager = { 0, 0 };
     ib_bytes_t dump_bytes = { 0, 0 };
     ib_tcglog_t dump;
     ib_tcglog_error_t dump_error;
@@ -164,6 +166,15 @@ static ib_loader_code ib_main_run(ib_loader_error_t *error) {
     }
 
     code = ib_bootmgfw_restore(&volume, error);
+    if (code != IB_LOADER_OK) {
+        goto done;
+    }
+
+    /* Read the restored boot manager now, while firmware file services still
+     * work.  After the payload returns, shim owns LoadImage and its path-based
+     * branch reads the file again - and that read is what fails as
+     * EFI_LOAD_ERROR once the payload has taken the machine over. */
+    code = ib_fs_read(&volume, IB_BOOTMGFW_PATH, &boot_manager, error);
     if (code != IB_LOADER_OK) {
         goto done;
     }
@@ -254,7 +265,7 @@ static ib_loader_code ib_main_run(ib_loader_error_t *error) {
      * this one want the spec version they found here. */
     ib_nvram_clear_residue(tcg_spec_offset, have_setup);
 
-    outcome = ib_main_tail(&payload, error);
+    outcome = ib_main_tail(&payload, &boot_manager, error);
 
     /* The protocol's functions live in this image, so it cannot outlive it.  An
      * application that returns is unloaded, which would leave the table pointing
@@ -278,12 +289,14 @@ static ib_loader_code ib_main_run(ib_loader_error_t *error) {
 done:
     ib_fs_close_volume(&volume);
     ib_bytes_free(&payload);
+    ib_bytes_free(&boot_manager);
     ib_bytes_free(&dump_bytes);
     ib_bytes_free(&config_bytes);
     return code;
 }
 
 static ib_loader_code ib_main_tail(const ib_bytes_t *payload,
+                                   const ib_bytes_t *boot_manager,
                                    ib_loader_error_t *error) {
     ib_loader_code code;
 
@@ -303,7 +316,7 @@ static ib_loader_code ib_main_tail(const ib_bytes_t *payload,
         ib_boot_reset_cold();
     }
 
-    code = ib_bootmgfw_start(error);
+    code = ib_bootmgfw_start(boot_manager->data, boot_manager->length, error);
     if (code != IB_LOADER_OK) {
         /* On success the payload returned through the guest-transition stub
          * with VMX root still active - it does not VMXOFF - so this frame is

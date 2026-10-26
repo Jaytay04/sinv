@@ -189,23 +189,29 @@ done:
     return code;
 }
 
-ib_loader_code ib_bootmgfw_start(ib_loader_error_t *error) {
-    ib_efi_device_path_protocol *device_path = NULL;
+ib_loader_code ib_bootmgfw_start(const ib_u8 *bytes, size_t length,
+                                 ib_loader_error_t *error) {
     ib_efi_handle image = NULL;
     ib_boot_image_identity_t identity;
     ib_loader_code code;
     ib_efi_status status;
     ib_efi_status cleanup_status;
 
-    code = ib_fs_file_device_path(IB_BOOTMGFW_PATH, &device_path, error);
-    if (code != IB_LOADER_OK) {
-        return code;
+    if (bytes == NULL || length == 0) {
+        ib_loader_error_str(error, IB_LOADER_ERR_MISSING_ARTIFACT,
+                            IB_BOOTMGFW_PATH);
+        return IB_LOADER_ERR_MISSING_ARTIFACT;
     }
 
-    status = ib_boot_load_image(ib_boot_image_handle(), device_path, &image);
+    /* Load from the bytes the loader read before the payload ran.  shim owns
+     * LoadImage by the time this executes, and its path-based branch reads the
+     * file again through firmware services - which is exactly what fails once
+     * the payload has taken the machine over (EFI_LOAD_ERROR).  The
+     * source-buffer branch only relocates the buffer. */
+    status = ib_boot_load_image_from_buffer(ib_boot_image_handle(), bytes, length,
+                                            &image);
     if (IB_EFI_IS_ERROR(status)) {
         char status_text[64];
-        ib_fs_device_path_free(device_path);
         ib_status_debug(status, status_text, sizeof(status_text));
         ib_console_printf(
             "experimental boot: LoadImage of the boot manager failed: %s\n",
@@ -223,7 +229,6 @@ ib_loader_code ib_bootmgfw_start(ib_loader_error_t *error) {
     if (IB_EFI_IS_ERROR(status)) {
         char status_text[64];
         (void)ib_boot_unload_image(image);
-        ib_fs_device_path_free(device_path);
         ib_status_debug(status, status_text, sizeof(status_text));
         ib_console_printf(
             "experimental boot: reading the loaded boot manager failed: %s\n",
@@ -233,7 +238,6 @@ ib_loader_code ib_bootmgfw_start(ib_loader_error_t *error) {
     }
 
     status = ib_boot_start_image(image);
-    ib_fs_device_path_free(device_path);
     cleanup_status = ib_boot_unload_image_if_owned(image, &identity);
     if (IB_EFI_IS_ERROR(cleanup_status)) {
         ib_console_println(
