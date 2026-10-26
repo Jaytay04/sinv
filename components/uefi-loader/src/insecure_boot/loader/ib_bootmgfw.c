@@ -9,11 +9,11 @@
 /* Read `path` back and say whether it holds exactly `length` bytes equal to
  * `expected`.  Every write in this transaction is verified before the next
  * step is allowed to destroy anything. */
-/* EFI_TABLE_HEADER is Signature, Revision, HeaderSize, CRC32, Reserved, so the
- * checksum lives at 0x0C and covers HeaderSize bytes with those four bytes
- * taken as zero - CRC32 (0xEDB88320), not a byte sum. shim rewrites the
- * BootServices function pointers without recomputing it, so whether the table
- * still validates is worth recording before Windows sees it. */
+/* EFI_TABLE_HEADER: Signature is 64-bit, so HeaderSize sits at 0x0C and CRC32
+ * at 0x10, and the header is 24 bytes. shim rewrites the BootServices function
+ * pointers without recomputing that CRC32, so whether the table still validates
+ * is worth recording before Windows sees it. The offsets come from the struct
+ * rather than hand-counted integers. */
 static ib_u32 ib_bootmgfw_crc32_step(ib_u32 crc, ib_u8 byte) {
     ib_u32 bit;
 
@@ -24,17 +24,21 @@ static ib_u32 ib_bootmgfw_crc32_step(ib_u32 crc, ib_u8 byte) {
     return crc;
 }
 
-static unsigned ib_bootmgfw_table_crc_ok(const ib_u8 *table) {
-    ib_u32 size = *(const ib_u32 *)(const void *)(table + 8);
-    ib_u32 expected = *(const ib_u32 *)(const void *)(table + 12);
+unsigned ib_bootmgfw_table_crc_ok(const ib_u8 *table) {
+    const ib_efi_table_header *header = (const ib_efi_table_header *)(const void *)table;
+    ib_u32 size = header->header_size;
+    ib_u32 expected = header->crc32;
+    size_t crc_at = offsetof(ib_efi_table_header, crc32);
     ib_u32 index;
     ib_u32 crc = UINT32_C(0xffffffff);
 
-    if (size < 20u || size > 0x1000u) {
+    if (size < (ib_u32)sizeof(ib_efi_table_header) || size > 0x1000u) {
         return 0;
     }
     for (index = 0; index < size; index++) {
-        ib_u8 byte = (index >= 12u && index < 16u) ? 0u : table[index];
+        ib_u8 byte = ((size_t)index >= crc_at && (size_t)index < crc_at + 4u)
+                         ? 0u
+                         : table[index];
         crc = ib_bootmgfw_crc32_step(crc, byte);
     }
     return (crc ^ UINT32_C(0xffffffff)) == expected ? 1u : 0u;

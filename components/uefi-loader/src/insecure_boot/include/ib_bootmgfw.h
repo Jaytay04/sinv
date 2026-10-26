@@ -34,6 +34,11 @@ extern "C" {
 ib_loader_code ib_bootmgfw_restore(ib_fs_volume_t *volume,
                                    ib_loader_error_t *error);
 
+/* Whether an EFI table header validates: CRC32 over HeaderSize bytes with the
+ * CRC32 field taken as zero. shim changes BootServices pointers without
+ * recomputing it. Exposed for the host tests. */
+unsigned ib_bootmgfw_table_crc_ok(const ib_u8 *table);
+
 /* Starts the restored boot manager from bytes and a device path the loader
  * prepared before the payload ran, and returns only if Windows did not boot.
  * Both matter: shim owns LoadImage by then, and only its source-buffer branch

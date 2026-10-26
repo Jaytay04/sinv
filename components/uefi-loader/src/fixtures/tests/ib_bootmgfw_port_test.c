@@ -634,6 +634,51 @@ static int test_unexpected_success_after_firmware_unload_is_not_unloaded_again(v
     return 1;
 }
 
+/* A 24-byte EFI_TABLE_HEADER: signature IBI SYST, revision 0x00020046,
+ * HeaderSize 24, CRC32 computed with the CRC field zeroed (0xE63801E1). */
+static void build_table_header(unsigned char *header, int corrupt) {
+    static const unsigned char clean[24] = {
+        0x49, 0x42, 0x49, 0x20, 0x53, 0x59, 0x53, 0x54,
+        0x46, 0x00, 0x02, 0x00,
+        0x18, 0x00, 0x00, 0x00,
+        0xE1, 0x01, 0x38, 0xE6,
+        0x00, 0x00, 0x00, 0x00
+    };
+    size_t index;
+
+    for (index = 0; index < sizeof(clean); index++) {
+        header[index] = clean[index];
+    }
+    if (corrupt) {
+        header[4] ^= 0xffu;
+    }
+}
+
+static int test_table_crc_accepts_a_valid_header(void) {
+    unsigned char header[24];
+
+    build_table_header(header, 0);
+    CHECK(ib_bootmgfw_table_crc_ok(header) == 1);
+    return 1;
+}
+
+static int test_table_crc_rejects_a_corrupted_header(void) {
+    unsigned char header[24];
+
+    build_table_header(header, 1);
+    CHECK(ib_bootmgfw_table_crc_ok(header) == 0);
+
+    /* A header that claims to be shorter than the header struct is refused
+     * rather than read past its declared size. */
+    build_table_header(header, 0);
+    header[12] = 0x04;
+    header[13] = 0x00;
+    header[14] = 0x00;
+    header[15] = 0x00;
+    CHECK(ib_bootmgfw_table_crc_ok(header) == 0);
+    return 1;
+}
+
 static int test_zero_memory_types_are_normalized_before_the_snapshot(void) {
     ib_loader_error_t error;
 
@@ -728,6 +773,10 @@ int main(void) {
           test_unexpected_success_after_firmware_unload_is_not_unloaded_again },
         { "load failure releases the returned handle",
           test_load_failure_releases_returned_handle_and_device_path },
+        { "table CRC32 accepts a valid header",
+          test_table_crc_accepts_a_valid_header },
+        { "table CRC32 rejects a corrupted or short header",
+          test_table_crc_rejects_a_corrupted_header },
         { "zero memory types are filled before the identity snapshot",
           test_zero_memory_types_are_normalized_before_the_snapshot },
         { "missing boot manager bytes are refused before any load",
