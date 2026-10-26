@@ -76,18 +76,22 @@ void ib_console_write(const char *text) {
     }
 
     while (*text != '\0') {
+        size_t needed = (*text == '\n') ? 2u : 1u;
+
         /* UEFI moves down and returns to the left margin as two separate
-         * operations: a bare LF walks the output diagonally. */
+         * operations: a bare LF walks the output diagonally. Room is checked
+         * before either unit is written, so a CR+LF pair at the end of a full
+         * chunk cannot run past the terminator slot. */
+        if (used + needed > IB_CONSOLE_CHUNK - 1) {
+            units[used] = 0;
+            out->output_string(out, units);
+            used = 0;
+        }
         if (*text == '\n') {
             units[used++] = '\r';
         }
         units[used++] = (ib_char16)(unsigned char)*text;
         text++;
-        if (used == IB_CONSOLE_CHUNK - 1) {
-            units[used] = 0;
-            out->output_string(out, units);
-            used = 0;
-        }
     }
     if (used != 0) {
         units[used] = 0;

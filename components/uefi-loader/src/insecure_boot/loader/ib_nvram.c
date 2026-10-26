@@ -222,12 +222,13 @@ static ib_nvram_outcome_t ib_nvram_wipe(const ib_char16 *name,
 
 /* One walk over the whole variable store.  Returns non-zero when a kill-list
  * name was deleted, so the caller restarts the walk. */
-static int ib_nvram_sweep_pass(void) {
+static int ib_nvram_sweep_pass(int *out_failed) {
     size_t capacity = 1024;
     ib_char16 *name = ib_boot_alloc(capacity);
     ib_char16 *cursor = ib_boot_alloc(capacity);
     size_t cursor_units = 0;
     int deleted = 0;
+    int failed = 0;
     ib_efi_guid_t vendor;
 
     cursor[0] = 0;
@@ -250,8 +251,14 @@ static int ib_nvram_sweep_pass(void) {
              * buffer, exactly what the Rust iterator does. */
             size_t needed = size + sizeof(ib_char16);
             ib_char16 *bigger = ib_boot_alloc(needed);
+            ib_char16 *wider_cursor = ib_boot_alloc(needed);
+            /* The cursor has to grow with the name: a long name that fits the
+             * grown buffer would otherwise be copied into the old 1 KiB one. */
+            ib_memcpy(wider_cursor, cursor, (cursor_units + 1) * sizeof(ib_char16));
             ib_boot_free(name);
+            ib_boot_free(cursor);
             name = bigger;
+            cursor = wider_cursor;
             capacity = needed;
             continue;
         }
@@ -262,6 +269,7 @@ static int ib_nvram_sweep_pass(void) {
             char status_text[48];
             ib_status_debug(status, status_text, sizeof(status_text));
             ib_console_printf("[sweep] enumeration error: %s\n", status_text);
+            *out_failed = 1;
             break;
         }
 
@@ -293,19 +301,34 @@ static int ib_nvram_sweep_pass(void) {
                     break;
                 }
             }
-            deleted = 1;
-            break;
+            /* Only a real deletion invalidates the cursor. A variable the
+             * firmware refuses to delete would otherwise match again on every
+             * pass and, with the watchdog off, restart the walk forever. */
+            if (outcome.kind == IB_NVRAM_DELETED) {
+                deleted = 1;
+                break;
+            }
+            if (outcome.kind == IB_NVRAM_FAILED) {
+                failed = 1;
+            }
         }
     }
 
     ib_boot_free(name);
     ib_boot_free(cursor);
+    if (failed) {
+        *out_failed = 1;
+    }
     return deleted;
 }
 
-static void ib_nvram_sweep(void) {
-    while (ib_nvram_sweep_pass()) {
+/* Returns 0 when the walk finished with nothing left it could not delete. */
+static int ib_nvram_sweep(void) {
+    int failed = 0;
+
+    while (ib_nvram_sweep_pass(&failed) != 0) {
     }
+    return failed;
 }
 
 /* Puts the TCG UEFI spec version byte back to TCG 2.0, leaving everything else
@@ -374,6 +397,7 @@ static void ib_nvram_restore_tcg_2(size_t offset) {
 
 void ib_nvram_clear_residue(size_t offset, int have_setup) {
     size_t index;
+    int sweep_failed;
 
     ib_boot_set_watchdog_timer();
 
@@ -405,7 +429,7 @@ void ib_nvram_clear_residue(size_t offset, int have_setup) {
         }
     }
 
-    ib_nvram_sweep();
+    sweep_failed = ib_nvram_sweep();
 
     if (have_setup) {
         ib_console_println("");
@@ -414,7 +438,13 @@ void ib_nvram_clear_residue(size_t offset, int have_setup) {
     }
 
     ib_console_println("");
-    ib_console_println("experimental boot: Variables cleared");
+    if (sweep_failed) {
+        ib_console_println(
+            "experimental boot: Variables not all cleared: the walk reported "
+            "failures above");
+    } else {
+        ib_console_println("experimental boot: Variables cleared");
+    }
 
     for (index = 0; index < 5; index++) {
         ib_boot_stall(1000000);

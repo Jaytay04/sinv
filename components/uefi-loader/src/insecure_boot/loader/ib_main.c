@@ -69,12 +69,17 @@ static void ib_main_probe_environment(const char *where) {
     ib_uintn map_size = 0;
     ib_uintn map_count = 0;
 
-    ib_boot_probe_memory_map(&map_size, &map_count);
-    ib_status_debug(status, status_text, sizeof(status_text));
-    ib_console_printf(
-        "experimental boot: probe %s: GetTime=%s map=%#llx/%llu\n", where,
-        status_text, (unsigned long long)map_size,
-        (unsigned long long)map_count);
+    {
+        ib_efi_status map_status = ib_boot_probe_memory_map(&map_size, &map_count);
+        char map_text[48];
+
+        ib_status_debug(map_status, map_text, sizeof(map_text));
+        ib_status_debug(status, status_text, sizeof(status_text));
+        ib_console_printf(
+            "experimental boot: probe %s: GetTime=%s map=%s %#llx/%llu\n", where,
+            status_text, map_text, (unsigned long long)map_size,
+            (unsigned long long)map_count);
+    }
 }
 static ib_loader_code ib_main_tail(const ib_bytes_t *payload,
                                    const ib_bytes_t *boot_manager,

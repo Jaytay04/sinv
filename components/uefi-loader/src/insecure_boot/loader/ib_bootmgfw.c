@@ -323,13 +323,18 @@ ib_loader_code ib_bootmgfw_start(const ib_u8 *bytes, size_t length,
         ib_uintn map_size = 0;
         ib_uintn map_count = 0;
 
-        ib_boot_probe_memory_map(&map_size, &map_count);
-        ib_status_debug(time_status, status_text, sizeof(status_text));
-        ib_console_printf(
-            "experimental boot: probe before StartImage: GetTime=%s "
-            "map=%#llx/%llu\n",
-            status_text, (unsigned long long)map_size,
-            (unsigned long long)map_count);
+        {
+            ib_efi_status map_status = ib_boot_probe_memory_map(&map_size, &map_count);
+            char map_text[48];
+
+            ib_status_debug(map_status, map_text, sizeof(map_text));
+            ib_status_debug(time_status, status_text, sizeof(status_text));
+            ib_console_printf(
+                "experimental boot: probe before StartImage: GetTime=%s "
+                "map=%s %#llx/%llu\n",
+                status_text, map_text, (unsigned long long)map_size,
+                (unsigned long long)map_count);
+        }
         ib_console_println("experimental boot: calling StartImage");
     }
 

@@ -198,7 +198,7 @@ ib_efi_status ib_boot_probe_get_time(void) {
     return ((ib_boot_get_time_fn)table->runtime_services->get_time)(&now, NULL);
 }
 
-void ib_boot_probe_memory_map(ib_uintn *out_size, ib_uintn *out_count) {
+ib_efi_status ib_boot_probe_memory_map(ib_uintn *out_size, ib_uintn *out_count) {
     ib_efi_system_table *table = ib_efi_get_system_table();
     ib_uintn size = 0;
     ib_uintn key = 0;
@@ -210,17 +210,17 @@ void ib_boot_probe_memory_map(ib_uintn *out_size, ib_uintn *out_count) {
     *out_count = 0;
     if (table == NULL || table->boot_services == NULL ||
         table->boot_services->get_memory_map == NULL) {
-        return;
+        return IB_EFI_UNSUPPORTED;
     }
     /* A zero-length query returns the required size and the descriptor size
      * without allocating anything; nothing is consumed here. */
     status = table->boot_services->get_memory_map(
         &size, NULL, &key, &descriptor_size, &descriptor_version);
-    (void)status;
     *out_size = size;
     if (descriptor_size != 0) {
         *out_count = size / descriptor_size;
     }
+    return status;
 }
 
 ib_efi_status ib_boot_load_image(ib_efi_handle parent,

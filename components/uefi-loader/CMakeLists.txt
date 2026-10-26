@@ -439,6 +439,15 @@ add_executable(acpi_tables_test
 target_include_directories(acpi_tables_test PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/insecure_boot/include)
 add_test(NAME acpi_tables_test COMMAND acpi_tables_test)
+# The console writer expands LF to CR+LF; a chunk boundary must not overflow.
+add_executable(console_write_test
+    src/fixtures/tests/console_write_test.c
+    src/insecure_boot/loader/ib_console.c
+    src/insecure_boot/host-free/ib_format.c
+    src/insecure_boot/host-free/ib_util.c)
+target_include_directories(console_write_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/insecure_boot/include)
+add_test(NAME console_write_test COMMAND console_write_test)
 add_executable(pe_image_layout_test src/fixtures/tests/pe_image_layout_test.c)
 add_test(NAME pe_image_layout_test COMMAND pe_image_layout_test $<TARGET_FILE:loader>)
 
