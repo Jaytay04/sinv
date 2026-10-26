@@ -37,7 +37,7 @@ Working directory: `C:\hsinv-sb`. Five files plus the payload.
 | Name in CWD | Copy from | Bytes | SHA-256 |
 | --- | --- | --- | --- |
 | `ib-install.exe` | `.codex-build\insecure-boot-c\reference_binaries\ib-install.exe` | 1,761,792 | `F9AD423DBDE31E341DB431CCC9E2A689DC2F7A10820BEDF9D154B5BC776FAAAD` |
-| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 93,184 | `5C4B74FBF379C037311B6AB37C3DEE437314411C9C91A4CAB459136448DCDA20` |
+| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 93,184 | `B9CA53B860AF4EC4731696BDB57FA1A80F4C67143247A3FE57F23B0A0176F8E7` |
 | `shimx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\shimx64.efi` | 1,036,008 | `351E131D3C4A636704E9CAE7D1296BAF8A05BECA9922CFEBBFA48933C9BF1AD3` |
 | `mmx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\mmx64.efi` | 874,360 | `D383E37E4CF82DFFCAAD3A0BD54C7634E04E13169297AE157DBF205122E9C44A` |
 | `tcglog.ib` | generated in section 2 | small | not pinned |
@@ -500,10 +500,12 @@ that no VMX root is entered. That makes the two outcomes informative:
 
 - **Windows boots** - the hand-off is compatible with this board and the failure
   belongs to the payload: the hypervisor changes something Windows then needs.
-- **`BlInitializeLibrary failed 0xc00000bb` again** - the failure is in the shim
-  hand-off itself, and the payload is exonerated. With `options=` and `bs=` in
-  the new `child LoadedImage` line this also says whether the child was given
-  LoadOptions and whether the BootServices checksum still validates after shim
+- **`BlInitializeLibrary failed 0xc00000bb` again** - the failure does not
+  require activation, so the payload is exonerated as a *trigger*. That is not
+  the same as proving shim is the sole cause: replacing the payload also removes
+  its allocations, initialisation and timing. With `options=` and `bs=` in the
+  `child LoadedImage` line the run also says whether the child was handed
+  LoadOptions and whether the BootServices table CRC32 still matches after shim
   rewrote the function pointers.
 
 Run it once; it costs one staging and the usual three boots, and it decides the
