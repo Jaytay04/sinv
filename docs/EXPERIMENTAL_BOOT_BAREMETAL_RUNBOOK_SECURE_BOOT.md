@@ -498,6 +498,7 @@ Shim, MOK, the signed loader, the TPM replay, the NVRAM sweep and the cached
 boot-manager bytes-plus-path stay the same. The payload does not: replacing it
 also removes its allocations, its initialisation and its timing, so the two runs
 differ by more than "VMX root on or off".
+
 Read the two outcomes as:
 
 
