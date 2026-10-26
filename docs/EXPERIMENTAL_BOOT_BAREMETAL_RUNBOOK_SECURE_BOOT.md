@@ -37,7 +37,7 @@ Working directory: `C:\hsinv-sb`. Five files plus the payload.
 | Name in CWD | Copy from | Bytes | SHA-256 |
 | --- | --- | --- | --- |
 | `ib-install.exe` | `.codex-build\insecure-boot-c\reference_binaries\ib-install.exe` | 1,761,792 | `F9AD423DBDE31E341DB431CCC9E2A689DC2F7A10820BEDF9D154B5BC776FAAAD` |
-| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 89,088 | `C2F00D1E13D5D920016D098459FF805320AD2AF2944E545E83F003D3B46969FC` |
+| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 89,600 | `AC74EB6C31360DB461B01F16EAA9FB483A7DFFD14D9264F5F4204E2E72CF1F0B` |
 | `shimx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\shimx64.efi` | 1,036,008 | `351E131D3C4A636704E9CAE7D1296BAF8A05BECA9922CFEBBFA48933C9BF1AD3` |
 | `mmx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\mmx64.efi` | 874,360 | `D383E37E4CF82DFFCAAD3A0BD54C7634E04E13169297AE157DBF205122E9C44A` |
 | `tcglog.ib` | generated in section 2 | small | not pinned |
@@ -285,6 +285,27 @@ then a cold reset. The unit restarts into shim again by itself — no re-arm
 needed, because shim is the boot manager now. Second time through the same lines
 read `experimental boot: TCG UEFI spec version is already TCG 1.2` and the boot
 continues.
+What the first complete hardware run actually printed (MSI AMI board, Windows 11
+25H2, Alder Lake fTPM, Secure Boot on): the lines above, then every MOK/SBAT/SSP
+variable as `not present`, `[sweep] enumeration error: INVALID_PARAMETER`,
+`Setup[0x1b]: 1 -> 2 (5010 bytes, ...)`, `Variables cleared`, `entering the
+payload at 0x...`, `the payload returned SUCCESS`, and finally
+`LoadImage of the boot manager failed: LOAD_ERROR`.
+
+Two things that transcript is telling you, and they are not board faults:
+
+- `no TPM 2.0 command-response-buffer interface` appears on **every** machine.
+  The port links `ib_uacpi_stub.c`, whose stated job is to answer "no table"
+  because the workspace ships no uACPI C runtime, so `ib_tpm_crb_probe` always
+  reports absent. Until a real uACPI is linked, the PCR replay and the
+  `EFI_TCG2_PROTOCOL` install never run anywhere - that is the half of the
+  design that makes a booted Windows look unmeasured. The TPM itself is fine and
+  reachable from Windows (`ib-tcg-dump` reads it through TBS).
+- AMI firmware refuses `LoadImage` of the boot manager the loader just rewrote
+  in the same boot, with `EFI_LOAD_ERROR`, even though the file is byte-identical
+  to the backup. The loader now names the call that failed and, when the hand-off
+  fails, resets cold instead of returning: the machine comes back through its own
+  boot order into the restored Windows.
 
 Firmware that keeps no AMI `Setup` variable prints instead:
 
