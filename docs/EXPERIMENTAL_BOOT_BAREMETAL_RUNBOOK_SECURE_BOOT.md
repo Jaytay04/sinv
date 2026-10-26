@@ -500,6 +500,7 @@ also removes its allocations, its initialisation and its timing, so the two runs
 differ by more than "VMX root on or off".
 Read the two outcomes as:
 
+
 - **Windows boots** - the failure needs something the hypervisor payload does,
   within the changed set (activation, its allocations, its initialisation or its
   timing). It does not by itself prove VMX root is the trigger.
