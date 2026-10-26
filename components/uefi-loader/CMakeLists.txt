@@ -341,7 +341,7 @@ add_executable(loader
     src/insecure_boot/host-free/ib_tcglog.c
     src/insecure_boot/host-free/ib_tpm2.c
     src/insecure_boot/host-free/ib_tpm_crb.c
-    src/insecure_boot/host-free/ib_uacpi_stub.c
+    src/insecure_boot/loader/ib_acpi_tables.c
     src/insecure_boot/host-free/ib_util.c
     src/insecure_boot/loader/ib_boot.c
     src/insecure_boot/loader/ib_bootmgfw.c
@@ -428,6 +428,14 @@ endif()
 # shim refuses a second-stage image whose non-BSS section starts inside the
 # image headers, and MSVC emits exactly that for an empty `.data` section.  The
 # built image is the only place that shows it, so the test reads the image.
+# Only the ACPI table walker can make the CRB driver attach, so its RSDP/XSDT
+# walk is tested against a synthetic table set.
+add_executable(acpi_tables_test
+    src/fixtures/tests/acpi_tables_test.c
+    src/insecure_boot/loader/ib_acpi_tables.c)
+target_include_directories(acpi_tables_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/insecure_boot/include)
+add_test(NAME acpi_tables_test COMMAND acpi_tables_test)
 add_executable(pe_image_layout_test src/fixtures/tests/pe_image_layout_test.c)
 add_test(NAME pe_image_layout_test COMMAND pe_image_layout_test $<TARGET_FILE:loader>)
 
