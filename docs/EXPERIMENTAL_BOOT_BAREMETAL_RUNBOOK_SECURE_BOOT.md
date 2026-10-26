@@ -497,20 +497,20 @@ C:\hsinv-sb\ib-install.exe C:\hsinv-baremetal\payload-stub.efi
 Shim, MOK, the signed loader, the TPM replay, the NVRAM sweep and the cached
 boot-manager bytes-plus-path stay the same. The payload does not: replacing it
 also removes its allocations, its initialisation and its timing, so the two runs
-differ by more than "VMX root on or off". Read the outcomes accordingly:
+differ by more than "VMX root on or off".
+Read the two outcomes as:
+
 - **Windows boots** - the failure needs something the hypervisor payload does,
   within the changed set (activation, its allocations, its initialisation or its
   timing). It does not by itself prove VMX root is the trigger.
-- **`BlInitializeLibrary failed 0xc00000bb` again** - that something is not
-  required: the failure reproduces without the payload doing anything. This does
-  not make shim the sole cause either, only the remaining common factor.
-- **`BlInitializeLibrary failed 0xc00000bb` again** - the failure does not
-  require activation, so the payload is exonerated as a *trigger*. That is not
-  the same as proving shim is the sole cause: replacing the payload also removes
-  its allocations, initialisation and timing. With `options=` and `bs=` in the
-  `child LoadedImage` line the run also says whether the child was handed
-  LoadOptions and whether the BootServices table CRC32 still matches after shim
-  rewrote the function pointers.
+- **`BlInitializeLibrary failed 0xc00000bb` again** - the real hypervisor payload
+  is unnecessary to reproduce the failure. The common chain - shim, the loader,
+  the TPM replay, the NVRAM sweep and the hand-off - remains unisolated.
 
-Run it once; it costs one staging and the usual three boots, and it decides the
+`options=` and `bs=` in the `child LoadedImage` line are what make the repeated
+failure worth reading: they report whether the child was handed LoadOptions and
+whether the BootServices table CRC32 still matches after shim rewrote the
+function pointers.
+
+Run it once; it costs one staging and the usual three boots.
 question the VM control was meant to decide.
