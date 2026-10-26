@@ -37,7 +37,7 @@ Working directory: `C:\hsinv-sb`. Five files plus the payload.
 | Name in CWD | Copy from | Bytes | SHA-256 |
 | --- | --- | --- | --- |
 | `ib-install.exe` | `.codex-build\insecure-boot-c\reference_binaries\ib-install.exe` | 1,761,792 | `F9AD423DBDE31E341DB431CCC9E2A689DC2F7A10820BEDF9D154B5BC776FAAAD` |
-| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 93,184 | `B9CA53B860AF4EC4731696BDB57FA1A80F4C67143247A3FE57F23B0A0176F8E7` |
+| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 93,184 | `3C124808815593AA0447F376C0F1A0F614FB1E8FD8FA947AC469006B14B7DE8E` |
 | `shimx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\shimx64.efi` | 1,036,008 | `351E131D3C4A636704E9CAE7D1296BAF8A05BECA9922CFEBBFA48933C9BF1AD3` |
 | `mmx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\mmx64.efi` | 874,360 | `D383E37E4CF82DFFCAAD3A0BD54C7634E04E13169297AE157DBF205122E9C44A` |
 | `tcglog.ib` | generated in section 2 | small | not pinned |
@@ -494,12 +494,16 @@ Copy-Item 'C:\Users\jayli\OneDrive\Documents\Projects\hsinv\.codex-build\gwul\ha
 C:\hsinv-sb\ib-install.exe C:\hsinv-baremetal\payload-stub.efi
 ```
 
-Everything else - shim, MOK, the signed loader, the TPM replay, the NVRAM
-sweep, the cached boot-manager bytes and path - is identical; the only change is
-that no VMX root is entered. That makes the two outcomes informative:
-
-- **Windows boots** - the hand-off is compatible with this board and the failure
-  belongs to the payload: the hypervisor changes something Windows then needs.
+Shim, MOK, the signed loader, the TPM replay, the NVRAM sweep and the cached
+boot-manager bytes-plus-path stay the same. The payload does not: replacing it
+also removes its allocations, its initialisation and its timing, so the two runs
+differ by more than "VMX root on or off". Read the outcomes accordingly:
+- **Windows boots** - the failure needs something the hypervisor payload does,
+  within the changed set (activation, its allocations, its initialisation or its
+  timing). It does not by itself prove VMX root is the trigger.
+- **`BlInitializeLibrary failed 0xc00000bb` again** - that something is not
+  required: the failure reproduces without the payload doing anything. This does
+  not make shim the sole cause either, only the remaining common factor.
 - **`BlInitializeLibrary failed 0xc00000bb` again** - the failure does not
   require activation, so the payload is exonerated as a *trigger*. That is not
   the same as proving shim is the sole cause: replacing the payload also removes
