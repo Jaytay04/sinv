@@ -398,8 +398,14 @@ ib_uacpi_status_t ib_uacpi_device_eval_dsm_integer(ib_uacpi_device_t device,
  * they were ticks per microsecond, which made every CRB timeout 1000x long. */
 uint64_t ib_acpi_ns_from_ticks(uint64_t ticks, uint64_t ticks_per_ns_q10) {
     uint64_t rate = (ticks_per_ns_q10 != 0) ? ticks_per_ns_q10 : 1u;
+    uint64_t whole = ticks / rate;
+    uint64_t part = ticks % rate;
 
-    return (ticks << 10) / rate;
+    /* Scaling the absolute counter first overflows at 2^54 ticks (about 69
+     * days at 3 GHz) and wraps the clock to zero, which would leave a CRB
+     * deadline unreachable. Divide first: `whole` is nanoseconds >> 10, and
+     * `part << 10` stays below rate * 1024. */
+    return (whole << 10) + ((part << 10) / rate);
 }
 
 /* The CRB timeouts are deltas, so the clock only has to advance. The firmware

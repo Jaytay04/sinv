@@ -162,9 +162,20 @@ static int test_tick_conversion(void) {
     /* 3 GHz: 3072 Q10 ticks per nanosecond. One millisecond is 3,000,000
      * ticks, which has to read back as 1,000,000 ns - not 1,000. */
     uint64_t nanoseconds = ib_acpi_ns_from_ticks(3000000ull, 3072ull);
+    /* Scaling the absolute counter before the division overflows at 2^54
+     * ticks (about 69 days at 3 GHz) and returned zero there. */
+    uint64_t large = ib_acpi_ns_from_ticks(1ull << 54, 3072ull);
+    uint64_t large_expected = (1ull << 54) / 3ull;
+    uint64_t later = ib_acpi_ns_from_ticks((1ull << 54) + 3000000ull, 3072ull);
 
     CHECK(nanoseconds > 990000ull);
     CHECK(nanoseconds < 1010000ull);
+    CHECK(large != 0);
+    CHECK(large > large_expected - large_expected / 1000ull);
+    CHECK(large < large_expected + large_expected / 1000ull);
+    CHECK(later > large);
+    CHECK(later - large > 990000ull);
+    CHECK(later - large < 1010000ull);
     return 0;
 }
 
