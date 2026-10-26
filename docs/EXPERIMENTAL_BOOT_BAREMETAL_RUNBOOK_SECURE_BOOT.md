@@ -37,7 +37,7 @@ Working directory: `C:\hsinv-sb`. Five files plus the payload.
 | Name in CWD | Copy from | Bytes | SHA-256 |
 | --- | --- | --- | --- |
 | `ib-install.exe` | `.codex-build\insecure-boot-c\reference_binaries\ib-install.exe` | 1,761,792 | `F9AD423DBDE31E341DB431CCC9E2A689DC2F7A10820BEDF9D154B5BC776FAAAD` |
-| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 91,136 | `B9EE49E40AAC2CCCB39A8F1100A258F833E7A70B06C972D5E28DB5A8A4A732DA` |
+| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 92,160 | `E2DC89BC62E4372808ACFB39AC553A513FB89114B5A8E0E7D1FC051B14154F84` |
 | `shimx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\shimx64.efi` | 1,036,008 | `351E131D3C4A636704E9CAE7D1296BAF8A05BECA9922CFEBBFA48933C9BF1AD3` |
 | `mmx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\mmx64.efi` | 874,360 | `D383E37E4CF82DFFCAAD3A0BD54C7634E04E13169297AE157DBF205122E9C44A` |
 | `tcglog.ib` | generated in section 2 | small | not pinned |
@@ -310,13 +310,16 @@ Two things that transcript is telling you, and they are not board faults:
   still takes the "no interface" path instead of aborting the run.
 - `EFI_LOAD_ERROR` from the hand-off was shim's, not the firmware's. shim 16.1
   replaces `BootServices->LoadImage` and `StartImage`; its path-based branch
-  reads the file through firmware file services (`try_load_from_sfs`), and once
-  the payload has taken the machine over that read fails, so shim returns a bare
-  `EFI_LOAD_ERROR` - which hid the cause. The loader now reads
-  `bootmgfw.efi` into memory *before* the payload runs and hands it over as a
-  source buffer: shim's source-buffer branch only relocates what it is given
-  (`handle_image`), with no file I/O. That is the path this runbook expects; the
-  path-based call remains in the code only for images that have no bytes.
+  reads the file through firmware file services (`try_load_from_sfs`) and turns
+  any failure into a bare `EFI_LOAD_ERROR`, which hid the cause. The loader now
+  caches two things before the payload runs - the `bootmgfw.efi` bytes and its
+  full device path - and hands both to shim, whose source-buffer branch relocates
+  the bytes (`handle_image`) and still resolves the path so the child image keeps
+  the device handle and file path the Windows boot manager needs to find its BCD
+  store. Whether the failing read was post-activation file I/O or something else
+  is not proven by the logs; the cached hand-off makes the question moot for the
+  loader, and the remaining risk is that the source-buffer path can still be
+  refused, which the named error would show.
 - A failed hand-off still costs the activation: the payload returns
   `EFI_SUCCESS` through the guest-transition stub with VMX root still active -
   the `HvEfiVmxOff` block belongs to `HvEfiFailAndFree`, the failure path - so
