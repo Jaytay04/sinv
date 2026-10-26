@@ -420,6 +420,8 @@ extern "C" {
 #define HV_EFI_GUEST_RESET_CR0 UINT64_C(0x60000010)
 #define HV_EFI_CR0_PE (UINT64_C(1) << 0)
 #define HV_EFI_CR0_WP (UINT64_C(1) << 16)
+/* CR4.LA57: five-level paging. The root tables this build creates are four-level. */
+#define HV_EFI_CR4_LA57 (UINT64_C(1) << 12)
 #define HV_EFI_CR0_PG (UINT64_C(1) << 31)
 #define HV_EFI_GUEST_VMX_CR0_NE (UINT64_C(1) << 5)
 #define HV_EFI_GUEST_RESET_CR0_VMX \

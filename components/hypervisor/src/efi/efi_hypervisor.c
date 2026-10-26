@@ -1619,7 +1619,17 @@ static int HvEfiPrepareControlRegisters(HV_EFI_CONTEXT *context,
     if ((normalizedCr0 | HV_EFI_CR0_WP) & ~cr0Fixed1) {
         return 0;
     }
-    context->HostCr0 = normalizedCr0 | HV_EFI_CR0_WP;
+    /* The private root tables are four-level (HvEfiInitializePrivatePageTables
+     * builds PML4 -> PDPT -> PD). Firmware that entered five-level paging has
+     * CR4.LA57 set, and the hardware would then walk this PML4 as a PML5: the
+     * first access to the scanner window at 0x40000000 faults inside VMX root.
+     * Refuse that entry state instead of dying there. */
+    if ((normalizedCr4 & HV_EFI_CR4_LA57) != 0) {
+        HvEfiDebugPrintAscii(
+            "uefi hypervisor: CR4.LA57 is set but the root page tables are "
+            "four-level; refusing to enter VMX root\n");
+        return 0;
+    }    context->HostCr0 = normalizedCr0 | HV_EFI_CR0_WP;
     context->HostCr4 = normalizedCr4;
     /* VMX fixed bits are also required by the guest-state checks.  Preserve
      * the originals separately for rollback if a later VMX step fails. */

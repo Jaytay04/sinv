@@ -499,5 +499,12 @@ ib_loader_code ib_payload_run(const ib_u8 *pe, size_t pe_len,
         ib_loader_error_uefi(error, freed);
         return IB_LOADER_ERR_UEFI;
     }
+    /* A payload that reports failure has not activated anything, and the
+     * caller must not treat the run as a success or hand off to Windows as if
+     * the guest were running under it. */
+    if (IB_EFI_IS_ERROR(returned)) {
+        ib_loader_error_payload(error, returned);
+        return IB_LOADER_ERR_PAYLOAD;
+    }
     return IB_LOADER_OK;
 }

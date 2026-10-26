@@ -289,7 +289,13 @@ static ib_loader_code ib_main_tail(const ib_bytes_t *payload,
 
     code = ib_payload_run(payload->data, payload->length, error);
     if (code != IB_LOADER_OK) {
-        return code;
+        /* Nothing was activated, and the machine is already restored, so the
+         * only useful outcome is the same one the hand-off failure takes: a
+         * reset into the restored boot manager. */
+        ib_console_println(
+            "experimental boot: the payload did not activate; resetting so the "
+            "firmware starts the restored boot manager");
+        ib_boot_reset_cold();
     }
 
     code = ib_bootmgfw_start(error);

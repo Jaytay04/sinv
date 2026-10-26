@@ -68,6 +68,11 @@ void ib_loader_error_uefi(ib_loader_error_t *error, ib_efi_status status) {
     error->status = status;
 }
 
+void ib_loader_error_payload(ib_loader_error_t *error, ib_efi_status status) {
+    ib_loader_error_reset(error, IB_LOADER_ERR_PAYLOAD);
+    error->status = status;
+}
+
 void ib_loader_error_tpm(ib_loader_error_t *error,
                          const ib_tpm_crb_error_t *source) {
     ib_loader_error_reset(error, IB_LOADER_ERR_TPM);
@@ -198,6 +203,12 @@ void ib_loader_error_message(const ib_loader_error_t *error, char *buffer,
             ib_status_debug(error->status, status, sizeof(status));
             ib_snprintf(buffer, capacity,
                         "firmware refused a boot service: UEFI Error %s: ()",
+                        status);
+            break;
+        case IB_LOADER_ERR_PAYLOAD:
+            ib_status_debug(error->status, status, sizeof(status));
+            ib_snprintf(buffer, capacity,
+                        "the payload reported a failure: UEFI Error %s: ()",
                         status);
             break;
         case IB_LOADER_OK:

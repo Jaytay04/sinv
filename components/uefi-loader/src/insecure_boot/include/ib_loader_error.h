@@ -47,7 +47,8 @@ typedef enum {
     IB_LOADER_ERR_UNSUPPORTED_RELOCATION = 19,
     IB_LOADER_ERR_DEVICE_PATH = 20,
     IB_LOADER_ERR_BOOT_MANAGER_RETURNED = 21,
-    IB_LOADER_ERR_UEFI = 22
+    IB_LOADER_ERR_UEFI = 22,
+    IB_LOADER_ERR_PAYLOAD = 23
 } ib_loader_code;
 
 typedef struct {
@@ -77,6 +78,7 @@ void ib_loader_error_partial_write(ib_loader_error_t *error, const char *path,
 void ib_loader_error_unsupported_relocation(ib_loader_error_t *error,
                                             ib_u16 relocation);
 void ib_loader_error_uefi(ib_loader_error_t *error, ib_efi_status status);
+void ib_loader_error_payload(ib_loader_error_t *error, ib_efi_status status);
 
 void ib_loader_error_tpm(ib_loader_error_t *error,
                          const ib_tpm_crb_error_t *source);
