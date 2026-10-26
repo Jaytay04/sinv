@@ -9,22 +9,35 @@
 /* Read `path` back and say whether it holds exactly `length` bytes equal to
  * `expected`.  Every write in this transaction is verified before the next
  * step is allowed to destroy anything. */
-/* UEFI table headers carry a checksum byte at 0x11 over HeaderSize; shim
- * rewrites BootServices function pointers without recomputing it, so whether
- * the table still validates is worth recording before Windows sees it. */
-static unsigned ib_bootmgfw_table_crc_ok(const ib_u8 *table) {
-    const ib_u8 *bytes = table;
-    ib_u32 size = *(const ib_u32 *)(const void *)(bytes + 12);
-    ib_u32 index;
-    ib_u8 sum = 0;
+/* EFI_TABLE_HEADER is Signature, Revision, HeaderSize, CRC32, Reserved, so the
+ * checksum lives at 0x0C and covers HeaderSize bytes with those four bytes
+ * taken as zero - CRC32 (0xEDB88320), not a byte sum. shim rewrites the
+ * BootServices function pointers without recomputing it, so whether the table
+ * still validates is worth recording before Windows sees it. */
+static ib_u32 ib_bootmgfw_crc32_step(ib_u32 crc, ib_u8 byte) {
+    ib_u32 bit;
 
-    if (size == 0 || size > 0x1000u) {
+    crc ^= byte;
+    for (bit = 0; bit < 8; bit++) {
+        crc = (crc >> 1) ^ (UINT32_C(0xedb88320) & (0u - (crc & 1u)));
+    }
+    return crc;
+}
+
+static unsigned ib_bootmgfw_table_crc_ok(const ib_u8 *table) {
+    ib_u32 size = *(const ib_u32 *)(const void *)(table + 8);
+    ib_u32 expected = *(const ib_u32 *)(const void *)(table + 12);
+    ib_u32 index;
+    ib_u32 crc = UINT32_C(0xffffffff);
+
+    if (size < 20u || size > 0x1000u) {
         return 0;
     }
     for (index = 0; index < size; index++) {
-        sum = (ib_u8)(sum + bytes[index]);
+        ib_u8 byte = (index >= 12u && index < 16u) ? 0u : table[index];
+        crc = ib_bootmgfw_crc32_step(crc, byte);
     }
-    return sum == 0 ? 1u : 0u;
+    return (crc ^ UINT32_C(0xffffffff)) == expected ? 1u : 0u;
 }
 static ib_loader_code ib_bootmgfw_matches(ib_fs_volume_t *volume,
                                           const char *path,
