@@ -37,7 +37,7 @@ Working directory: `C:\hsinv-sb`. Five files plus the payload.
 | Name in CWD | Copy from | Bytes | SHA-256 |
 | --- | --- | --- | --- |
 | `ib-install.exe` | `.codex-build\insecure-boot-c\reference_binaries\ib-install.exe` | 1,761,792 | `F9AD423DBDE31E341DB431CCC9E2A689DC2F7A10820BEDF9D154B5BC776FAAAD` |
-| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 92,160 | `E2DC89BC62E4372808ACFB39AC553A513FB89114B5A8E0E7D1FC051B14154F84` |
+| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 92,672 | `859E19DDEE14C0C28A556DD36CEE222D840EDE72A6CC8BF7EC109A33D6445BD4` |
 | `shimx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\shimx64.efi` | 1,036,008 | `351E131D3C4A636704E9CAE7D1296BAF8A05BECA9922CFEBBFA48933C9BF1AD3` |
 | `mmx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\mmx64.efi` | 874,360 | `D383E37E4CF82DFFCAAD3A0BD54C7634E04E13169297AE157DBF205122E9C44A` |
 | `tcglog.ib` | generated in section 2 | small | not pinned |
@@ -330,6 +330,30 @@ Two things that transcript is telling you, and they are not board faults:
   waits the usual five seconds, and takes the same reset path instead of handing
   off to Windows as if the guest were running under it.
 
+
+### When Windows Boot Manager itself refuses
+
+`BlInitializeLibrary failed 0xc00000bb` (`STATUS_NOT_SUPPORTED`) printed by the
+child, then `StartImage of the boot manager failed: UNSUPPORTED`, means Windows
+started and rejected its own environment. shim's `StartImage` calls the child
+entry point and passes its status back, so the loader's "firmware refused a boot
+service" line is about shim, not about the image being blocked.
+
+The loader now prints the child's `LoadedImage` before entering it:
+
+```text
+experimental boot: child LoadedImage: base=0x... size=0x... code=0 data=0 device=1 path=1
+```
+
+`code=0` is `EfiReservedMemoryType`: shim zeroes the struct and never fills
+`ImageCodeType`/`ImageDataType`, although it allocates the image as
+`EfiLoaderCode`. The loader fills those two when they are zero - a candidate fix
+for the boot manager's early-init check, not a proven one. Windows is not shown
+to consult them, and the same run also has the hypervisor resident, so the
+failure can still be the payload rather than the metadata. Read the next run as
+an experiment: if Windows boots, the metadata was it; if `0xc00000bb` returns
+with `code=1`, the metadata was not it and the payload's effect on firmware
+services (BCD reads included) is the remaining suspect.
 Both EFI images are now linked with `/Brepro`, so a rebuild from the same
 sources produces the same bytes: the pinned hashes above can be checked by
 rebuilding, and the bundle and worktree sources produce identical images
