@@ -129,6 +129,7 @@ else()
             /ENTRY:EfiMain
             /FIXED:NO
             /MANIFEST:NO
+            /Brepro
             /NODEFAULTLIB)
         # Phase 6: Strip debug info and remove identifiable PE metadata
         target_link_options(uefi_hypervisor PRIVATE
@@ -180,6 +181,7 @@ else()
             /ENTRY:EfiMain
             /FIXED:NO
             /MANIFEST:NO
+            /Brepro
             /NODEFAULTLIB)
 
         add_executable(uefi_hypervisor_post_ebs_probe
@@ -201,6 +203,7 @@ else()
             /ENTRY:EfiMain
             /FIXED:NO
             /MANIFEST:NO
+            /Brepro
             /NODEFAULTLIB)
 
         # Keep the internal target name short.  The ExternalProject superbuild
@@ -225,6 +228,7 @@ else()
             /ENTRY:EfiMain
             /FIXED:NO
             /MANIFEST:NO
+            /Brepro
             /NODEFAULTLIB)
         add_custom_target(uefi_hypervisor_post_ebs_interrupt_probe
             DEPENDS uefi_hv_post_ebs_interrupt_probe)

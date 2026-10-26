@@ -423,6 +423,9 @@ endif()
 # and is never read at run time, so /INCLUDE keeps the section data in the image.
 if(MSVC)
     target_link_options(loader PRIVATE /INCLUDE:ib_sbat_section /INCREMENTAL:NO)
+    # Without /Brepro the PE timestamp makes every rebuild a different hash, so
+    # a pinned hash could never check the sources it came from.
+    target_link_options(loader PRIVATE /Brepro)
 endif()
 
 # shim refuses a second-stage image whose non-BSS section starts inside the

@@ -291,23 +291,33 @@ static ib_loader_code ib_main_tail(const ib_bytes_t *payload,
     if (code != IB_LOADER_OK) {
         /* Nothing was activated, and the machine is already restored, so the
          * only useful outcome is the same one the hand-off failure takes: a
-         * reset into the restored boot manager. */
+         * reset into the restored boot manager. Say what failed first: the
+         * reset never returns, so the caller's error printing never runs. */
+        char message[384];
+        ib_loader_error_message(error, message, sizeof(message));
+        ib_console_println("experimental boot: %s", message);
         ib_console_println(
             "experimental boot: the payload did not activate; resetting so the "
             "firmware starts the restored boot manager");
+        ib_boot_stall(IB_MAIN_ERROR_STALL);
         ib_boot_reset_cold();
     }
 
     code = ib_bootmgfw_start(error);
     if (code != IB_LOADER_OK) {
-        /* The machine is already restored: the boot manager is back in place,
-         * the staged files are gone and the Setup byte is back at TCG 2.0, so
-         * a reset lands in the same Windows the hand-off was going to start.
-         * Firmware that refuses LoadImage here (AMI: EFI_LOAD_ERROR) would
-         * otherwise leave the outcome to its own boot order. */
+        /* On success the payload returned through the guest-transition stub
+         * with VMX root still active - it does not VMXOFF - so this frame is
+         * already running as a guest and the activation is live. A reset
+         * cannot preserve that; the run has failed whether or not the firmware
+         * would have fallen through on its own. Name the call that failed, then
+         * reset, because leaving it to the boot order is not deterministic. */
+        char message[384];
+        ib_loader_error_message(error, message, sizeof(message));
+        ib_console_println("experimental boot: %s", message);
         ib_console_println(
-            "experimental boot: could not start the restored boot manager; "
-            "resetting so the firmware starts it");
+            "experimental boot: the hypervisor is not preserved by a reset; "
+            "resetting so the firmware starts the restored boot manager");
+        ib_boot_stall(IB_MAIN_ERROR_STALL);
         ib_boot_reset_cold();
     }
     return code;
