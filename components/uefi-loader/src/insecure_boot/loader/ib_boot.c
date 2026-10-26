@@ -204,12 +204,12 @@ ib_efi_status ib_boot_load_image(ib_efi_handle parent,
  * survives shim's hooks: shim replaces LoadImage, and its path-based branch
  * reads the file through firmware services, while the source-buffer branch
  * only relocates what it is given. */
-ib_efi_status ib_boot_load_image_from_buffer(ib_efi_handle parent,
-                                             const void *bytes, ib_uintn length,
-                                             ib_efi_handle *out_image) {
+ib_efi_status ib_boot_load_image_from_buffer(
+    ib_efi_handle parent, ib_efi_device_path_protocol *device_path,
+    const void *bytes, ib_uintn length, ib_efi_handle *out_image) {
     ib_efi_handle image = NULL;
     ib_efi_status status = ib_boot_services()->load_image(
-        IB_FALSE, parent, NULL, (void *)(uintptr_t)bytes, length, &image);
+        IB_FALSE, parent, device_path, (void *)(uintptr_t)bytes, length, &image);
 
     if (!IB_EFI_IS_ERROR(status)) {
         *out_image = image;

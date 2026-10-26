@@ -190,6 +190,7 @@ done:
 }
 
 ib_loader_code ib_bootmgfw_start(const ib_u8 *bytes, size_t length,
+                                 ib_efi_device_path_protocol *device_path,
                                  ib_loader_error_t *error) {
     ib_efi_handle image = NULL;
     ib_boot_image_identity_t identity;
@@ -197,7 +198,7 @@ ib_loader_code ib_bootmgfw_start(const ib_u8 *bytes, size_t length,
     ib_efi_status status;
     ib_efi_status cleanup_status;
 
-    if (bytes == NULL || length == 0) {
+    if (bytes == NULL || length == 0 || device_path == NULL) {
         ib_loader_error_str(error, IB_LOADER_ERR_MISSING_ARTIFACT,
                             IB_BOOTMGFW_PATH);
         return IB_LOADER_ERR_MISSING_ARTIFACT;
@@ -208,8 +209,8 @@ ib_loader_code ib_bootmgfw_start(const ib_u8 *bytes, size_t length,
      * file again through firmware services - which is exactly what fails once
      * the payload has taken the machine over (EFI_LOAD_ERROR).  The
      * source-buffer branch only relocates the buffer. */
-    status = ib_boot_load_image_from_buffer(ib_boot_image_handle(), bytes, length,
-                                            &image);
+    status = ib_boot_load_image_from_buffer(ib_boot_image_handle(), device_path,
+                                            bytes, length, &image);
     if (IB_EFI_IS_ERROR(status)) {
         char status_text[64];
         ib_status_debug(status, status_text, sizeof(status_text));

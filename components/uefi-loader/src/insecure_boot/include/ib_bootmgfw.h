@@ -34,11 +34,14 @@ extern "C" {
 ib_loader_code ib_bootmgfw_restore(ib_fs_volume_t *volume,
                                    ib_loader_error_t *error);
 
-/* Starts the restored boot manager from bytes the loader read before the
- * payload ran, and returns only if Windows did not boot.  The bytes matter:
- * shim owns LoadImage by then, and only its source-buffer branch avoids the
- * file I/O that fails once the payload has taken the machine over. */
+/* Starts the restored boot manager from bytes and a device path the loader
+ * prepared before the payload ran, and returns only if Windows did not boot.
+ * Both matter: shim owns LoadImage by then, and only its source-buffer branch
+ * avoids the file read, while the path is what gives the child image the
+ * DeviceHandle and FilePath the boot manager needs to find its BCD store.
+ * The caller keeps ownership of both and frees them. */
 ib_loader_code ib_bootmgfw_start(const ib_u8 *bytes, size_t length,
+                                 ib_efi_device_path_protocol *device_path,
                                  ib_loader_error_t *error);
 
 #ifdef __cplusplus

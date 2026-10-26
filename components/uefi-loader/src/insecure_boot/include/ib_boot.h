@@ -95,11 +95,13 @@ ib_efi_status ib_boot_close_protocol_exclusive(ib_efi_handle handle,
 ib_efi_status ib_boot_load_image(ib_efi_handle parent,
                                  ib_efi_device_path_protocol *device_path,
                                  ib_efi_handle *out_image);
-/* `load_image_from_buffer` skips all file I/O, which matters once shim has
- * replaced LoadImage and after the payload has taken the machine over. */
-ib_efi_status ib_boot_load_image_from_buffer(ib_efi_handle parent,
-                                             const void *bytes, ib_uintn length,
-                                             ib_efi_handle *out_image);
+/* `load_image_from_buffer` loads bytes the caller already holds.  The device
+ * path is not optional in practice: shim's source-buffer branch still copies
+ * the path and the resolved device handle into the child's LoadedImage, and
+ * the Windows boot manager needs both to find its BCD store. */
+ib_efi_status ib_boot_load_image_from_buffer(
+    ib_efi_handle parent, ib_efi_device_path_protocol *device_path,
+    const void *bytes, ib_uintn length, ib_efi_handle *out_image);
 /* `unload_image`: releases an image handle.  The firmware may hand one back
  * with EFI_SECURITY_VIOLATION, so this is needed even for a load that failed. */
 ib_efi_status ib_boot_unload_image(ib_efi_handle image);

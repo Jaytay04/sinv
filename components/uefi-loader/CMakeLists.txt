@@ -477,6 +477,7 @@ if(IB_BUILD_BOOT_CHAIN_VM_FIXTURES)
         src/insecure_boot/loader/ib_fs.c
         src/insecure_boot/loader/ib_console.c
         src/insecure_boot/loader/ib_efi_glue.c
+        src/insecure_boot/host-free/ib_debug.c
         src/insecure_boot/host-free/ib_format.c
         src/insecure_boot/host-free/ib_util.c)
     add_executable(boot_chain_vm_child src/fixtures/boot_chain_vm_fixture.c)

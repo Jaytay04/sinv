@@ -82,7 +82,15 @@ ib_efi_status IB_EFIAPI EfiMain(ib_efi_handle image, ib_efi_system_table *table)
         trace("stage absence code: "); trace_hex(code);
         trace("stage present: "); trace_hex(present);
         if (code != IB_LOADER_OK || present) goto done;
-        code = ib_bootmgfw_start(&error);
+        {
+            ib_efi_device_path_protocol *start_path = NULL;
+
+            code = ib_fs_file_device_path(IB_BOOTMGFW_PATH, &start_path, &error);
+            if (code == IB_LOADER_OK) {
+                code = ib_bootmgfw_start(after.data, after.length, start_path, &error);
+            }
+            ib_fs_device_path_free(start_path);
+        }
         trace("firmware start code: "); trace_hex(code);
         trace("firmware start status: "); trace_hex(error.status);
         if (code != IB_LOADER_ERR_UEFI || error.status != IB_EFI_LOAD_ERROR) goto done;
