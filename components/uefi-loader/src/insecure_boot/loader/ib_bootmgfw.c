@@ -9,6 +9,23 @@
 /* Read `path` back and say whether it holds exactly `length` bytes equal to
  * `expected`.  Every write in this transaction is verified before the next
  * step is allowed to destroy anything. */
+/* UEFI table headers carry a checksum byte at 0x11 over HeaderSize; shim
+ * rewrites BootServices function pointers without recomputing it, so whether
+ * the table still validates is worth recording before Windows sees it. */
+static unsigned ib_bootmgfw_table_crc_ok(const ib_u8 *table) {
+    const ib_u8 *bytes = table;
+    ib_u32 size = *(const ib_u32 *)(const void *)(bytes + 12);
+    ib_u32 index;
+    ib_u8 sum = 0;
+
+    if (size == 0 || size > 0x1000u) {
+        return 0;
+    }
+    for (index = 0; index < size; index++) {
+        sum = (ib_u8)(sum + bytes[index]);
+    }
+    return sum == 0 ? 1u : 0u;
+}
 static ib_loader_code ib_bootmgfw_matches(ib_fs_volume_t *volume,
                                           const char *path,
                                           const ib_u8 *expected,
@@ -251,13 +268,18 @@ ib_loader_code ib_bootmgfw_start(const ib_u8 *bytes, size_t length,
 
             ib_console_printf(
                 "experimental boot: child LoadedImage: base=%#llx size=%#llx "
-                "code=%u->%u data=%u->%u device=%d path=%d\n",
+                "code=%u->%u data=%u->%u device=%d path=%d options=%llu "
+                "bs=%u:%u\n",
                 (unsigned long long)(uintptr_t)loaded->image_base,
                 (unsigned long long)loaded->image_size,
                 code_before, (unsigned)loaded->image_code_type,
                 data_before, (unsigned)loaded->image_data_type,
                 loaded->device_handle != NULL ? 1 : 0,
-                loaded->file_path != NULL ? 1 : 0);
+                loaded->file_path != NULL ? 1 : 0,
+                (unsigned long long)loaded->load_options_size,
+                (unsigned)ib_efi_get_system_table()->boot_services->hdr.revision,
+                (unsigned)ib_bootmgfw_table_crc_ok(
+                    (const ib_u8 *)ib_efi_get_system_table()->boot_services));
         }
     }
 
