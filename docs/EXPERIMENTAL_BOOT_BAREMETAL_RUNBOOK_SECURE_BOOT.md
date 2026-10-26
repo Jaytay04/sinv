@@ -37,7 +37,7 @@ Working directory: `C:\hsinv-sb`. Five files plus the payload.
 | Name in CWD | Copy from | Bytes | SHA-256 |
 | --- | --- | --- | --- |
 | `ib-install.exe` | `.codex-build\insecure-boot-c\reference_binaries\ib-install.exe` | 1,761,792 | `F9AD423DBDE31E341DB431CCC9E2A689DC2F7A10820BEDF9D154B5BC776FAAAD` |
-| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 94,208 | `B809E0E7DDAE7CB07E9EC314AB6E1EC298A4CFA647B45E6528105D77C8A2ABFD` |
+| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 95,232 | `AEB686BD1FE8CFE2854C89980114B00F6BB35A8C5871DAA63A1798579D1DBDE1` |
 | `shimx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\shimx64.efi` | 1,036,008 | `351E131D3C4A636704E9CAE7D1296BAF8A05BECA9922CFEBBFA48933C9BF1AD3` |
 | `mmx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\mmx64.efi` | 874,360 | `D383E37E4CF82DFFCAAD3A0BD54C7634E04E13169297AE157DBF205122E9C44A` |
 | `tcglog.ib` | generated in section 2 | small | not pinned |
@@ -528,9 +528,8 @@ whether the BootServices table CRC32 still matches after shim rewrote the
 function pointers.
 
 Run it once; it costs one staging and the usual three boots.
-question the VM control was meant to decide.
 
-### Three defects fixed in this build
+### Defects fixed in this build
 
 - The variable sweep used `605dab50-e046-4670-...` as the shim namespace; the
   real one is `605dab50-e046-4300-abb6-3dd810dd8b23`. Every `Mok*/Sbat*/HSIStatus
@@ -538,8 +537,15 @@ question the VM control was meant to decide.
   asking the wrong GUID. The audit tool carried a third variant (`...-430a-...`);
   both are corrected.
 - `GetNextVariableName` takes the previous *name and vendor GUID* together. The
-  sweep reset the GUID while keeping the name, which is what produced
+  sweep reset the GUID while keeping the name, which produced
   `[sweep] enumeration error: INVALID_PARAMETER`; the vendor now survives across
   iterations.
+- A kill-list variable the firmware refuses to delete no longer restarts the walk
+  (that loop had no watchdog), and the cursor grows with the name so a long
+  variable name cannot be copied into the old 1 KiB buffer.
 - Console output sent a bare `LF`; UEFI needs `CR` then `LF`, which is why the
-  older transcripts print diagonally.
+  older transcripts print diagonally. The chunk flush now reserves room for the
+  pair before writing it.
+- `Variables cleared` is only printed when the walk and every deletion actually
+  succeeded; otherwise the line says so.
+
