@@ -37,7 +37,7 @@ Working directory: `C:\hsinv-sb`. Five files plus the payload.
 | Name in CWD | Copy from | Bytes | SHA-256 |
 | --- | --- | --- | --- |
 | `ib-install.exe` | `.codex-build\insecure-boot-c\reference_binaries\ib-install.exe` | 1,761,792 | `F9AD423DBDE31E341DB431CCC9E2A689DC2F7A10820BEDF9D154B5BC776FAAAD` |
-| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 92,672 | `19138F9730746297E849598996C105BD46C274E422A85CA0F2C32CF25B9D4277` |
+| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 91,136 | `B9EE49E40AAC2CCCB39A8F1100A258F833E7A70B06C972D5E28DB5A8A4A732DA` |
 | `shimx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\shimx64.efi` | 1,036,008 | `351E131D3C4A636704E9CAE7D1296BAF8A05BECA9922CFEBBFA48933C9BF1AD3` |
 | `mmx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\mmx64.efi` | 874,360 | `D383E37E4CF82DFFCAAD3A0BD54C7634E04E13169297AE157DBF205122E9C44A` |
 | `tcglog.ib` | generated in section 2 | small | not pinned |
@@ -308,16 +308,20 @@ Two things that transcript is telling you, and they are not board faults:
   would fail inside the driver; and method 6 is TIS, which the CRB driver
   rejects outright. Only method 7 is accepted, so a board that reports 6 or 8
   still takes the "no interface" path instead of aborting the run.
-- AMI firmware refuses `LoadImage` of the boot manager the loader just rewrote
-  in the same boot, with `EFI_LOAD_ERROR`, even though the file is byte-identical
-  to the backup. The loader now names the call that failed and, when the hand-off
-  fails, resets cold instead of returning: the machine comes back through its own
-  boot order into the restored Windows. That reset does cost the activation: the
-  payload returns `EFI_SUCCESS` through the guest-transition stub with VMX root
-  still active - the `HvEfiVmxOff` block belongs to `HvEfiFailAndFree`, the
-  failure path - so a hand-off failure ends a live hypervisor, and the run is a
-  failure however the machine recovers. The loader now prints the call that
-  failed and says the hypervisor is not preserved before it resets.
+- `EFI_LOAD_ERROR` from the hand-off was shim's, not the firmware's. shim 16.1
+  replaces `BootServices->LoadImage` and `StartImage`; its path-based branch
+  reads the file through firmware file services (`try_load_from_sfs`), and once
+  the payload has taken the machine over that read fails, so shim returns a bare
+  `EFI_LOAD_ERROR` - which hid the cause. The loader now reads
+  `bootmgfw.efi` into memory *before* the payload runs and hands it over as a
+  source buffer: shim's source-buffer branch only relocates what it is given
+  (`handle_image`), with no file I/O. That is the path this runbook expects; the
+  path-based call remains in the code only for images that have no bytes.
+- A failed hand-off still costs the activation: the payload returns
+  `EFI_SUCCESS` through the guest-transition stub with VMX root still active -
+  the `HvEfiVmxOff` block belongs to `HvEfiFailAndFree`, the failure path - so
+  the loader prints the call that failed, says the hypervisor is not preserved,
+  and resets, which lands in the restored Windows.
 - A payload that returns an error status is now a failed activation, not a
   success: the loader reports `the payload reported a failure: UEFI Error ...`,
   waits the usual five seconds, and takes the same reset path instead of handing
