@@ -37,7 +37,7 @@ Working directory: `C:\hsinv-sb`. Five files plus the payload.
 | Name in CWD | Copy from | Bytes | SHA-256 |
 | --- | --- | --- | --- |
 | `ib-install.exe` | `.codex-build\insecure-boot-c\reference_binaries\ib-install.exe` | 1,761,792 | `F9AD423DBDE31E341DB431CCC9E2A689DC2F7A10820BEDF9D154B5BC776FAAAD` |
-| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 93,184 | `3C124808815593AA0447F376C0F1A0F614FB1E8FD8FA947AC469006B14B7DE8E` |
+| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 94,208 | `B809E0E7DDAE7CB07E9EC314AB6E1EC298A4CFA647B45E6528105D77C8A2ABFD` |
 | `shimx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\shimx64.efi` | 1,036,008 | `351E131D3C4A636704E9CAE7D1296BAF8A05BECA9922CFEBBFA48933C9BF1AD3` |
 | `mmx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\mmx64.efi` | 874,360 | `D383E37E4CF82DFFCAAD3A0BD54C7634E04E13169297AE157DBF205122E9C44A` |
 | `tcglog.ib` | generated in section 2 | small | not pinned |
@@ -353,16 +353,30 @@ even though it allocates the image as `EfiLoaderCode`. The loader fills them wit
 before the identity snapshot, so the line shows both what arrived and what the
 child will actually see.
 
-What the next run can and cannot conclude:
+That fill is now known **not** to explain `BlInitializeLibrary failed
+0xc00000bb`: the exact boot manager (10.0.28000.376) was inspected with its
+symbols and its early initialisation reads `DeviceHandle`, `FilePath`,
+`LoadOptions`, `ImageBase` and `ImageSize` - never the two memory-type fields.
+The assignment stays because it is truthful, not because it is a fix, and the
+line stays because it records what the child receives.
 
-- Windows booting would support the metadata hypothesis.
-- The same `0xc00000bb` would only establish that these two assignments were
-  insufficient. It would not isolate the payload from post-activation firmware
-  services: BCD and other boot-file reads happen after the hypervisor is
-  resident, and nothing here rules them out.
-- Separating shim/hand-off compatibility from hypervisor effects still needs the
-  VM control: the same cached bytes-plus-path hand-off with a do-nothing payload
-  versus the same hand-off after activation.
+What the next run should read for:
+
+- `GetTime=` invalid at one of the three probe points. The boot manager's early
+  initialisation calls `RuntimeServices->GetTime` (`BlpTimeInitialize`), and
+  `EFI_UNSUPPORTED` from there maps directly to `STATUS_NOT_SUPPORTED`, which is
+  exactly `0xc00000bb`.
+- `map=` changing shape between `before payload`, `after payload` and `before
+  StartImage`. The hypervisor reserves roughly 10.4 MiB per logical CPU, about
+  208 MiB on a 20-thread part, mostly below 1 GiB, so fragmentation and
+  allocation pressure are real candidates.
+- `bs=` stays `0 : ...` - a BootServices CRC mismatch is expected with shim and
+  was reproduced in a VM with Windows booting normally, so it is not the cause.
+
+Both EFI images are now linked with `/Brepro`, so a rebuild from the same
+sources produces the same bytes: the pinned hashes above can be checked by
+rebuilding, and the bundle and worktree sources produce identical images
+(`loader.efi` from either tree hashes to the same value).
 
 Both EFI images are now linked with `/Brepro`, so a rebuild from the same
 sources produces the same bytes: the pinned hashes above can be checked by
@@ -515,3 +529,17 @@ function pointers.
 
 Run it once; it costs one staging and the usual three boots.
 question the VM control was meant to decide.
+
+### Three defects fixed in this build
+
+- The variable sweep used `605dab50-e046-4670-...` as the shim namespace; the
+  real one is `605dab50-e046-4300-abb6-3dd810dd8b23`. Every `Mok*/Sbat*/HSIStatus
+  "not present" line before this build was therefore meaningless - the loader was
+  asking the wrong GUID. The audit tool carried a third variant (`...-430a-...`);
+  both are corrected.
+- `GetNextVariableName` takes the previous *name and vendor GUID* together. The
+  sweep reset the GUID while keeping the name, which is what produced
+  `[sweep] enumeration error: INVALID_PARAMETER`; the vendor now survives across
+  iterations.
+- Console output sent a bare `LF`; UEFI needs `CR` then `LF`, which is why the
+  older transcripts print diagonally.
