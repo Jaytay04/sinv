@@ -29,9 +29,9 @@
 #define IB_ACPI_TPM2_CONTROL_AT 40u
 #define IB_ACPI_TPM2_MIN_LEN    52u
 
-#define IB_ACPI_TPM2_START_MEMORY_MAPPED        6u
+/* Only the plain command response buffer is driven here. 6 is TIS, and 8 and
+ * the secured variants need _DSM, which this shim does not evaluate. */
 #define IB_ACPI_TPM2_START_COMMAND_BUFFER       7u
-#define IB_ACPI_TPM2_START_COMMAND_BUFFER_ACPI  8u
 
 /* The CRB register block the port models sits immediately before the control
  * address, and the window below it holds the command and response buffers. */
@@ -90,19 +90,27 @@ static void ib_acpi_clear_error(ib_uacpi_error_t *error) {
     }
 }
 
-/* First configuration table of either ACPI flavor: the RSDP address. */
+/* The RSDP address. ACPI 2.0 (XSDT) wins over 1.0 (RSDT) regardless of the
+ * order the firmware lists the configuration tables in; only if no 2.0 entry
+ * exists does the 1.0 table get used. */
 static const uint8_t *ib_acpi_root(void) {
     ib_efi_system_table *table = ib_efi_get_system_table();
-    ib_uintn index;
+    const ib_efi_guid_t *wanted[2];
+    size_t pass;
 
     if (table == 0 || table->configuration_table == 0) {
         return 0;
     }
-    for (index = 0; index < table->number_of_table_entries; index++) {
-        const ib_efi_configuration_table *entry = &table->configuration_table[index];
-        if (ib_acpi_guid_equal(&entry->vendor_guid, &ib_acpi_guid_20) ||
-            ib_acpi_guid_equal(&entry->vendor_guid, &ib_acpi_guid_10)) {
-            return (const uint8_t *)entry->vendor_table;
+    wanted[0] = &ib_acpi_guid_20;
+    wanted[1] = &ib_acpi_guid_10;
+    for (pass = 0; pass < 2; pass++) {
+        ib_uintn index;
+        for (index = 0; index < table->number_of_table_entries; index++) {
+            const ib_efi_configuration_table *entry =
+                &table->configuration_table[index];
+            if (ib_acpi_guid_equal(&entry->vendor_guid, wanted[pass])) {
+                return (const uint8_t *)entry->vendor_table;
+            }
         }
     }
     return 0;
@@ -252,9 +260,7 @@ ib_uacpi_status_t ib_uacpi_find_device(const char *hardware_id, ib_uacpi_device_
         return IB_UACPI_STATUS_OK;
     }
     start_method = ib_acpi_u32(table + IB_ACPI_TPM2_START_AT);
-    if (start_method != IB_ACPI_TPM2_START_MEMORY_MAPPED &&
-        start_method != IB_ACPI_TPM2_START_COMMAND_BUFFER &&
-        start_method != IB_ACPI_TPM2_START_COMMAND_BUFFER_ACPI) {
+    if (start_method != IB_ACPI_TPM2_START_COMMAND_BUFFER) {
         return IB_UACPI_STATUS_OK;
     }
 
@@ -386,28 +392,42 @@ ib_uacpi_status_t ib_uacpi_device_eval_dsm_integer(ib_uacpi_device_t device,
     return IB_UACPI_STATUS_NOT_FOUND;
 }
 
+/* Ticks to nanoseconds from a ticks-per-nanosecond rate held in Q10 fixed point.
+ * Kept separate so the conversion is testable without a real TSC: the first
+ * version of this file measured ticks per millisecond and then scaled as if
+ * they were ticks per microsecond, which made every CRB timeout 1000x long. */
+uint64_t ib_acpi_ns_from_ticks(uint64_t ticks, uint64_t ticks_per_ns_q10) {
+    uint64_t rate = (ticks_per_ns_q10 != 0) ? ticks_per_ns_q10 : 1u;
+
+    return (ticks << 10) / rate;
+}
+
 /* The CRB timeouts are deltas, so the clock only has to advance. The firmware
- * stall gives a reference: measure the TSC across one millisecond once, then
- * read it as microseconds. */
+ * stall gives the reference: measure the TSC across one millisecond once, then
+ * convert every reading through ib_acpi_ns_from_ticks. */
 uint64_t ib_uacpi_monotonic_ns(void) {
-    static uint64_t ticks_per_microsecond;
+    static uint64_t ticks_per_ns_q10;
     ib_efi_system_table *table = ib_efi_get_system_table();
     uint64_t before;
     uint64_t after;
     uint64_t ticks;
 
-    if (ticks_per_microsecond == 0) {
+    if (ticks_per_ns_q10 == 0) {
         if (table == 0 || table->boot_services == 0 ||
             table->boot_services->stall == 0) {
             return 0;
         }
         before = __rdtsc();
-        (void)table->boot_services->stall(1000);
+        (void)table->boot_services->stall(1000);   /* one millisecond */
         after = __rdtsc();
         ticks = after - before;
-        ticks_per_microsecond = (ticks != 0) ? ticks : 1;
+        /* ticks per millisecond -> ticks per nanosecond, times 1024. */
+        ticks_per_ns_q10 = (ticks * 1024u) / 1000000u;
+        if (ticks_per_ns_q10 == 0) {
+            ticks_per_ns_q10 = 1;
+        }
     }
-    return (__rdtsc() / ticks_per_microsecond) * 1000u;
+    return ib_acpi_ns_from_ticks(__rdtsc(), ticks_per_ns_q10);
 }
 
 /* The CRB driver polls with this; the firmware's own stall is the clock it

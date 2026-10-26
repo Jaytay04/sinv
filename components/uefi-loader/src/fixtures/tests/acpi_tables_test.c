@@ -6,6 +6,9 @@
 #include "ib_uacpi.h"
 #include "ib_uefi.h"
 
+/* Defined in ib_acpi_tables.c so the conversion can be checked without a TSC. */
+extern uint64_t ib_acpi_ns_from_ticks(uint64_t ticks, uint64_t ticks_per_ns_q10);
+
 #define CHECK(condition)                                                       \
     do {                                                                       \
         if (!(condition)) {                                                    \
@@ -16,12 +19,17 @@
 
 static unsigned char fixture_buffer[1024];
 static unsigned char fixture_xsdt[64];
-static ib_efi_configuration_table fixture_tables[1];
+static ib_efi_configuration_table fixture_tables[2];
 static ib_efi_system_table fixture_system;
 
 static const ib_efi_guid_t acpi_20_guid = {
     0x8868e871, 0xe4f1, 0x11d3,
     { 0xbc, 0x22, 0x00, 0x80, 0xc7, 0x3c, 0x88, 0x81 }
+};
+
+static const ib_efi_guid_t acpi_10_guid = {
+    0xeb9d2d30, 0x2d88, 0x11d3,
+    { 0x9a, 0x16, 0x00, 0x90, 0x27, 0x3f, 0xc1, 0x4d }
 };
 
 ib_efi_system_table *ib_efi_get_system_table(void) {
@@ -150,6 +158,71 @@ static int test_bad_checksum(void) {
     return 0;
 }
 
+static int test_tick_conversion(void) {
+    /* 3 GHz: 3072 Q10 ticks per nanosecond. One millisecond is 3,000,000
+     * ticks, which has to read back as 1,000,000 ns - not 1,000. */
+    uint64_t nanoseconds = ib_acpi_ns_from_ticks(3000000ull, 3072ull);
+
+    CHECK(nanoseconds > 990000ull);
+    CHECK(nanoseconds < 1010000ull);
+    return 0;
+}
+
+static int test_only_method_seven(void) {
+    static const unsigned rejected[] = { 1u, 2u, 3u, 4u, 6u, 8u, 9u, 10u, 11u };
+    ib_uacpi_device_t device;
+    ib_uacpi_error_t error;
+    int found;
+    size_t index;
+
+    for (index = 0; index < sizeof(rejected) / sizeof(rejected[0]); index++) {
+        build_tpm2(rejected[index], 0xfed40000ull);
+        CHECK(ib_uacpi_find_device("MSFT0101", &device, &found, &error) ==
+              IB_UACPI_STATUS_OK);
+        if (found != 0) {
+            printf("FAIL: start method %u was advertised\n", rejected[index]);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int test_acpi_20_wins_over_10(void) {
+    static unsigned char old_root[64];
+    static unsigned char old_rsdt[64];
+    unsigned char *new_root = fixture_buffer + 256;
+    ib_uacpi_table_t table;
+    ib_uacpi_error_t error;
+    int found;
+
+    /* ACPI 1.0 root with an empty RSDT, listed first. */
+    memset(old_root, 0, sizeof(old_root));
+    memset(old_rsdt, 0, sizeof(old_rsdt));
+    memcpy(old_rsdt, "RSDT", 4);
+    put_u32(old_rsdt + 4, 36);
+    old_rsdt[8] = 1;
+    fix_checksum(old_rsdt, 36);
+    memcpy(old_root, "RSD PTR ", 8);
+    old_root[15] = 0;
+    put_u32(old_root + 16, (unsigned)(uintptr_t)old_rsdt);
+    fix_checksum(old_root, 20);
+
+    build_tpm2(7u, 0xfed40000ull);
+
+    fixture_tables[0].vendor_guid = acpi_10_guid;
+    fixture_tables[0].vendor_table = old_root;
+    fixture_tables[1].vendor_guid = acpi_20_guid;
+    fixture_tables[1].vendor_table = new_root;
+    memset(&fixture_system, 0, sizeof(fixture_system));
+    fixture_system.number_of_table_entries = 2;
+    fixture_system.configuration_table = fixture_tables;
+
+    CHECK(ib_uacpi_find_table("TPM2", &table, &found, &error) == IB_UACPI_STATUS_OK);
+    CHECK(found == 1);
+    CHECK(memcmp(table.bytes, "TPM2", 4) == 0);
+    return 0;
+}
+
 int main(void) {
     if (test_walk_and_device() != 0) {
         return 1;
@@ -158,6 +231,15 @@ int main(void) {
         return 1;
     }
     if (test_bad_checksum() != 0) {
+        return 1;
+    }
+    if (test_tick_conversion() != 0) {
+        return 1;
+    }
+    if (test_only_method_seven() != 0) {
+        return 1;
+    }
+    if (test_acpi_20_wins_over_10() != 0) {
         return 1;
     }
     puts("acpi_tables_test: PASS");
