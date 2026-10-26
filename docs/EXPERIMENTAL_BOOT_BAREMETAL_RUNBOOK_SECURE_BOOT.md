@@ -37,7 +37,7 @@ Working directory: `C:\hsinv-sb`. Five files plus the payload.
 | Name in CWD | Copy from | Bytes | SHA-256 |
 | --- | --- | --- | --- |
 | `ib-install.exe` | `.codex-build\insecure-boot-c\reference_binaries\ib-install.exe` | 1,761,792 | `F9AD423DBDE31E341DB431CCC9E2A689DC2F7A10820BEDF9D154B5BC776FAAAD` |
-| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 91,648 | `8FB5E3229918A38A248A06AF8AE665F4201C3227D4CFD9C0B17BA7D4ACDC4344` |
+| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 91,648 | `3BEA91F86F324EFCF355618E24F5B271BE9F272834646B8733E78BAD346AA902` |
 | `shimx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\shimx64.efi` | 1,036,008 | `351E131D3C4A636704E9CAE7D1296BAF8A05BECA9922CFEBBFA48933C9BF1AD3` |
 | `mmx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\mmx64.efi` | 874,360 | `D383E37E4CF82DFFCAAD3A0BD54C7634E04E13169297AE157DBF205122E9C44A` |
 | `tcglog.ib` | generated in section 2 | small | not pinned |
@@ -312,7 +312,15 @@ Two things that transcript is telling you, and they are not board faults:
   in the same boot, with `EFI_LOAD_ERROR`, even though the file is byte-identical
   to the backup. The loader now names the call that failed and, when the hand-off
   fails, resets cold instead of returning: the machine comes back through its own
-  boot order into the restored Windows.
+  boot order into the restored Windows. That reset costs nothing that survived
+  anyway: the payload calls `HvEfiVmxOff` and restores CR0/CR4 before it returns
+  (`efi_hypervisor.c`), so a returned payload is not resident. It would matter
+  only for a payload that returns with VMX root still active, and that does not
+  exist yet.
+- A payload that returns an error status is now a failed activation, not a
+  success: the loader reports `the payload reported a failure: UEFI Error ...`
+  and takes the same reset path instead of handing off to Windows as if the
+  guest were running under it.
 
 Firmware that keeps no AMI `Setup` variable prints instead:
 
