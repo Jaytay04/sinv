@@ -37,7 +37,7 @@ Working directory: `C:\hsinv-sb`. Five files plus the payload.
 | Name in CWD | Copy from | Bytes | SHA-256 |
 | --- | --- | --- | --- |
 | `ib-install.exe` | `.codex-build\insecure-boot-c\reference_binaries\ib-install.exe` | 1,761,792 | `F9AD423DBDE31E341DB431CCC9E2A689DC2F7A10820BEDF9D154B5BC776FAAAD` |
-| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 91,648 | `24061DE51FB323473A54E8593A0F875BADE313AD169E7A24D70F7650A1EFAE3C` |
+| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 91,648 | `F36E361C820CF32F1648ED7C4451D924807532BF9F1A86CE5C57B5993CC3EF63` |
 | `shimx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\shimx64.efi` | 1,036,008 | `351E131D3C4A636704E9CAE7D1296BAF8A05BECA9922CFEBBFA48933C9BF1AD3` |
 | `mmx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\mmx64.efi` | 874,360 | `D383E37E4CF82DFFCAAD3A0BD54C7634E04E13169297AE157DBF205122E9C44A` |
 | `tcglog.ib` | generated in section 2 | small | not pinned |
@@ -303,7 +303,11 @@ Two things that transcript is telling you, and they are not board faults:
   dump and install `EFI_TCG2_PROTOCOL`. There is still no AML interpreter, so
   `_CRS` is not evaluated: the memory window comes from the control address in
   the `TPM2` table, and the ARM SMC, Pluton and FF-A start methods are reported
-  as absent rather than driven.
+  as absent rather than driven. Start method 8 is in the same boat for a
+  different reason: it starts every command through `_DSM`, so advertising it
+  would fail inside the driver; and method 6 is TIS, which the CRB driver
+  rejects outright. Only method 7 is accepted, so a board that reports 6 or 8
+  still takes the "no interface" path instead of aborting the run.
 - AMI firmware refuses `LoadImage` of the boot manager the loader just rewrote
   in the same boot, with `EFI_LOAD_ERROR`, even though the file is byte-identical
   to the backup. The loader now names the call that failed and, when the hand-off
