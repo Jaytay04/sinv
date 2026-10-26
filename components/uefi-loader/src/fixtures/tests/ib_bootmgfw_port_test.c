@@ -560,7 +560,7 @@ static int test_child_returned_security_violation_was_already_unloaded(void) {
     CHECK(code == IB_LOADER_ERR_UEFI);
     CHECK(error.status == IB_EFI_SECURITY_VIOLATION);
     CHECK(fixture_unload_calls == 0);
-    CHECK(fixture_handle_queries == 2);
+    CHECK(fixture_handle_queries == 3);   /* identity + start + metadata */
     CHECK(fixture_pool_balanced());
     return 1;
 }
@@ -575,7 +575,7 @@ static int test_preentry_rejection_unloads_same_registered_image(void) {
     CHECK(code == IB_LOADER_ERR_UEFI);
     CHECK(error.status == IB_EFI_SECURITY_VIOLATION);
     CHECK(fixture_unload_calls == 1);
-    CHECK(fixture_handle_queries == 2);
+    CHECK(fixture_handle_queries == 3);   /* identity + start + metadata */
     CHECK(fixture_pool_balanced());
     return 1;
 }

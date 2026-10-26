@@ -238,6 +238,42 @@ ib_loader_code ib_bootmgfw_start(const ib_u8 *bytes, size_t length,
         return IB_LOADER_ERR_UEFI;
     }
 
+    /* shim's loader installs LoadedImage itself: it zeroes the struct and fills
+     * a subset, so ImageCodeType/ImageDataType stay 0 (EfiReservedMemoryType)
+     * even though the image memory is EfiLoaderCode. Windows Boot Manager is
+     * known to care about the LoadedImage it is given, so record what the child
+     * actually sees before entering it. */
+    {
+        void *interface = NULL;
+        ib_efi_loaded_image_protocol *loaded;
+        ib_efi_status probe = ib_boot_services()->handle_protocol(
+            image, (ib_efi_guid_t *)&ib_guid_loaded_image, &interface);
+
+        loaded = (ib_efi_loaded_image_protocol *)interface;
+        if (!IB_EFI_IS_ERROR(probe) && loaded != NULL) {
+            ib_console_printf(
+                "experimental boot: child LoadedImage: base=%#llx size=%#llx "
+                "code=%u data=%u device=%d path=%d\n",
+                (unsigned long long)(uintptr_t)loaded->image_base,
+                (unsigned long long)loaded->image_size,
+                (unsigned)loaded->image_code_type,
+                (unsigned)loaded->image_data_type,
+                loaded->device_handle != NULL ? 1 : 0,
+                loaded->file_path != NULL ? 1 : 0);
+
+            /* Candidate fix for the Windows early-init failure. shim zeroes the
+             * struct and never fills these two, so the child is told its image
+             * memory is EfiReservedMemoryType while shim allocated it as
+             * EfiLoaderCode. Only fill what is missing. */
+            if (loaded->image_code_type == 0) {
+                loaded->image_code_type = IbEfiLoaderCode;
+            }
+            if (loaded->image_data_type == 0) {
+                loaded->image_data_type = IbEfiLoaderData;
+            }
+        }
+    }
+
     status = ib_boot_start_image(image);
     cleanup_status = ib_boot_unload_image_if_owned(image, &identity);
     if (IB_EFI_IS_ERROR(cleanup_status)) {
