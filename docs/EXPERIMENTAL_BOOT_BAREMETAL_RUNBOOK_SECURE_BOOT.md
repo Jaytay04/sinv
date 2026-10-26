@@ -37,7 +37,7 @@ Working directory: `C:\hsinv-sb`. Five files plus the payload.
 | Name in CWD | Copy from | Bytes | SHA-256 |
 | --- | --- | --- | --- |
 | `ib-install.exe` | `.codex-build\insecure-boot-c\reference_binaries\ib-install.exe` | 1,761,792 | `F9AD423DBDE31E341DB431CCC9E2A689DC2F7A10820BEDF9D154B5BC776FAAAD` |
-| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 92,672 | `859E19DDEE14C0C28A556DD36CEE222D840EDE72A6CC8BF7EC109A33D6445BD4` |
+| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 93,184 | `2EBB8D362CFCD1758DD50207EAFCC55D08535972E99BD323CED2FAFB41EE0F83` |
 | `shimx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\shimx64.efi` | 1,036,008 | `351E131D3C4A636704E9CAE7D1296BAF8A05BECA9922CFEBBFA48933C9BF1AD3` |
 | `mmx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\mmx64.efi` | 874,360 | `D383E37E4CF82DFFCAAD3A0BD54C7634E04E13169297AE157DBF205122E9C44A` |
 | `tcglog.ib` | generated in section 2 | small | not pinned |
@@ -342,18 +342,28 @@ service" line is about shim, not about the image being blocked.
 The loader now prints the child's `LoadedImage` before entering it:
 
 ```text
-experimental boot: child LoadedImage: base=0x... size=0x... code=0 data=0 device=1 path=1
+experimental boot: child LoadedImage: base=0x... size=0x... code=0->1 data=0->2 device=1 path=1
 ```
 
-`code=0` is `EfiReservedMemoryType`: shim zeroes the struct and never fills
-`ImageCodeType`/`ImageDataType`, although it allocates the image as
-`EfiLoaderCode`. The loader fills those two when they are zero - a candidate fix
-for the boot manager's early-init check, not a proven one. Windows is not shown
-to consult them, and the same run also has the hypervisor resident, so the
-failure can still be the payload rather than the metadata. Read the next run as
-an experiment: if Windows boots, the metadata was it; if `0xc00000bb` returns
-with `code=1`, the metadata was not it and the payload's effect on firmware
-services (BCD reads included) is the remaining suspect.
+
+`0->1` and `0->2` are the transitions that matter: shim zeroes the struct and
+never fills `ImageCodeType`/`ImageDataType` (both 0, `EfiReservedMemoryType`),
+even though it allocates the image as `EfiLoaderCode`. The loader fills them with
+`EfiLoaderCode`/`EfiLoaderData` - the values EDK2 uses for an EFI application -
+before the identity snapshot, so the line shows both what arrived and what the
+child will actually see.
+
+What the next run can and cannot conclude:
+
+- Windows booting would support the metadata hypothesis.
+- The same `0xc00000bb` would only establish that these two assignments were
+  insufficient. It would not isolate the payload from post-activation firmware
+  services: BCD and other boot-file reads happen after the hypervisor is
+  resident, and nothing here rules them out.
+- Separating shim/hand-off compatibility from hypervisor effects still needs the
+  VM control: the same cached bytes-plus-path hand-off with a do-nothing payload
+  versus the same hand-off after activation.
+
 Both EFI images are now linked with `/Brepro`, so a rebuild from the same
 sources produces the same bytes: the pinned hashes above can be checked by
 rebuilding, and the bundle and worktree sources produce identical images
