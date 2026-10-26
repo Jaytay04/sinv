@@ -81,7 +81,7 @@ Get-ChildItem $Stage | ForEach-Object {
 ```
 
 `ib-install.exe` `F9AD423D...`, `shimx64.efi` `351E131D...`, `mmx64.efi`
-`D383E37E...`, `ib-loader.efi` `AC74EB6C...`, `ib-tcg-dump.exe` `7D5CBCEC...` -
+`D383E37E...`, `ib-loader.efi` `24061DE5...`, `ib-tcg-dump.exe` `7D5CBCEC...` -
 mismatch means stop.
 
 ## 0.5 The installer needs an AMI `Setup` variable that VMware does not have

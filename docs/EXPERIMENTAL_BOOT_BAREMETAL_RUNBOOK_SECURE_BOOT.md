@@ -37,7 +37,7 @@ Working directory: `C:\hsinv-sb`. Five files plus the payload.
 | Name in CWD | Copy from | Bytes | SHA-256 |
 | --- | --- | --- | --- |
 | `ib-install.exe` | `.codex-build\insecure-boot-c\reference_binaries\ib-install.exe` | 1,761,792 | `F9AD423DBDE31E341DB431CCC9E2A689DC2F7A10820BEDF9D154B5BC776FAAAD` |
-| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 89,600 | `AC74EB6C31360DB461B01F16EAA9FB483A7DFFD14D9264F5F4204E2E72CF1F0B` |
+| `ib-loader.efi` | `.codex-build\vm-test-handoff\dist\loader.efi` (renamed) | 91,648 | `24061DE51FB323473A54E8593A0F875BADE313AD169E7A24D70F7650A1EFAE3C` |
 | `shimx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\shimx64.efi` | 1,036,008 | `351E131D3C4A636704E9CAE7D1296BAF8A05BECA9922CFEBBFA48933C9BF1AD3` |
 | `mmx64.efi` | `.codex-build\insecure-boot-c\reference_binaries\mmx64.efi` | 874,360 | `D383E37E4CF82DFFCAAD3A0BD54C7634E04E13169297AE157DBF205122E9C44A` |
 | `tcglog.ib` | generated in section 2 | small | not pinned |
@@ -294,13 +294,16 @@ payload at 0x...`, `the payload returned SUCCESS`, and finally
 
 Two things that transcript is telling you, and they are not board faults:
 
-- `no TPM 2.0 command-response-buffer interface` appears on **every** machine.
-  The port links `ib_uacpi_stub.c`, whose stated job is to answer "no table"
-  because the workspace ships no uACPI C runtime, so `ib_tpm_crb_probe` always
-  reports absent. Until a real uACPI is linked, the PCR replay and the
-  `EFI_TCG2_PROTOCOL` install never run anywhere - that is the half of the
-  design that makes a booted Windows look unmeasured. The TPM itself is fine and
-  reachable from Windows (`ib-tcg-dump` reads it through TBS).
+- `no TPM 2.0 command-response-buffer interface` was, at that point, a property
+  of the build and not of the board: the port linked `ib_uacpi_stub.c`, which
+  answers "no table" by design. It now walks the firmware's own configuration
+  tables (RSDP -> XSDT -> `TPM2`) in `ib_acpi_tables.c` and builds the CRB
+  device from that table, so on x86 firmware with a CRB TPM the loader should
+  print `TPM on <transport> using start method <name>` and go on to replay the
+  dump and install `EFI_TCG2_PROTOCOL`. There is still no AML interpreter, so
+  `_CRS` is not evaluated: the memory window comes from the control address in
+  the `TPM2` table, and the ARM SMC, Pluton and FF-A start methods are reported
+  as absent rather than driven.
 - AMI firmware refuses `LoadImage` of the boot manager the loader just rewrote
   in the same boot, with `EFI_LOAD_ERROR`, even though the file is byte-identical
   to the backup. The loader now names the call that failed and, when the hand-off
