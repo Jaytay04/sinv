@@ -3,6 +3,7 @@
 
 #include "ib_boot.h"
 #include "ib_console.h"
+#include "ib_debug.h"
 #include "ib_util.h"
 
 /* Read `path` back and say whether it holds exactly `length` bytes equal to
@@ -203,7 +204,12 @@ ib_loader_code ib_bootmgfw_start(ib_loader_error_t *error) {
 
     status = ib_boot_load_image(ib_boot_image_handle(), device_path, &image);
     if (IB_EFI_IS_ERROR(status)) {
+        char status_text[64];
         ib_fs_device_path_free(device_path);
+        ib_status_debug(status, status_text, sizeof(status_text));
+        ib_console_printf(
+            "experimental boot: LoadImage of the boot manager failed: %s\n",
+            status_text);
         ib_loader_error_uefi(error, status);
         return IB_LOADER_ERR_UEFI;
     }
@@ -215,8 +221,13 @@ ib_loader_code ib_bootmgfw_start(ib_loader_error_t *error) {
      * release it and stop if its identity cannot be captured. */
     status = ib_boot_capture_image_identity(image, &identity);
     if (IB_EFI_IS_ERROR(status)) {
+        char status_text[64];
         (void)ib_boot_unload_image(image);
         ib_fs_device_path_free(device_path);
+        ib_status_debug(status, status_text, sizeof(status_text));
+        ib_console_printf(
+            "experimental boot: reading the loaded boot manager failed: %s\n",
+            status_text);
         ib_loader_error_uefi(error, status);
         return IB_LOADER_ERR_UEFI;
     }
@@ -231,6 +242,11 @@ ib_loader_code ib_bootmgfw_start(ib_loader_error_t *error) {
     if (IB_EFI_IS_ERROR(status)) {
         /* Preserve the original StartImage status; cleanup is best-effort and
          * its result must not replace the operation's failure. */
+        char status_text[64];
+        ib_status_debug(status, status_text, sizeof(status_text));
+        ib_console_printf(
+            "experimental boot: StartImage of the boot manager failed: %s\n",
+            status_text);
         ib_loader_error_uefi(error, status);
         return IB_LOADER_ERR_UEFI;
     }

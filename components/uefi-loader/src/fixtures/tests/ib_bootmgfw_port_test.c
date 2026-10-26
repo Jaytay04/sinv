@@ -245,6 +245,18 @@ void ib_console_println(const char *format, ...) {
     console_messages++;
 }
 
+void ib_console_printf(const char *format, ...) {
+    (void)format;
+    console_messages++;
+}
+
+void ib_status_debug(ib_efi_status status, char *buffer, size_t capacity) {
+    (void)status;
+    if (capacity > 0) {
+        buffer[0] = '\0';
+    }
+}
+
 static int test_restore_missing_target(void) {
     ib_fs_volume_t volume = { 0 };
     ib_loader_error_t error;

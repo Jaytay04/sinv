@@ -14,15 +14,18 @@
 #define IB_CONSOLE_CHUNK 240
 
 #ifdef IB_CONSOLE_SERIAL_MIRROR
+#include <intrin.h>
+
+/* COM1 lives in port space: the same 0x3F8 the hypervisor writes with an out
+ * instruction. A pointer at 0x3F8 touches low memory instead, which is why an
+ * earlier version of this mirror printed nothing. */
 static void ib_console_serial_char(char ch) {
-    volatile unsigned char *lsr = (volatile unsigned char *)0x3fdu;
-    volatile unsigned char *thr = (volatile unsigned char *)0x3f8u;
     unsigned long spin = 0;
 
-    while (((*lsr) & 0x20u) == 0u && spin < 200000ul) {
+    while ((__inbyte(0x3fdu) & 0x20u) == 0u && spin < 200000ul) {
         spin++;
     }
-    *thr = (unsigned char)ch;
+    __outbyte(0x3f8u, (unsigned char)ch);
 }
 
 static void ib_console_serial_write(const char *text) {

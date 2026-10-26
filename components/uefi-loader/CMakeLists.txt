@@ -363,7 +363,7 @@ add_executable(loader
 # loops stay intact; every other port source keeps the Release /O2.
 set_source_files_properties(
     src/insecure_boot/host-free/ib_util.c
-    COMPILE_FLAGS "/Od")
+    COMPILE_FLAGS "/Od /Oi-")
 target_include_directories(loader PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/insecure_boot/include
 )
@@ -372,9 +372,6 @@ target_compile_options(loader PRIVATE
 if(IB_PAYLOAD_REPLAY_INDEPENDENT)
     target_compile_definitions(loader PRIVATE
         IB_PAYLOAD_REPLAY_INDEPENDENT=1)
-endif()
-if(MSVC)
-    target_compile_options(loader PRIVATE "$<$<COMPILE_LANGUAGE:C>:/Oi->")
 endif()
 set_target_properties(loader PROPERTIES
     SUFFIX ".efi"
@@ -414,6 +411,14 @@ if(MSVC)
     unset(_ib_arch)
 endif()
 
+# Diagnostic build: mirror every console line to COM1 so a headless run can be
+# read from the serial file. The mirror calls __inbyte/__outbyte, which the
+# target-wide /Oi- would turn into CRT calls /NODEFAULTLIB cannot resolve, so
+# that one file keeps intrinsics on.
+option(IB_CONSOLE_SERIAL_MIRROR "Mirror loader console output to COM1" OFF)
+if(IB_CONSOLE_SERIAL_MIRROR)
+    target_compile_definitions(loader PRIVATE IB_CONSOLE_SERIAL_MIRROR=1)
+endif()
 # The .sbat section shim 15.3 requires is emitted by insecure_boot/loader/ib_sbat.c
 # and is never read at run time, so /INCLUDE keeps the section data in the image.
 if(MSVC)
